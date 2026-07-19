@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cloudflare-vfs-test",
+  "main": "test/worker.ts",
+  "compatibility_date": "2026-07-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "VFS_TEST",
+        "class_name": "TestWorkspaceVfs"
+      }
+    ]
+  },
+  "r2_buckets": [
+    {
+      "binding": "VFS_TEST_BUCKET",
+      "bucket_name": "cloudflare-vfs-test"
+    }
+  ],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["TestWorkspaceVfs"]
+    }
+  ]
+}
