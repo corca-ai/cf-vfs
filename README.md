@@ -1,28 +1,29 @@
 # cf-vfs
 
-`cf-vfs` is a tree-shakable, application-level virtual filesystem for
-Cloudflare Workers. It provides familiar POSIX-style paths and filesystem
-semantics on top of Durable Object SQLite and R2 without attempting to
-implement the POSIX system-call interface or support unmodified POSIX
-applications.
+`cf-vfs` is a tree-shakable byte-oriented virtual filesystem and non-interactive
+Bash-compatible runtime for Cloudflare Workers. One SQLite-backed Durable
+Object owns a strongly consistent pathname namespace. Files up to 8 MiB can be
+stored inline and read by shell utilities; large payloads live as immutable R2
+objects and are intentionally opaque to the shell.
 
-Cloudflare Workers do not expose a persistent local filesystem. Durable
-Objects and R2 provide durable storage primitives, but applications still have
-to implement hierarchical paths, directories, metadata, atomic namespace
-changes, concurrent-update protection, and recovery across storage services.
-`cf-vfs` supplies that reusable filesystem layer: one Durable Object represents
-one logical workspace, repository, or tenant; SQLite stores the namespace,
-metadata, and UTF-8 text; and R2 stores immutable binary bodies.
+```ts
+const result = await shell.executeText({
+  script: `find src -name '*.ts' | sort > files.txt`,
+  cwd: "/workspace",
+});
+```
 
-The package also provides independently importable, structured commands such
-as `ls`, `cat`, `grep`, `sed`, `test`, `patch`, `sha256sum`, and bounded text
-transforms. Applications select only the commands they need, and agents or
-remote clients can compose them without invoking a shell.
+This is an application runtime, not an operating-system shell or POSIX ABI. It
+does not launch processes, mount a filesystem, or provide an interactive TTY.
+The supported language is an explicit versioned subset, and every parser,
+execution, stream, mutation, and storage boundary is bounded.
 
-Read [docs/index.md](docs/index.md) for installation, architecture, commands,
-performance evidence, and development documentation. The
-[POSIX-style compatibility profile](docs/posix-compatibility.md) defines what
-the filesystem deliberately supports and omits.
+The pre-1.0 stream-first redesign is intentionally breaking. The old
+`{ command, input }` structured executor and text/binary storage split have
+been removed.
+
+Read [docs/index.md](docs/index.md) for setup, language and command semantics,
+the SQLite/R2 lifecycle, limits, benchmarks, and compatibility details.
 
 ## License
 

@@ -1,154 +1,98 @@
-# Performance
+# Performance and benchmarks
 
-This page separates Cloudflare's platform semantics from measurements collected
-while designing `cf-vfs`. The production numbers below support the storage
-model, but they are not a release benchmark of every current library command.
+The runtime optimizes for bounded memory, predictable failure, and cloud
+backpressure before microbenchmark latency. Run `npm run bench` for the Node
+memory-backend scenarios and `npm test -- storage-benchmark` for workerd SQL
+metrics. The checked-in [local baseline](../bench/baseline-2026-07-20.md)
+records the environment and raw interpretation.
 
-## Why synchronous SQL is appropriate here
+## Stream and storage cost model
 
-Durable Object SQL is a synchronous API: `sql.exec()` returns a cursor without
-`await`, and query execution blocks JavaScript on that Durable Object's single
-thread. This is an intentional exception to the usual recommendation that I/O
-be asynchronous.
+Pipeline edges carry `Uint8Array` chunks through a small raw
+`ReadableStream` pump with byte-sized high-water accounting. A writer waits
+when its downstream queue is full, and cancellation wakes both sides. Stages
+start concurrently; the runtime does not materialize a whole pipeline between
+commands.
 
-Cloudflare runs embedded SQLite in the same thread as the Durable Object. There
-is no database process or network boundary; cached indexed queries can complete
-in microseconds, and a cache miss reaches local SSD. Avoiding promise and event
-loop machinery can therefore be faster than making the API asynchronous. The
-same property also makes a sequence of SQL statements easy to reason about:
-without an `await`, another request cannot interleave and change the observed
-state.
+Small command output is coalesced into roughly 64 KiB writes to avoid one
+promise/microtask per line. Text decoders preserve partial UTF-8 sequences
+across source chunks. Utilities such as `cat`, byte `head`, and `wc` can remain
+incremental. `sort`, `diff`, `join`, `patch`, atomic redirection, and whole-file
+VFS commit buffer because their semantics require a barrier; separate byte,
+line, record, and heap budgets bound that materialization.
 
-Writes also return synchronously to application code. Durability confirmation
-is handled by the Durable Object output gate: the program can continue building
-its response, but the runtime withholds external messages until preceding
-writes are confirmed. If confirmation fails, the success response is not
-released.
+Inline VFS reads are intentionally eager. SQLite's synchronous cursor is fully
+consumed into at most 8 MiB before a stream is returned, establishing a stable
+snapshot without holding a cursor or transaction across `await`. Writes collect
+directly into fixed slabs and publish once. This is usually faster and simpler
+than a paged pull protocol at this size, but concurrent snapshots and writes
+are capped by the instance-wide in-flight budget.
 
-Sources: Cloudflare's [zero-latency SQLite design
-article](https://blog.cloudflare.com/sqlite-in-durable-objects/), current
-[SQLite storage API](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/),
-and [Durable Object lifecycle](https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/).
+Opaque work is payload-size-independent inside the metadata DO. Upload/download
+bytes go directly to R2; the DO performs metadata SQL plus one R2 `HEAD` during
+commit. Copy and move perform no R2 body operation. GC batches up to 100 keys
+into one idempotent delete request.
 
-## N+1 queries are different, not free
+## Covered scenarios
 
-The conventional N+1 problem is dominated by repeated database network round
-trips. Embedded SQLite has no such round trips. Cloudflare explicitly shows 100
-indexed child lookups following one parent query and states that this can
-perform about the same as a join. For clarity, `cf-vfs` may therefore use a
-small sequence of simple indexed queries when it expresses the filesystem
-operation more directly.
+The executable benchmark covers:
 
-This is not permission to ignore query cost:
+- 1 KiB, 64 KiB, 1 MiB, and 8 MiB inline write/materialize/read;
+- a 1 MiB inline overwrite;
+- one-, three-, and six-stage 1 MiB pipelines;
+- 16,384 one-byte chunks;
+- a 1 MiB line through a buffering utility;
+- early downstream cancellation and a deliberately slow 64-chunk consumer;
+- four concurrent shell executions;
+- 1 MiB opaque begin/put/`HEAD`/commit/unlink/GC; and
+- a 64-object GC batch.
 
-- every statement still consumes CPU and SQLite virtual-machine work;
-- rows read and written affect billing, and every updated index row counts as
-  another row write;
-- an unindexed lookup or repeated full scan remains expensive;
-- materializing large cursors and file bodies consumes the Worker's memory;
-- long synchronous work blocks other requests to the same workspace object.
+Each Node row records median elapsed time after a warm-up, three measured
+repeats, heap/ArrayBuffer/external/RSS high-water deltas, output bytes, backend,
+SQL fields, logical R2 Class A/B/free-delete operations, and a
+marginal Standard-storage operation-cost estimate. SQL fields are explicitly
+`null` for the memory backend rather than presented as zero.
 
-Use joins, range scans, or batching when they reduce rows or repeated scans.
-Do not contort a clear indexed lookup solely to minimize statement count. In
-this architecture the useful review question is "how many rows and bytes are
-visited?", not just "how many SQL calls are present?".
+The workerd storage benchmark meters `SqlStorageCursor.rowsRead` and
+`rowsWritten`, `databaseSize`, and physical inline chunk count for a 1 MiB
+overwrite plus snapshot. Cursor metrics are the platform billing-oriented
+values; an ordinary `COUNT(*)` is deliberately outside that meter.
 
-## Production design benchmark: July 19, 2026
+## Interpreting the baseline
 
-The `rwxweb` investigation measured one SQLite-backed Durable Object with
-filesystem metadata and 20,000-byte text files. Three independent objects were
-measured at each corpus size. Times are client-observed medians around the full
-Worker-to-DO RPC, with the three-run range in parentheses.
+Local timings are regression evidence, not production latency. Even separate
+Node heap, ArrayBuffer, external, and RSS samples can miss synchronous peaks,
+and garbage collection can make an observed delta zero. Worker
+isolate allocation, DO duration, RPC/edge latency, R2 network time, cold starts,
+and concurrent tenants require deployed measurements.
 
-| Files | Logical text | Create | Full regex search | Corpus find/replace |
-| ---: | ---: | ---: | ---: | ---: |
-| 1,000 | 20 MB | 2.114 s (1.905–2.128) | 225 ms (214–264) | 270 ms (258–642) |
-| 5,000 | 100 MB | 6.247 s (6.091–6.300) | 312 ms (292–336) | 468 ms (442–572) |
-| 10,000 | 200 MB | 11.753 s (11.644–12.568) | 424 ms (392–470) | 701 ms (644–813) |
+The billing estimates use rates current on 2026-07-20 and show marginal cost
+after included usage; they exclude storage duration, DO requests/duration,
+Worker cost, multipart requests, retries, and Infrequent Access retrieval or
+minimum-duration fees. R2 `PutObject` is Class A, `HeadObject`/`GetObject` are
+Class B, and deletes are free according to [R2
+pricing](https://developers.cloudflare.com/r2/pricing/). SQLite rows and stored
+data follow [Durable Object
+pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/).
 
-Median effective throughput was 9.5–17.0 MB/s for creation, 88.9–471.5 MB/s
-for regex scanning, and 74.0–285.1 MB/s for the replacement pass. Apparent scan
-throughput rises with the corpus size because every measurement includes fixed
-network and RPC latency. All runs traversed a LAX edge; they are end-to-end
-values, not isolated SQLite timings.
+## Durable Object SQL
 
-The corpus stored metadata in one table and ordered text chunks in another,
-using the same 256 KiB chunk policy as this library. Each small benchmark file
-occupied one chunk. One file in every 100 matched the predictable ECMAScript
-regex `search-(?:target)-rwxweb`. Search joined entries and chunks in file/chunk
-order, reconstructed one file at a time, and ran the regex inside the Durable
-Object. Replacement paged up to 250 files and atomically rewrote only matches.
+`sql.exec()` is synchronous because SQLite is embedded beside the object,
+without a database network round trip. Keep cursors synchronous and fully
+consumed, and keep related mutations in `transactionSync()`. External R2 or
+network I/O must occur after that transaction. Cloudflare's output gate handles
+durability before external messages are released.
 
-The current library's recursive `grep` follows the same storage and
-reconstruction model. Its `sed` command replaces one named file, not an entire
-corpus, so the corpus replacement result is design evidence for a possible
-future bulk API rather than a direct `sed` measurement.
+Repeated indexed statements are not free: CPU, rows visited, index updates,
+database bytes, and time on the object's single thread still matter. Review
+rows and bytes rather than statement count alone. Prefer pagination and range
+scans for large namespaces, and use deployed analytics for billed rows.
 
-## Correctness and storage overhead
-
-All nine benchmark cases verified exact file, chunk, and logical byte counts,
-expected match counts, removal of the old marker, insertion of the new marker,
-and revision increments without a logical-size change.
-
-| Files | Logical bytes | SQLite bytes | Overhead over text |
-| ---: | ---: | ---: | ---: |
-| 1,000 | 20,000,000 | 20,676,608 | 3.38% |
-| 5,000 | 100,000,000 | 103,256,064 | 3.26% |
-| 10,000 | 200,000,000 | 206,503,936 | 3.25% |
-
-This overhead includes the minimal metadata table, paths, chunk primary key and
-index, and SQLite pages. A richer schema, history, or additional indexes will
-change it.
-
-## Measurement caveat: deployed timers
-
-In deployed Workers, `performance.now()` and `Date.now()` advance only when I/O
-occurs. Synchronous CPU and SQL phases may therefore appear to take zero time.
-The benchmark used a Node monotonic clock around each HTTPS RPC. Local workerd
-timers do advance normally; its diagnostic 1K/5K/10K search times were 12, 63,
-and 127 ms, but local results are not substitutes for production latency. See
-[Performance and timers](https://developers.cloudflare.com/workers/runtime-apis/performance/).
-
-## Platform limits that shape the library
-
-As of July 19, 2026, current documented limits include:
-
-- 10 GB per SQLite-backed Durable Object on Workers Paid; the Free-plan FAQ
-  documents 1 GB per object and 5 GB total account storage;
-- 2 MB per SQL string, BLOB, or row; 100 KB statements; 100 bound parameters;
-  and 50-byte `LIKE`/`GLOB` patterns;
-- 30 seconds default CPU per request, configurable to five minutes, and a soft
-  1,000 requests/second limit per individual object;
-- 128 MB Worker isolate memory;
-- R2 single-part uploads just under 5 GiB, multipart objects just under 5 TiB,
-  up to 10,000 parts, and one same-key write per second.
-
-Always verify changing limits against [Durable Object
+Current platform constraints include a finite per-object SQLite capacity, a
+128 MiB Worker isolate memory limit, SQL value/statement limits, and separate
+CPU/request limits. R2 has different single-part, multipart, and same-key write
+constraints. Verify changing values in [Durable Object
 limits](https://developers.cloudflare.com/durable-objects/platform/limits/),
 [Workers limits](https://developers.cloudflare.com/workers/platform/limits/),
-and [R2 limits](https://developers.cloudflare.com/r2/platform/limits/).
-
-## Scaling interpretation
-
-The 200 MB result supports one Durable Object per ordinary workspace at that
-scale. It does not show that arbitrary multi-gigabyte workspaces, pathological
-regexes, or concurrent scans are safe.
-
-- Metadata commands should remain indexed and body-free.
-- Large namespace consumers should prefer keyset-paginated `listPage()` and
-  `findPage()` over materializing an unbounded directory or subtree.
-- `head` and `tail` should stop after enough chunks; `cat`, regex `grep`, and
-  replacement currently materialize one whole logical file.
-- Keep a configured per-text-file limit below the Worker memory budget. The
-  library defaults to 32 MiB.
-- Large binary consumers should use `readBinaryStream()` so R2 and Workers RPC
-  flow control replaces whole-object buffering.
-- Treat full-tree regex as cooperative workspace work. For larger corpora,
-  expose versioned pages or jobs so one scan does not monopolize the object's
-  single thread.
-- Use FTS5 only as an optional literal candidate prefilter. Always verify the
-  requested regex against reconstructed file text to preserve API semantics.
-
-Benchmark limitations: three warm trials per size, synthetic ASCII files, a
-predictable linear regex, no concurrent users, no cold-start isolation, no R2
-binary path, and no pricing measurement.
+and [R2 limits](https://developers.cloudflare.com/r2/platform/limits/) before
+deployment.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -19,38 +19,25 @@ try {
     { cwd: packageRoot },
   );
   const [{ filename, files }] = JSON.parse(stdout);
-  assert(files.some(({ path }) => path === "dist/commands/ls.js"));
-  assert(files.some(({ path }) => path === "dist/commands/ls.d.ts"));
-  for (const command of [
-    "basename",
-    "chmod",
-    "cmp",
-    "comm",
-    "diff",
-    "dirname",
-    "du",
-    "fold",
-    "join",
-    "mktemp",
-    "nl",
-    "paste",
-    "patch",
-    "pwd",
-    "realpath",
-    "sha256sum",
-    "sort",
-    "tee",
-    "test",
-    "touch",
-    "tree",
-    "uniq",
-    "cut",
-    "tr",
-  ]) {
-    assert(files.some(({ path }) => path === `dist/commands/${command}.js`));
-    assert(files.some(({ path }) => path === `dist/commands/${command}.d.ts`));
-  }
-  assert(files.some(({ path }) => path === "docs/index.md"));
+  for (const path of [
+    "dist/index.js",
+    "dist/vfs/index.js",
+    "dist/vfs/do-sql.js",
+    "dist/shell/index.js",
+    "dist/shell/commands/index.js",
+    "dist/shell/commands/default.js",
+    "dist/shell/commands/ls.js",
+    "dist/storage/r2.js",
+    "dist/durable-object.js",
+    "dist/testing/index.js",
+    "docs/index.md",
+  ]) assert(files.some((file) => file.path === path), `package is missing ${path}`);
+  for (const removed of [
+    "dist/core/command.js",
+    "dist/core/executor.js",
+    "dist/core/validation.js",
+    "dist/commands/index.js",
+  ]) assert(!files.some((file) => file.path === removed), `package contains removed ${removed}`);
   assert(!files.some(({ path }) => path.startsWith("src/")));
 
   await mkdir(consumerDirectory, { recursive: true });
@@ -60,25 +47,64 @@ try {
   );
   await execFileAsync(
     "npm",
-    ["install", "--ignore-scripts", "--no-package-lock", join(packageDirectory, filename)],
+    [
+      "install",
+      "--ignore-scripts",
+      "--no-package-lock",
+      join(packageDirectory, filename),
+      "typescript@7.0.2",
+      "@cloudflare/workers-types@5.20260719.1",
+    ],
     { cwd: consumerDirectory },
   );
+  await writeFile(join(consumerDirectory, "probe.mjs"), `
+    import { MAX_INLINE_FILE_BYTES } from "@corca-ai/cf-vfs";
+    import { Shell, BASH_COMPATIBILITY_VERSION } from "@corca-ai/cf-vfs/shell";
+    import { lsCommand } from "@corca-ai/cf-vfs/shell/commands/ls";
+    import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
+    import { MemoryFileSystem } from "@corca-ai/cf-vfs/testing";
+    if (MAX_INLINE_FILE_BYTES !== 8 * 1024 * 1024) throw new Error("inline limit");
+    if (BASH_COMPATIBILITY_VERSION !== 1) throw new Error("language version");
+    if (lsCommand.name !== "ls") throw new Error("ls export");
+    const shell = new Shell({ fileSystem: new MemoryFileSystem(), commands: defaultShellCommands });
+    const result = await shell.executeText({ script: "printf package-ok" });
+    if (result.stdout !== "package-ok") throw new Error("shell execution");
+  `);
+  await execFileAsync("node", ["probe.mjs"], { cwd: consumerDirectory });
+  await writeFile(join(consumerDirectory, "probe.ts"), `
+    import { Shell, type ExecuteBytesResult, type ExecuteTextResult } from "@corca-ai/cf-vfs/shell";
+    import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
+    import { MemoryFileSystem } from "@corca-ai/cf-vfs/testing";
+    const shell = new Shell({ fileSystem: new MemoryFileSystem(), commands: defaultShellCommands });
+    const text: Promise<ExecuteTextResult> = shell.executeText({ script: "printf text" });
+    const bytes: Promise<ExecuteBytesResult> = shell.executeBytes({ script: "printf bytes" });
+    void Promise.all([text, bytes]);
+  `);
+  await writeFile(join(consumerDirectory, "tsconfig.json"), JSON.stringify({
+    compilerOptions: {
+      target: "es2022",
+      module: "nodenext",
+      moduleResolution: "nodenext",
+      strict: true,
+      types: ["@cloudflare/workers-types"],
+      skipLibCheck: true,
+      noEmit: true,
+    },
+    include: ["probe.ts"],
+  }));
+  await execFileAsync("npx", ["tsc", "-p", "tsconfig.json"], { cwd: consumerDirectory });
 
-  const modulePath = join(
-    consumerDirectory,
-    "node_modules",
-    "@corca-ai",
-    "cf-vfs",
-    "dist",
-    "commands",
-    "ls.js",
-  );
-  const source = await readFile(modulePath, "utf8");
-  assert(source.includes('name: "ls"'));
+  for (const hidden of [
+    "@corca-ai/cf-vfs/shell/commands/helpers",
+    "@corca-ai/cf-vfs/vfs/memory",
+  ]) {
+    await assert.rejects(import(hidden), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });
+  }
+
   const packageFiles = await readdir(join(consumerDirectory, "node_modules", "@corca-ai", "cf-vfs"));
   assert(packageFiles.includes("dist"));
   assert(!packageFiles.includes("src"));
-  console.log("package tarball and command subpath verified");
+  console.log("package tarball, runtime/type consumers, and explicit exports verified");
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });
 }

@@ -1,4 +1,4 @@
-import { lsCommand } from "@corca-ai/cf-vfs/commands/ls";
+import { lsCommand } from "@corca-ai/cf-vfs/shell/commands/ls";
 
 export default {
   fetch(): Response {

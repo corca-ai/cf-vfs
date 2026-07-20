@@ -2,68 +2,50 @@
 
 ## Install
 
-Until an npm registry release is published, install directly from GitHub:
-
 ```sh
-npm install github:corca-ai/cf-vfs
+npm install @corca-ai/cf-vfs
 ```
 
-The package is prepared for a public registry release under the name
-`@corca-ai/cf-vfs`. It publishes ESM JavaScript and TypeScript declaration files
-from `dist`; consumers do not compile this repository's TypeScript source.
+The package publishes ESM JavaScript and TypeScript declarations from `dist`.
+Direct VFS, shell, command, Durable Object, R2, and testing entry points are
+separate so a Worker only bundles what it imports.
 
-## Compose a filesystem Durable Object
+## Compose a shell Durable Object
 
-Import commands through their individual subpaths. Commands omitted from the
-array are not exposed over RPC and can be removed by the Worker bundler.
+The default registry is convenient but deliberately isolated at
+`shell/commands/default`. Production applications can pass any explicit array
+of `ShellCommand` values instead.
 
 ```ts
-import type { CommandDefinition } from "@corca-ai/cf-vfs/core";
-import { catCommand } from "@corca-ai/cf-vfs/commands/cat";
-import { grepCommand } from "@corca-ai/cf-vfs/commands/grep";
-import { lsCommand } from "@corca-ai/cf-vfs/commands/ls";
-import { sedCommand } from "@corca-ai/cf-vfs/commands/sed";
-import { statCommand } from "@corca-ai/cf-vfs/commands/stat";
-import { VfsDurableObject } from "@corca-ai/cf-vfs/durable-object";
-import { createNativeRegexEngine } from "@corca-ai/cf-vfs/regex/native";
-import { R2BinaryStore } from "@corca-ai/cf-vfs/storage/r2";
-
-const commands = [
-  catCommand,
-  grepCommand,
-  lsCommand,
-  sedCommand,
-  statCommand,
-] satisfies readonly CommandDefinition[];
+import { ShellDurableObject } from "@corca-ai/cf-vfs/durable-object";
+import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
+import { R2OpaqueStore } from "@corca-ai/cf-vfs/storage/r2";
 
 interface Env {
-  WORKSPACE_FILES: DurableObjectNamespace<WorkspaceFiles>;
+  WORKSPACES: DurableObjectNamespace<WorkspaceFiles>;
   FILE_BODIES: R2Bucket;
 }
 
-export class WorkspaceFiles extends VfsDurableObject<Env> {
+export class WorkspaceFiles extends ShellDurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env, {
-      commands,
-      binaryStore: new R2BinaryStore(env.FILE_BODIES),
-      regexEngine: createNativeRegexEngine(),
+      commands: defaultShellCommands,
+      opaqueStore: new R2OpaqueStore(env.FILE_BODIES),
+      workspaceId: ctx.id.toString(),
+      chunkBytes: 256 * 1024,
     });
   }
 }
 ```
 
-The native ECMAScript regex engine is suitable only for trusted patterns. See
-[Operations and security](operations.md#regular-expressions) before accepting
-patterns from users or agents.
-
-## Configure bindings
+Configuration:
 
 ```jsonc
 {
   "compatibility_date": "2026-07-19",
   "durable_objects": {
     "bindings": [
-      { "name": "WORKSPACE_FILES", "class_name": "WorkspaceFiles" }
+      { "name": "WORKSPACES", "class_name": "WorkspaceFiles" }
     ]
   },
   "r2_buckets": [
@@ -75,34 +57,78 @@ patterns from users or agents.
 }
 ```
 
-Regenerate the consuming Worker's environment types after changing bindings:
+Run `npx wrangler types` after changing bindings. Route one workspace, tenant,
+or repository to one object with `getByName(workspaceId)`; do not place an
+entire service in one Durable Object.
 
-```sh
-npx wrangler types
-```
+## Execute source
 
-## Execute a command
-
-Use structured inputs instead of parsing a shell string. This avoids quoting
-ambiguity and command injection while retaining familiar text output and exit
-codes.
+`executeText()` is the bounded convenience RPC. It drains stdout and stderr
+concurrently and returns decoded strings. Use `executeBytes()` when exact bytes
+are required; it does not also allocate decoded copies.
 
 ```ts
-const files = env.WORKSPACE_FILES.getByName(workspaceId);
-const result = await files.execute({
-  command: "grep",
+const workspace = env.WORKSPACES.getByName(workspaceId);
+const result = await workspace.executeText({
+  script: `find src -name '*.ts' | sort > files.txt; wc -l files.txt`,
   cwd: "/repo",
-  input: {
-    pattern: "TODO|FIXME",
-    paths: ["src"],
-    include: "**/*.ts",
-    maxResults: 200,
-  },
-  output: "both",
-  maxOutputBytes: 256 * 1024,
+  args: [],
+  env: {},
 });
 ```
 
-One Durable Object should normally represent one workspace or tenant, not the
-entire service. Route deterministically with `getByName(workspaceId)` so
-unrelated workspaces scale across separate objects.
+Dynamic values belong in positional arguments, not interpolated source:
+
+```ts
+await workspace.executeText({
+  script: `grep -F "$1" "$2"`,
+  args: [userPattern, userPath],
+  cwd: "/repo",
+});
+```
+
+For a remote byte-stream boundary, pass explicit RPC streams and sinks through
+`executeTo()`:
+
+```ts
+await workspace.executeTo({ script, stdin, stdout, stderr });
+```
+
+The richer in-process `Shell.executeStream()` returns separate readable stdout
+and stderr streams. Start consuming both before awaiting `completed`, otherwise
+backpressure can correctly pause execution.
+
+## Use the direct byte VFS
+
+The root and `/vfs` entry points do not import the parser or utilities.
+
+```ts
+import { readAllBytes } from "@corca-ai/cf-vfs/vfs";
+import { MemoryFileSystem } from "@corca-ai/cf-vfs/testing";
+
+const fs = new MemoryFileSystem();
+await fs.writeFile("/bytes", new Uint8Array([0xff, 0x00, 0x01]));
+const body = await readAllBytes(fs.readFile("/bytes").stream, 8 * 1024 * 1024);
+```
+
+## Upload a large opaque body
+
+The body must not pass through the metadata Durable Object:
+
+```ts
+import { putOpaque } from "@corca-ai/cf-vfs/vfs";
+import { R2OpaqueStore } from "@corca-ai/cf-vfs/storage/r2";
+
+const objects = new R2OpaqueStore(env.FILE_BODIES);
+const stat = await putOpaque(workspace, objects, "/artifacts/model.bin", body, {
+  createParents: true,
+  expectedSizeBytes,
+  contentType: "application/octet-stream",
+});
+```
+
+Here `workspace` coordinates only reservation, verified metadata commit, and
+cleanup intent. `objects.putIfAbsent()` sends the body directly to R2 with a
+conditional create. For untrusted clients, put this body operation in a
+trusted upload Worker or use trusted multipart completion. See [Operations and
+security](operations.md).

@@ -1,98 +1,139 @@
 # Operations and security
 
-## Workspace placement
+## Isolation and routing
 
-Use one Durable Object per logical workspace or tenant and route with a stable
-name. A recursive scan is synchronous work on that object's single thread, so
-large searches delay interactive operations for that workspace but do not
-block other workspace objects.
+Route one tenant, workspace, or repository to one SQLite-backed Durable Object
+using a stable name. That object is the strongly consistent namespace and
+serialization boundary. Do not route all customers through one object: long
+parses, scans, or SQL work on an object share its single-threaded execution
+boundary.
 
-## Text size and memory
+Authorization belongs at the application boundary. Mode bits are metadata,
+not access checks. For untrusted source, compose a deliberately small command
+registry and set `ShellPolicy`:
 
-The default text chunk is 256 KiB and the default logical text-file limit is 32
-MiB. `head` and `tail` fetch partial chunks. `cat`, regex search, and replacement
-currently reconstruct one full file in memory, so increasing the limit must be
-evaluated against the Worker's memory limit and all other live allocations.
+```ts
+const shell = new Shell({
+  fileSystem,
+  commands: [catCommand, grepCommand, findCommand],
+  policy: {
+    readRoots: ["/input"],
+    writeRoots: ["/output"],
+    allowedCommands: ["cat", "grep", "find"],
+    maxMutations: 100,
+  },
+});
+```
 
-UTF-8 is validated on read. Byte-limited text slices round inward rather than
-returning an invalid partial code point.
+The shell receives a capability-wrapped `ShellFileSystem`; it has no opaque
+upload, lease, GC, or R2 body method. Treat scripts, positional arguments,
+environment variables, and uploaded bytes as separate inputs. Put dynamic
+values in positional arguments instead of interpolating source.
 
-## Regular expressions
+## Execution budgets
 
-Fixed-string search needs no regex engine. Regex support is injected explicitly.
-The provided native ECMAScript engine has a pattern-length limit but cannot
-prevent catastrophic backtracking. Do not expose it to arbitrary untrusted
-patterns without additional syntax and input restrictions.
+Every execution owns one shared budget across all pipeline stages. Defaults:
 
-For untrusted inputs, implement the small `RegexEngine` interface with a
-linear-time RE2-compatible engine. Whatever engine is selected must report the
-first match column and preserve the documented replacement behavior.
+| Limit | Default |
+| --- | ---: |
+| script bytes | 1 MiB |
+| AST nodes / commands / steps | 10,000 / 10,000 / 100,000 |
+| pipeline bytes | 8 MiB |
+| stdout / stderr | 8 MiB each |
+| materialized stdout + stderr | 8 MiB |
+| total I/O | 32 MiB |
+| simultaneously buffered semantic data | 16 MiB |
+| one decoded line / buffered records | 1 MiB / 100,000 |
+| glob matches / mutations | 10,000 / 10,000 |
+| deadline / no-output-consumer timeout | 30 s / 5 s |
 
-## Cursors and transactions
+Lower these per workload. A policy mutation limit can only tighten the runtime
+limit. Glob scans, traversal, decoded records, and output all charge their
+specific limit as well as relevant shared work/I/O limits.
 
-Consume every SQL cursor synchronously with iteration, `.toArray()`, or `.one()`
-before the next `await`. Cloudflare documents that a cursor retained across an
-`await` has no stable snapshot and can observe later, even eventually rolled
-back, writes.
+`executeStream()` exposes real backpressure. Consume stdout and stderr
+concurrently; if a root output remains blocked beyond the idle timeout the
+execution fails instead of retaining memory forever. Cancellation wakes
+blocked writers and readers. Limit, deadline, and cancellation failures error
+affected streams and resolve `completed` with status 1; they never return a
+valid truncated prefix. Unexpected command or runtime invariant failures
+reject `completed`.
 
-Use `transactionSync()` for related SQL reads and writes. Its callback must be
-synchronous and cannot include R2, `fetch`, KV, or other promises. Never hold
-`blockConcurrencyWhile()` across external I/O.
+`executeText()` is intentionally bounded materialization. It drains both
+outputs concurrently and returns decoded strings. `executeBytes()` returns
+bytes without duplicating them as strings. Prefer
+`executeStream()` in-process or `executeTo()` across RPC when the consumer can
+stream.
 
-## R2 maintenance
+## Inline storage controls
 
-Binary uploads use immutable generation keys and leave recoverable GC records
-when activation is incomplete. Call `drainBinaryGarbage()` from an alarm or a
-bounded maintenance task. Deletion is idempotent; failed keys remain queued.
+Inline bodies are arbitrary bytes with an absolute 8 MiB per-file ceiling.
+Configure lower per-file limits, workspace logical-byte quota, entry quota,
+instance-wide in-flight buffered bytes, maximum database bytes, and reserved
+database headroom. The default logical inline quota is 512 MiB, entry quota is
+100,000, and in-flight materialization quota is 32 MiB.
 
-R2 binding writes and deletes are strongly consistent once their promises
-resolve. The SQL/R2 saga is still necessary because no transaction spans the
-two services. See the [R2 consistency
-model](https://developers.cloudflare.com/r2/reference/consistency/).
+A read snapshot holds in-flight capacity until its stream completes or is
+cancelled. Streaming writes collect into fixed slabs, recheck the path token,
+then publish in one short transaction. Failed collection or a stale guard does
+not mutate the file. `SQLITE_FULL` and proactive headroom exhaustion surface as
+`ENOSPC`; reads and cleanup remain available.
 
-## Revisions and concurrent agents
+Monitor logical inline bytes, entries, `storage.sql.databaseSize`, quota
+failures, stream-limit failures, deadline/idle cancellations, and per-command
+status. Cloudflare bills SQLite rows read/written and stored data, so also use
+platform analytics for deployed workloads.
 
-Read the current revision and pass it as `ifRevision` to `write` or `sed` when a
-change depends on previously read text. A stale revision produces `EREVISION`
-instead of overwriting a concurrent update.
+## Opaque upload trust boundary
 
-The R2 upload introduces an `await`, so another RPC can run before binary
-activation. Pending state and the GC queue make upload/remove races recoverable.
+Large bodies must travel from a trusted gateway or direct Worker binding to
+R2, not through the metadata DO:
 
-## Output and result limits
+1. reserve with `beginOpaqueUpload()`;
+2. upload once to the returned random generation key;
+3. commit by upload ID; the coordinator performs R2 `HEAD` outside SQL and
+   trusts only store-observed size, ETag, version, and verified digest;
+4. abort on client failure, or let the persisted expiry/alarm recover it.
 
-Command stdout defaults to 1 MiB and is hard-capped at 8 MiB without splitting
-UTF-8 code points. `find` and `grep` also cap result counts. Structured data is
-not byte-capped, so request `output: "text"` for potentially large agent-facing
-results or add an application-level pagination policy.
+Do not let a client choose an existing key or assert an unverified SHA-256.
+For multipart upload, the trusted gateway must complete parts under the
+reserved generation and only then ask the coordinator to commit. A key is
+immutable after its conditional create. Direct R2 bindings are trusted: never
+hand one to an untrusted client. A gateway must bind upload authority to the
+reservation key and expire it no later than the session expiry.
 
-Command stdin is opt-in and uses the same default and hard byte limits. Unlike
-stdout, oversized stdin is rejected rather than truncated so a transform never
-observes an ambiguous prefix. Passing stdout to another command is an explicit
-application action; the executor does not interpret pipes or redirection.
+| Persisted state | Recovery behavior |
+| --- | --- |
+| `open` | commit may claim it; expiry converts it to GC work |
+| `verifying` | concurrent commit gets `EAGAIN`; an expired verification lease becomes GC work |
+| `committed` | retry returns the receipt during its 24-hour retention window; abort is a no-op |
+| `garbage` | commit is rejected; deletion waits for authority expiry plus a settlement grace, then retries idempotently |
 
-Recursive workspace commands also have entry-count limits. `tree` and `du`
-report whether their traversal was truncated. `diff` checks file metadata
-before reading bodies, defaults to 1 MiB per file, has an 8 MiB hard limit, and
-rejects comparisons whose line matrix would exceed one million cells.
+The namespace mutation token and verification lease token are checked after
+`HEAD`, closing ordinary races, absent-path ABA, and stale-verifier cleanup.
+Copy and move manipulate SQLite references only.
+Removing/replacing the last live reference queues deletion transactionally.
 
-`sha256sum` streams binary bodies into Workers `DigestStream`, so memory use is
-not proportional to the R2 object size. The command still defaults to a 32 MiB
-per-file work limit and permits an explicit limit up to 256 MiB because hashing
-CPU remains proportional to input size. `cmp` similarly streams both inputs and
-has a 64 MiB hard per-file limit. `join` has a separate row limit to bound the
-Cartesian expansion of duplicate keys.
+## Reads, leases, and garbage collection
 
-For larger or incremental consumers, use `listPage()` or `findPage()` and keep
-following `nextCursor`, including across empty filtered pages. Pagination is
-mutation-tolerant but not snapshot-isolated: a rename or insertion before the
-cursor can be skipped, while a later key can still appear. Restart traversal
-when the application requires a fresh complete view.
+`resolveOpaqueRead()` persists a bounded retention lease before returning R2
+metadata. The gateway must start `getStream()` within that lease. Removing the
+path during the lease hides the name immediately but delays object deletion.
+The default lease is five minutes and the maximum is one hour.
 
-## Storage exhaustion
+`ShellDurableObject.alarm()` drains bounded GC batches. Failures retain the
+key, error text, attempt count, and exponential next-attempt time. The alarm is
+reset to the earliest open expiry, verification lease, retention deadline, or
+retry. Operations are idempotent and survive object eviction.
 
-When a SQLite-backed object reaches its storage ceiling, writes fail with
-`SQLITE_FULL`; reads and deletes remain available. Translate this into an
-application error and allow cleanup rather than repeatedly retrying the same
-write. Monitor per-workspace logical bytes and database size before reaching
-the platform limit.
+Alert on old `open`/`verifying` sessions, growing GC depth, repeated delete
+attempts, R2 `HEAD` mismatch/missing objects, and database headroom. An opaque
+namespace entry whose R2 body is missing is `EIO`; repair or remove it rather
+than silently treating it as empty.
+
+Platform behavior and limits change. Verify deployments against Cloudflare's
+[Durable Object limits](https://developers.cloudflare.com/durable-objects/platform/limits/),
+[Durable Object pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/),
+[R2 consistency](https://developers.cloudflare.com/r2/reference/consistency/),
+[R2 limits](https://developers.cloudflare.com/r2/platform/limits/), and [R2
+pricing](https://developers.cloudflare.com/r2/pricing/).

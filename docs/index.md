@@ -1,37 +1,43 @@
 # cf-vfs documentation
 
-`cf-vfs` provides a logical POSIX-style filesystem and agent-oriented commands
-on top of a SQLite-backed Durable Object and R2. The root
-[README](../README.md) is the short overview; this page is the documentation
-entry point.
+`cf-vfs` combines a byte-oriented virtual filesystem with a bounded,
+non-interactive Bash-compatible runtime. The [README](../README.md) is the
+short overview; this page is the documentation entry point.
 
 ## Start here
 
-- [Getting started](getting-started.md) — install the package, configure
-  Durable Objects and R2, and execute the first command.
-- [Commands and API](commands.md) — command inputs, outputs, exit codes, direct
-  functions, and binary RPC methods.
-- [POSIX-style compatibility](posix-compatibility.md) — supported filesystem
-  semantics, deliberate differences, and non-goals.
-- [Architecture](architecture.md) — package boundaries, SQL schema, text
-  chunking, consistency, and binary garbage collection.
-- [Performance](performance.md) — production measurements, synchronous SQL
-  semantics, N+1 queries, limits, and scaling guidance.
-- [Operations and security](operations.md) — workspace sharding, regex safety,
-  memory, output limits, maintenance, and failure handling.
-- [Development](development.md) — repository layout, tests, packaging, and
-  release preparation.
+- [Getting started](getting-started.md) — install, configure a Durable Object
+  and R2, execute source, and transfer opaque bodies outside the metadata DO.
+- [Shell, commands, and direct API](commands.md) — Bash Version 1, streams,
+  statuses, utilities, opaque behavior, and direct VFS primitives.
+- [Architecture](architecture.md) — SQLite inline bytes, immutable R2 objects,
+  mutation tokens, upload verification, read leases, and GC alarms.
+- [POSIX and Bash compatibility](posix-compatibility.md) — supported behavior,
+  deliberate atomic-redirection divergence, and rejected syntax.
+- [Operations and security](operations.md) — policy, quotas, cancellation,
+  upload trust, monitoring, recovery, and workspace routing.
+- [Performance and benchmarks](performance.md) — synchronous snapshots,
+  backpressure, output slabs, benchmark scenarios, and measurement caveats.
+- [Parser technology spike](parser-spike.md) — why Version 1 uses a small
+  handwritten parser and what would trigger reconsideration.
+- [Development](development.md) — repository layout, complete verification,
+  package boundaries, and extending the runtime.
 
-## Scope
+## Public layers
 
-The library supports normalized absolute paths, directories, text files,
-immutable binary files, metadata, revisions, recursive search, atomic text
-replacement, and a structured command executor. It intentionally does not
-model symlinks, hard links, users/groups, open file descriptors, locks, sparse
-files, or binary mutation/search.
+1. `VirtualFileSystem` provides typed byte, namespace, metadata, and opaque
+   lifecycle primitives.
+2. `Shell` parses complete source and connects virtual file descriptors with
+   `ReadableStream<Uint8Array>`.
+3. `ShellCommand` utilities receive argv, byte streams, a shared budget, and a
+   capability-wrapped filesystem that cannot access opaque bodies.
+4. `VfsDurableObject` and `ShellDurableObject` expose the metadata and remote
+   execution boundaries. R2 body transfer uses a separate gateway or direct
+   binding path.
 
-The current platform sources of truth are Cloudflare's
-[Durable Objects documentation](https://developers.cloudflare.com/durable-objects/),
-[SQLite storage API](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/),
-[Durable Object limits](https://developers.cloudflare.com/durable-objects/platform/limits/),
-and [R2 Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/).
+Current platform references are Cloudflare's [Durable Objects
+documentation](https://developers.cloudflare.com/durable-objects/), [SQLite
+storage API](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/),
+[Workers Streams](https://developers.cloudflare.com/workers/runtime-apis/streams/),
+[Workers RPC](https://developers.cloudflare.com/workers/runtime-apis/rpc/), and
+[R2 Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/).

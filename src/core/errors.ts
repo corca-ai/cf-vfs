@@ -1,4 +1,6 @@
 export type VfsErrorCode =
+  | "EACCES"
+  | "EAGAIN"
   | "E2BIG"
   | "EEXIST"
   | "EFBIG"
@@ -8,10 +10,13 @@ export type VfsErrorCode =
   | "ENAMETOOLONG"
   | "ENOTDIR"
   | "ENOTEMPTY"
-  | "ENOTTEXT"
   | "ENOENT"
+  | "ENOSPC"
   | "ENOSYS"
   | "ENOTSUP"
+  | "EPIPE"
+  | "ETIMEDOUT"
+  | "ECANCELED"
   | "EREVISION";
 
 export class VfsError extends Error {

@@ -38,13 +38,37 @@
       "types": "./dist/core/index.d.ts",
       "import": "./dist/core/index.js"
     },
-    "./commands": {
-      "types": "./dist/commands/index.d.ts",
-      "import": "./dist/commands/index.js"
+    "./vfs": {
+      "types": "./dist/vfs/index.d.ts",
+      "import": "./dist/vfs/index.js"
     },
-    "./commands/*": {
-      "types": "./dist/commands/*.d.ts",
-      "import": "./dist/commands/*.js"
+    "./shell": {
+      "types": "./dist/shell/index.d.ts",
+      "import": "./dist/shell/index.js"
+    },
+    "./shell/commands": {
+      "types": "./dist/shell/commands/index.d.ts",
+      "import": "./dist/shell/commands/index.js"
+    },
+    "./shell/commands/default": {
+      "types": "./dist/shell/commands/default.d.ts",
+      "import": "./dist/shell/commands/default.js"
+    },
+    "./shell/commands/core": {
+      "types": "./dist/shell/commands/core.d.ts",
+      "import": "./dist/shell/commands/core.js"
+    },
+    "./shell/commands/fs": {
+      "types": "./dist/shell/commands/fs.d.ts",
+      "import": "./dist/shell/commands/fs.js"
+    },
+    "./shell/commands/ls": {
+      "types": "./dist/shell/commands/ls.d.ts",
+      "import": "./dist/shell/commands/ls.js"
+    },
+    "./shell/commands/text": {
+      "types": "./dist/shell/commands/text.d.ts",
+      "import": "./dist/shell/commands/text.js"
     },
     "./storage/do-sql": {
       "types": "./dist/storage/do-sql.d.ts",
@@ -58,13 +82,9 @@
       "types": "./dist/durable-object.d.ts",
       "import": "./dist/durable-object.js"
     },
-    "./regex/native": {
-      "types": "./dist/regex/native.d.ts",
-      "import": "./dist/regex/native.js"
-    },
     "./testing": {
-      "types": "./dist/testing/memory.d.ts",
-      "import": "./dist/testing/memory.js"
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -82,7 +102,10 @@
     "test:docs": "node test/check-docs.mjs",
     "test:package": "node test/check-package.mjs",
     "test:tree-shaking": "node test/check-tree-shaking.mjs",
-    "check": "npm run typegen && npm run build && npm run typecheck && npm test && npm run test:docs && npm run test:package && npm run test:tree-shaking"
+    "bench": "npm run build && node bench/benchmarks.mjs",
+    "test:benchmarks": "node test/check-benchmarks.mjs",
+    "test:bash-fixtures:regenerate": "node scripts/regenerate-bash-fixtures.mjs",
+    "check": "npm run typegen && npm run build && npm run typecheck && npm test && npm run test:docs && npm run test:package && npm run test:tree-shaking && npm run test:benchmarks"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.18.6",

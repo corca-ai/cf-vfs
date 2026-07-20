@@ -1,114 +1,155 @@
 # Architecture
 
-`cf-vfs` is an application-level logical filesystem, not an operating-system
-filesystem or a POSIX ABI implementation. The
-[POSIX-style compatibility profile](posix-compatibility.md) describes the
-semantic subset implemented by the architecture below.
+`cf-vfs` keeps one strongly consistent pathname namespace per SQLite-backed
+Durable Object and separates two explicit content classes:
+
+```text
+Bash-compatible source
+  -> complete parse and deliberate expansion
+  -> shell session + virtual byte file descriptors
+  -> explicit command registry + scoped VFS
+  -> SQLite namespace
+       |- inline: bounded shell-readable byte chunks
+       `- opaque: metadata reference to immutable R2 content
+
+metadata Durable Object: paths, tokens, upload CAS, leases, GC intent
+upload/download gateway: R2 body bytes; never relayed through metadata DO
+```
 
 ## Package boundaries
 
-- `src/core` defines platform-independent paths, filesystem contracts, errors,
-  regex and binary-store interfaces, and the command executor.
-- `src/commands` contains one independently importable module per command.
-- `src/storage/do-sql.ts` implements the filesystem on Durable Object SQLite.
-- `src/storage/r2.ts` implements immutable binary storage through an R2 binding.
-- `src/durable-object.ts` composes selected commands into typed RPC methods.
-- `src/testing/memory.ts` provides a fast in-memory text implementation.
+- `src/core` contains path, glob, error, diff, and unified-patch primitives.
+- `src/vfs` contains the byte contract, stream helpers, deterministic memory
+  implementation, SQLite implementation, opaque facade, and VFS DO base.
+- `src/shell` contains Version 1 parsing and expansion, manual pipe pumps,
+  sessions, redirections, budgets, capability policy, and execution APIs.
+- `src/shell/commands` contains argv-based built-ins and utilities. The full
+  registry is a separate module.
+- `src/storage/r2.ts` is the immutable `R2OpaqueStore` adapter.
+- `src/testing` contains deterministic in-memory VFS and R2 substitutes.
 
-The build preserves this module graph instead of producing one monolithic
-bundle. Conditional package exports point to ESM JavaScript and declarations in
-`dist`, and `sideEffects: false` lets consumers retain only reachable commands.
+The root and `/vfs` exports do not import shell code. The `/shell` export does
+not import Durable Object platform code. Worker-only bases are under
+`/durable-object`. Package and Wrangler tests verify those boundaries.
 
-## Coordination boundary
+## Inline files
 
-One Durable Object is one strongly consistent filesystem. A typical mapping is
-one object per workspace, repository, or tenant. All paths and mutations inside
-that workspace are serialized by the object's single-threaded execution model;
-different objects scale independently.
+An inline file is arbitrary bytes, not necessarily UTF-8. SQLite stores fixed
+chunks under a stable entry ID. A file is limited to 8 MiB.
 
-Do not route all customers to a single object. Cloudflare documents an
-individual object's soft throughput limit as 1,000 requests per second, and
-body scanning consumes materially more time than a metadata lookup.
+Read behavior:
 
-## SQL representation
+1. Execute and fully consume the ordered SQLite chunk query synchronously.
+2. Copy the bounded result to establish a snapshot.
+3. Account it against the instance-wide in-flight byte budget.
+4. Return a `ReadableStream<Uint8Array>` that releases the budget on completion
+   or cancellation.
 
-`vfs_entries` is the authoritative path index. It stores absolute path, parent,
-basename, kind, content kind/state, logical byte and line counts, mode,
-timestamps, revision, and optional R2 key. A unique `(parent_path, name)` pair
-models a directory entry.
+A later replace or unlink cannot change the active snapshot. No read refcount,
+lease, immutable inline generation, staging table, or inline GC exists.
+Callers must consume or cancel returned streams.
 
-UTF-8 text bytes are stored in `vfs_text_chunks`, ordered by `(path,
-chunk_index)`. The default 256 KiB chunk is comfortably below the current 2 MB
-SQL BLOB/row limit and makes `head` and `tail` partial reads possible. The API
-reassembles chunks and exposes one logical file.
+Write behavior:
 
-Paths are normalized absolute POSIX-style strings. `.` and `..` resolve against
-the command `cwd`; NUL, names over 255 UTF-8 bytes, and paths over 4096 bytes
-are rejected. A trailing slash is preserved as access intent long enough to
-require that the resolved entry is a directory, while stored paths remain
-canonical. Descendant queries use a lexicographic range rather than a
-`LIKE`/`GLOB` prefix, avoiding Cloudflare's current 50-byte SQL pattern limit.
+1. Collect directly into fixed-size slabs while enforcing file and shared
+   in-flight limits.
+2. Capture and later recheck the pathname mutation token.
+3. In one short `transactionSync()`, validate quota and headroom, replace chunk
+   rows, update metadata and usage, and publish one new revision/token.
+4. Release the buffered-byte reservation before any external await.
 
-## Paginated traversal
+No cursor or SQLite transaction crosses an `await`. `SQLITE_FULL` is translated
+to `ENOSPC`. Per-workspace inline logical bytes, entry count, database
+headroom, and per-instance materialized bytes are separate limits.
 
-`listPage()` and `findPage()` use canonical paths as keyset continuation
-positions. A page materializes at most 1,000 raw entries. Recursive filters are
-applied after that bounded scan, which keeps storage and memory work bounded
-but means a filtered page is not guaranteed to be full.
+## Namespace and ABA protection
 
-A cursor does not hold a SQLite cursor or transaction open across requests and
-does not represent a snapshot. Entries inserted or moved before the keyset
-position can be missed; entries inserted after it can appear in a later page.
-This behavior avoids retaining isolate state and remains safe across Durable
-Object eviction.
+`vfs2_entries` is the namespace source of truth. `vfs2_path_versions` retains a
+tombstone token even while a path is absent. Every create, content replace,
+metadata update, move, and delete changes the token. An absent → create →
+delete sequence therefore invalidates a reservation captured while absent.
 
-## Text transactions
+The schema also contains:
 
-Creating or replacing text deletes the previous chunks, writes the new chunks,
-and updates metadata inside `transactionSync()`. Each mutation increments the
-entry revision. `ifRevision` implements compare-and-swap and prevents a stale
-agent from silently overwriting a newer edit.
+- `vfs2_inline_chunks(entry_id, chunk_index, body)`;
+- `vfs2_opaque_objects` with R2 key, size, ETag, version, optional verified
+  digest and MIME type, and read-retention deadline;
+- `vfs2_upload_sessions` with `open`, `verifying`, `committed`, and `garbage`
+  states plus CAS token/lease and idempotent receipt;
+- `vfs2_gc_queue` with due time, attempts, retry time, and last error;
+- `vfs2_usage` for atomic logical-byte and entry quotas.
 
-Text writes can explicitly require creation, replacement, or allow either. A
-rename can optionally replace a compatible destination in the same SQL
-transaction. If the replaced destination is binary, its immutable R2 key is
-queued for garbage collection before its namespace entry is removed.
+Checks and triggers reject invalid directory/content combinations, dangling
+opaque references, orphan inline chunks, and deletion of referenced content.
+Opaque liveness is derived from the indexed entry rows with `NOT EXISTS`; no
+stored reference count can drift.
 
-Appending UTF-8 text adds chunks and updates counts and revision in one SQL
-transaction. Touch and metadata changes update entry metadata without rewriting
-file bodies. Mode values remain compatibility metadata and are never used for
-authorization.
+## Opaque R2 lifecycle
 
-Directory moves update the entry subtree and its text-chunk paths in one SQL
-transaction. Text replacement reads and rewrites one logical file atomically.
-No cursor is retained across an `await`.
+R2 keys are random generations independent of paths:
 
-## Binary activation and garbage collection
+```text
+vfs/{workspace-id}/objects/{random-generation-id}
+```
 
-R2 and Durable Object SQL cannot participate in one transaction. Binary create
-therefore uses a recoverable saga:
+Upload protocol:
 
-1. Insert `pending` SQL metadata and a durable garbage-collection key.
-2. Upload an immutable, generation-specific R2 object.
-3. Activate the SQL entry and clear its GC key.
+1. `beginOpaqueUpload()` captures the current path token, persists an expiring
+   `open` session, allocates a one-write key, and schedules the earliest alarm.
+2. A gateway or direct binding path uploads bytes to R2. `R2OpaqueStore` uses a
+   conditional create, so the generation cannot be overwritten. Direct
+   bindings are trusted; gateway authority is key-scoped and expires with the
+   reservation.
+3. `commitOpaqueUpload()` synchronously claims `open -> verifying` with a
+   unique token and lease, then performs R2 `HEAD` outside SQL.
+4. A second short transaction rechecks the verification lease and pathname
+   token, stores server-observed size/ETag/version, publishes the opaque entry,
+   and persists a receipt. A successful retry returns that receipt during its
+   bounded retention window.
+5. Expiry, abort, failed validation, a lost lease, or a stale path makes the key
+   durable GC work before the failure is returned. Deletion is not eligible
+   until upload authority has expired plus a settlement grace, preventing a
+   late in-flight PUT from recreating a just-deleted generation.
 
-If upload fails or its outcome is ambiguous, the GC row survives. Removal first
-queues object keys transactionally with metadata deletion, then attempts R2
-deletion. Failed deletions remain queued for `drainBinaryGarbage()`.
+Client assertions never establish a digest. A digest is exposed only when a
+trusted store or gateway verified it against the bytes. The metadata DO never
+accepts or returns the large body.
 
-R2 is strongly consistent after a successful binding operation, but that does
-not create cross-service atomicity. Generation-specific keys prevent readers
-from confusing old and new bodies and avoid R2's same-key concurrent-write
-limit.
+Opaque copy inserts another namespace reference and performs no R2 operation.
+Move updates SQLite paths only. Replacing or removing the last reference moves
+the object key to GC in the same namespace transaction.
 
-Binary range reads have both buffered and streaming forms. The streaming form
-passes the R2 `ReadableStream` through Workers RPC, preserving flow control and
-cancellation instead of accumulating an entire object in isolate memory.
+## Read leases and GC
 
-## Deliberate non-goals
+`resolveOpaqueRead()` extends the object's durable retention time by a bounded
+lease (capped at one hour) and returns R2 metadata. `readOpaque()` then obtains
+the body directly from the store. Unlink queues deletion no earlier than that
+retention time; callers must start the R2 read within the lease.
 
-The current model has no symlinks, hard links, users/groups, access-control
-enforcement, file descriptors, locks, sparse files, extended attributes, or
-binary mutation/search. `mode` is compatibility metadata and is not an
-authorization system. Existing POSIX applications cannot mount or access this
-namespace without an application-specific adapter.
+GC materializes at most 100 due keys, issues one idempotent multi-delete, and
+removes queue/session rows in a short transaction. Failure records exponential
+backoff and schedules the next alarm before rethrowing. One alarm is always
+set to the earliest open-session expiry, verification lease, or GC retry. The
+work survives Durable Object eviction.
+
+## Shell and RPC boundaries
+
+The manual raw-`ReadableStream` pipe has byte-sized high-water accounting,
+backpressure, cancellation wakeups, ref-counted sinks, and no dependency on
+custom `TransformStream` transformer semantics. Pipelines start every stage
+before awaiting completion. File descriptor duplication is evaluated
+left-to-right.
+
+In-process execution returns `{ stdout, stderr, completed, cancel }`. Remote
+`executeTo()` instead accepts explicit stdin/stdout/stderr streams and returns
+only an exit status; `executeText()` is the bounded convenience form. This
+avoids assuming that a nested execution object has a transferable RPC
+lifetime.
+
+## Migration policy
+
+This pre-1.0 redesign deliberately removes the structured executor and the old
+text/binary schema. The new tables use the `vfs2_` prefix and require a fresh
+filesystem. There is no automatic migration of deployed legacy data. Export
+old data and import it through the byte and opaque APIs before switching a
+production binding.

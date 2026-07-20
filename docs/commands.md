@@ -1,150 +1,147 @@
-# Commands and API
+# Shell, commands, and direct API
 
-These commands borrow familiar Unix names but are structured application APIs,
-not complete POSIX or GNU/BSD utility implementations. See the
-[POSIX-style compatibility profile](posix-compatibility.md) for the exact
-boundary.
+The primary command interface is Bash-compatible source, not a JSON dispatcher.
+`BASH_COMPATIBILITY_VERSION` is currently `1`.
 
-Each command lives in its own side-effect-free module and exports two entry
-points:
-
-- `runLs`, `runGrep`, and similar typed functions for direct composition;
-- `lsCommand`, `grepCommand`, and similar definitions for the generic executor,
-  including runtime input validation.
-
-Prefer imports such as `@corca-ai/cf-vfs/commands/ls` over the all-command
-barrel when bundle size matters. The package declares `sideEffects: false`.
-
-## Executor contract
-
-`CommandExecutor.execute()` and the Durable Object `execute()` RPC accept:
+## Execution APIs
 
 ```ts
-interface ExecuteRequest {
-  command: string;
-  cwd?: string;
-  input?: unknown;
-  stdin?: string;
-  maxInputBytes?: number;
-  maxOutputBytes?: number;
-  output?: "both" | "structured" | "text";
-}
+import { Shell } from "@corca-ai/cf-vfs/shell";
+import { catCommand, findCommand } from "@corca-ai/cf-vfs/shell/commands";
+import { lsCommand } from "@corca-ai/cf-vfs/shell/commands/ls";
+
+const shell = new Shell({
+  fileSystem,
+  commands: [catCommand, findCommand, lsCommand],
+});
+
+const execution = shell.executeStream({ script, cwd, env, args, stdin });
+const [stdout, stderr, status] = await Promise.all([
+  new Response(execution.stdout).text(),
+  new Response(execution.stderr).text(),
+  execution.completed,
+]);
 ```
 
-The result contains `exitCode`, `stdout`, `stderr`, structured `data`, and a
-`truncated` flag. Unknown commands return 127, invalid command input returns 2,
-and filesystem failures return 1. Commands can also return a meaningful
-non-zero status without a filesystem failure: `test` returns 1 for a false
-predicate, `grep` returns 1 for no matches, and `cmp`/`diff` return 1 for
-different content. Text output defaults to 1 MiB and has an 8 MiB hard cap. Use
-`output: "text"` when structured search results would only duplicate a large
-stdout response.
+Consume stdout and stderr concurrently before awaiting `completed`; an
+unconsumed output correctly applies backpressure. `cancel(reason)` cancels the
+whole execution. Deadline, idle-output, intermediate, and output limits fail
+instead of returning a valid truncated prefix.
 
-`stdin` is an explicit string for commands that consume text input. It defaults
-to empty and is never populated by an implicit pipeline. Input defaults to a 1
-MiB byte limit and has an 8 MiB hard cap; oversized input is rejected with
-`E2BIG` rather than truncated. A caller can compose commands by explicitly
-passing one result's `stdout` as the next request's `stdin`.
+`executeText()` concurrently drains both streams and returns decoded strings;
+`executeBytes()` returns exact byte arrays without also allocating strings.
+Both apply a shared 8 MiB materialized-output limit by default. Use them only
+when bounded materialization is appropriate. `ShellDurableObject`
+also provides `executeTo({ script, stdin, stdout, stderr })` for the remote
+stream boundary.
 
-Structured filesystem errors expose a code and optional canonical path.
-Common codes include `ENOENT`, `EEXIST`, `ENOTDIR`, `EISDIR`, `ENOTEMPTY`,
-`ENAMETOOLONG`, `EFBIG`, and `ENOTSUP`. `EREVISION` and `ENOTTEXT` describe
-library-specific revision and text-content constraints; `E2BIG` is used for
-bounded command or search inputs rather than filesystem capacity.
+Shell-domain failures resolve to statuses so `||` can handle them. An
+unexpected command/runtime invariant rejects `completed`.
 
-## Supported commands
+| Outcome | Status |
+| --- | ---: |
+| success | 0 |
+| false `test`, no `grep` match, `cmp`/`diff` difference | 1 |
+| syntax or usage error | 2 |
+| command unavailable by policy | 126 |
+| command not found | 127 |
 
-| Module | Important input | Semantics and implementation |
-| --- | --- | --- |
-| `ls` | `path`, `all`, `long` | Direct-child indexed metadata query; never reads bodies. |
-| `stat` | `path` or `paths` | Kind, content kind, bytes, lines, mode, timestamps, and revision. |
-| `find` | `path`, `type`, `name`, `pathGlob`, `maxDepth`, `limit` | Indexed path-range scan followed by glob and depth filters. |
-| `pwd` | none | Returns the executor's normalized current working directory. |
-| `basename`, `dirname` | `path`; optional `suffix` for `basename` | Lexical POSIX-style path component transforms. They do not access the filesystem. |
-| `realpath` | `path`, `requireExists` | Resolves a canonical absolute VFS path. Existence is required by default; there are no symlinks to traverse. |
-| `test` | `path`, `predicate`, `negate` | Tests `exists`, `file`, `directory`, `text`, `binary`, or `nonempty`; false is exit status 1 rather than an error. |
-| `tree` | `path`, `maxDepth`, `limit` | Bounded recursive tree display with structured entries and truncation metadata. |
-| `du` | `path` or `paths`, `maxDepth`, `limit` | Sums logical file bytes from metadata without reading file bodies. |
-| `cat` | `path` or `paths` | Concatenates logical text files regardless of SQL chunk count. |
-| `head`, `tail` | `path` plus either `lines` or `bytes` | Reads only enough leading or trailing chunks. Byte slices round inward to valid UTF-8. |
-| `grep` | `pattern`, `paths`, `fixed`, `ignoreCase`, `include`, `maxResults` | Recursive line-oriented fixed or regex search with path, line, and column output. |
-| `sed` | `path`, `pattern`, `replacement`, `fixed`, `global`, `ifRevision` | Atomic whole-file replacement with an optional revision guard. |
-| `diff` | `from`, `to`, `maxBytes` | Bounded UTF-8 line comparison with a compact zero-context unified-style output. It is not a patch-format compatibility promise. |
-| `cmp` | `from`, `to`, `maxBytes` | Streaming byte comparison for text or binary files. Different content returns exit status 1 with the first differing byte and line. |
-| `patch` | `path`, `patch` or text/stdin, `ifRevision` | Applies a bounded, single-file unified-diff subset atomically. Every context/deletion line must match and writes use a revision guard. |
-| `wc` | `path` or `paths`, `lines`, `words`, `bytes` | POSIX-style newline, word, and UTF-8 byte counts. |
-| `sha256sum` | `path` or `paths`, `maxBytes` | Computes SHA-256 over exact file bytes. Binary R2 bodies are consumed through a digest stream. |
-| `write` | `path`, `text`, `createParents`, `ifRevision`, `mode`, `disposition` | Atomic text write. `disposition` is `create`, `replace`, or the default `upsert`. |
-| `tee` | `paths`, text or stdin, `append`, `createParents`, `ifRevision` | Writes bounded input to one or more text files and echoes it. A revision guard requires exactly one target. |
-| `mkdir` | `path` or `paths`, `parents`, `mode` | Directory creation with `mkdir -p` semantics and optional compatibility mode metadata. |
-| `touch` | `path` or `paths`, `create`, `createParents`, `ifRevision`, `mode`, `modifiedAtMs` | Creates empty text files or updates metadata without rewriting existing bodies. |
-| `chmod` | `path` or `paths`, `mode`, `ifRevision` | Changes permission-shaped metadata while preserving file-type bits. It does not enforce access control. |
-| `mktemp` | `template`, `directory`, `createParents`, `mode` | Exclusively creates a randomized file or directory. The template ends in at least six `X` characters. |
-| `cp` | `from`, `to`, `createParents` | Text-only copy; a directory destination receives the source basename. |
-| `mv` | `from`, `to`, `replace` | Atomic rename of a file or subtree within one Durable Object. Replacement is opt-in and requires compatible file/directory kinds and an empty destination directory. |
-| `rm` | `path` or `paths`, `recursive` | Removes SQL state and deletes or durably queues R2 objects. |
-| `rmdir` | `path` or `paths` | Removes empty directories and rejects regular files. |
-| `sort` | `text` or stdin, `ignoreCase`, `numeric`, `reverse` | Stable whole-line sort using deterministic Unicode string order or numeric values. |
-| `uniq` | `text` or stdin, `count`, `ignoreCase` | Collapses adjacent equal lines, optionally prefixing occurrence counts. |
-| `cut` | `text` or stdin, `delimiter`, `fields` | Selects 1-based delimiter-separated fields; lines without the delimiter pass through. |
-| `tr` | `text` or stdin, `from`, `to`, `delete` | Translates or deletes explicit Unicode code points. Ranges and character classes are not expanded. |
-| `nl` | `text` or stdin, `all`, `start`, `increment`, `width`, `separator` | Numbers non-empty lines by default with configurable numbering metadata. |
-| `paste` | `texts`, `delimiter`, `serial` | Combines bounded text inputs by corresponding lines or serially. |
-| `comm` | `left`, `right`, suppression flags, `checkOrder` | Produces three logical columns for two sorted bounded text inputs. Ordering is checked by default. |
-| `join` | `left`, `right`, `delimiter`, `leftField`, `rightField`, `unpaired`, `maxRows` | Bounded equi-join over exact-delimiter fields, including duplicate-key Cartesian pairs and optional unpaired rows. |
-| `fold` | `text` or stdin, `width`, `spaces` | Folds lines by Unicode code-point count, optionally at whitespace. It does not calculate terminal display width. |
+## Bash Version 1
 
-The text-transform commands use an explicit `text` field when supplied and
-otherwise consume `stdin`. Their input is checked against the executor's input
-limit. Line-oriented transforms preserve whether the original input ended in a
-newline; empty input remains empty. They operate on JavaScript Unicode strings,
-not locale-specific byte collation, and intentionally implement only the
-options listed above.
+Supported syntax:
 
-`paste`, `comm`, and `join` accept multiple explicit text values and apply the
-same input limit to their combined UTF-8 byte size. `comm` uses deterministic
-JavaScript string ordering. `join` accepts one exact, non-empty delimiter rather
-than locale-dependent blank-field parsing.
+- simple commands, assignment-only commands, and command-prefix assignments;
+- single quotes, double quotes, and backslash escapes;
+- `$VAR`, `${VAR}`, `$?`, `$0`, `$1...`, `$@`, and `$#`;
+- newlines, `;`, `&&`, `||`, and prefix `!`;
+- concurrent pipelines;
+- `<`, `>`, `>>`, `2>`, `2>>`, and left-to-right `2>&1`;
+- pathname expansion with `*`, `?`, and bracket/range expressions;
+- comments beginning with `#` at a word boundary.
 
-`patch` accepts one file and one patch document. It supports standard unified
-hunk headers, context/add/delete lines, and the no-final-newline marker, but not
-multi-file patches, renames, binary patches, fuzz, or offset guessing. This
-strict subset prevents a patch from silently applying to unexpected content.
+The complete submitted script is parsed before any command runs. Unsupported
+parenthesized syntax, command substitution, parameter operators, arrays,
+extended `[[ ]]`, brace expansion, arbitrary descriptors, background jobs,
+reserved control syntax, and malformed redirection produce status 2 before a
+partial mutation.
 
-This is a command API, not a shell interpreter. It intentionally has no string
-parser, process spawning, pipes, redirection, environment expansion, or command
-substitution. An agent can use returned text as the next structured request's
-input without exposing a shell-injection surface.
+Pipeline stages receive cloned shell state; an ordinary single built-in uses
+parent state. Assignment-only commands persist. Command-prefix assignments are
+recognized before expansion, their right-hand sides do not split or glob, and
+normally restore after a command. Consecutive assignment-only right-hand sides
+observe earlier assignments. `export` and
+`unset` mutate parent state outside a pipeline. `set -o pipefail` and
+`set +o pipefail` are supported.
 
-## Binary methods
+A downstream normal early close maps the upstream edge's `EPIPE` to status 0.
+Consequently `cat large | head -n 1` remains successful under `pipefail` while
+real non-zero upstream statuses are still selected from right to left.
 
-Binary bodies are not exposed through the text commands. The Durable Object
-base class provides:
+See [POSIX and Bash compatibility](posix-compatibility.md) for deterministic
+locale, glob, and redirection details and [the parser spike](parser-spike.md)
+for parser selection.
 
-```ts
-putBinary(path, bytes, { createParents?, mode? })
-readBinary(path, { offset, length } | { suffix })
-readBinaryStream(path, { offset, length } | { suffix })
-drainBinaryGarbage(limit?)
-```
+## Built-ins and utilities
 
-Binary creation is immutable. An existing path cannot be overwritten, searched,
-or edited. Remove the old path and create a new generation-specific object when
-the application wants replacement semantics.
+The default registry is available only from
+`@corca-ai/cf-vfs/shell/commands/default`. Applications should normally build
+the smallest registry they need. The dedicated `ls` subpath and ordinary
+`cat`/`grep` barrel imports are covered by bundle tests proving unrelated
+command implementations are absent; the default preset is covered separately.
 
-`readBinary()` materializes its selected range as an `ArrayBuffer` for
-compatibility. `readBinaryStream()` transfers an R2 byte stream over Workers
-RPC with flow control, so large or slow consumers do not require whole-object
-buffering. Cancelling the receiving stream propagates to its source.
+| Group | Commands and principal Version 1 options |
+| --- | --- |
+| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `unset`, `exit`, `set -o pipefail`, `test`, `[` |
+| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f`, `ls -l -d`, `find -name -type -maxdepth`, `stat`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
+| streaming text/bytes | `cat`, `grep -i -v -n -F -c`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed s/old/new/[g]` |
+| bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch` |
 
-## Paginated filesystem reads
+Text utilities use fatal incremental UTF-8 decoding unless the operation is
+explicitly byte-based. Invalid UTF-8 is `EIO`. `cat`, byte `head`, byte `wc`,
+and `cmp` preserve arbitrary bytes. Line length and record count are bounded
+independently from byte count. Commands batch small output into roughly 64 KiB
+slabs. `sort`, `tail`, `paste`, `diff`, `comm`, `join`, `patch`, hashing, and
+atomic VFS commits buffer only at their semantic barriers.
 
-The filesystem and Durable Object base class expose `listPage(path, options)`
-and `findPage(options)`. Both accept a `limit` of at most 1,000 and an opaque
-`cursor`, and return `entries`, `scanned`, and `nextCursor`. `findPage` limits
-raw paths scanned in a page before applying type, depth, name, and path filters,
-so a filtered page can contain fewer entries or even be empty while still
-returning a continuation cursor.
+Named utilities implement the documented subset, not every GNU/BSD option.
+Unsupported options are usage errors rather than silently ignored behavior.
 
-Cursors are keyset positions, not snapshots. Callers must treat them as opaque
-and continue until `nextCursor` is null.
+## Opaque behavior
+
+Opaque files are normal regular files for pathname and metadata operations but
+their bodies are absent from the shell capability object.
+
+| Operation | Behavior |
+| --- | --- |
+| `ls`, `stat`, `find`, `tree`, glob, `du`, `test -f`, `file` | metadata only; succeeds |
+| `touch`, `chmod`, `mv` | SQLite metadata/namespace only |
+| `cp` | creates another metadata reference; no R2 body transfer |
+| `rm` | unlinks and durably queues the last unreachable generation |
+| `cat`, text `head`/`tail`, `grep`, `sort`, `sed`, `cut`, `tr`, `nl`, `fold` | `ENOTSUP` before R2 read |
+| `cmp`, `diff`, `patch`, `join`, `comm` | `ENOTSUP` if an opaque body is required |
+| `sha256sum` | emits a trusted verified digest; otherwise `ENOTSUP` |
+| `>>` and append `tee` | `ENOTSUP` |
+| `>` | atomically replaces the entry with bounded inline bytes and queues old R2 content if unreachable |
+
+`readOpaque()` and upload lifecycle methods remain on the programmatic VFS;
+they are not present on `ShellCommandContext.fileSystem`.
+
+## Direct VFS primitives
+
+`VirtualFileSystem` operates on bytes and canonical paths:
+
+- `stat`, `list`/`listPage`, and `find`/`findPage`;
+- `readFile`, `writeFile`, `appendFile`, `touch`, and `setMetadata`;
+- `mkdir`, `remove`, `move`, and `copy`;
+- `getMutationToken` and optional revision/token guards;
+- `beginOpaqueUpload`, `commitOpaqueUpload`, `abortOpaqueUpload`;
+- `resolveOpaqueRead` and `drainGarbage`.
+
+Inline `readFile()` returns a stable bounded stream snapshot. Consume or cancel
+it to release the instance-wide materialization budget. Writes accept strings,
+buffers, typed views, or byte streams and publish once after normal collection.
+
+Pagination cursors are keyset positions, not durable snapshots. Continue
+through empty filtered pages until `nextCursor` is null. A concurrent mutation
+before the cursor can be missed; restart when a fresh complete traversal is
+required.
