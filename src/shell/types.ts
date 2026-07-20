@@ -48,7 +48,20 @@ export interface ShellSession {
   sourceDepth: number;
   loopDepth: number;
   localFrames: Array<Map<string, string | undefined>>;
+  localGetoptsFrames: ShellLocalGetoptsFrame[];
+  getopts: ShellGetoptsState | undefined;
   flow: ShellFlow;
+}
+
+export interface ShellGetoptsState {
+  optind: number;
+  characterIndex: number;
+  optindGeneration: number;
+}
+
+export interface ShellLocalGetoptsFrame {
+  captured: boolean;
+  state: ShellGetoptsState | undefined;
 }
 
 export type ShellFlow =

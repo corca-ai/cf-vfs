@@ -36,10 +36,14 @@ particular, process substitution, backticks, arrays, brace expansion, extended
 tests, C-style `for`, background jobs, and arbitrary descriptors are not
 approximated. The language version is exported as `BASH_COMPATIBILITY_VERSION`.
 
-Version 3 source-file work is available while the complete Version 3 profile
-is still in progress. `source` and `.` read only an explicit inline VFS path,
-never search `PATH`, parse the complete sourced unit before executing it, and
-share all relevant budgets with the caller. Opaque files remain unavailable.
+Version 3 work is available while the complete Version 3 profile is still in
+progress. `source` and `.` read only an explicit inline VFS path, never search
+`PATH`, parse the complete sourced unit before executing it, and share all
+relevant budgets with the caller. Opaque files remain unavailable.
+`read -r`, `shift`, and short-option `getopts` provide the non-interactive input
+and positional primitives used by reusable VFS scripts. `read` has no prompt,
+timeout, terminal, or readline behavior; it uses bounded virtual fd 0 and the
+fixed whitespace `IFS` profile.
 
 Deliberate deterministic choices include:
 
@@ -49,6 +53,11 @@ Deliberate deterministic choices include:
   `**` has no special cross-directory meaning;
 - pipeline stages receive cloned state, while a non-pipeline built-in can
   change the parent session;
+- `read -r` preserves a final partial record but returns status 1, and an
+  excessive `shift` returns status 1 without changing positional arguments;
+- `getopts` exposes `OPTIND` and `OPTARG`, accepts only short options and
+  required option arguments, uses leading `:` for silent error results, and
+  resets its hidden cluster cursor on an `OPTIND` assignment;
 - subshells and command substitutions also clone session state; command
   substitution output must be bounded valid UTF-8 and contain no NUL;
 - arithmetic wraps deterministically at signed 64 bits instead of using the

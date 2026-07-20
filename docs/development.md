@@ -69,6 +69,14 @@ parse the whole bounded file before executing that file, and charge cumulative
 source bytes and AST nodes to the caller's execution. Never give `source` a
 `PATH` lookup or access to opaque bodies.
 
+`read -r` must use the managed shell-input cursor rather than taking a raw
+reader and discarding the suffix of a chunk after newline. Wrap every root,
+pipeline, here-document, here-string, and input-redirection stream at its shell
+fd boundary. Tests must cover several records in one chunk, a UTF-8 code point
+split across chunks, partial EOF, cancellation, and line/buffer limits.
+The top-level executor owns fd 0 for its lifetime and must cancel any unread
+root input on every success, failure, or cancellation exit.
+
 Regenerate the fixture only after reviewing the semantic change:
 
 ```sh

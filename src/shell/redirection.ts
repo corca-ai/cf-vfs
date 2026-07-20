@@ -3,6 +3,7 @@ import { normalizePath } from "../core/path.js";
 import { bodyToStream } from "../vfs/streams.js";
 import type { ByteBody } from "../vfs/types.js";
 import { expandScalarWord, expandWord, type ExpansionRuntime } from "./expand.js";
+import { shellInput } from "./input.js";
 import { sinkFromWritable } from "./pipe.js";
 import type { Redirection } from "./parser.js";
 import type {
@@ -118,7 +119,7 @@ export async function applyRedirections(
         if (cancelReplacedInput || inputRedirected) {
           await fds[0].cancel(new VfsError("EPIPE", "pipeline input was replaced by redirection"));
         }
-        fds[0] = bodyToStream(`${value}\n`);
+        fds[0] = shellInput(bodyToStream(`${value}\n`));
         inputRedirected = true;
         continue;
       }
@@ -127,7 +128,7 @@ export async function applyRedirections(
         if (cancelReplacedInput || inputRedirected) {
           await fds[0].cancel(new VfsError("EPIPE", "pipeline input was replaced by redirection"));
         }
-        fds[0] = bodyToStream(value);
+        fds[0] = shellInput(bodyToStream(value));
         inputRedirected = true;
         continue;
       }
@@ -137,7 +138,7 @@ export async function applyRedirections(
         if (cancelReplacedInput || inputRedirected) {
           await fds[0].cancel(new VfsError("EPIPE", "pipeline input was replaced by redirection"));
         }
-        fds[0] = replacement;
+        fds[0] = shellInput(replacement);
         inputRedirected = true;
         continue;
       }

@@ -59,6 +59,15 @@ share cumulative source-byte and AST-node allowances. Command substitutions
 also charge total I/O and their dedicated output limit; neither construct
 creates a fresh allowance.
 
+`read -r` consumes fd 0 with a fatal streaming UTF-8 decoder. It retains at
+most the unread suffix of one upstream chunk plus one decoded line under the
+shared buffered-byte budget, applies the one-line and total-I/O limits, and
+cancels promptly with the execution. The root input is also cancelled when the
+execution finishes, releasing an unread suffix and its producer. This preserves
+the next record without draining the rest of a backpressured stream. Repeated
+`getopts` calls and all three positional built-ins consume the ordinary command
+and step budgets rather than creating a separate loop budget.
+
 `executeStream()` exposes real backpressure. Consume stdout and stderr
 concurrently; if a root output remains blocked beyond the idle timeout the
 execution fails instead of retaining memory forever. Cancellation wakes

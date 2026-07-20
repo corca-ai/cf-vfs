@@ -110,7 +110,7 @@ A downstream normal early close maps the upstream edge's `EPIPE` to status 0.
 Consequently `cat large | head -n 1` remains successful under `pipefail` while
 real non-zero upstream statuses are still selected from right to left.
 
-### Version 3 work in progress: sourced units
+### Version 3 work in progress
 
 The default registry includes `source` and `.`. They resolve only explicit
 absolute or `cwd`-relative VFS paths; there is no `PATH` search. A sourced file
@@ -122,6 +122,31 @@ options, and `cwd` changes persist. Supplied positional arguments are temporary,
 Sourced units share cumulative source-byte, AST-node, execution, I/O, mutation,
 deadline, and cancellation budgets with the caller. The exported compatibility
 version remains 2 until every issue in the declared Version 3 profile is complete.
+
+The default registry also includes the deliberately non-interactive
+
+- `read -r [--] [name ...]`, which consumes one bounded UTF-8 record from fd 0,
+  assigns `REPLY` without splitting when no name is supplied, and otherwise
+  uses the fixed whitespace `IFS` profile. A final unterminated record is
+  assigned with status 1; empty EOF assigns empty values with status 1. Other
+  `read` options, prompts, timeouts, and backslash processing are unsupported.
+- `shift [n]`, which atomically removes positional arguments in the current
+  argument frame. The default is one, zero is allowed, and a count beyond `$#`
+  returns status 1 without mutation.
+- `getopts optstring name [args ...]`, which implements short option clusters,
+  required arguments, leading-colon silent reporting, `OPTARG`, and `OPTIND`.
+  It stops at a non-option or `--`; long options and optional arguments are not
+  supported. Assigning `OPTIND=1` resets the hidden short-option cluster cursor
+  even when its visible value was already 1. A function-local `OPTIND` gets its
+  own cursor and restores the caller's cursor on return.
+
+These built-ins mutate the current function or sourced-unit session. Pipeline
+stages, subshells, and command substitutions receive the same cloned state as
+the rest of the Version 3 runtime, so their argument and variable changes do
+not escape. `read -r` retains bytes after its first newline for the next
+consumer even when an upstream stream chunk contains several records.
+At execution completion, any unread root stdin is cancelled so a retained
+record suffix and an RPC producer cannot outlive the shell execution.
 
 See [POSIX and Bash compatibility](posix-compatibility.md) for deterministic
 locale, glob, and redirection details and [the parser spike](parser-spike.md)
@@ -137,7 +162,7 @@ command implementations are absent; the default preset is covered separately.
 
 | Registry group | Available commands and principal options |
 | --- | --- |
-| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `unset`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set -o pipefail`, `test`, `[` |
+| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set -o pipefail`, `test`, `[` |
 | namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f`, `ls -l -d`, `find -name -type -maxdepth`, `stat`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | streaming text/bytes | `cat`, `grep -i -v -n -F -c`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed s/old/new/[g]` |
 | bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch` |

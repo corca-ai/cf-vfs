@@ -159,6 +159,69 @@
       "args": [],
       "stdout": "inner:4|:6",
       "exitCode": 0
+    },
+    {
+      "name": "read-records-and-fields",
+      "script": "{ read -r FIRST SECOND; read -r THIRD; printf '<%s>|<%s>|<%s>' \"$FIRST\" \"$SECOND\" \"$THIRD\"; } <<'EOF'\n  alpha   beta gamma  \ntail\nEOF",
+      "env": {},
+      "args": [],
+      "stdout": "<alpha>|<beta gamma>|<tail>",
+      "exitCode": 0
+    },
+    {
+      "name": "shift-positional-arguments",
+      "script": "shift; printf '%s:%s|' \"$1\" \"$#\"; shift 2; printf '%s:%s' \"$1\" \"$#\"",
+      "env": {},
+      "args": [
+        "one",
+        "two",
+        "three",
+        "four"
+      ],
+      "stdout": "two:3|four:1",
+      "exitCode": 0
+    },
+    {
+      "name": "getopts-clusters-arguments-and-reset",
+      "script": "while getopts ':ab:' OPT; do printf '%s:<%s>:%s|' \"$OPT\" \"$OPTARG\" \"$OPTIND\"; done; OPTIND=1; while getopts ':ab:' OPT; do printf '%s:<%s>:%s|' \"$OPT\" \"$OPTARG\" \"$OPTIND\"; done",
+      "env": {},
+      "args": [
+        "-a",
+        "-bvalue",
+        "tail"
+      ],
+      "stdout": "a:<>:2|b:<value>:3|a:<>:2|b:<value>:3|",
+      "exitCode": 0
+    },
+    {
+      "name": "read-partial-eof-and-atomic-shift-failure",
+      "script": "printf partial | { read -r VALUE; printf '%s:<%s>|' \"$?\" \"$VALUE\"; }; shift 9 || printf '%s:%s:%s' \"$?\" \"$1\" \"$#\"",
+      "env": {},
+      "args": [
+        "one",
+        "two"
+      ],
+      "stdout": "1:<partial>|1:one:2",
+      "exitCode": 0
+    },
+    {
+      "name": "getopts-hidden-cursor-and-local-reset",
+      "script": "getopts abc OPT -abc; printf '%s|' \"$OPT\"; getopts xyz OPT -xyz; printf '%s|' \"$OPT\"; OPTIND=1; getopts abc OPT -abc; printf '%s|' \"$OPT\"; parse() { local OPTIND=1; getopts abc OPT -abc; printf '%s|' \"$OPT\"; }; parse; parse",
+      "env": {},
+      "args": [],
+      "stdout": "a|y|a|a|a|",
+      "exitCode": 0
+    },
+    {
+      "name": "getopts-silent-errors",
+      "script": "while getopts ':ab:' OPT; do printf '%s:<%s>:%s|' \"$OPT\" \"$OPTARG\" \"$OPTIND\"; done",
+      "env": {},
+      "args": [
+        "-x",
+        "-b"
+      ],
+      "stdout": "?:<x>:2|::<b>:3|",
+      "exitCode": 0
     }
   ]
 }

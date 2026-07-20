@@ -661,6 +661,29 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(result).toMatchObject({ exitCode: 0, stdout: "7|sourced", stderr: "" });
   });
 
+  it("reads streamed records and parses positional options through RPC", async () => {
+    const stub = workspace("shell-input-builtins-rpc");
+    const result = await stub.executeText({
+      script: [
+        "read -r FIRST",
+        "read -r SECOND",
+        "getopts 'a:' OPT",
+        "shift \"$((OPTIND - 1))\"",
+        "printf '%s:%s|%s:%s' \"$FIRST\" \"$SECOND\" \"$OPTARG\" \"$1\"",
+      ].join("\n"),
+      args: ["-a", "value", "tail"],
+      stdin: streamFromChunks([
+        new TextEncoder().encode("first\nsec"),
+        new TextEncoder().encode("ond\n"),
+      ]),
+    });
+    expect(result).toMatchObject({
+      exitCode: 0,
+      stdout: "first:second|value:tail",
+      stderr: "",
+    });
+  });
+
   it("uses caller-provided byte streams for the remote streaming boundary", async () => {
     const stub = workspace("shell-stream-rpc");
     const input = streamFromChunks([new TextEncoder().encode("streamed")]);

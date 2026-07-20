@@ -11,7 +11,7 @@ async function run(fixture) {
     "-e", `TZ=${fixtures.timezone}`,
     ...Object.entries(fixture.env).flatMap(([name, value]) => ["-e", `${name}=${value}`]),
     fixtures.image,
-    "--noprofile", "--norc", "-s", ...fixture.args,
+    "--noprofile", "--norc", "-s", "--", ...fixture.args,
   ], { stdio: ["pipe", "pipe", "pipe"] });
   let stdout = "";
   let stderr = "";

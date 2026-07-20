@@ -1,5 +1,7 @@
 import { VfsError } from "../../core/errors.js";
 import { normalizePath } from "../../core/path.js";
+import { optindGeneration, setOptindFromGetopts } from "../environment.js";
+import { readInputRecord } from "../input.js";
 import type { ShellCommandContext } from "../types.js";
 import {
   commandPath,
@@ -136,6 +138,182 @@ export const unsetCommand = /* @__PURE__ */ defineCommand("unset", (context, arg
   return 0;
 });
 
+const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/u;
+const READ_IFS = /[ \t\n]/u;
+
+function readVariableNames(argv: readonly string[]): { names: string[]; reply: boolean } {
+  if (argv[0] !== "-r") {
+    throw new VfsError("EINVAL", "read: only read -r [name ...] is supported");
+  }
+  const operands = argv[1] === "--" ? argv.slice(2) : argv.slice(1);
+  const names = operands.length === 0 ? ["REPLY"] : [...operands];
+  for (const name of names) {
+    if (!VARIABLE_NAME.test(name)) {
+      throw new VfsError("EINVAL", `read: invalid variable name: ${name}`);
+    }
+  }
+  return { names, reply: operands.length === 0 };
+}
+
+function readAssignments(
+  value: string,
+  names: readonly string[],
+  reply: boolean,
+): Array<{ name: string; value: string }> {
+  if (reply) return [{ name: "REPLY", value }];
+  const assignments: Array<{ name: string; value: string }> = [];
+  let offset = 0;
+  while (offset < value.length && READ_IFS.test(value[offset] ?? "")) offset += 1;
+  for (const [index, name] of names.entries()) {
+    if (index === names.length - 1) {
+      let end = value.length;
+      while (end > offset && READ_IFS.test(value[end - 1] ?? "")) end -= 1;
+      assignments.push({ name, value: value.slice(offset, end) });
+      break;
+    }
+    let end = offset;
+    while (end < value.length && !READ_IFS.test(value[end] ?? "")) end += 1;
+    assignments.push({ name, value: value.slice(offset, end) });
+    offset = end;
+    while (offset < value.length && READ_IFS.test(value[offset] ?? "")) offset += 1;
+  }
+  return assignments;
+}
+
+export const readCommand = /* @__PURE__ */ defineCommand("read", async (context, argv, fds) => {
+  const { names, reply } = readVariableNames(argv);
+  const record = await readInputRecord(fds[0], context.budget, context.signal);
+  for (const value of readAssignments(record.value, names, reply)) {
+    context.session.env.set(value.name, value.value);
+  }
+  return record.terminated ? 0 : 1;
+});
+
+export const shiftCommand = /* @__PURE__ */ defineCommand("shift", (context, argv) => {
+  if (argv.length > 1) throw new VfsError("EINVAL", "shift: too many arguments");
+  const count = argv[0] === undefined ? 1 : parseInteger(argv[0], "shift count");
+  if (count > context.session.args.length) return 1;
+  context.session.args.splice(0, count);
+  return 0;
+});
+
+function validateGetoptsSpec(optstring: string, name: string): void {
+  if (!VARIABLE_NAME.test(name)) {
+    throw new VfsError("EINVAL", `getopts: invalid variable name: ${name}`);
+  }
+  const specification = optstring.startsWith(":") ? optstring.slice(1) : optstring;
+  for (let index = 0; index < specification.length; index += 1) {
+    const option = specification[index] ?? "";
+    if (option === ":" || option === "?" || option === "-") {
+      throw new VfsError("EINVAL", `getopts: invalid option specification: ${option}`);
+    }
+    if (specification[index + 1] === ":") index += 1;
+  }
+}
+
+export const getoptsCommand = /* @__PURE__ */ defineCommand("getopts", async (context, argv, fds) => {
+  if (argv.length < 2) {
+    throw new VfsError("EINVAL", "getopts: expected optstring and variable name");
+  }
+  const [optstring = "", name = "", ...explicitArgs] = argv;
+  validateGetoptsSpec(optstring, name);
+  const args = explicitArgs.length === 0 ? context.session.args : explicitArgs;
+  const optind = parseInteger(context.session.env.get("OPTIND") ?? "1", "getopts: OPTIND", 1);
+  const previous = context.session.getopts;
+  let argumentIndex = optind - 1;
+  let characterIndex = previous !== undefined
+    && previous.optind === optind
+    && previous.optindGeneration === optindGeneration(context.session.env)
+    ? previous.characterIndex
+    : 1;
+  const silent = optstring.startsWith(":");
+  const specification = silent ? optstring.slice(1) : optstring;
+
+  const save = (nextOptind: number, nextCharacterIndex: number): void => {
+    setOptindFromGetopts(context.session.env, String(nextOptind));
+    context.session.getopts = {
+      optind: nextOptind,
+      characterIndex: nextCharacterIndex,
+      optindGeneration: optindGeneration(context.session.env),
+    };
+  };
+  const finish = (nextOptind: number): number => {
+    save(nextOptind, 1);
+    context.session.env.set(name, "?");
+    context.session.env.delete("OPTARG");
+    return 1;
+  };
+
+  while (true) {
+    const argument = args[argumentIndex];
+    if (argument === undefined || argument === "-" || !argument.startsWith("-")) {
+      return finish(argumentIndex + 1);
+    }
+    if (argument === "--") return finish(argumentIndex + 2);
+    if (characterIndex >= argument.length) {
+      argumentIndex += 1;
+      characterIndex = 1;
+      continue;
+    }
+
+    const option = argument[characterIndex] ?? "";
+    const definition = option === ":" ? -1 : specification.indexOf(option);
+    const requiresArgument = definition >= 0 && specification[definition + 1] === ":";
+    let nextOptind = argumentIndex + 1;
+    let nextCharacterIndex = characterIndex + 1;
+    if (nextCharacterIndex >= argument.length) {
+      nextOptind += 1;
+      nextCharacterIndex = 1;
+    }
+
+    if (definition < 0) {
+      save(nextOptind, nextCharacterIndex);
+      context.session.env.set(name, "?");
+      if (silent) context.session.env.set("OPTARG", option);
+      else {
+        context.session.env.delete("OPTARG");
+        await writeText(fds[2], `getopts: illegal option -- ${option}\n`);
+      }
+      return 0;
+    }
+
+    if (!requiresArgument) {
+      save(nextOptind, nextCharacterIndex);
+      context.session.env.set(name, option);
+      context.session.env.delete("OPTARG");
+      return 0;
+    }
+
+    let optionArgument: string | undefined;
+    if (characterIndex + 1 < argument.length) {
+      optionArgument = argument.slice(characterIndex + 1);
+      nextOptind = argumentIndex + 2;
+      nextCharacterIndex = 1;
+    } else if (args[argumentIndex + 1] !== undefined) {
+      optionArgument = args[argumentIndex + 1];
+      nextOptind = argumentIndex + 3;
+      nextCharacterIndex = 1;
+    }
+    if (optionArgument !== undefined) {
+      save(nextOptind, nextCharacterIndex);
+      context.session.env.set(name, option);
+      context.session.env.set("OPTARG", optionArgument);
+      return 0;
+    }
+
+    save(argumentIndex + 2, 1);
+    if (silent) {
+      context.session.env.set(name, ":");
+      context.session.env.set("OPTARG", option);
+    } else {
+      context.session.env.set(name, "?");
+      context.session.env.delete("OPTARG");
+      await writeText(fds[2], `getopts: option requires an argument -- ${option}\n`);
+    }
+    return 0;
+  }
+});
+
 function defineSourceCommand(name: "source" | ".") {
   return defineCommand(name, async (context, argv, fds) => {
     const [path, ...args] = argv;
@@ -172,12 +350,19 @@ export const dotCommand = /* @__PURE__ */ defineSourceCommand(".");
 
 export const localCommand = /* @__PURE__ */ defineCommand("local", (context, argv) => {
   const frame = context.session.localFrames.at(-1);
-  if (context.session.functionDepth === 0 || frame === undefined) {
+  const getoptsFrame = context.session.localGetoptsFrames.at(-1);
+  if (context.session.functionDepth === 0 || frame === undefined || getoptsFrame === undefined) {
     throw new VfsError("EINVAL", "local: can only be used in a function");
   }
   for (const value of argv) {
     const parsed = assignment(value);
     if (!frame.has(parsed.name)) frame.set(parsed.name, context.session.env.get(parsed.name));
+    if (parsed.name === "OPTIND" && !getoptsFrame.captured) {
+      getoptsFrame.captured = true;
+      getoptsFrame.state = context.session.getopts === undefined
+        ? undefined
+        : { ...context.session.getopts };
+    }
     context.session.env.set(parsed.name, value.includes("=") ? parsed.value : "");
   }
   return 0;

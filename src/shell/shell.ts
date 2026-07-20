@@ -3,6 +3,7 @@ import { normalizePath } from "../core/path.js";
 import { bodyToStream, readAllBytes } from "../vfs/streams.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 import { ExecutionBudget, resolveShellLimits } from "./budget.js";
+import { optindGeneration, ShellEnvironment } from "./environment.js";
 import {
   expandAssignmentValue,
   expandCasePattern,
@@ -12,6 +13,7 @@ import {
   type ExpansionRuntime,
 } from "./expand.js";
 import { createBytePipe, isDownstreamClosedError } from "./pipe.js";
+import { shellInput } from "./input.js";
 import {
   parseShellScript,
   type AndOrNode,
@@ -34,6 +36,7 @@ import type {
   ShellExecution,
   ShellFileDescriptors,
   ShellLimits,
+  ShellLocalGetoptsFrame,
   ShellOptions,
   ShellPolicy,
   ShellSession,
@@ -47,7 +50,9 @@ function emptyInput(): ReadableStream<Uint8Array> {
 function cloneSession(session: ShellSession): ShellSession {
   return {
     cwd: session.cwd,
-    env: new Map(session.env),
+    env: session.env instanceof ShellEnvironment
+      ? session.env.clone()
+      : new ShellEnvironment(session.env),
     args: [...session.args],
     lastExitCode: session.lastExitCode,
     exitRequested: false,
@@ -58,6 +63,11 @@ function cloneSession(session: ShellSession): ShellSession {
     sourceDepth: session.sourceDepth,
     loopDepth: session.loopDepth,
     localFrames: session.localFrames.map((frame) => new Map(frame)),
+    localGetoptsFrames: session.localGetoptsFrames.map((frame) => ({
+      captured: frame.captured,
+      state: frame.state === undefined ? undefined : { ...frame.state },
+    })),
+    getopts: session.getopts === undefined ? undefined : { ...session.getopts },
     flow: { type: "none" },
   };
 }
@@ -316,9 +326,11 @@ async function runFunction(
   }
   const previousArgs = session.args;
   const frame = new Map<string, string | undefined>();
+  const getoptsFrame: ShellLocalGetoptsFrame = { captured: false, state: undefined };
   session.args = [...argv];
   session.functionDepth += 1;
   session.localFrames.push(frame);
+  session.localGetoptsFrames.push(getoptsFrame);
   try {
     let status = await runCommandNode(
       definition.body,
@@ -334,7 +346,13 @@ async function runFunction(
     return status;
   } finally {
     session.localFrames.pop();
+    session.localGetoptsFrames.pop();
     restoreLocals(session, frame);
+    if (getoptsFrame.captured) {
+      session.getopts = getoptsFrame.state === undefined
+        ? undefined
+        : { ...getoptsFrame.state, optindGeneration: optindGeneration(session.env) };
+    }
     session.functionDepth -= 1;
     session.args = previousArgs;
   }
@@ -653,7 +671,7 @@ async function runPipeline(
         account: (bytes) => runtime.budget.io(bytes),
       });
       output = pipe.sink;
-      nextInput = pipe.readable;
+      nextInput = shellInput(pipe.readable);
     }
     stages.push({
       node,
@@ -798,7 +816,7 @@ export class Shell {
     });
     const session: ShellSession = {
       cwd: normalizePath(options.cwd ?? "/"),
-      env: new Map(Object.entries(options.env ?? {})),
+      env: new ShellEnvironment(Object.entries(options.env ?? {})),
       args: [...(options.args ?? [])],
       lastExitCode: 0,
       exitRequested: false,
@@ -809,18 +827,21 @@ export class Shell {
       sourceDepth: 0,
       loopDepth: 0,
       localFrames: [],
+      localGetoptsFrames: [],
+      getopts: undefined,
       flow: { type: "none" },
     };
     session.env.set("PWD", session.cwd);
     session.env.set("0", session.env.get("0") ?? "cf-vfs");
     session.env.set("IFS", " \t\n");
+    if (!session.env.has("OPTIND")) session.env.set("OPTIND", "1");
     session.env.set("LC_ALL", "C");
     session.env.set("TZ", "UTC");
     const timeout = setTimeout(() => {
       controller.abort(new VfsError("ETIMEDOUT", "shell execution deadline exceeded"));
     }, this.limits.deadlineMs);
     const rootFds: ShellFileDescriptors = {
-      0: options.stdin ?? emptyInput(),
+      0: shellInput(options.stdin ?? emptyInput()),
       1: stdout.sink,
       2: stderr.sink,
     };
@@ -859,6 +880,9 @@ export class Shell {
         await Promise.allSettled([rootFds[1].close(), rootFds[2].close()]);
         return { exitCode: error.code === "EINVAL" ? 2 : 1 };
       } finally {
+        const inputReason = controller.signal.reason
+          ?? new VfsError("EPIPE", "shell execution stopped reading input");
+        await rootFds[0].cancel(inputReason).catch(() => undefined);
         clearTimeout(timeout);
         if (externalAbort !== undefined) options.signal?.removeEventListener("abort", externalAbort);
       }
