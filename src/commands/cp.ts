@@ -1,14 +1,13 @@
 import type { CommandContext, CommandDefinition, CommandPayload } from "../core/command.js";
 import { inputRecord, booleanValue, stringValue } from "../core/validation.js";
-import type { WriteResult } from "../core/types.js";
+import type { WriteResult, WriteTextOptions } from "../core/types.js";
 import { basename } from "../core/path.js";
 import { isVfsError } from "../core/errors.js";
 import { commandPath } from "./common.js";
 
-export interface CpInput {
+export interface CpInput extends Pick<WriteTextOptions, "createParents"> {
   from: string;
   to: string;
-  createParents?: boolean;
 }
 
 export async function runCp(
@@ -25,7 +24,7 @@ export async function runCp(
   }
   const read = await context.fileSystem.readText(source);
   const result = await context.fileSystem.writeText(target, read.text, {
-    createParents: input.createParents,
+    createParents: input.createParents ?? false,
     mode: read.stat.mode,
   });
   return { data: result };

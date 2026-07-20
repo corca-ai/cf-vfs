@@ -21,8 +21,8 @@ export function searchContent(
   }
 
   const lines = text.split("\n");
-  for (let index = 0; index < lines.length && matches.length < maximumResults; index += 1) {
-    const line = lines[index];
+  for (const [index, line] of lines.entries()) {
+    if (matches.length >= maximumResults) break;
     const haystack = ignoreCase ? line.toLowerCase() : line;
     const column = fixed ? haystack.indexOf(needle) : program?.findLine(line) ?? -1;
     if (column >= 0) {

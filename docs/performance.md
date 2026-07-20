@@ -135,10 +135,14 @@ scale. It does not show that arbitrary multi-gigabyte workspaces, pathological
 regexes, or concurrent scans are safe.
 
 - Metadata commands should remain indexed and body-free.
+- Large namespace consumers should prefer keyset-paginated `listPage()` and
+  `findPage()` over materializing an unbounded directory or subtree.
 - `head` and `tail` should stop after enough chunks; `cat`, regex `grep`, and
   replacement currently materialize one whole logical file.
 - Keep a configured per-text-file limit below the Worker memory budget. The
   library defaults to 32 MiB.
+- Large binary consumers should use `readBinaryStream()` so R2 and Workers RPC
+  flow control replaces whole-object buffering.
 - Treat full-tree regex as cooperative workspace work. For larger corpora,
   expose versioned pages or jobs so one scan does not monopolize the object's
   single thread.

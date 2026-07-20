@@ -11,6 +11,8 @@ entry point.
   Durable Objects and R2, and execute the first command.
 - [Commands and API](commands.md) — command inputs, outputs, exit codes, direct
   functions, and binary RPC methods.
+- [POSIX-style compatibility](posix-compatibility.md) — supported filesystem
+  semantics, deliberate differences, and non-goals.
 - [Architecture](architecture.md) — package boundaries, SQL schema, text
   chunking, consistency, and binary garbage collection.
 - [Performance](performance.md) — production measurements, synchronous SQL

@@ -4,3 +4,4 @@ export * from "./executor.js";
 export * from "./glob.js";
 export * from "./path.js";
 export * from "./types.js";
+export * from "./unified-patch.js";

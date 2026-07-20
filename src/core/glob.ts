@@ -5,7 +5,7 @@ function escapeRegex(character: string): string {
 export function globToRegExp(pattern: string): RegExp {
   let source = "^";
   for (let index = 0; index < pattern.length; index += 1) {
-    const character = pattern[index];
+    const character = pattern.charAt(index);
     if (character === "*") {
       if (pattern[index + 1] === "*") {
         source += ".*";

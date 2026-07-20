@@ -7,12 +7,25 @@ function utf8Length(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
 
+export function compareUtf8(left: string, right: string): number {
+  const leftBytes = new TextEncoder().encode(left);
+  const rightBytes = new TextEncoder().encode(right);
+  const length = Math.min(leftBytes.byteLength, rightBytes.byteLength);
+  for (let index = 0; index < length; index += 1) {
+    const leftByte = leftBytes[index];
+    const rightByte = rightBytes[index];
+    if (leftByte === undefined || rightByte === undefined) break;
+    if (leftByte !== rightByte) return leftByte - rightByte;
+  }
+  return leftBytes.byteLength - rightBytes.byteLength;
+}
+
 function validatePath(path: string): void {
   if (path.includes("\0")) {
     throw new VfsError("EINVAL", "paths cannot contain NUL bytes", path);
   }
   if (utf8Length(path) > MAX_PATH_BYTES) {
-    throw new VfsError("EINVAL", `path exceeds ${MAX_PATH_BYTES} UTF-8 bytes`, path);
+    throw new VfsError("ENAMETOOLONG", `path exceeds ${MAX_PATH_BYTES} UTF-8 bytes`, path);
   }
 }
 
@@ -31,7 +44,7 @@ export function normalizePath(path: string, cwd = "/"): string {
     }
     if (utf8Length(segment) > MAX_NAME_BYTES) {
       throw new VfsError(
-        "EINVAL",
+        "ENAMETOOLONG",
         `path segment exceeds ${MAX_NAME_BYTES} UTF-8 bytes`,
         path,
       );
@@ -42,6 +55,15 @@ export function normalizePath(path: string, cwd = "/"): string {
   const normalized = `/${segments.join("/")}`;
   validatePath(normalized);
   return normalized;
+}
+
+export function pathRequiresDirectory(path: string): boolean {
+  return path.length > 1 && path.endsWith("/");
+}
+
+export function normalizePathPreservingTrailingSlash(path: string, cwd = "/"): string {
+  const normalized = normalizePath(path, cwd);
+  return normalized !== "/" && pathRequiresDirectory(path) ? `${normalized}/` : normalized;
 }
 
 export function dirname(path: string): string {

@@ -21,6 +21,35 @@ try {
   const [{ filename, files }] = JSON.parse(stdout);
   assert(files.some(({ path }) => path === "dist/commands/ls.js"));
   assert(files.some(({ path }) => path === "dist/commands/ls.d.ts"));
+  for (const command of [
+    "basename",
+    "chmod",
+    "cmp",
+    "comm",
+    "diff",
+    "dirname",
+    "du",
+    "fold",
+    "join",
+    "mktemp",
+    "nl",
+    "paste",
+    "patch",
+    "pwd",
+    "realpath",
+    "sha256sum",
+    "sort",
+    "tee",
+    "test",
+    "touch",
+    "tree",
+    "uniq",
+    "cut",
+    "tr",
+  ]) {
+    assert(files.some(({ path }) => path === `dist/commands/${command}.js`));
+    assert(files.some(({ path }) => path === `dist/commands/${command}.d.ts`));
+  }
   assert(files.some(({ path }) => path === "docs/index.md"));
   assert(!files.some(({ path }) => path.startsWith("src/")));
 

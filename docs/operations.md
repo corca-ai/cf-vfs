@@ -66,6 +66,29 @@ UTF-8 code points. `find` and `grep` also cap result counts. Structured data is
 not byte-capped, so request `output: "text"` for potentially large agent-facing
 results or add an application-level pagination policy.
 
+Command stdin is opt-in and uses the same default and hard byte limits. Unlike
+stdout, oversized stdin is rejected rather than truncated so a transform never
+observes an ambiguous prefix. Passing stdout to another command is an explicit
+application action; the executor does not interpret pipes or redirection.
+
+Recursive workspace commands also have entry-count limits. `tree` and `du`
+report whether their traversal was truncated. `diff` checks file metadata
+before reading bodies, defaults to 1 MiB per file, has an 8 MiB hard limit, and
+rejects comparisons whose line matrix would exceed one million cells.
+
+`sha256sum` streams binary bodies into Workers `DigestStream`, so memory use is
+not proportional to the R2 object size. The command still defaults to a 32 MiB
+per-file work limit and permits an explicit limit up to 256 MiB because hashing
+CPU remains proportional to input size. `cmp` similarly streams both inputs and
+has a 64 MiB hard per-file limit. `join` has a separate row limit to bound the
+Cartesian expansion of duplicate keys.
+
+For larger or incremental consumers, use `listPage()` or `findPage()` and keep
+following `nextCursor`, including across empty filtered pages. Pagination is
+mutation-tolerant but not snapshot-isolated: a rename or insertion before the
+cursor can be skipped, while a later key can still appear. Restart traversal
+when the application requires a fresh complete view.
+
 ## Storage exhaustion
 
 When a SQLite-backed object reaches its storage ceiling, writes fail with

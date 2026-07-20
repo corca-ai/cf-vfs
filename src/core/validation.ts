@@ -1,15 +1,21 @@
 import { VfsError } from "./errors.js";
 
-export function inputRecord(value: unknown): Record<string, unknown> {
+export type InputRecord = Readonly<Record<string, unknown>>;
+
+function isInputRecord(value: unknown): value is InputRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+export function inputRecord(value: unknown): InputRecord {
   if (value === undefined) return {};
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+  if (!isInputRecord(value)) {
     throw new VfsError("EINVAL", "command input must be an object");
   }
-  return value as Record<string, unknown>;
+  return value;
 }
 
 export function stringValue(
-  record: Record<string, unknown>,
+  record: InputRecord,
   key: string,
   fallback?: string,
 ): string {
@@ -21,7 +27,7 @@ export function stringValue(
 }
 
 export function optionalString(
-  record: Record<string, unknown>,
+  record: InputRecord,
   key: string,
 ): string | undefined {
   const value = record[key];
@@ -32,8 +38,22 @@ export function optionalString(
   return value;
 }
 
+export function optionalStringChoice<const Choices extends readonly string[]>(
+  record: InputRecord,
+  key: string,
+  choices: Choices,
+): Choices[number] | undefined {
+  const value = optionalString(record, key);
+  if (value === undefined) return undefined;
+  const choice = choices.find((candidate) => candidate === value);
+  if (choice === undefined) {
+    throw new VfsError("EINVAL", `${key} must be one of ${choices.join(", ")}`);
+  }
+  return choice;
+}
+
 export function booleanValue(
-  record: Record<string, unknown>,
+  record: InputRecord,
   key: string,
   fallback = false,
 ): boolean {
@@ -45,24 +65,29 @@ export function booleanValue(
 }
 
 export function integerValue(
-  record: Record<string, unknown>,
+  record: InputRecord,
   key: string,
   fallback: number,
   minimum: number,
   maximum: number,
 ): number {
   const value = record[key] ?? fallback;
-  if (!Number.isInteger(value) || (value as number) < minimum || (value as number) > maximum) {
+  if (
+    typeof value !== "number"
+    || !Number.isInteger(value)
+    || value < minimum
+    || value > maximum
+  ) {
     throw new VfsError(
       "EINVAL",
       `${key} must be an integer from ${minimum} to ${maximum}`,
     );
   }
-  return value as number;
+  return value;
 }
 
 export function optionalInteger(
-  record: Record<string, unknown>,
+  record: InputRecord,
   key: string,
   minimum: number,
   maximum: number,
@@ -72,13 +97,20 @@ export function optionalInteger(
 }
 
 export function stringArray(
-  record: Record<string, unknown>,
+  record: InputRecord,
   key: string,
   fallback: readonly string[] = [],
 ): string[] {
   const value = record[key] ?? fallback;
-  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+  if (!Array.isArray(value)) {
     throw new VfsError("EINVAL", `${key} must be an array of strings`);
   }
-  return [...value];
+  const strings: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") {
+      throw new VfsError("EINVAL", `${key} must be an array of strings`);
+    }
+    strings.push(item);
+  }
+  return strings;
 }

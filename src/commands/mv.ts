@@ -1,11 +1,11 @@
 import type { CommandContext, CommandDefinition, CommandPayload } from "../core/command.js";
-import { inputRecord, stringValue } from "../core/validation.js";
-import type { MoveResult } from "../core/types.js";
+import { booleanValue, inputRecord, stringValue } from "../core/validation.js";
+import type { MoveOptions, MoveResult } from "../core/types.js";
 import { isVfsError } from "../core/errors.js";
 import { basename } from "../core/path.js";
 import { commandPath } from "./common.js";
 
-export interface MvInput {
+export interface MvInput extends MoveOptions {
   from: string;
   to: string;
 }
@@ -24,7 +24,7 @@ export async function runMv(
   } catch (error) {
     if (!isVfsError(error) || error.code !== "ENOENT") throw error;
   }
-  const result = await context.fileSystem.move(source, target);
+  const result = await context.fileSystem.move(source, target, { replace: input.replace ?? false });
   return { data: result };
 }
 
@@ -35,6 +35,7 @@ export const mvCommand: CommandDefinition = {
     return runMv(context, {
       from: stringValue(record, "from"),
       to: stringValue(record, "to"),
+      replace: booleanValue(record, "replace"),
     });
   },
 };

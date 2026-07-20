@@ -1,11 +1,10 @@
 import type { CommandContext, CommandDefinition, CommandPayload } from "../core/command.js";
 import { booleanValue } from "../core/validation.js";
-import type { RemoveResult } from "../core/types.js";
+import type { RemoveOptions, RemoveResult } from "../core/types.js";
 import { commandPath, oneOrManyPaths } from "./common.js";
 
-export interface RmInput {
+export interface RmInput extends RemoveOptions {
   paths: string[];
-  recursive?: boolean;
 }
 
 export async function runRm(
@@ -15,7 +14,7 @@ export async function runRm(
   const results: RemoveResult[] = [];
   for (const path of input.paths) {
     results.push(await context.fileSystem.remove(commandPath(context, path), {
-      recursive: input.recursive,
+      recursive: input.recursive ?? false,
     }));
   }
   return { data: { results } };

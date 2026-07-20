@@ -11,31 +11,51 @@ import {
 import { VfsError } from "../core/errors.js";
 import { matchesGlob } from "../core/glob.js";
 import {
+  matchesFindPage,
+  resolveFindCursor,
+  resolveListCursor,
+  resolvePageLimit,
+  scanPage,
+} from "../core/pagination.js";
+import {
   basename,
-  depthFrom,
   descendantRange,
   dirname,
   isDescendant,
   normalizePath,
+  pathRequiresDirectory,
 } from "../core/path.js";
 import { replaceContent, searchContent } from "../core/search.js";
 import type {
+  AppendTextOptions,
   BinaryRange,
+  BinaryFileStat,
   BinaryReadResult,
   BinaryStore,
+  BinaryStreamReadResult,
   BinaryWriteResult,
+  BinaryWriteOptions,
+  EntryPage,
   FindOptions,
+  FindPageOptions,
+  MetadataUpdateOptions,
+  MoveOptions,
   MoveResult,
+  PageOptions,
   RegexEngine,
   RemoveOptions,
   RemoveResult,
   ReplaceTextOptions,
   ReplaceTextResult,
   TextReadResult,
+  TextFileStat,
   TextSearchOptions,
   TextSearchResult,
   TextSliceOptions,
+  TouchOptions,
   VfsStat,
+  VfsStatMetadata,
+  DirectoryStat,
   VirtualFileSystem,
   WriteResult,
   WriteTextOptions,
@@ -48,42 +68,62 @@ const FILE_MODE = 0o100644;
 
 const ENTRY_COLUMNS = `
   path, parent_path, name, kind, content_kind, content_state,
-  size_bytes, line_count, mode, created_at_ms, modified_at_ms,
+  size_bytes, line_count, word_count, mode, created_at_ms, modified_at_ms,
   revision, r2_key
 `;
 
-interface EntryRow extends Record<string, SqlStorageValue> {
-  path: string;
-  parent_path: string;
-  name: string;
-  kind: "directory" | "file";
-  content_kind: "binary" | "text" | null;
-  content_state: "active" | "none" | "pending";
-  size_bytes: number;
-  line_count: number;
-  mode: number;
-  created_at_ms: number;
-  modified_at_ms: number;
-  revision: number;
-  r2_key: string | null;
+type SqlRow = Readonly<Record<string, SqlStorageValue>>;
+
+interface EntryRowMetadata {
+  readonly path: string;
+  readonly parent_path: string;
+  readonly name: string;
+  readonly size_bytes: number;
+  readonly line_count: number;
+  readonly word_count: number;
+  readonly mode: number;
+  readonly created_at_ms: number;
+  readonly modified_at_ms: number;
+  readonly revision: number;
 }
 
-interface ChunkRow extends Record<string, SqlStorageValue> {
-  body: ArrayBuffer;
-  byte_length: number;
-  newline_count: number;
+interface DirectoryEntryRow extends EntryRowMetadata {
+  readonly kind: "directory";
+  readonly content_kind: null;
+  readonly content_state: "none";
+  readonly r2_key: null;
+}
+
+interface TextEntryRow extends EntryRowMetadata {
+  readonly kind: "file";
+  readonly content_kind: "text";
+  readonly content_state: "active";
+  readonly r2_key: null;
+}
+
+interface BinaryEntryRow extends EntryRowMetadata {
+  readonly kind: "file";
+  readonly content_kind: "binary";
+  readonly content_state: "active" | "pending";
+  readonly r2_key: string;
+}
+
+type EntryRow = DirectoryEntryRow | TextEntryRow | BinaryEntryRow;
+
+interface ChunkRow {
+  readonly body: ArrayBuffer;
+  readonly byte_length: number;
+  readonly newline_count: number;
 }
 
 interface SearchChunkRow extends ChunkRow {
-  path: string;
+  readonly path: string;
 }
 
-interface BinaryKeyRow extends Record<string, SqlStorageValue> {
-  r2_key: string;
-}
-
-interface CountRow extends Record<string, SqlStorageValue> {
-  value: number;
+interface ActiveBinaryFile {
+  objectKey: string;
+  stat: BinaryFileStat;
+  store: BinaryStore;
 }
 
 export interface DurableObjectFileSystemOptions {
@@ -95,13 +135,115 @@ export interface DurableObjectFileSystemOptions {
   createObjectKey?: () => string;
 }
 
-function rowToStat(row: EntryRow): VfsStat {
+function invalidSqlColumn(column: string, expected: string): never {
+  throw new VfsError("EIO", `invalid SQLite row: ${column} must be ${expected}`);
+}
+
+function stringColumn(row: SqlRow, column: string): string {
+  const value = row[column];
+  return typeof value === "string" ? value : invalidSqlColumn(column, "text");
+}
+
+function nullableStringColumn(row: SqlRow, column: string): string | null {
+  const value = row[column];
+  return value === null || typeof value === "string"
+    ? value
+    : invalidSqlColumn(column, "text or null");
+}
+
+function integerColumn(row: SqlRow, column: string): number {
+  const value = row[column];
+  return typeof value === "number" && Number.isSafeInteger(value)
+    ? value
+    : invalidSqlColumn(column, "a safe integer");
+}
+
+function nullableIntegerColumn(row: SqlRow, column: string): number | null {
+  const value = row[column];
+  return value === null || (typeof value === "number" && Number.isSafeInteger(value))
+    ? value
+    : invalidSqlColumn(column, "a safe integer or null");
+}
+
+function arrayBufferColumn(row: SqlRow, column: string): ArrayBuffer {
+  const value = row[column];
+  return value instanceof ArrayBuffer ? value : invalidSqlColumn(column, "a blob");
+}
+
+function parseEntryRow(row: SqlRow): EntryRow {
+  const metadata: EntryRowMetadata = {
+    path: stringColumn(row, "path"),
+    parent_path: stringColumn(row, "parent_path"),
+    name: stringColumn(row, "name"),
+    size_bytes: integerColumn(row, "size_bytes"),
+    line_count: integerColumn(row, "line_count"),
+    word_count: integerColumn(row, "word_count"),
+    mode: integerColumn(row, "mode"),
+    created_at_ms: integerColumn(row, "created_at_ms"),
+    modified_at_ms: integerColumn(row, "modified_at_ms"),
+    revision: integerColumn(row, "revision"),
+  };
+  const kind = stringColumn(row, "kind");
+  const contentKind = nullableStringColumn(row, "content_kind");
+  const contentState = stringColumn(row, "content_state");
+  const objectKey = nullableStringColumn(row, "r2_key");
+
+  if (kind === "directory" && contentKind === null && contentState === "none" && objectKey === null) {
+    return {
+      ...metadata,
+      kind,
+      content_kind: contentKind,
+      content_state: contentState,
+      r2_key: objectKey,
+    };
+  }
+  if (kind === "file" && contentKind === "text" && contentState === "active" && objectKey === null) {
+    return {
+      ...metadata,
+      kind,
+      content_kind: contentKind,
+      content_state: contentState,
+      r2_key: objectKey,
+    };
+  }
+  if (
+    kind === "file"
+    && contentKind === "binary"
+    && (contentState === "active" || contentState === "pending")
+    && objectKey !== null
+  ) {
+    return {
+      ...metadata,
+      kind,
+      content_kind: contentKind,
+      content_state: contentState,
+      r2_key: objectKey,
+    };
+  }
+  throw new VfsError("EIO", "invalid SQLite entry state", metadata.path);
+}
+
+function parseChunkRow(row: SqlRow): ChunkRow {
   return {
+    body: arrayBufferColumn(row, "body"),
+    byte_length: integerColumn(row, "byte_length"),
+    newline_count: integerColumn(row, "newline_count"),
+  };
+}
+
+function parseSearchChunkRow(row: SqlRow): SearchChunkRow {
+  return { ...parseChunkRow(row), path: stringColumn(row, "path") };
+}
+
+function rowToStat(row: DirectoryEntryRow): DirectoryStat;
+function rowToStat(row: TextEntryRow): TextFileStat;
+function rowToStat(row: BinaryEntryRow): BinaryFileStat;
+function rowToStat(row: EntryRow): VfsStat;
+function rowToStat(row: EntryRow): VfsStat {
+  const metadata: VfsStatMetadata = {
     path: row.path,
     parentPath: row.parent_path,
     name: row.name,
-    kind: row.kind,
-    contentKind: row.content_kind,
     sizeBytes: row.size_bytes,
     lineCount: row.line_count,
     mode: row.mode,
@@ -109,6 +251,13 @@ function rowToStat(row: EntryRow): VfsStat {
     modifiedAtMs: row.modified_at_ms,
     revision: row.revision,
   };
+  if (row.kind === "directory") {
+    return { ...metadata, kind: row.kind, contentKind: row.content_kind };
+  }
+  if (row.content_kind === "text") {
+    return { ...metadata, kind: row.kind, contentKind: row.content_kind };
+  }
+  return { ...metadata, kind: row.kind, contentKind: row.content_kind };
 }
 
 function ancestorPaths(path: string): string[] {
@@ -132,8 +281,8 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
   private readonly sql: SqlStorage;
   private readonly chunkBytes: number;
   private readonly maxTextFileBytes: number;
-  private readonly regexEngine?: RegexEngine;
-  private readonly binaryStore?: BinaryStore;
+  private readonly regexEngine: RegexEngine | undefined;
+  private readonly binaryStore: BinaryStore | undefined;
   private readonly now: () => number;
   private readonly createObjectKey: () => string;
 
@@ -219,11 +368,29 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
     });
   }
 
+  private entryRows(query: string, ...bindings: SqlStorageValue[]): EntryRow[] {
+    return this.sql.exec<SqlRow>(query, ...bindings).toArray().map(parseEntryRow);
+  }
+
+  private count(query: string, ...bindings: SqlStorageValue[]): number {
+    return integerColumn(this.sql.exec<SqlRow>(query, ...bindings).one(), "value");
+  }
+
   private entry(path: string): EntryRow | null {
-    const rows = this.sql
-      .exec<EntryRow>(`SELECT ${ENTRY_COLUMNS} FROM vfs_entries WHERE path = ?`, path)
-      .toArray();
+    const rows = this.entryRows(`SELECT ${ENTRY_COLUMNS} FROM vfs_entries WHERE path = ?`, path);
     return rows[0] ?? null;
+  }
+
+  private normalizeAccessPath(path: string, allowMissingDirectory = false): string {
+    const normalized = normalizePath(path);
+    if (!pathRequiresDirectory(path) || normalized === "/") return normalized;
+    const row = this.entry(normalized);
+    if (!row) {
+      if (allowMissingDirectory) return normalized;
+      throw new VfsError("ENOENT", "no such directory", normalized);
+    }
+    if (row.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", normalized);
+    return normalized;
   }
 
   private requireEntry(path: string): EntryRow {
@@ -232,21 +399,21 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
     return row;
   }
 
-  private requireDirectory(path: string): EntryRow {
+  private requireDirectory(path: string): DirectoryEntryRow {
     const row = this.requireEntry(path);
     if (row.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", path);
     return row;
   }
 
-  private requireText(path: string): EntryRow {
+  private requireText(path: string): TextEntryRow {
     const row = this.requireEntry(path);
     if (row.kind === "directory") throw new VfsError("EISDIR", "is a directory", path);
-    if (row.content_kind !== "text" || row.content_state !== "active") {
+    if (row.content_kind !== "text") {
       throw new VfsError("ENOTTEXT", "file is not an active text file", path);
     }
     if (row.size_bytes > this.maxTextFileBytes) {
       throw new VfsError(
-        "E2BIG",
+        "EFBIG",
         `text file exceeds configured ${this.maxTextFileBytes}-byte read limit`,
         path,
       );
@@ -254,7 +421,7 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
     return row;
   }
 
-  private createDirectory(path: string, now: number): void {
+  private createDirectory(path: string, now: number, mode = DIRECTORY_MODE): void {
     const parentPath = dirname(path);
     const existing = this.entry(path);
     if (existing) {
@@ -273,7 +440,7 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
       path,
       parentPath,
       basename(path),
-      DIRECTORY_MODE,
+      mode,
       now,
       now,
     );
@@ -290,74 +457,113 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
   }
 
   stat(path: string): VfsStat {
-    return rowToStat(this.requireEntry(normalizePath(path)));
+    return rowToStat(this.requireEntry(this.normalizeAccessPath(path)));
   }
 
   list(path: string): VfsStat[] {
-    const normalized = normalizePath(path);
+    const normalized = this.normalizeAccessPath(path);
     this.requireDirectory(normalized);
-    return this.sql
-      .exec<EntryRow>(
+    return this.entryRows(
         `SELECT ${ENTRY_COLUMNS}
          FROM vfs_entries WHERE parent_path = ? AND path <> '/'
          ORDER BY name`,
         normalized,
       )
-      .toArray()
       .map(rowToStat);
   }
 
+  listPage(path: string, options: PageOptions = {}): EntryPage {
+    const normalized = this.normalizeAccessPath(path);
+    this.requireDirectory(normalized);
+    const limit = resolvePageLimit(options.limit);
+    const cursor = resolveListCursor(normalized, options.cursor);
+    const rows = this.entryRows(
+        `SELECT ${ENTRY_COLUMNS}
+         FROM vfs_entries
+         WHERE parent_path = ? AND path <> '/' AND path > ?
+         ORDER BY path LIMIT ?`,
+        normalized,
+        cursor ?? normalized,
+        limit + 1,
+      );
+    const page = scanPage(rows, limit);
+    return {
+      entries: page.candidates.map(rowToStat),
+      nextCursor: page.nextCursor,
+      scanned: page.scanned,
+    };
+  }
+
   find(options: FindOptions): VfsStat[] {
-    const root = normalizePath(options.path);
-    const rootEntry = this.requireEntry(root);
     const limit = Math.min(Math.max(options.limit ?? 10_000, 1), 100_000);
-    const rows: EntryRow[] = [];
-
-    if (rootEntry.kind === "file") {
-      rows.push(rootEntry);
-    } else {
-      const range = descendantRange(root);
-      const descendants = this.sql
-        .exec<EntryRow>(
-          `SELECT ${ENTRY_COLUMNS}
-           FROM vfs_entries
-           WHERE path >= ? AND path < ?
-           ORDER BY path`,
-          range.lower,
-          range.upper,
-        )
-        .toArray();
-      if (options.includeRoot && root !== "/") rows.push(rootEntry);
-      rows.push(...descendants.filter((row) => row.path !== root));
-    }
-
     const result: VfsStat[] = [];
-    for (const row of rows) {
-      if (options.type && row.kind !== options.type) continue;
-      if (options.maxDepth !== undefined && depthFrom(root, row.path) > options.maxDepth) continue;
-      if (!matchesGlob(row.name, options.name)) continue;
-      if (!matchesGlob(row.path, options.pathGlob)) continue;
-      result.push(rowToStat(row));
-      if (result.length >= limit) break;
-    }
+    let cursor: string | undefined;
+    do {
+      const page = this.findPage({
+        ...options,
+        limit: Math.min(limit, 1000),
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      result.push(...page.entries.slice(0, limit - result.length));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor !== undefined && result.length < limit);
     return result;
   }
 
-  private textBytes(path: string): { stat: VfsStat; bytes: Uint8Array } {
+  findPage(options: FindPageOptions): EntryPage {
+    const root = this.normalizeAccessPath(options.path);
+    const rootEntry = this.requireEntry(root);
+    const limit = resolvePageLimit(options.limit);
+    const cursor = resolveFindCursor(root, options.cursor);
+
+    const raw: EntryRow[] = [];
+    if (rootEntry.kind === "file") {
+      if (cursor === null) raw.push(rootEntry);
+    } else {
+      if (cursor === null && options.includeRoot && root !== "/") raw.push(rootEntry);
+      const range = descendantRange(root);
+      const remaining = limit + 1 - raw.length;
+      if (remaining > 0) {
+        raw.push(...this.entryRows(
+            `SELECT ${ENTRY_COLUMNS}
+             FROM vfs_entries
+             WHERE path >= ? AND path < ? AND path > ?
+             ORDER BY path LIMIT ?`,
+            range.lower,
+            range.upper,
+            cursor ?? root,
+            remaining,
+          ));
+      }
+    }
+
+    const page = scanPage(raw, limit);
+    const entries = page.candidates
+      .filter((row) => matchesFindPage(root, row, options))
+      .map(rowToStat);
+    return {
+      entries,
+      nextCursor: page.nextCursor,
+      scanned: page.scanned,
+    };
+  }
+
+  private textBytes(path: string): { stat: TextFileStat; bytes: Uint8Array } {
     const stat = rowToStat(this.requireText(path));
     const chunks = this.sql
-      .exec<ChunkRow>(
+      .exec<SqlRow>(
         `SELECT body, byte_length, newline_count
          FROM vfs_text_chunks WHERE path = ? ORDER BY chunk_index`,
         path,
       )
       .toArray()
+      .map(parseChunkRow)
       .map((row) => new Uint8Array(row.body));
     return { stat, bytes: concatenateBytes(chunks) };
   }
 
   readText(path: string): TextReadResult {
-    const normalized = normalizePath(path);
+    const normalized = this.normalizeAccessPath(path);
     const result = this.textBytes(normalized);
     return {
       stat: result.stat,
@@ -370,20 +576,21 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
     path: string,
     options: TextSliceOptions,
     reverse: boolean,
-  ): { stat: VfsStat; bytes: Uint8Array } {
+  ): { stat: TextFileStat; bytes: Uint8Array } {
     const stat = rowToStat(this.requireText(path));
     const byteLimit = options.bytes;
     const lineLimit = options.lines ?? (byteLimit === undefined ? 10 : undefined);
     const chunks: Uint8Array[] = [];
     let accumulatedBytes = 0;
     let accumulatedLines = 0;
-    const cursor = this.sql.exec<ChunkRow>(
+    const cursor = this.sql.exec<SqlRow>(
       `SELECT body, byte_length, newline_count
        FROM vfs_text_chunks WHERE path = ?
        ORDER BY chunk_index ${reverse ? "DESC" : "ASC"}`,
       path,
     );
-    for (const row of cursor) {
+    for (const rawRow of cursor) {
+      const row = parseChunkRow(rawRow);
       const body = new Uint8Array(row.body);
       if (reverse) chunks.unshift(body);
       else chunks.push(body);
@@ -396,7 +603,7 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
   }
 
   readTextHead(path: string, options: TextSliceOptions): TextReadResult {
-    const normalized = normalizePath(path);
+    const normalized = this.normalizeAccessPath(path);
     const result = this.partialTextBytes(normalized, options, false);
     const sliced = options.bytes !== undefined
       ? headBytes(result.bytes, options.bytes)
@@ -405,7 +612,7 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
   }
 
   readTextTail(path: string, options: TextSliceOptions): TextReadResult {
-    const normalized = normalizePath(path);
+    const normalized = this.normalizeAccessPath(path);
     const result = this.partialTextBytes(normalized, options, true);
     const sliced = options.bytes !== undefined
       ? tailBytes(result.bytes, options.bytes)
@@ -423,11 +630,11 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
     let truncated = false;
 
     for (const requestedRoot of options.roots) {
-      const root = normalizePath(requestedRoot);
+      const root = this.normalizeAccessPath(requestedRoot);
       const entry = this.requireEntry(root);
       const range = descendantRange(root);
       const cursor = entry.kind === "file"
-        ? this.sql.exec<SearchChunkRow>(
+        ? this.sql.exec<SqlRow>(
             `SELECT e.path, c.body, c.byte_length, c.newline_count
              FROM vfs_entries AS e
              JOIN vfs_text_chunks AS c ON c.path = e.path
@@ -435,7 +642,7 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
              ORDER BY e.path, c.chunk_index`,
             root,
           )
-        : this.sql.exec<SearchChunkRow>(
+        : this.sql.exec<SqlRow>(
             `SELECT e.path, c.body, c.byte_length, c.newline_count
              FROM vfs_entries AS e
              JOIN vfs_text_chunks AS c ON c.path = e.path
@@ -473,7 +680,8 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
         if (matches.length >= maximumResults) truncated = true;
       };
 
-      for (const row of cursor) {
+      for (const rawRow of cursor) {
+        const row = parseSearchChunkRow(rawRow);
         if (row.path !== currentPath) {
           inspect();
           if (truncated) break;
@@ -494,12 +702,12 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
     text: string,
     options: WriteTextOptions,
   ): WriteResult {
-    const normalized = normalizePath(path);
+    const normalized = this.normalizeAccessPath(path);
     if (normalized === "/") throw new VfsError("EISDIR", "cannot write the root directory", normalized);
     const encoded = new TextEncoder().encode(text);
     if (encoded.byteLength > this.maxTextFileBytes) {
       throw new VfsError(
-        "E2BIG",
+        "EFBIG",
         `text exceeds configured ${this.maxTextFileBytes}-byte write limit`,
         normalized,
       );
@@ -507,6 +715,13 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
     const now = this.now();
     this.ensureParentDirectories(normalized, options.createParents ?? false, now);
     const existing = this.entry(normalized);
+    const disposition = options.disposition ?? "upsert";
+    if (disposition === "create" && existing) {
+      throw new VfsError("EEXIST", "file or directory already exists", normalized);
+    }
+    if (disposition === "replace" && !existing) {
+      throw new VfsError("ENOENT", "no such file", normalized);
+    }
     if (existing?.kind === "directory") throw new VfsError("EISDIR", "is a directory", normalized);
     if (existing?.content_kind === "binary") {
       throw new VfsError("ENOTTEXT", "binary files cannot be modified", normalized);
@@ -564,9 +779,130 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
     return this.storage.transactionSync(() => this.writeTextInTransaction(path, text, options));
   }
 
+  appendText(path: string, text: string, options: AppendTextOptions = {}): WriteResult {
+    return this.storage.transactionSync(() => {
+      const normalized = this.normalizeAccessPath(path);
+      const existing = this.requireText(normalized);
+      if (options.ifRevision !== undefined && existing.revision !== options.ifRevision) {
+        throw new VfsError("EREVISION", "file revision does not match", normalized);
+      }
+      const encoded = new TextEncoder().encode(text);
+      if (existing.size_bytes + encoded.byteLength > this.maxTextFileBytes) {
+        throw new VfsError(
+          "EFBIG",
+          `text exceeds configured ${this.maxTextFileBytes}-byte write limit`,
+          normalized,
+        );
+      }
+      if (encoded.byteLength === 0) {
+        return {
+          path: normalized,
+          revision: existing.revision,
+          sizeBytes: existing.size_bytes,
+          created: false,
+        };
+      }
+
+      const suffix = existing.size_bytes === 0
+        ? ""
+        : this.readTextTail(normalized, { bytes: 4 }).text;
+
+      const lastIndex = nullableIntegerColumn(
+        this.sql.exec<SqlRow>(
+          "SELECT MAX(chunk_index) AS value FROM vfs_text_chunks WHERE path = ?",
+          normalized,
+        ).one(),
+        "value",
+      ) ?? -1;
+      for (
+        let offset = 0, index = lastIndex + 1;
+        offset < encoded.byteLength;
+        offset += this.chunkBytes, index += 1
+      ) {
+        const chunk = encoded.slice(offset, offset + this.chunkBytes);
+        this.sql.exec(
+          `INSERT INTO vfs_text_chunks
+             (path, chunk_index, byte_start, byte_length, newline_count, body)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          normalized,
+          index,
+          existing.size_bytes + offset,
+          chunk.byteLength,
+          countNewlines(chunk),
+          chunk.buffer,
+        );
+      }
+
+      const joinsWord = /\S$/u.test(suffix) && /^\S/u.test(text);
+      const revision = existing.revision + 1;
+      const sizeBytes = existing.size_bytes + encoded.byteLength;
+      this.sql.exec(
+        `UPDATE vfs_entries SET
+           size_bytes = ?, line_count = ?, word_count = ?,
+           modified_at_ms = ?, revision = ?
+         WHERE path = ?`,
+        sizeBytes,
+        existing.line_count + countNewlines(encoded),
+        existing.word_count + countWords(text) - (joinsWord ? 1 : 0),
+        this.now(),
+        revision,
+        normalized,
+      );
+      return { path: normalized, revision, sizeBytes, created: false };
+    });
+  }
+
+  private setMetadataInTransaction(path: string, options: MetadataUpdateOptions): VfsStat {
+    const normalized = this.normalizeAccessPath(path);
+    const existing = this.requireEntry(normalized);
+    if (options.ifRevision !== undefined && existing.revision !== options.ifRevision) {
+      throw new VfsError("EREVISION", "file revision does not match", normalized);
+    }
+    const revision = existing.revision + 1;
+    this.sql.exec(
+      `UPDATE vfs_entries SET mode = ?, modified_at_ms = ?, revision = ? WHERE path = ?`,
+      options.mode ?? existing.mode,
+      options.modifiedAtMs ?? this.now(),
+      revision,
+      normalized,
+    );
+    return rowToStat(this.requireEntry(normalized));
+  }
+
+  setMetadata(path: string, options: MetadataUpdateOptions): VfsStat {
+    return this.storage.transactionSync(() => this.setMetadataInTransaction(path, options));
+  }
+
+  touch(path: string, options: TouchOptions = {}): VfsStat {
+    return this.storage.transactionSync(() => {
+      const normalized = this.normalizeAccessPath(path);
+      const existing = this.entry(normalized);
+      if (existing) return this.setMetadataInTransaction(normalized, options);
+      if (options.create === false) {
+        throw new VfsError("ENOENT", "no such file or directory", normalized);
+      }
+      if (options.ifRevision !== undefined) {
+        throw new VfsError("EREVISION", "file revision does not match", normalized);
+      }
+      this.writeTextInTransaction(normalized, "", {
+        createParents: options.createParents ?? false,
+        disposition: "create",
+        ...(options.mode === undefined ? {} : { mode: options.mode }),
+      });
+      if (options.modifiedAtMs !== undefined) {
+        this.sql.exec(
+          "UPDATE vfs_entries SET modified_at_ms = ? WHERE path = ?",
+          options.modifiedAtMs,
+          normalized,
+        );
+      }
+      return rowToStat(this.requireEntry(normalized));
+    });
+  }
+
   replaceText(options: ReplaceTextOptions): ReplaceTextResult {
     return this.storage.transactionSync(() => {
-      const normalized = normalizePath(options.path);
+      const normalized = this.normalizeAccessPath(options.path);
       const current = this.readText(normalized);
       if (options.ifRevision !== undefined && current.stat.revision !== options.ifRevision) {
         throw new VfsError("EREVISION", "file revision does not match", normalized);
@@ -598,8 +934,8 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
     });
   }
 
-  mkdir(path: string, recursive = false): VfsStat {
-    const normalized = normalizePath(path);
+  mkdir(path: string, recursive = false, mode?: number): VfsStat {
+    const normalized = this.normalizeAccessPath(path, true);
     return this.storage.transactionSync(() => {
       const existing = this.entry(normalized);
       if (existing) {
@@ -609,37 +945,36 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
       const now = this.now();
       if (recursive) {
         for (const ancestor of [...ancestorPaths(normalized), normalized]) {
-          this.createDirectory(ancestor, now);
+          this.createDirectory(ancestor, now, ancestor === normalized ? mode : undefined);
         }
       } else {
-        this.createDirectory(normalized, now);
+        this.createDirectory(normalized, now, mode);
       }
       return rowToStat(this.requireDirectory(normalized));
     });
   }
 
   async remove(path: string, options: RemoveOptions = {}): Promise<RemoveResult> {
-    const normalized = normalizePath(path);
+    const normalized = this.normalizeAccessPath(path);
     if (normalized === "/") throw new VfsError("EINVAL", "cannot remove the root directory", normalized);
     const target = this.requireEntry(normalized);
     if (target.kind === "directory" && !options.recursive) {
-      const children = this.sql
-        .exec<CountRow>("SELECT COUNT(*) AS value FROM vfs_entries WHERE parent_path = ?", normalized)
-        .one().value;
+      const children = this.count(
+        "SELECT COUNT(*) AS value FROM vfs_entries WHERE parent_path = ?",
+        normalized,
+      );
       if (children > 0) throw new VfsError("ENOTEMPTY", "directory is not empty", normalized);
     }
 
     const range = descendantRange(normalized);
-    const rows = this.sql
-      .exec<EntryRow>(
+    const rows = this.entryRows(
         `SELECT ${ENTRY_COLUMNS} FROM vfs_entries
          WHERE path = ? OR (path >= ? AND path < ?)
          ORDER BY path DESC`,
         normalized,
         range.lower,
         range.upper,
-      )
-      .toArray();
+      );
     const binaryKeys = rows
       .map((row) => row.r2_key)
       .filter((key): key is string => key !== null);
@@ -668,35 +1003,62 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
       );
     });
     await this.deleteBinaryKeys(binaryKeys);
-    const queued = this.sql.exec<CountRow>("SELECT COUNT(*) AS value FROM vfs_binary_gc").one().value;
+    const queued = this.count("SELECT COUNT(*) AS value FROM vfs_binary_gc");
     return { removed: rows.length, binaryObjectsQueuedForDeletion: queued };
   }
 
-  move(from: string, to: string): MoveResult {
-    const source = normalizePath(from);
-    const target = normalizePath(to);
+  move(from: string, to: string, options: MoveOptions = {}): MoveResult {
+    const source = this.normalizeAccessPath(from);
+    const target = this.normalizeAccessPath(to);
     if (source === "/" || target === "/") {
       throw new VfsError("EINVAL", "cannot move from or to the root directory");
     }
-    if (source === target) return { from: source, to: target, moved: 0 };
+    if (source === target) return { from: source, to: target, moved: 0, replaced: false };
     const sourceEntry = this.requireEntry(source);
     if (sourceEntry.kind === "directory" && isDescendant(source, target)) {
       throw new VfsError("EINVAL", "cannot move a directory inside itself", target);
     }
 
     return this.storage.transactionSync(() => {
-      if (this.entry(target)) throw new VfsError("EEXIST", "destination already exists", target);
       this.requireDirectory(dirname(target));
+      const targetEntry = this.entry(target);
+      if (targetEntry && !options.replace) {
+        throw new VfsError("EEXIST", "destination already exists", target);
+      }
+      if (targetEntry) {
+        if (sourceEntry.kind === "directory" && targetEntry.kind !== "directory") {
+          throw new VfsError("ENOTDIR", "cannot replace a file with a directory", target);
+        }
+        if (sourceEntry.kind !== "directory" && targetEntry.kind === "directory") {
+          throw new VfsError("EISDIR", "cannot replace a directory with a file", target);
+        }
+        if (targetEntry.kind === "directory") {
+          const children = this.count(
+            "SELECT COUNT(*) AS value FROM vfs_entries WHERE parent_path = ?",
+            target,
+          );
+          if (children > 0) {
+            throw new VfsError("ENOTEMPTY", "destination directory is not empty", target);
+          }
+        }
+        if (targetEntry.r2_key) {
+          this.sql.exec(
+            "INSERT OR IGNORE INTO vfs_binary_gc (r2_key, queued_at_ms) VALUES (?, ?)",
+            targetEntry.r2_key,
+            this.now(),
+          );
+        }
+        this.sql.exec("DELETE FROM vfs_text_chunks WHERE path = ?", target);
+        this.sql.exec("DELETE FROM vfs_entries WHERE path = ?", target);
+      }
       const range = descendantRange(source);
-      const moved = this.sql
-        .exec<CountRow>(
+      const moved = this.count(
           `SELECT COUNT(*) AS value FROM vfs_entries
            WHERE path = ? OR (path >= ? AND path < ?)`,
           source,
           range.lower,
           range.upper,
-        )
-        .one().value;
+        );
       const substringStart = source.length + 1;
       this.sql.exec(
         `UPDATE vfs_text_chunks
@@ -738,17 +1100,17 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
         range.lower,
         range.upper,
       );
-      return { from: source, to: target, moved };
+      return { from: source, to: target, moved, replaced: targetEntry !== null };
     });
   }
 
   async writeBinary(
     path: string,
     value: ReadableStream | ArrayBuffer | ArrayBufferView | string | Blob,
-    options: { createParents?: boolean; mode?: number } = {},
+    options: BinaryWriteOptions = {},
   ): Promise<BinaryWriteResult> {
-    if (!this.binaryStore) throw new VfsError("ENOSYS", "binary storage is not configured");
-    const normalized = normalizePath(path);
+    if (!this.binaryStore) throw new VfsError("ENOTSUP", "binary storage is not configured");
+    const normalized = this.normalizeAccessPath(path);
     const objectKey = this.createObjectKey();
     const now = this.now();
     this.storage.transactionSync(() => {
@@ -788,8 +1150,7 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
       throw error;
     }
 
-    const activated = this.sql
-      .exec<EntryRow>(
+    const [activated] = this.entryRows(
         `UPDATE vfs_entries
          SET content_state = 'active', size_bytes = ?, modified_at_ms = ?
          WHERE r2_key = ? AND content_state = 'pending'
@@ -797,9 +1158,8 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
         stored.size,
         this.now(),
         objectKey,
-      )
-      .toArray();
-    if (activated.length === 0) {
+      );
+    if (!activated) {
       this.sql.exec(
         "INSERT OR IGNORE INTO vfs_binary_gc (r2_key, queued_at_ms) VALUES (?, ?)",
         objectKey,
@@ -814,7 +1174,7 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
       throw new VfsError("ENOENT", "binary file was removed before upload completed", normalized);
     }
     this.sql.exec("DELETE FROM vfs_binary_gc WHERE r2_key = ?", objectKey);
-    const result = rowToStat(activated[0]);
+    const result = rowToStat(activated);
     return {
       path: result.path,
       revision: result.revision,
@@ -825,16 +1185,35 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
   }
 
   async readBinary(path: string, range?: BinaryRange): Promise<BinaryReadResult> {
-    if (!this.binaryStore) throw new VfsError("ENOSYS", "binary storage is not configured");
-    const normalized = normalizePath(path);
+    const binary = this.requireActiveBinary(path);
+    const bytes = await binary.store.get(binary.objectKey, range);
+    if (!bytes) throw new VfsError("EIO", "binary object is missing", binary.stat.path);
+    return { stat: binary.stat, bytes: copyArrayBuffer(bytes) };
+  }
+
+  private requireActiveBinary(path: string): ActiveBinaryFile {
+    const store = this.binaryStore;
+    if (!store) throw new VfsError("ENOTSUP", "binary storage is not configured");
+    const normalized = this.normalizeAccessPath(path);
     const row = this.requireEntry(normalized);
     if (row.kind === "directory") throw new VfsError("EISDIR", "is a directory", normalized);
     if (row.content_kind !== "binary" || row.content_state !== "active" || !row.r2_key) {
       throw new VfsError("EIO", "binary file is not active", normalized);
     }
-    const bytes = await this.binaryStore.get(row.r2_key, range);
-    if (!bytes) throw new VfsError("EIO", "binary object is missing", normalized);
-    return { stat: rowToStat(row), bytes: copyArrayBuffer(bytes) };
+    return { objectKey: row.r2_key, stat: rowToStat(row), store };
+  }
+
+  async readBinaryStream(path: string, range?: BinaryRange): Promise<BinaryStreamReadResult> {
+    const binary = this.requireActiveBinary(path);
+    let stream: ReadableStream<Uint8Array> | null;
+    if (binary.store.getStream) {
+      stream = await binary.store.getStream(binary.objectKey, range);
+    } else {
+      const bytes = await binary.store.get(binary.objectKey, range);
+      stream = bytes === null ? null : new Blob([bytes]).stream();
+    }
+    if (!stream) throw new VfsError("EIO", "binary object is missing", binary.stat.path);
+    return { stat: binary.stat, stream };
   }
 
   private async deleteBinaryKeys(keys: readonly string[]): Promise<number> {
@@ -855,16 +1234,14 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
   async drainBinaryGarbage(limit = 100): Promise<{ deleted: number; remaining: number }> {
     const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 1000);
     const keys = this.sql
-      .exec<BinaryKeyRow>(
+      .exec<SqlRow>(
         "SELECT r2_key FROM vfs_binary_gc ORDER BY queued_at_ms LIMIT ?",
         safeLimit,
       )
       .toArray()
-      .map((row) => row.r2_key);
+      .map((row) => stringColumn(row, "r2_key"));
     const deleted = await this.deleteBinaryKeys(keys);
-    const remaining = this.sql
-      .exec<CountRow>("SELECT COUNT(*) AS value FROM vfs_binary_gc")
-      .one().value;
+    const remaining = this.count("SELECT COUNT(*) AS value FROM vfs_binary_gc");
     return { deleted, remaining };
   }
 }

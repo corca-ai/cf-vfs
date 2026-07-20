@@ -1,13 +1,13 @@
 export type Awaitable<T> = T | Promise<T>;
-export type EntryKind = "directory" | "file";
-export type ContentKind = "binary" | "text";
+export const ENTRY_KINDS = ["directory", "file"] as const;
+export type EntryKind = typeof ENTRY_KINDS[number];
+export const CONTENT_KINDS = ["binary", "text"] as const;
+export type ContentKind = typeof CONTENT_KINDS[number];
 
-export interface VfsStat {
+export interface VfsStatMetadata {
   path: string;
   parentPath: string;
   name: string;
-  kind: EntryKind;
-  contentKind: ContentKind | null;
   sizeBytes: number;
   lineCount: number;
   mode: number;
@@ -15,6 +15,23 @@ export interface VfsStat {
   modifiedAtMs: number;
   revision: number;
 }
+
+export interface DirectoryStat extends VfsStatMetadata {
+  kind: "directory";
+  contentKind: null;
+}
+
+export interface TextFileStat extends VfsStatMetadata {
+  kind: "file";
+  contentKind: "text";
+}
+
+export interface BinaryFileStat extends VfsStatMetadata {
+  kind: "file";
+  contentKind: "binary";
+}
+
+export type VfsStat = DirectoryStat | TextFileStat | BinaryFileStat;
 
 export interface FindOptions {
   path: string;
@@ -26,16 +43,28 @@ export interface FindOptions {
   limit?: number;
 }
 
+export interface PageOptions {
+  cursor?: string;
+  limit?: number;
+}
+
+export interface FindPageOptions extends Omit<FindOptions, "limit">, PageOptions {}
+
+export interface EntryPage {
+  entries: VfsStat[];
+  nextCursor: string | null;
+  scanned: number;
+}
+
 export interface TextReadResult {
-  stat: VfsStat;
+  stat: TextFileStat;
   text: string;
   bytesRead: number;
 }
 
-export interface TextSliceOptions {
-  bytes?: number;
-  lines?: number;
-}
+export type TextSliceOptions =
+  | { readonly bytes: number; readonly lines?: never }
+  | { readonly bytes?: never; readonly lines?: number };
 
 export interface TextSearchOptions {
   roots: string[];
@@ -64,13 +93,32 @@ export interface WriteTextOptions {
   createParents?: boolean;
   ifRevision?: number;
   mode?: number;
+  disposition?: WriteDisposition;
 }
+
+export const WRITE_DISPOSITIONS = ["create", "replace", "upsert"] as const;
+export type WriteDisposition = typeof WRITE_DISPOSITIONS[number];
 
 export interface WriteResult {
   path: string;
   revision: number;
   sizeBytes: number;
   created: boolean;
+}
+
+export interface AppendTextOptions {
+  ifRevision?: number;
+}
+
+export interface MetadataUpdateOptions {
+  ifRevision?: number;
+  mode?: number;
+  modifiedAtMs?: number;
+}
+
+export interface TouchOptions extends MetadataUpdateOptions {
+  create?: boolean;
+  createParents?: boolean;
 }
 
 export interface ReplaceTextOptions {
@@ -101,35 +149,59 @@ export interface MoveResult {
   from: string;
   to: string;
   moved: number;
+  replaced: boolean;
+}
+
+export interface MoveOptions {
+  replace?: boolean;
 }
 
 export type BinaryRange =
-  | { offset: number; length?: number; suffix?: never }
-  | { offset?: number; length: number; suffix?: never }
-  | { offset?: never; length?: never; suffix: number };
+  | { readonly offset: number; readonly length?: number; readonly suffix?: never }
+  | { readonly offset?: number; readonly length: number; readonly suffix?: never }
+  | { readonly offset?: never; readonly length?: never; readonly suffix: number };
 
 export interface BinaryReadResult {
-  stat: VfsStat;
+  stat: BinaryFileStat;
   bytes: ArrayBuffer;
+}
+
+export interface BinaryStreamReadResult {
+  stat: BinaryFileStat;
+  stream: ReadableStream<Uint8Array>;
 }
 
 export interface BinaryWriteResult extends WriteResult {
   objectKey: string;
 }
 
+export interface BinaryWriteOptions {
+  createParents?: boolean;
+  mode?: number;
+}
+
 export interface VirtualFileSystem {
   stat(path: string): Awaitable<VfsStat>;
   list(path: string): Awaitable<VfsStat[]>;
+  listPage(path: string, options?: PageOptions): Awaitable<EntryPage>;
   find(options: FindOptions): Awaitable<VfsStat[]>;
+  findPage(options: FindPageOptions): Awaitable<EntryPage>;
   readText(path: string): Awaitable<TextReadResult>;
   readTextHead(path: string, options: TextSliceOptions): Awaitable<TextReadResult>;
   readTextTail(path: string, options: TextSliceOptions): Awaitable<TextReadResult>;
   searchText(options: TextSearchOptions): Awaitable<TextSearchResult>;
   writeText(path: string, text: string, options?: WriteTextOptions): Awaitable<WriteResult>;
+  appendText(path: string, text: string, options?: AppendTextOptions): Awaitable<WriteResult>;
   replaceText(options: ReplaceTextOptions): Awaitable<ReplaceTextResult>;
-  mkdir(path: string, recursive?: boolean): Awaitable<VfsStat>;
+  touch(path: string, options?: TouchOptions): Awaitable<VfsStat>;
+  setMetadata(path: string, options: MetadataUpdateOptions): Awaitable<VfsStat>;
+  mkdir(path: string, recursive?: boolean, mode?: number): Awaitable<VfsStat>;
   remove(path: string, options?: RemoveOptions): Awaitable<RemoveResult>;
-  move(from: string, to: string): Awaitable<MoveResult>;
+  move(from: string, to: string, options?: MoveOptions): Awaitable<MoveResult>;
+  readBinaryStream?(
+    path: string,
+    range?: BinaryRange,
+  ): Awaitable<BinaryStreamReadResult>;
 }
 
 export interface RegexProgram {
@@ -150,5 +222,9 @@ export interface BinaryStore {
     value: ReadableStream | ArrayBuffer | ArrayBufferView | string | Blob,
   ): Promise<{ size: number }>;
   get(key: string, range?: BinaryRange): Promise<ArrayBuffer | null>;
+  getStream?(
+    key: string,
+    range?: BinaryRange,
+  ): Promise<ReadableStream<Uint8Array> | null>;
   delete(key: string): Promise<void>;
 }

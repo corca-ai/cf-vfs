@@ -1,18 +1,19 @@
-import { VfsError } from "../core/errors.js";
 import type { CommandContext, CommandDefinition, CommandPayload } from "../core/command.js";
-import { inputRecord, booleanValue, integerValue, optionalString, stringValue } from "../core/validation.js";
-import type { EntryKind, VfsStat } from "../core/types.js";
+import {
+  booleanValue,
+  inputRecord,
+  integerValue,
+  optionalString,
+  optionalStringChoice,
+  stringValue,
+} from "../core/validation.js";
+import { ENTRY_KINDS } from "../core/types.js";
+import type { FindOptions, VfsStat } from "../core/types.js";
 import { commandPath } from "./common.js";
 
-export interface FindInput {
+export type FindInput = Omit<FindOptions, "path"> & {
   path?: string;
-  includeRoot?: boolean;
-  maxDepth?: number;
-  name?: string;
-  pathGlob?: string;
-  type?: EntryKind;
-  limit?: number;
-}
+};
 
 export async function runFind(
   context: CommandContext,
@@ -30,18 +31,17 @@ export const findCommand: CommandDefinition = {
   name: "find",
   execute(context, input) {
     const record = inputRecord(input);
-    const type = optionalString(record, "type");
-    if (type !== undefined && type !== "file" && type !== "directory") {
-      throw new VfsError("EINVAL", "type must be file or directory");
-    }
+    const name = optionalString(record, "name");
+    const pathGlob = optionalString(record, "pathGlob");
+    const type = optionalStringChoice(record, "type", ENTRY_KINDS);
     return runFind(context, {
       path: stringValue(record, "path", "."),
       includeRoot: booleanValue(record, "includeRoot"),
       maxDepth: integerValue(record, "maxDepth", 1_000_000, 0, 1_000_000),
-      name: optionalString(record, "name"),
-      pathGlob: optionalString(record, "pathGlob"),
-      type,
       limit: integerValue(record, "limit", 10_000, 1, 100_000),
+      ...(name === undefined ? {} : { name }),
+      ...(pathGlob === undefined ? {} : { pathGlob }),
+      ...(type === undefined ? {} : { type }),
     });
   },
 };
