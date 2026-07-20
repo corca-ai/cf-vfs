@@ -1,7 +1,7 @@
 # Shell, commands, and direct API
 
 The primary command interface is Bash-compatible source, not a JSON dispatcher.
-`BASH_COMPATIBILITY_VERSION` is currently `1`.
+`BASH_COMPATIBILITY_VERSION` is currently `2`.
 
 ## Execution APIs
 
@@ -46,7 +46,7 @@ unexpected command/runtime invariant rejects `completed`.
 | command unavailable by policy | 126 |
 | command not found | 127 |
 
-## Bash Version 1
+## Bash Version 2
 
 Supported syntax:
 
@@ -55,15 +55,28 @@ Supported syntax:
 - `$VAR`, `${VAR}`, `$?`, `$0`, `$1...`, `$@`, and `$#`;
 - newlines, `;`, `&&`, `||`, and prefix `!`;
 - concurrent pipelines;
-- `<`, `>`, `>>`, `2>`, `2>>`, and left-to-right `2>&1`;
+- ordinary groups `{ list; }` and isolated subshells `(list)`;
+- `if`/`elif`/`else`, `while`, `until`, `for name [in words]`, and `case` with
+  `;;` terminators;
+- `name() compound-command` functions plus `local`, `return`, `break`, and
+  `continue`;
+- `$(script)` command substitution;
+- `${name-word}`, `${name:-word}`, `${name=word}`, `${name:=word}`,
+  `${name+word}`, `${name:+word}`, `${name?word}`, `${name:?word}`, and
+  `${#name}` parameter expansion;
+- signed 64-bit `$((expression))` expansion and `((expression))` commands,
+  including integer variables, assignment/update, arithmetic, comparison,
+  bitwise, logical, conditional, and comma operators;
+- `<`, `>`, `>>`, `2>`, `2>>`, left-to-right `2>&1`, `<<`, `<<-`, and `<<<`;
 - pathname expansion with `*`, `?`, and bracket/range expressions;
 - comments beginning with `#` at a word boundary.
 
 The complete submitted script is parsed before any command runs. Unsupported
-parenthesized syntax, command substitution, parameter operators, arrays,
-extended `[[ ]]`, brace expansion, arbitrary descriptors, background jobs,
-reserved control syntax, and malformed redirection produce status 2 before a
-partial mutation.
+backticks, process substitution, C-style `for`, arrays, extended `[[ ]]`, brace
+expansion, arbitrary descriptors, background jobs, `source`/`.`, `select`, the
+`function` keyword, `time`, `coproc`, and malformed syntax produce status 2
+before a partial mutation. `eval`, traps, job control, shell options other than
+`pipefail`, and OS process features are unavailable commands or usage errors.
 
 Pipeline stages receive cloned shell state; an ordinary single built-in uses
 parent state. Assignment-only commands persist. Command-prefix assignments are
@@ -72,6 +85,26 @@ normally restore after a command. Consecutive assignment-only right-hand sides
 observe earlier assignments. `export` and
 `unset` mutate parent state outside a pipeline. `set -o pipefail` and
 `set +o pipefail` are supported.
+
+Ordinary groups and function bodies use the current session. Pipelines,
+parenthesized subshells, and command substitutions clone variables, functions,
+arguments, and working directory, so their changes do not escape. Functions
+are definitions rather than registry commands: an allowlist may invoke a
+defined function, but every utility reached by its body is still checked.
+
+Command substitution inherits the current virtual stdin, sends stderr to the
+current stderr, requires valid UTF-8 without NUL bytes, removes trailing
+newlines, and is limited to 1 MiB by default. It is collected concurrently with
+execution, so the pipe remains backpressured rather than deadlocking. Here
+strings append one newline. An unquoted here-document delimiter enables
+parameter, command, arithmetic, and backslash expansion; quoting any delimiter
+character disables expansion, and `<<-` strips leading tab characters.
+
+Arithmetic is deterministic two's-complement signed 64-bit arithmetic rather
+than JavaScript number arithmetic. Invalid numeric text in a referenced shell
+variable reads as zero. Division by zero and excessive exponents fail the
+command; loops, function calls, nesting, and substitution output all have
+explicit limits in [Operations and security](operations.md).
 
 A downstream normal early close maps the upstream edge's `EPIPE` to status 0.
 Consequently `cat large | head -n 1` remains successful under `pipefail` while
@@ -89,9 +122,9 @@ the smallest registry they need. The dedicated `ls` subpath and ordinary
 `cat`/`grep` barrel imports are covered by bundle tests proving unrelated
 command implementations are absent; the default preset is covered separately.
 
-| Group | Commands and principal Version 1 options |
+| Group | Commands and principal Version 2 options |
 | --- | --- |
-| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `unset`, `exit`, `set -o pipefail`, `test`, `[` |
+| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `unset`, `local`, `return`, `break`, `continue`, `exit`, `set -o pipefail`, `test`, `[` |
 | namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f`, `ls -l -d`, `find -name -type -maxdepth`, `stat`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | streaming text/bytes | `cat`, `grep -i -v -n -F -c`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed s/old/new/[g]` |
 | bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch` |

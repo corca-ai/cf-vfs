@@ -1,4 +1,5 @@
 import type { Awaitable, VfsStat, VirtualFileSystem } from "../vfs/types.js";
+import type { FunctionDefinitionNode } from "./parser.js";
 
 export type ShellFileSystem = Pick<
   VirtualFileSystem,
@@ -42,7 +43,17 @@ export interface ShellSession {
   exitRequested: boolean;
   requestedExitCode: number;
   pipefail: boolean;
+  functions: Map<string, FunctionDefinitionNode>;
+  functionDepth: number;
+  loopDepth: number;
+  localFrames: Array<Map<string, string | undefined>>;
+  flow: ShellFlow;
 }
+
+export type ShellFlow =
+  | { type: "none" }
+  | { type: "return"; status: number }
+  | { type: "break" | "continue"; levels: number };
 
 export interface ShellPolicy {
   readonly readRoots?: readonly string[];
@@ -57,6 +68,9 @@ export interface ShellLimits {
   maxNestingDepth: number;
   maxCommands: number;
   maxSteps: number;
+  maxLoopIterations: number;
+  maxFunctionDepth: number;
+  maxCommandSubstitutionBytes: number;
   maxPipelineBytes: number;
   maxStdoutBytes: number;
   maxStderrBytes: number;
@@ -138,6 +152,7 @@ export interface ShellBudget {
   readonly limits: ShellLimits;
   step(count?: number): void;
   command(): void;
+  loop(): void;
   io(bytes: number): void;
   mutation(count?: number): void;
   glob(count?: number): void;

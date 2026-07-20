@@ -9,6 +9,9 @@ export const DEFAULT_SHELL_LIMITS: ShellLimits = {
   maxNestingDepth: 64,
   maxCommands: 10_000,
   maxSteps: 100_000,
+  maxLoopIterations: 10_000,
+  maxFunctionDepth: 64,
+  maxCommandSubstitutionBytes: 1024 * 1024,
   maxPipelineBytes: 8 * 1024 * 1024,
   maxStdoutBytes: 8 * 1024 * 1024,
   maxStderrBytes: 8 * 1024 * 1024,
@@ -48,6 +51,7 @@ export class ExecutionBudget implements ShellBudget {
   private readonly now: () => number;
   private steps = 0;
   private commands = 0;
+  private loopIterations = 0;
   private ioBytes = 0;
   private mutations = 0;
   private globMatches = 0;
@@ -78,6 +82,14 @@ export class ExecutionBudget implements ShellBudget {
     this.commands += 1;
     if (this.commands > this.limits.maxCommands) {
       throw new VfsError("E2BIG", "shell command limit exceeded");
+    }
+  }
+
+  loop(): void {
+    this.step();
+    this.loopIterations += 1;
+    if (this.loopIterations > this.limits.maxLoopIterations) {
+      throw new VfsError("E2BIG", "shell loop iteration limit exceeded");
     }
   }
 

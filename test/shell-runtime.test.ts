@@ -2,18 +2,11 @@ import { describe, expect, it } from "vitest";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { defineCommand, writeText } from "../src/shell/commands/helpers.js";
 import { Shell } from "../src/shell/shell.js";
-import type { ShellCommand } from "../src/shell/types.js";
 import { MemoryFileSystem } from "../src/vfs/memory.js";
 import { putOpaque } from "../src/vfs/opaque.js";
 import { readAllBytes } from "../src/vfs/streams.js";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
-
-function createShell(fileSystem = new MemoryFileSystem(), extra: readonly ShellCommand[] = []) {
-  return {
-    fileSystem,
-    shell: new Shell({ fileSystem, commands: [...defaultShellCommands, ...extra] }),
-  };
-}
+import { createBashHarness } from "./helpers/bash.js";
 
 describe("stream-first shell runtime", () => {
   it("keeps the per-edge pipeline limit at or below 8 MiB", () => {
@@ -24,34 +17,8 @@ describe("stream-first shell runtime", () => {
     })).toThrowError(expect.objectContaining({ code: "EINVAL" }));
   });
 
-  it("parses quoting, variables, positional parameters, and control operators", async () => {
-    const { shell } = createShell();
-    const result = await shell.executeText({
-      script: `false && echo no; true || echo no; ! false && printf '%s:%s:%s\n' "$NAME" '$NAME' "$1"`,
-      env: { NAME: "expanded" },
-      args: ["argument"],
-    });
-    expect(result).toMatchObject({
-      exitCode: 0,
-      stdout: "expanded:$NAME:argument\n",
-      stderr: "",
-    });
-  });
-
-  it("preserves lexical assignment words and applies assignment-only values in order", async () => {
-    const { shell } = createShell();
-    const result = await shell.executeText({
-      script: "X='a b'; A=$X; unset C D; C=one D=$C; printf '<%s>:<%s>:<%s>\\n' \"$A\" \"$C\" \"$D\"",
-    });
-    expect(result).toMatchObject({
-      exitCode: 0,
-      stdout: "<a b>:<one>:<one>\n",
-      stderr: "",
-    });
-  });
-
   it("treats printf %b arguments as escaped data and reports invalid test integers as usage errors", async () => {
-    const { shell } = createShell();
+    const { shell } = createBashHarness();
     expect(await shell.executeText({ script: "printf '%b\\n' '%s'" })).toMatchObject({
       exitCode: 0,
       stdout: "%s\n",
@@ -62,26 +29,12 @@ describe("stream-first shell runtime", () => {
     });
   });
 
-  it("keeps escaped dollars literal and implements quoted and unquoted $@ field rules", async () => {
-    const { shell } = createShell();
-    const result = await shell.executeText({
-      script: `printf '<%s>\n' "\\$HOME" $@; printf '[%s]\n' "pre$@post"`,
-      env: { HOME: "/home/test" },
-      args: ["one two", "three"],
-    });
-    expect(result).toMatchObject({
-      exitCode: 0,
-      stdout: "<$HOME>\n<one>\n<two>\n<three>\n[preone two]\n[threepost]\n",
-      stderr: "",
-    });
-  });
-
   it("keeps ! inside command words and follows Bash positional expansion rules", async () => {
     const bang = defineCommand("!echo", async (_context, argv, fds) => {
       await writeText(fds[1], `${argv.join("|")}\n`);
       return 0;
     });
-    const { shell } = createShell(new MemoryFileSystem(), [bang]);
+    const { shell } = createBashHarness({ extraCommands: [bang] });
     const result = await shell.executeText({
       script: `!echo $10 "\${10}" "$@"; printf '<%s>\n' $FIELDS`,
       args: ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"],
@@ -95,7 +48,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("runs a backpressured find/sort pipeline into an atomic redirection", async () => {
-    const { fileSystem, shell } = createShell();
+    const { fileSystem, shell } = createBashHarness();
     const result = await shell.executeText({
       script: `mkdir -p src; printf b > src/b.ts; printf a > src/a.ts; find src -name '*.ts' | sort > files.txt; cat files.txt`,
     });
@@ -106,7 +59,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("preserves arbitrary bytes through cat without UTF-8 materialization", async () => {
-    const { fileSystem, shell } = createShell();
+    const { fileSystem, shell } = createBashHarness();
     await fileSystem.writeFile("/binary", new Uint8Array([0xff, 0, 1, 2]));
     const execution = shell.executeStream({ script: "cat /binary" });
     const [stdout, stderr, status] = await Promise.all([
@@ -120,7 +73,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("commits normal-close redirections even for a non-zero command", async () => {
-    const { fileSystem, shell } = createShell();
+    const { fileSystem, shell } = createBashHarness();
     await fileSystem.writeFile("/file", "old");
     const result = await shell.executeText({ script: "false > /file" });
     expect(result.exitCode).toBe(1);
@@ -132,7 +85,7 @@ describe("stream-first shell runtime", () => {
       await Promise.all([writeText(fds[1], "out\n"), writeText(fds[2], "err\n")]);
       return 0;
     });
-    const { fileSystem, shell } = createShell(new MemoryFileSystem(), [emit]);
+    const { fileSystem, shell } = createBashHarness({ extraCommands: [emit] });
     const result = await shell.executeText({
       script: "emit > /both 2>&1; emit 2>&1 > /stdout",
     });
@@ -145,7 +98,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("preflights redirection parents before running the command", async () => {
-    const { fileSystem, shell } = createShell();
+    const { fileSystem, shell } = createBashHarness();
     const result = await shell.executeText({ script: "touch /side-effect > /missing/output" });
     expect(result).toMatchObject({ exitCode: 1 });
     expect(() => fileSystem.stat("/side-effect")).toThrowError(
@@ -173,7 +126,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("aborts an opened atomic target if a later redirection cannot be applied", async () => {
-    const { fileSystem, shell } = createShell();
+    const { fileSystem, shell } = createBashHarness();
     await fileSystem.writeFile("/target", "old");
     await fileSystem.mkdir("/directory");
     const result = await shell.executeText({ script: "printf new > /target > /directory" });
@@ -189,7 +142,7 @@ describe("stream-first shell runtime", () => {
       await context.fileSystem.touch("/target");
       return 0;
     });
-    const { fileSystem, shell } = createShell(new MemoryFileSystem(), [mutateTarget]);
+    const { fileSystem, shell } = createBashHarness({ extraCommands: [mutateTarget] });
     await fileSystem.writeFile("/target", "old");
     const result = await shell.executeText({ script: "mutate-target > /target" });
     expect(result).toMatchObject({ exitCode: 1 });
@@ -199,11 +152,79 @@ describe("stream-first shell runtime", () => {
   });
 
   it("keeps parent shell state for ordinary builtins but clones pipeline stages", async () => {
-    const { shell } = createShell();
+    const { shell } = createBashHarness();
     const result = await shell.executeText({
       script: "mkdir -p /work/sub; cd /work; pwd; cd /work/sub | cat; pwd",
     });
     expect(result.stdout).toBe("/work\n/work\n");
+  });
+
+  it("runs compound groups, conditionals, loops, and case clauses", async () => {
+    const { shell } = createBashHarness();
+    const result = await shell.executeText({
+      script: [
+        "X=outer",
+        "{ X=group; }",
+        "printf '%s|' \"$X\"",
+        "(X=subshell; printf '%s|' \"$X\")",
+        "printf '%s|' \"$X\"",
+        "if false; then printf no; elif true; then printf elif; else printf no; fi",
+        "for item in a b c; do test \"$item\" = b && continue; printf ':%s' \"$item\"; test \"$item\" = c && break; done",
+        "count=0",
+        "while ((count < 2)); do ((count += 1)); done",
+        "until ((count >= 3)); do ((count++)); done",
+        "case \"$count\" in 1|2) printf no ;; 3) printf ':case' ;; *) printf no ;; esac",
+      ].join("; "),
+    });
+    expect(result).toMatchObject({
+      exitCode: 0,
+      stdout: "group|subshell|group|elif:a:c:case",
+      stderr: "",
+    });
+  });
+
+  it("shares loop, recursion, substitution, and parser nesting limits", async () => {
+    const fileSystem = new MemoryFileSystem();
+    const loopLimited = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      limits: { maxLoopIterations: 2 },
+    });
+    expect(await loopLimited.executeText({ script: "while true; do :; done" }))
+      .toMatchObject({ exitCode: 1, stdout: "" });
+
+    const recursive = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      limits: { maxFunctionDepth: 2 },
+    });
+    expect(await recursive.executeText({ script: "recurse() { recurse; }; recurse" }))
+      .toMatchObject({ exitCode: 1 });
+
+    const substitution = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      limits: { maxCommandSubstitutionBytes: 4 },
+    });
+    expect(await substitution.executeText({ script: "printf '%s' \"$(printf 12345)\"" }))
+      .toMatchObject({ exitCode: 1, stdout: "" });
+
+    const bufferedSubstitution = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      limits: { maxBufferedBytes: 4 },
+    });
+    expect(await bufferedSubstitution.executeText({ script: "printf '%s' \"$(printf 12345)\"" }))
+      .toMatchObject({ exitCode: 1, stdout: "" });
+
+    const nested = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      limits: { maxNestingDepth: 1 },
+    });
+    expect(await nested.executeText({ script: "(true)" })).toMatchObject({ exitCode: 1 });
+    expect(await nested.executeText({ script: "printf '%s' \"$((- - 1))\"" }))
+      .toMatchObject({ exitCode: 1 });
   });
 
   it("enforces command and path capabilities below utilities", async () => {
@@ -225,6 +246,19 @@ describe("stream-first shell runtime", () => {
     });
     expect(await shell.executeText({ script: "cat /secret" })).toMatchObject({ exitCode: 126 });
     expect(await shell.executeText({ script: "rm /allowed/input" })).toMatchObject({ exitCode: 126 });
+  });
+
+  it("allows script functions under command policy while checking their bodies", async () => {
+    const fileSystem = new MemoryFileSystem();
+    const shell = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      policy: { allowedCommands: ["printf"] },
+    });
+    expect(await shell.executeText({ script: "say() { printf allowed; }; say" }))
+      .toMatchObject({ exitCode: 0, stdout: "allowed" });
+    expect(await shell.executeText({ script: "remove() { rm /anything; }; remove" }))
+      .toMatchObject({ exitCode: 126 });
   });
 
   it("keeps opaque bodies outside shell content commands", async () => {
@@ -279,7 +313,7 @@ describe("stream-first shell runtime", () => {
       }
       return 0;
     });
-    const { shell } = createShell(new MemoryFileSystem(), [noisy]);
+    const { shell } = createBashHarness({ extraCommands: [noisy] });
     const result = await shell.executeText({ script: "noisy" });
     expect(result.exitCode).toBe(0);
     expect(result.stdout.length).toBe(2 * 1024 * 1024);
@@ -287,7 +321,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("keeps incremental UTF-8 text output independent of source chunk boundaries", async () => {
-    const { shell } = createShell();
+    const { shell } = createBashHarness();
     const source = new TextEncoder().encode("가나다\nalpha\n나비\n");
     for (const chunkBytes of [1, 2, 5, 7]) {
       const chunks = new ReadableStream<Uint8Array>({
@@ -320,7 +354,7 @@ describe("stream-first shell runtime", () => {
       await fds[1].write(new Uint8Array(128 * 1024));
       return 0;
     });
-    const { shell } = createShell(new MemoryFileSystem(), [produce]);
+    const { shell } = createBashHarness({ extraCommands: [produce] });
     const execution = shell.executeStream({ script: "produce" });
     let completed = false;
     void execution.completed.then(() => { completed = true; });
@@ -338,7 +372,9 @@ describe("stream-first shell runtime", () => {
   });
 
   it("treats a downstream head close as a successful pipeline edge under pipefail", async () => {
-    const { fileSystem, shell } = createShell(new MemoryFileSystem({ chunkBytes: 1024 }));
+    const { fileSystem, shell } = createBashHarness({
+      fileSystem: new MemoryFileSystem({ chunkBytes: 1024 }),
+    });
     await fileSystem.writeFile("/many", "first\n" + "next\n".repeat(1000));
     const result = await shell.executeText({
       script: "set -o pipefail; cat /many | head -n 1; printf '%s\\n' $?",
@@ -352,7 +388,7 @@ describe("stream-first shell runtime", () => {
       for (let index = 0; index < 9; index += 1) await fds[1].write(chunk);
       return 0;
     });
-    const { fileSystem, shell } = createShell(new MemoryFileSystem(), [spam]);
+    const { fileSystem, shell } = createBashHarness({ extraCommands: [spam] });
     await fileSystem.writeFile("/target", "old");
     const result = await shell.executeText({ script: "spam > /target" });
     expect(result.exitCode).toBe(1);
@@ -373,7 +409,7 @@ describe("stream-first shell runtime", () => {
       });
       return 0;
     });
-    const { fileSystem, shell } = createShell(new MemoryFileSystem(), [waiting]);
+    const { fileSystem, shell } = createBashHarness({ extraCommands: [waiting] });
     await fileSystem.writeFile("/target", "old");
     const execution = shell.executeStream({ script: "waiting > /target" });
     const stdout = readAllBytes(execution.stdout, 16).catch(() => new Uint8Array());
@@ -431,7 +467,7 @@ describe("stream-first shell runtime", () => {
       });
       return 0;
     });
-    const { shell } = createShell(new MemoryFileSystem(), [waitForCancel]);
+    const { shell } = createBashHarness({ extraCommands: [waitForCancel] });
     const execution = shell.executeStream({ script: "wait-for-cancel" });
     const reader = execution.stdout.getReader();
     await reader.read();
@@ -461,7 +497,7 @@ describe("stream-first shell runtime", () => {
     const broken = defineCommand("broken", () => {
       throw new Error("command invariant failed");
     });
-    const { shell } = createShell(new MemoryFileSystem(), [broken]);
+    const { shell } = createBashHarness({ extraCommands: [broken] });
     const execution = shell.executeStream({ script: "broken" });
     await expect(execution.completed).rejects.toThrow("command invariant failed");
     await expect(readAllBytes(execution.stdout, 1024)).rejects.toThrow("command invariant failed");
@@ -484,55 +520,6 @@ describe("stream-first shell runtime", () => {
     });
   });
 
-  it("rejects unsupported syntax before mutation and expands bracket globs deterministically", async () => {
-    const { fileSystem, shell } = createShell();
-    for (const script of [
-      "printf changed > /file; (echo no)",
-      "printf changed > /file; echo hi 3>/other",
-      "printf changed > /file; echo {a,b}",
-      "printf changed > /file; [[ -f /file ]]",
-    ]) {
-      expect(await shell.executeText({ script })).toMatchObject({ exitCode: 2 });
-      expect(() => fileSystem.stat("/file")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
-    }
-    const result = await shell.executeText({
-      script: "mkdir /glob; touch /glob/a1 /glob/a2 /glob/ab /glob/.a1; printf '<%s>\\n' /glob/a[12] /glob/no*; printf '<%s>\\n' /*; [ -f /glob/a1 ]",
-    });
-    expect(result).toMatchObject({
-      exitCode: 0,
-      stdout: "</glob/a1>\n</glob/a2>\n</glob/no*>\n</glob>\n",
-    });
-  });
-
-  it("preserves quoted glob metacharacters and renders parent-relative matches", async () => {
-    const { shell } = createShell();
-    const result = await shell.executeText({
-      script: "mkdir -p /w/sub /d; printf literal > '/d/*x'; printf other > /d/ax; cd /w; touch a; cd sub; printf '<%s>\\n' /d/\"*\"? ../*",
-    });
-    expect(result).toMatchObject({
-      exitCode: 0,
-      stdout: "</d/*x>\n<../a>\n<../sub>\n",
-      stderr: "",
-    });
-  });
-
-  it("rejects unsupported descriptor and quote forms with UTF-8 byte offsets before mutation", async () => {
-    const { fileSystem, shell } = createShell();
-    for (const script of [
-      "printf changed > /file; echo hi 2>&11",
-      "printf changed > /file; printf $'x'",
-      "printf changed > /file; printf $*",
-      "printf changed > /file; printf $-",
-      "printf changed > /file; printf $$",
-    ]) {
-      expect(await shell.executeText({ script })).toMatchObject({ exitCode: 2 });
-      expect(() => fileSystem.stat("/file")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
-    }
-    const offset = await shell.executeText({ script: "printf 가; (" });
-    expect(offset).toMatchObject({ exitCode: 2 });
-    expect(offset.stderr).toContain("at byte 12");
-  });
-
   it("settles command-budget overflow and rejects invalid plugin exit statuses", async () => {
     const limited = new Shell({
       fileSystem: new MemoryFileSystem(),
@@ -545,7 +532,7 @@ describe("stream-first shell runtime", () => {
     ])).resolves.toMatchObject({ exitCode: 1 });
 
     const invalid = defineCommand("invalid", () => Number.NaN);
-    const { shell } = createShell(new MemoryFileSystem(), [invalid]);
+    const { shell } = createBashHarness({ extraCommands: [invalid] });
     await expect(shell.executeStream({ script: "invalid" }).completed)
       .rejects.toThrow("invalid exit status");
   });
@@ -572,7 +559,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("provides comm, join, and atomic unified patch utilities", async () => {
-    const { fileSystem, shell } = createShell();
+    const { fileSystem, shell } = createBashHarness();
     await fileSystem.writeFile("/left", "a\nb\n");
     await fileSystem.writeFile("/right", "b\nc\n");
     await fileSystem.writeFile("/users", "1 Alice\n2 Bob\n");
@@ -593,7 +580,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("smoke-tests the remaining default utility families through the shell", async () => {
-    const { fileSystem, shell } = createShell();
+    const { fileSystem, shell } = createBashHarness();
     const result = await shell.executeText({
       script: [
         "mkdir -p /u/empty",
@@ -635,7 +622,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("makes diff output consumable by patch", async () => {
-    const { fileSystem, shell } = createShell();
+    const { fileSystem, shell } = createBashHarness();
     await fileSystem.writeFile("/before", "one\ntwo\n");
     await fileSystem.writeFile("/after", "one\nchanged\n");
     const result = await shell.executeText({
@@ -736,11 +723,4 @@ describe("stream-first shell runtime", () => {
     expect(() => fileSystem.stat("/one")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
   });
 
-  it("parses the complete script before performing a mutation", async () => {
-    const { fileSystem, shell } = createShell();
-    expect(await shell.executeText({ script: "printf changed > /file &&" })).toMatchObject({
-      exitCode: 2,
-    });
-    expect(() => fileSystem.stat("/file")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
-  });
 });

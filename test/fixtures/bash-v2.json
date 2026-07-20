@@ -95,6 +95,54 @@
       "args": [],
       "stdout": "<$HOME>\n",
       "exitCode": 0
+    },
+    {
+      "name": "compound-control-flow",
+      "script": "count=0; if false; then printf no; elif true; then printf 'if|'; fi; for item in a b; do printf '%s' \"$item\"; done; while ((count < 2)); do ((count += 1)); done; until ((count >= 3)); do ((count++)); done; case $count in 3) printf '|case' ;; *) printf no ;; esac",
+      "env": {},
+      "args": [],
+      "stdout": "if|ab|case",
+      "exitCode": 0
+    },
+    {
+      "name": "groups-and-subshells",
+      "script": "X=outer; { X=group; }; printf '%s|' \"$X\"; (X=sub; printf '%s|' \"$X\"); printf '%s' \"$X\"",
+      "env": {},
+      "args": [],
+      "stdout": "group|sub|group",
+      "exitCode": 0
+    },
+    {
+      "name": "function-local-return",
+      "script": "X=global; show() { local X=local; test \"$1\" = stop && return 7; printf '%s:%s' \"$X\" \"$1\"; }; show go; printf '|%s|' \"$X\"; show stop || printf '%s' \"$?\"",
+      "env": {},
+      "args": [],
+      "stdout": "local:go|global|7",
+      "exitCode": 0
+    },
+    {
+      "name": "substitution-parameter-arithmetic",
+      "script": "unset X EMPTY; EMPTY=; printf '<%s>|' \"${X:-default}\"; printf '<%s>|' \"${EMPTY-default}\"; printf '<%s>|' \"${X:=assigned}\"; printf '<%s>|' \"${X:+alternate}\"; printf '<%s>|' \"${#X}\"; printf '<%s>|' \"$(printf 'line\\n\\n')\"; N=2; printf '%s|' \"$((N * 3))\"; ((N += 4)); printf '%s' \"$N\"",
+      "env": {},
+      "args": [],
+      "stdout": "<default>|<>|<assigned>|<alternate>|<8>|<line>|6|6",
+      "exitCode": 0
+    },
+    {
+      "name": "assignment-substitution-status",
+      "script": "VALUE=$(false); printf '%s|' \"$?\"; VALUE=$(true); printf '%s' \"$?\"",
+      "env": {},
+      "args": [],
+      "stdout": "1|0",
+      "exitCode": 0
+    },
+    {
+      "name": "heredoc-and-here-string",
+      "script": "NAME=world\ncat <<EOF\nhello $NAME\n$(printf nested)\nEOF\ncat <<'LITERAL'\n$NAME\nLITERAL\ncat <<< \"$NAME\"",
+      "env": {},
+      "args": [],
+      "stdout": "hello world\nnested\n$NAME\nworld\n",
+      "exitCode": 0
     }
   ]
 }

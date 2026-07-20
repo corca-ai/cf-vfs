@@ -68,11 +68,37 @@ Regenerate the fixture only after reviewing the semantic change:
 
 ```sh
 npm run test:bash-fixtures:regenerate
-git diff -- test/fixtures/bash-v1.json
+git diff -- test/fixtures/bash-v2.json
 ```
 
 The generator uses `bash:5.3.3`, `LC_ALL=C`, and `TZ=UTC`. Docker is required
 only for regeneration, not ordinary tests.
+
+Use the test DSL in `test/helpers/bash.ts` for ordinary language behavior. It
+creates an isolated in-memory VFS for each case, accepts a string or an array
+of commands, and defaults to status 0 with empty stdout and stderr:
+
+```ts
+bashCases([
+  {
+    name: "keeps a quoted empty argument",
+    script: [`unset X`, `printf '<%s>' "$X"`],
+    stdout: "<>",
+  },
+  {
+    name: "publishes a redirected file",
+    script: "printf body > /result",
+    expectedFiles: { "/result": "body" },
+  },
+]);
+```
+
+Cases can also declare `stdin`, `env`, `args`, initial `files`, expected or
+missing files, non-zero `exitCode`, exact `stderr`, or `stderrIncludes`. Use
+`createBashHarness()` when a case needs custom commands, limits, policy, raw
+byte streams, cancellation, or additional state assertions. Keep one behavior
+per declarative case; retain a smaller number of explicit integration tests for
+backpressure and interactions among several features.
 
 Pipes and sinks are ownership-sensitive. Test both outputs concurrently,
 blocked consumers, cancellation, early close, `EPIPE`, duplicated FDs, and

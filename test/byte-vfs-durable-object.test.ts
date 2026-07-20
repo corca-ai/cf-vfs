@@ -167,7 +167,7 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(result.first).toBe(result.second);
   });
 
-  it("uploads R2 bytes outside the DO and commits verified metadata idempotently", async () => {
+  it("recovers a committed upload receipt idempotently after eviction", async () => {
     const stub = workspace("opaque-commit");
     const upload = await stub.beginOpaqueUpload("/asset", {
       expectedSizeBytes: 4,
@@ -179,6 +179,7 @@ describe("byte-oriented Durable Object filesystem", () => {
     });
 
     const first = await stub.commitOpaqueUpload(upload.uploadId);
+    await evictDurableObject(stub);
     const second = await stub.commitOpaqueUpload(upload.uploadId);
     expect(second).toEqual(first);
     expect(first).toMatchObject({
@@ -187,6 +188,58 @@ describe("byte-oriented Durable Object filesystem", () => {
       sizeBytes: 4,
     });
     expect((await env.VFS_TEST_BUCKET.head(upload.objectKey))?.version).not.toBe("");
+  });
+
+  it("returns a transient verification failure to open state and retries safely", async () => {
+    const stub = workspace("opaque-head-retry");
+    const result = await runInDurableObject(stub, async (_instance, state) => {
+      const backing = new MemoryOpaqueStore();
+      let rejectNextHead = true;
+      const fileSystem = new DurableObjectFileSystem(state.storage, {
+        workspaceId: "head-retry",
+        opaqueStore: {
+          putIfAbsent: (...args) => backing.putIfAbsent(...args),
+          head: (...args) => {
+            if (rejectNextHead) {
+              rejectNextHead = false;
+              throw new Error("transient R2 head failure");
+            }
+            return backing.head(...args);
+          },
+          getStream: (...args) => backing.getStream(...args),
+          delete: (...args) => backing.delete(...args),
+        },
+      });
+      const upload = await fileSystem.beginOpaqueUpload("/asset");
+      await backing.putIfAbsent(upload.objectKey, "body");
+      let message = "";
+      try {
+        await fileSystem.commitOpaqueUpload(upload.uploadId);
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+      const afterFailure = state.storage.sql.exec<{
+        state: string;
+        verification_token: string | null;
+        verification_lease_until_ms: number | null;
+        queued: number;
+      }>(
+        `SELECT state, verification_token, verification_lease_until_ms,
+                (SELECT COUNT(*) FROM vfs2_gc_queue WHERE r2_key = s.r2_key) AS queued
+         FROM vfs2_upload_sessions s WHERE id = ?`,
+        upload.uploadId,
+      ).one();
+      const committed = await fileSystem.commitOpaqueUpload(upload.uploadId);
+      return { message, afterFailure, committed };
+    });
+    expect(result.message).toBe("transient R2 head failure");
+    expect(result.afterFailure).toEqual({
+      state: "open",
+      verification_token: null,
+      verification_lease_until_ms: null,
+      queued: 0,
+    });
+    expect(result.committed).toMatchObject({ path: "/asset", contentClass: "opaque" });
   });
 
   it("validates committed receipts and expires them without removing the file", async () => {
@@ -316,7 +369,7 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(await env.VFS_TEST_BUCKET.head(lease.object.key)).not.toBeNull();
   });
 
-  it("persists upload-expiry cleanup across eviction and drains it from the alarm", async () => {
+  it("persists upload-expiry cleanup across eviction and tolerates a duplicate alarm", async () => {
     const stub = workspace("opaque-expiry-alarm");
     const upload = await stub.beginOpaqueUpload("/abandoned", { expiresInMs: 60_000 });
     await new R2OpaqueStore(env.VFS_TEST_BUCKET).putIfAbsent(upload.objectKey, "body");
@@ -326,6 +379,15 @@ describe("byte-oriented Durable Object filesystem", () => {
         "UPDATE vfs2_upload_sessions SET expires_at_ms = 0 WHERE id = ?",
         upload.uploadId,
       );
+    });
+    await evictDurableObject(stub);
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    expect(await env.VFS_TEST_BUCKET.head(upload.objectKey)).toBeNull();
+    await runInDurableObject(stub, async (_instance, state) => {
+      expect(state.storage.sql.exec<{ count: number }>(
+        "SELECT COUNT(*) AS count FROM vfs2_gc_queue",
+      ).one().count).toBe(0);
+      await state.storage.setAlarm(Date.now() + 60_000);
     });
     await evictDurableObject(stub);
     expect(await runDurableObjectAlarm(stub)).toBe(true);
@@ -393,6 +455,127 @@ describe("byte-oriented Durable Object filesystem", () => {
         "SELECT COUNT(*) AS count FROM vfs2_gc_queue",
       ).one().count).toBe(0);
     });
+  });
+
+  it("retries GC when R2 deletes the object but its success response is lost", async () => {
+    const stub = workspace("opaque-gc-lost-response");
+    const result = await runInDurableObject(stub, async (_instance, state) => {
+      const backing = new MemoryOpaqueStore();
+      let loseDeleteResponse = true;
+      const fileSystem = new DurableObjectFileSystem(state.storage, {
+        workspaceId: "gc-lost-response",
+        opaqueStore: {
+          putIfAbsent: (...args) => backing.putIfAbsent(...args),
+          head: (...args) => backing.head(...args),
+          getStream: (...args) => backing.getStream(...args),
+          async delete(...args) {
+            await backing.delete(...args);
+            if (loseDeleteResponse) {
+              loseDeleteResponse = false;
+              throw new Error("R2 delete response lost");
+            }
+          },
+        },
+      });
+      const upload = await fileSystem.beginOpaqueUpload("/asset");
+      await backing.putIfAbsent(upload.objectKey, "body");
+      await fileSystem.commitOpaqueUpload(upload.uploadId);
+      await fileSystem.remove("/asset");
+      let message = "";
+      try {
+        await fileSystem.drainGarbage();
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+      const failed = state.storage.sql.exec<{
+        attempts: number;
+        last_error: string;
+      }>(
+        "SELECT attempts, last_error FROM vfs2_gc_queue WHERE r2_key = ?",
+        upload.objectKey,
+      ).one();
+      const objectExistsAfterFailure = backing.has(upload.objectKey);
+      state.storage.sql.exec(
+        "UPDATE vfs2_gc_queue SET next_attempt_at_ms = 0 WHERE r2_key = ?",
+        upload.objectKey,
+      );
+      const retried = await fileSystem.drainGarbage();
+      const queued = state.storage.sql.exec<{ count: number }>(
+        "SELECT COUNT(*) AS count FROM vfs2_gc_queue WHERE r2_key = ?",
+        upload.objectKey,
+      ).one().count;
+      return { message, failed, objectExistsAfterFailure, retried, queued };
+    });
+    expect(result).toMatchObject({
+      message: "R2 delete response lost",
+      failed: { attempts: 1, last_error: "R2 delete response lost" },
+      objectExistsAfterFailure: false,
+      retried: { deleted: 1, remaining: 0 },
+      queued: 0,
+    });
+  });
+
+  it("lets abort win against an in-flight verifier without publishing the path", async () => {
+    const stub = workspace("opaque-abort-verifier-race");
+    const result = await runInDurableObject(stub, async (_instance, state) => {
+      let headStarted: (() => void) | undefined;
+      let releaseHead: (() => void) | undefined;
+      const started = new Promise<void>((resolve) => { headStarted = resolve; });
+      const gate = new Promise<void>((resolve) => { releaseHead = resolve; });
+      const backing = new MemoryOpaqueStore();
+      const fileSystem = new DurableObjectFileSystem(state.storage, {
+        workspaceId: "abort-verifier-race",
+        opaqueStore: {
+          putIfAbsent: (...args) => backing.putIfAbsent(...args),
+          async head(key) {
+            headStarted?.();
+            await gate;
+            return backing.head(key);
+          },
+          getStream: (...args) => backing.getStream(...args),
+          delete: (...args) => backing.delete(...args),
+        },
+        uploadSettlementGraceMs: 1,
+      });
+      const upload = await fileSystem.beginOpaqueUpload("/asset", { expiresInMs: 60_000 });
+      await backing.putIfAbsent(upload.objectKey, "body");
+      const committing = fileSystem.commitOpaqueUpload(upload.uploadId);
+      const observed = committing.then(() => null, (error: unknown) => error);
+      await started;
+      await fileSystem.abortOpaqueUpload(upload.uploadId);
+      releaseHead?.();
+      const commitError = await observed;
+      let statError: unknown;
+      try {
+        fileSystem.stat("/asset");
+      } catch (error) {
+        statError = error;
+      }
+      const garbage = state.storage.sql.exec<{ state: string; queued: number }>(
+        `SELECT state,
+                (SELECT COUNT(*) FROM vfs2_gc_queue WHERE r2_key = s.r2_key) AS queued
+         FROM vfs2_upload_sessions s WHERE id = ?`,
+        upload.uploadId,
+      ).one();
+      state.storage.sql.exec(
+        `UPDATE vfs2_gc_queue SET not_before_ms = 0, next_attempt_at_ms = 0
+         WHERE r2_key = ?`,
+        upload.objectKey,
+      );
+      const drained = await fileSystem.drainGarbage();
+      return {
+        commitError,
+        statError,
+        garbage,
+        drained,
+        objectExistsAfterDrain: backing.has(upload.objectKey),
+      };
+    });
+    expect(result.commitError).toMatchObject({ code: "EREVISION", path: "/asset" });
+    expect(result.statError).toMatchObject({ code: "ENOENT", path: "/asset" });
+    expect(result.garbage).toEqual({ state: "garbage", queued: 1 });
+    expect(result.drained).toEqual({ deleted: 1, remaining: 0 });
+    expect(result.objectExistsAfterDrain).toBe(false);
   });
 
   it("prevents an expired verifier from garbage-collecting a newer verifier", async () => {

@@ -1,15 +1,32 @@
 import { isVfsError, VfsError } from "../core/errors.js";
 import { normalizePath } from "../core/path.js";
 import { bodyToStream, readAllBytes } from "../vfs/streams.js";
+import { evaluateArithmetic } from "./arithmetic.js";
 import { ExecutionBudget, resolveShellLimits } from "./budget.js";
-import { expandAssignmentValue, expandWords } from "./expand.js";
+import {
+  expandAssignmentValue,
+  expandCasePattern,
+  expandScalarWord,
+  expandWords,
+  matchesCasePattern,
+  type ExpansionRuntime,
+} from "./expand.js";
 import { createBytePipe, isDownstreamClosedError } from "./pipe.js";
-import { parseShellScript, type AndOrNode, type PipelineNode, type ScriptNode, type SimpleCommandNode } from "./parser.js";
+import {
+  parseShellScript,
+  type AndOrNode,
+  type CommandNode,
+  type CompoundCommandNode,
+  type FunctionDefinitionNode,
+  type PipelineNode,
+  type ScriptNode,
+  type SimpleCommandNode,
+} from "./parser.js";
 import { ScopedFileSystem } from "./policy.js";
 import { applyRedirections } from "./redirection.js";
 import type {
-  ExecuteStreamOptions,
   ExecuteBytesResult,
+  ExecuteStreamOptions,
   ExecuteTextOptions,
   ExecuteTextResult,
   ShellBudget,
@@ -36,6 +53,11 @@ function cloneSession(session: ShellSession): ShellSession {
     exitRequested: false,
     requestedExitCode: 0,
     pipefail: session.pipefail,
+    functions: new Map(session.functions),
+    functionDepth: session.functionDepth,
+    loopDepth: session.loopDepth,
+    localFrames: session.localFrames.map((frame) => new Map(frame)),
+    flow: { type: "none" },
   };
 }
 
@@ -69,8 +91,405 @@ interface Runtime {
   limits: ShellLimits;
 }
 
-async function runSimpleCommand(
+interface CollectedSubstitution {
+  bytes: Uint8Array;
+  release(): void;
+}
+
+async function collectSubstitutionOutput(
+  stream: ReadableStream<Uint8Array>,
+  runtime: Runtime,
+): Promise<CollectedSubstitution> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  const chunkReleases: Array<() => void> = [];
+  let total = 0;
+  let releaseOutput: (() => void) | undefined;
+  try {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      total += result.value.byteLength;
+      if (total > runtime.limits.maxCommandSubstitutionBytes) {
+        throw new VfsError("E2BIG", "command substitution output limit exceeded");
+      }
+      const release = runtime.budget.buffered(result.value.byteLength);
+      try {
+        chunks.push(result.value.slice());
+        chunkReleases.push(release);
+      } catch (error) {
+        release();
+        throw error;
+      }
+    }
+    releaseOutput = runtime.budget.buffered(total);
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    chunks.length = 0;
+    for (const release of chunkReleases.splice(0)) release();
+    return { bytes, release: releaseOutput };
+  } catch (error) {
+    await reader.cancel(error).catch(() => undefined);
+    releaseOutput?.();
+    throw error;
+  } finally {
+    for (const release of chunkReleases) release();
+    reader.releaseLock();
+  }
+}
+
+function redirections(node: CommandNode): readonly import("./parser.js").Redirection[] {
+  return node.type === "function-definition" ? [] : node.redirections;
+}
+
+function expansionRuntime(fds: ShellFileDescriptors, runtime: Runtime): ExpansionRuntime {
+  let lastStatus: number | undefined;
+  return {
+    async commandSubstitute(script, session) {
+      const output = createBytePipe({
+        maximumBytes: runtime.limits.maxCommandSubstitutionBytes,
+        signal: runtime.signal,
+        name: "command substitution",
+        account: (bytes) => runtime.budget.io(bytes),
+      });
+      const child = cloneSession(session);
+      const childFds: ShellFileDescriptors = {
+        0: fds[0],
+        1: output.sink,
+        2: fds[2].clone(),
+      };
+      const completed = (async () => {
+        try {
+          return await runScript(script, child, childFds, runtime);
+        } finally {
+          await closeDescriptors(childFds);
+        }
+      })();
+      let retained: CollectedSubstitution | undefined;
+      try {
+        const [collected, status] = await Promise.all([
+          collectSubstitutionOutput(output.readable, runtime).then((value) => {
+            retained = value;
+            return value;
+          }),
+          completed,
+        ]);
+        lastStatus = status;
+        let value: string;
+        try {
+          value = new TextDecoder("utf-8", { fatal: true }).decode(collected.bytes);
+        } catch {
+          throw new VfsError("EIO", "command substitution output is not valid UTF-8");
+        }
+        if (value.includes("\0")) throw new VfsError("EINVAL", "command substitution produced a NUL byte");
+        return value.replace(/\n+$/u, "");
+      } finally {
+        retained?.release();
+      }
+    },
+    lastSubstitutionStatus() {
+      return lastStatus;
+    },
+  };
+}
+
+interface PreparedSimpleCommand {
+  assignments: Array<{ name: string; value: string }>;
+  argv: string[];
+  substitutionStatus?: number;
+}
+
+async function prepareSimpleCommand(
   node: SimpleCommandNode,
+  session: ShellSession,
+  runtime: Runtime,
+  expansion: ExpansionRuntime,
+): Promise<PreparedSimpleCommand> {
+  const assignments: Array<{ name: string; value: string }> = [];
+  const assignmentSession = cloneSession(session);
+  let wordIndex = 0;
+  while (node.words[wordIndex]?.assignmentName !== undefined) {
+    const word = node.words[wordIndex];
+    if (word === undefined || word.assignmentName === undefined) break;
+    const value = await expandAssignmentValue(
+      word,
+      word.assignmentName,
+      assignmentSession,
+      runtime.fileSystem,
+      runtime.budget,
+      expansion,
+    );
+    assignments.push({ name: word.assignmentName, value });
+    assignmentSession.env.set(word.assignmentName, value);
+    wordIndex += 1;
+  }
+  const assignmentNames = new Set(assignments.map((value) => value.name));
+  for (const [name, value] of assignmentSession.env) {
+    if (!assignmentNames.has(name) && session.env.get(name) !== value) session.env.set(name, value);
+  }
+  const argv = await expandWords(
+    node.words.slice(wordIndex),
+    session,
+    runtime.fileSystem,
+    runtime.budget,
+    expansion,
+  );
+  const substitutionStatus = expansion.lastSubstitutionStatus();
+  return {
+    assignments,
+    argv,
+    ...(substitutionStatus === undefined ? {} : { substitutionStatus }),
+  };
+}
+
+function restoreVariables(
+  session: ShellSession,
+  previous: ReadonlyMap<string, string | undefined>,
+  preserved: ReadonlySet<string>,
+): void {
+  for (const [name, value] of previous) {
+    if (preserved.has(name)) continue;
+    if (value === undefined) session.env.delete(name);
+    else session.env.set(name, value);
+  }
+}
+
+function restoreLocals(session: ShellSession, frame: ReadonlyMap<string, string | undefined>): void {
+  for (const [name, value] of frame) {
+    if (value === undefined) session.env.delete(name);
+    else session.env.set(name, value);
+  }
+}
+
+async function runFunction(
+  definition: FunctionDefinitionNode,
+  argv: readonly string[],
+  session: ShellSession,
+  fds: ShellFileDescriptors,
+  runtime: Runtime,
+): Promise<number> {
+  if (session.functionDepth >= runtime.limits.maxFunctionDepth) {
+    throw new VfsError("E2BIG", "shell function recursion limit exceeded");
+  }
+  const previousArgs = session.args;
+  const frame = new Map<string, string | undefined>();
+  session.args = [...argv];
+  session.functionDepth += 1;
+  session.localFrames.push(frame);
+  try {
+    let status = await runCommandNode(
+      definition.body,
+      session,
+      { 0: fds[0], 1: fds[1].clone(), 2: fds[2].clone() },
+      runtime,
+      false,
+    );
+    if (session.flow.type === "return") {
+      status = session.flow.status;
+      session.flow = { type: "none" };
+    }
+    return status;
+  } finally {
+    session.localFrames.pop();
+    restoreLocals(session, frame);
+    session.functionDepth -= 1;
+    session.args = previousArgs;
+  }
+}
+
+async function executeSimpleCommand(
+  prepared: PreparedSimpleCommand,
+  session: ShellSession,
+  fds: ShellFileDescriptors,
+  runtime: Runtime,
+): Promise<number> {
+  if (prepared.argv.length === 0) {
+    for (const value of prepared.assignments) session.env.set(value.name, value.value);
+    return prepared.substitutionStatus ?? 0;
+  }
+  const [name = "", ...argv] = prepared.argv;
+  const definition = session.functions.get(name);
+  if (definition === undefined && runtime.policy.allowedCommands !== undefined
+    && !runtime.policy.allowedCommands.includes(name)) {
+    throw new VfsError("EACCES", `command is not allowed: ${name}`);
+  }
+  const previous = new Map<string, string | undefined>();
+  for (const value of prepared.assignments) {
+    previous.set(value.name, session.env.get(value.name));
+    session.env.set(value.name, value.value);
+  }
+  try {
+    let exitCode: number;
+    if (definition !== undefined) {
+      exitCode = await runFunction(definition, argv, session, fds, runtime);
+    } else {
+      const command = runtime.commands.get(name);
+      if (command === undefined) {
+        await fds[2].write(new TextEncoder().encode(`${name}: command not found\n`));
+        return 127;
+      }
+      exitCode = (await command.run(
+        {
+          fileSystem: runtime.fileSystem,
+          session,
+          signal: runtime.signal,
+          budget: runtime.budget,
+          policy: runtime.policy,
+        },
+        argv,
+        fds,
+      ).completed).exitCode;
+      if (!Number.isInteger(exitCode) || exitCode < 0 || exitCode > 255) {
+        throw new RangeError(`command ${name} returned an invalid exit status: ${exitCode}`);
+      }
+    }
+    return exitCode;
+  } finally {
+    const preserved = name === "export"
+      ? new Set(argv.map((value) => value.split("=", 1)[0] ?? ""))
+      : new Set<string>();
+    restoreVariables(session, previous, preserved);
+  }
+}
+
+function consumeLoopFlow(session: ShellSession): "break" | "continue" | "propagate" | "none" {
+  const flow = session.flow;
+  if (flow.type !== "break" && flow.type !== "continue") return "none";
+  if (flow.levels > 1) {
+    session.flow = { type: flow.type, levels: flow.levels - 1 };
+    return "propagate";
+  }
+  session.flow = { type: "none" };
+  return flow.type;
+}
+
+function flowActive(session: ShellSession): boolean {
+  return session.flow.type !== "none";
+}
+
+async function runLoopBody(
+  body: ScriptNode,
+  session: ShellSession,
+  fds: ShellFileDescriptors,
+  runtime: Runtime,
+): Promise<{ status: number; action: "break" | "continue" | "propagate" | "none" }> {
+  runtime.budget.loop();
+  const status = await runScript(body, session, fds, runtime);
+  return { status, action: consumeLoopFlow(session) };
+}
+
+async function executeCompoundCommand(
+  node: CompoundCommandNode,
+  session: ShellSession,
+  fds: ShellFileDescriptors,
+  runtime: Runtime,
+  expansion: ExpansionRuntime,
+): Promise<number> {
+  switch (node.type) {
+    case "group": {
+      const target = node.subshell ? cloneSession(session) : session;
+      return await runScript(node.body, target, fds, runtime);
+    }
+    case "if": {
+      for (const branch of node.branches) {
+        const condition = await runScript(branch.condition, session, fds, runtime);
+        if (session.exitRequested || session.flow.type !== "none") return condition;
+        if (condition === 0) return await runScript(branch.body, session, fds, runtime);
+      }
+      return node.alternate === undefined ? 0 : await runScript(node.alternate, session, fds, runtime);
+    }
+    case "loop": {
+      let status = 0;
+      session.loopDepth += 1;
+      try {
+        while (true) {
+          const condition = await runScript(node.condition, session, fds, runtime);
+          if (session.exitRequested || session.flow.type !== "none") return condition;
+          if ((condition === 0) === node.until) break;
+          const result = await runLoopBody(node.body, session, fds, runtime);
+          status = result.status;
+          if (result.action === "break") break;
+          if (result.action === "propagate") return status;
+          if (session.exitRequested || flowActive(session)) return status;
+        }
+        return status;
+      } finally {
+        session.loopDepth -= 1;
+      }
+    }
+    case "for": {
+      const values = node.words === undefined
+        ? [...session.args]
+        : await expandWords(node.words, session, runtime.fileSystem, runtime.budget, expansion);
+      let status = 0;
+      session.loopDepth += 1;
+      try {
+        for (const value of values) {
+          session.env.set(node.name, value);
+          const result = await runLoopBody(node.body, session, fds, runtime);
+          status = result.status;
+          if (result.action === "break") break;
+          if (result.action === "propagate") return status;
+          if (session.exitRequested || flowActive(session)) return status;
+        }
+        return status;
+      } finally {
+        session.loopDepth -= 1;
+      }
+    }
+    case "case": {
+      const value = await expandScalarWord(
+        node.word,
+        session,
+        runtime.fileSystem,
+        runtime.budget,
+        expansion,
+      );
+      for (const clause of node.clauses) {
+        for (const patternWord of clause.patterns) {
+          const pattern = await expandCasePattern(
+            patternWord,
+            session,
+            runtime.fileSystem,
+            runtime.budget,
+            expansion,
+          );
+          if (matchesCasePattern(value, pattern)) return await runScript(clause.body, session, fds, runtime);
+        }
+      }
+      return 0;
+    }
+    case "arithmetic-command": {
+      return evaluateArithmetic(node.expression, session.env) === 0n ? 1 : 0;
+    }
+  }
+}
+
+async function executeCommandNode(
+  node: CommandNode,
+  prepared: PreparedSimpleCommand | undefined,
+  session: ShellSession,
+  fds: ShellFileDescriptors,
+  runtime: Runtime,
+  expansion: ExpansionRuntime,
+): Promise<number> {
+  if (node.type === "command") {
+    if (prepared === undefined) throw new VfsError("EIO", "simple command was not expanded");
+    return await executeSimpleCommand(prepared, session, fds, runtime);
+  }
+  if (node.type === "function-definition") {
+    session.functions.set(node.name, node);
+    return 0;
+  }
+  return await executeCompoundCommand(node, session, fds, runtime, expansion);
+}
+
+async function runCommandNode(
+  node: CommandNode,
   session: ShellSession,
   initialFds: ShellFileDescriptors,
   runtime: Runtime,
@@ -81,34 +500,22 @@ async function runSimpleCommand(
   const fallbackStderr = initialFds[2].clone();
   let semanticFailure = false;
   let shouldCancelInput = cancelUnreadInput;
+  const expansion = expansionRuntime(initialFds, runtime);
   try {
     runtime.budget.command();
-    const assignments: Array<{ name: string; value: string }> = [];
-    const assignmentSession = cloneSession(session);
-    let wordIndex = 0;
-    while (node.words[wordIndex]?.assignmentName !== undefined) {
-      const word = node.words[wordIndex];
-      if (word === undefined || word.assignmentName === undefined) break;
-      const value = expandAssignmentValue(word, word.assignmentName, assignmentSession);
-      assignments.push({ name: word.assignmentName, value });
-      assignmentSession.env.set(word.assignmentName, value);
-      wordIndex += 1;
-    }
-    const expanded = await expandWords(
-      node.words.slice(wordIndex),
-      session,
-      runtime.fileSystem,
-      runtime.budget,
-    );
+    const prepared = node.type === "command"
+      ? await prepareSimpleCommand(node, session, runtime, expansion)
+      : undefined;
     let applied;
     try {
       applied = await applyRedirections(
-        node.redirections,
+        redirections(node),
         fds,
         session,
         runtime.fileSystem,
         runtime.budget,
         cancelUnreadInput,
+        expansion,
       );
     } catch (error) {
       fds = { 0: initialFds[0], 1: initialFds[1], 2: fallbackStderr };
@@ -117,53 +524,9 @@ async function runSimpleCommand(
     fds = applied.fds;
     redirected = applied.redirected;
     shouldCancelInput ||= applied.inputRedirected;
-    if (expanded.length === 0) {
-      for (const value of assignments) session.env.set(value.name, value.value);
-      await closeDescriptors(fds);
-      return 0;
-    }
-    const name = expanded.shift() ?? "";
-    if (
-      runtime.policy.allowedCommands !== undefined
-      && !runtime.policy.allowedCommands.includes(name)
-    ) throw new VfsError("EACCES", `command is not allowed: ${name}`);
-    const command = runtime.commands.get(name);
-    if (command === undefined) {
-      await fds[2].write(new TextEncoder().encode(`${name}: command not found\n`));
-      await closeDescriptors(fds);
-      return 127;
-    }
-    const previous = new Map<string, string | undefined>();
-    for (const value of assignments) {
-      previous.set(value.name, session.env.get(value.name));
-      session.env.set(value.name, value.value);
-    }
-    let exitCode: number;
-    try {
-      exitCode = (await command.run(
-        {
-          fileSystem: runtime.fileSystem,
-          session,
-          signal: runtime.signal,
-          budget: runtime.budget,
-          policy: runtime.policy,
-        },
-        expanded,
-        fds,
-      ).completed).exitCode;
-      if (!Number.isInteger(exitCode) || exitCode < 0 || exitCode > 255) {
-        throw new RangeError(`command ${name} returned an invalid exit status: ${exitCode}`);
-      }
-    } finally {
-      const exported = name === "export" ? new Set(expanded.map((value) => value.split("=", 1)[0])) : new Set<string>();
-      for (const [variable, oldValue] of previous) {
-        if (exported.has(variable)) continue;
-        if (oldValue === undefined) session.env.delete(variable);
-        else session.env.set(variable, oldValue);
-      }
-    }
+    const status = await executeCommandNode(node, prepared, session, fds, runtime, expansion);
     await closeDescriptors(fds);
-    return exitCode;
+    return status;
   } catch (error) {
     if (isDownstreamClosedError(error)) {
       await Promise.allSettled([fds[1].close(), fds[2].close()]);
@@ -173,9 +536,8 @@ async function runSimpleCommand(
       await Promise.allSettled([fds[1].abort(error), fds[2].abort(error)]);
       throw error;
     }
-    const fatal = isVfsError(error)
-      && (error.code === "E2BIG" || error.code === "EFBIG"
-        || error.code === "ETIMEDOUT" || error.code === "ECANCELED");
+    const fatal = error.code === "E2BIG" || error.code === "EFBIG"
+      || error.code === "ETIMEDOUT" || error.code === "ECANCELED";
     if (fatal) {
       await abortRedirectedDescriptors(fds, redirected, error);
       throw error;
@@ -187,7 +549,7 @@ async function runSimpleCommand(
     } finally {
       await Promise.allSettled([fds[1].close(), fds[2].close()]);
     }
-    return isVfsError(error) ? statusFor(error) : 1;
+    return statusFor(error);
   } finally {
     if (shouldCancelInput) {
       await fds[0].cancel(new VfsError("EPIPE", "command stopped reading input")).catch(() => undefined);
@@ -204,7 +566,7 @@ async function runPipeline(
   runtime: Runtime,
 ): Promise<number> {
   const stages: Array<{
-    node: SimpleCommandNode;
+    node: CommandNode;
     session: ShellSession;
     fds: ShellFileDescriptors;
   }> = [];
@@ -232,7 +594,7 @@ async function runPipeline(
     if (nextInput !== undefined) input = nextInput;
   }
   const statuses = await Promise.all(stages.map((stage, index) =>
-    runSimpleCommand(stage.node, stage.session, stage.fds, runtime, index > 0)));
+    runCommandNode(stage.node, stage.session, stage.fds, runtime, index > 0)));
   let status = statuses.at(-1) ?? 0;
   if (session.pipefail) {
     for (let index = statuses.length - 1; index >= 0; index -= 1) {
@@ -256,7 +618,7 @@ async function runAndOr(
 ): Promise<number> {
   let status = await runPipeline(node.first, session, fds, runtime);
   for (const item of node.rest) {
-    if (session.exitRequested) break;
+    if (session.exitRequested || session.flow.type !== "none") break;
     if ((item.operator === "&&" && status === 0) || (item.operator === "||" && status !== 0)) {
       status = await runPipeline(item.pipeline, session, fds, runtime);
     }
@@ -276,6 +638,7 @@ async function runScript(
     status = await runAndOr(list, session, fds, runtime);
     session.lastExitCode = status;
     if (session.exitRequested) return session.requestedExitCode;
+    if (session.flow.type !== "none") return status;
   }
   return status;
 }
@@ -326,7 +689,11 @@ export class Shell {
       parseError = new VfsError("E2BIG", "shell source exceeds the script byte limit");
     } else {
       try {
-        parsed = parseShellScript(options.script, this.limits.maxAstNodes);
+        parsed = parseShellScript(
+          options.script,
+          this.limits.maxAstNodes,
+          this.limits.maxNestingDepth,
+        );
       } catch (error) {
         if (!isVfsError(error)) throw error;
         parseError = error;
@@ -376,6 +743,11 @@ export class Shell {
       exitRequested: false,
       requestedExitCode: 0,
       pipefail: false,
+      functions: new Map(),
+      functionDepth: 0,
+      loopDepth: 0,
+      localFrames: [],
+      flow: { type: "none" },
     };
     session.env.set("PWD", session.cwd);
     session.env.set("0", session.env.get("0") ?? "cf-vfs");
@@ -422,7 +794,7 @@ export class Shell {
           }
         }
         await Promise.allSettled([rootFds[1].close(), rootFds[2].close()]);
-        return { exitCode: isVfsError(error) && error.code === "EINVAL" ? 2 : 1 };
+        return { exitCode: error.code === "EINVAL" ? 2 : 1 };
       } finally {
         clearTimeout(timeout);
         if (externalAbort !== undefined) options.signal?.removeEventListener("abort", externalAbort);

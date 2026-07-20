@@ -8,7 +8,7 @@ short overview; this page is the documentation entry point.
 
 - [Getting started](getting-started.md) — install, configure a Durable Object
   and R2, execute source, and transfer opaque bodies outside the metadata DO.
-- [Shell, commands, and direct API](commands.md) — Bash Version 1, streams,
+- [Shell, commands, and direct API](commands.md) — Bash Version 2, streams,
   statuses, utilities, opaque behavior, and direct VFS primitives.
 - [Architecture](architecture.md) — SQLite inline bytes, immutable R2 objects,
   mutation tokens, upload verification, read leases, and GC alarms.
@@ -18,7 +18,7 @@ short overview; this page is the documentation entry point.
   upload trust, monitoring, recovery, and workspace routing.
 - [Performance and benchmarks](performance.md) — synchronous snapshots,
   backpressure, output slabs, benchmark scenarios, and measurement caveats.
-- [Parser technology spike](parser-spike.md) — why Version 1 uses a small
+- [Parser technology spike](parser-spike.md) — why Version 2 still uses a
   handwritten parser and what would trigger reconsideration.
 - [Development](development.md) — repository layout, complete verification,
   package boundaries, and extending the runtime.

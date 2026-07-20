@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 
-const fixtureUrl = new URL("../test/fixtures/bash-v1.json", import.meta.url);
+const fixtureUrl = new URL("../test/fixtures/bash-v2.json", import.meta.url);
 const fixtures = JSON.parse(await readFile(fixtureUrl, "utf8"));
 
 async function run(fixture) {

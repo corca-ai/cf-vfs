@@ -21,7 +21,7 @@ upload/download gateway: R2 body bytes; never relayed through metadata DO
 - `src/core` contains path, glob, error, diff, and unified-patch primitives.
 - `src/vfs` contains the byte contract, stream helpers, deterministic memory
   implementation, SQLite implementation, opaque facade, and VFS DO base.
-- `src/shell` contains Version 1 parsing and expansion, manual pipe pumps,
+- `src/shell` contains Version 2 parsing, expansion, and arithmetic, manual pipe pumps,
   sessions, redirections, budgets, capability policy, and execution APIs.
 - `src/shell/commands` contains argv-based built-ins and utilities. The full
   registry is a separate module.

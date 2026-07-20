@@ -130,6 +130,55 @@ export const unsetCommand = /* @__PURE__ */ defineCommand("unset", (context, arg
   return 0;
 });
 
+export const localCommand = /* @__PURE__ */ defineCommand("local", (context, argv) => {
+  const frame = context.session.localFrames.at(-1);
+  if (context.session.functionDepth === 0 || frame === undefined) {
+    throw new VfsError("EINVAL", "local: can only be used in a function");
+  }
+  for (const value of argv) {
+    const parsed = assignment(value);
+    if (!frame.has(parsed.name)) frame.set(parsed.name, context.session.env.get(parsed.name));
+    context.session.env.set(parsed.name, value.includes("=") ? parsed.value : "");
+  }
+  return 0;
+});
+
+export const returnCommand = /* @__PURE__ */ defineCommand("return", (context, argv) => {
+  if (context.session.functionDepth === 0) {
+    throw new VfsError("EINVAL", "return: can only be used in a function");
+  }
+  if (argv.length > 1) throw new VfsError("EINVAL", "return: too many arguments");
+  const status = argv[0] === undefined
+    ? context.session.lastExitCode
+    : parseInteger(argv[0], "return status") & 0xff;
+  context.session.flow = { type: "return", status };
+  return status;
+});
+
+function loopControl(
+  name: "break" | "continue",
+  context: ShellCommandContext,
+  argv: readonly string[],
+): number {
+  if (context.session.loopDepth === 0) {
+    throw new VfsError("EINVAL", `${name}: only meaningful in a loop`);
+  }
+  if (argv.length > 1) throw new VfsError("EINVAL", `${name}: too many arguments`);
+  const requested = argv[0] === undefined ? 1 : parseInteger(argv[0], `${name} level`);
+  if (requested <= 0) throw new VfsError("EINVAL", `${name}: level must be positive`);
+  context.session.flow = {
+    type: name,
+    levels: Math.min(requested, context.session.loopDepth),
+  };
+  return 0;
+}
+
+export const breakCommand = /* @__PURE__ */ defineCommand("break", (context, argv) =>
+  loopControl("break", context, argv));
+
+export const continueCommand = /* @__PURE__ */ defineCommand("continue", (context, argv) =>
+  loopControl("continue", context, argv));
+
 export const exitCommand = /* @__PURE__ */ defineCommand("exit", (context, argv) => {
   if (argv.length > 1) throw new VfsError("EINVAL", "exit: too many arguments");
   const code = argv[0] === undefined ? context.session.lastExitCode : parseInteger(argv[0], "exit status");

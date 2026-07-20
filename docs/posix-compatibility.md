@@ -7,7 +7,7 @@ host filesystem access.
 
 ## Filesystem boundary
 
-| Area | Version 1 behavior |
+| Area | Version 2 behavior |
 | --- | --- |
 | Paths | `/`-separated canonical Unicode strings with `.`, `..`, repeated-separator, name-length, path-length, and trailing-slash validation. Shell-relative paths resolve from `cwd`. Paths are not arbitrary POSIX byte strings. |
 | Regular files | Inline files contain arbitrary bytes and are limited to 8 MiB. Opaque files are immutable R2 generations whose metadata participates in the namespace but whose bodies are unavailable to shell commands. |
@@ -25,16 +25,17 @@ they are not Durable Object state and have no shared seek offset.
 
 ## Shell language
 
-Bash Version 1 supports simple commands and assignments; single/double quotes
-and escapes; selected parameter expansion; `;`, newlines, `&&`, `||`, `!`, and
-pipelines; six input/output redirections; and ordinary pathname expansion. See
-[Shell, commands, and direct API](commands.md) for the exact list.
+Bash Version 2 supports simple commands and assignments; quoting and escapes;
+selected parameter, command, and arithmetic expansion; lists and pipelines;
+groups, subshells, control structures, functions, and selected flow built-ins;
+ordinary redirection, here-documents, here-strings, and pathname expansion. See
+[Shell, commands, and direct API](commands.md) for the exact grammar and limits.
 
 The parser rejects unsupported syntax before running any command. In
-particular, command/process substitution, control structures, functions,
-subshells, arithmetic, arrays, brace expansion, extended tests, here-documents,
-background jobs, and arbitrary descriptors are not approximated. The language
-version is exported as `BASH_COMPATIBILITY_VERSION`.
+particular, process substitution, backticks, arrays, brace expansion, extended
+tests, C-style `for`, source-file execution, background jobs, and arbitrary
+descriptors are not approximated. The language version is exported as
+`BASH_COMPATIBILITY_VERSION`.
 
 Deliberate deterministic choices include:
 
@@ -44,6 +45,12 @@ Deliberate deterministic choices include:
   `**` has no special cross-directory meaning;
 - pipeline stages receive cloned state, while a non-pipeline built-in can
   change the parent session;
+- subshells and command substitutions also clone session state; command
+  substitution output must be bounded valid UTF-8 and contain no NUL;
+- arithmetic wraps deterministically at signed 64 bits instead of using the
+  platform's native C integer width;
+- ordinary groups, function bodies, and expanded unquoted here-documents use
+  the current session; quoted delimiters produce literal bodies;
 - `set -o pipefail` selects the rightmost real non-zero stage, while normal
   downstream early close maps upstream `EPIPE` to success;
 - status 2 is syntax/usage, 126 is policy denial, and 127 is command-not-found.
@@ -52,7 +59,7 @@ Differential fixtures are pinned against `bash:5.3.3` with the same locale and
 timezone. They cover representative supported quoting, assignment and
 positional expansion, control, pipeline, redirection, glob, and status
 behavior. Explicit rejection tests cover syntax deliberately outside Version
-1. Neither suite implies compatibility outside the declared subset.
+2. Neither suite implies compatibility outside the declared subset.
 
 ## Atomic redirection divergence
 

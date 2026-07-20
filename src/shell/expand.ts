@@ -1,9 +1,9 @@
 import { VfsError } from "../core/errors.js";
 import { compareUtf8, dirname, normalizePath } from "../core/path.js";
-import type { ShellWord, WordPart } from "./parser.js";
+import { evaluateArithmetic } from "./arithmetic.js";
+import type { ParameterExpansion, ShellWord, WordPart } from "./parser.js";
 import type { ShellBudget, ShellFileSystem, ShellSession } from "./types.js";
 
-const VARIABLE = /\$(?:\{([A-Za-z_][A-Za-z0-9_]*|[?#@]|[0-9]+)\}|([A-Za-z_][A-Za-z0-9_]*|[?#@0-9]))/gu;
 const IFS = /[ \t\n]+/u;
 
 interface Field {
@@ -11,13 +11,29 @@ interface Field {
   pattern: string;
 }
 
-function variable(name: string, session: ShellSession): string {
-  if (name === "?") return String(session.lastExitCode);
-  if (name === "#") return String(session.args.length);
-  if (name === "@") return session.args.join(" ");
-  if (name === "0") return session.env.get("0") ?? "cf-vfs";
-  if (/^[1-9][0-9]*$/u.test(name)) return session.args[Number(name) - 1] ?? "";
-  return session.env.get(name) ?? "";
+export interface ExpansionRuntime {
+  commandSubstitute(script: import("./parser.js").ScriptNode, session: ShellSession): Promise<string>;
+  lastSubstitutionStatus(): number | undefined;
+}
+
+function variableState(name: string, session: ShellSession): { set: boolean; value: string } {
+  if (name === "?") return { set: true, value: String(session.lastExitCode) };
+  if (name === "#") return { set: true, value: String(session.args.length) };
+  if (name === "@") return { set: true, value: session.args.join(" ") };
+  if (name === "0") return { set: true, value: session.env.get("0") ?? "cf-vfs" };
+  if (/^[1-9][0-9]*$/u.test(name)) {
+    const value = session.args[Number(name) - 1];
+    return value === undefined ? { set: false, value: "" } : { set: true, value };
+  }
+  const value = session.env.get(name);
+  return value === undefined ? { set: false, value: "" } : { set: true, value };
+}
+
+function assignParameter(name: string, value: string, session: ShellSession): void {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name)) {
+    throw new VfsError("EINVAL", `cannot assign to special parameter ${name}`);
+  }
+  session.env.set(name, value);
 }
 
 function escapeGlob(value: string): string {
@@ -94,7 +110,7 @@ async function glob(
     const prefixStat = await fileSystem.stat(prefix);
     if (prefixStat.kind === "directory") root = prefix;
   } catch {
-    // The non-wildcard prefix may end in a partial filename.
+    // A non-wildcard prefix may end in a partial filename.
   }
   const matches: string[] = [];
   let cursor: string | undefined;
@@ -151,19 +167,81 @@ function alternatives(fields: Field[], values: readonly string[], activeGlob: bo
   }
 }
 
-function partSegments(part: WordPart): Array<{ literal?: string; parameter?: string }> {
-  if (part.kind === "literal") return [{ literal: part.value }];
-  const output: Array<{ literal?: string; parameter?: string }> = [];
-  let offset = 0;
-  for (const match of part.value.matchAll(VARIABLE)) {
-    const index = match.index;
-    if (index > offset) output.push({ literal: part.value.slice(offset, index) });
-    output.push({ parameter: match[1] ?? match[2] ?? "" });
-    offset = index + match[0].length;
+function assertNoNul(value: string): string {
+  if (value.includes("\0")) throw new VfsError("EINVAL", "shell expansion produced a NUL byte");
+  return value;
+}
+
+async function scalarParts(
+  parts: readonly WordPart[],
+  session: ShellSession,
+  fileSystem: ShellFileSystem,
+  budget: ShellBudget,
+  runtime: ExpansionRuntime,
+): Promise<string> {
+  let output = "";
+  for (const part of parts) output += await partValue(part, session, fileSystem, budget, runtime);
+  return assertNoNul(output);
+}
+
+async function parameterValue(
+  expansion: ParameterExpansion,
+  session: ShellSession,
+  fileSystem: ShellFileSystem,
+  budget: ShellBudget,
+  runtime: ExpansionRuntime,
+): Promise<string> {
+  const state = variableState(expansion.name, session);
+  if (expansion.length) return String([...state.value].length);
+  const operator = expansion.operator;
+  if (operator === undefined) return state.value;
+  const checkNull = operator.startsWith(":");
+  const absent = !state.set || (checkNull && state.value.length === 0);
+  const operand = async (): Promise<string> => expansion.word === undefined
+    ? ""
+    : await scalarParts(expansion.word.parts, session, fileSystem, budget, runtime);
+  if (operator.endsWith("-")) return absent ? await operand() : state.value;
+  if (operator.endsWith("+")) return absent ? "" : await operand();
+  if (operator.endsWith("=")) {
+    if (!absent) return state.value;
+    const value = await operand();
+    assignParameter(expansion.name, value, session);
+    return value;
   }
-  if (offset < part.value.length) output.push({ literal: part.value.slice(offset) });
-  if (output.length === 0) output.push({ literal: part.value });
-  return output;
+  if (!absent) return state.value;
+  const message = await operand();
+  throw new VfsError("EINVAL", message || `${expansion.name}: parameter is unset or empty`);
+}
+
+async function partValue(
+  part: WordPart,
+  session: ShellSession,
+  fileSystem: ShellFileSystem,
+  budget: ShellBudget,
+  runtime: ExpansionRuntime,
+): Promise<string> {
+  if (part.kind === "literal") return assertNoNul(part.value);
+  if (part.kind === "parameter") {
+    return assertNoNul(await parameterValue(part.expansion, session, fileSystem, budget, runtime));
+  }
+  if (part.kind === "arithmetic") {
+    return String(evaluateArithmetic(part.expression, session.env));
+  }
+  return assertNoNul(await runtime.commandSubstitute(part.script, session));
+}
+
+async function partValues(
+  part: WordPart,
+  session: ShellSession,
+  fileSystem: ShellFileSystem,
+  budget: ShellBudget,
+  runtime: ExpansionRuntime,
+): Promise<string[]> {
+  if (part.kind === "parameter" && part.expansion.name === "@" && part.expansion.operator === undefined) {
+    return part.quoted ? [...session.args] : session.args.flatMap(split);
+  }
+  const value = await partValue(part, session, fileSystem, budget, runtime);
+  return part.quoted ? [value] : split(value);
 }
 
 export async function expandWord(
@@ -171,42 +249,20 @@ export async function expandWord(
   session: ShellSession,
   fileSystem: ShellFileSystem,
   budget: ShellBudget,
+  runtime: ExpansionRuntime,
 ): Promise<string[]> {
-  if (
-    word.parts.length === 1
-    && word.parts[0]?.kind === "expand"
-    && word.parts[0].value === "$@"
-  ) {
-    return word.parts[0].quoted ? [...session.args] : session.args.flatMap(split);
-  }
-
   const fields: Field[] = [{ value: "", pattern: "" }];
   let quoted = false;
   let removedByExpansion = false;
   for (const part of word.parts) {
     quoted ||= part.quoted;
-    for (const segment of partSegments(part)) {
-      if (segment.literal !== undefined) {
-        if (segment.literal.includes("\0")) {
-          throw new VfsError("EINVAL", "shell expansion produced a NUL byte");
-        }
-        append(fields, segment.literal, !part.quoted);
-        continue;
-      }
-      const name = segment.parameter ?? "";
-      let values: string[];
-      if (name === "@") {
-        values = part.quoted ? [...session.args] : session.args.flatMap(split);
-      } else {
-        const value = variable(name, session);
-        values = part.quoted ? [value] : split(value);
-      }
-      if (values.some((value) => value.includes("\0"))) {
-        throw new VfsError("EINVAL", "shell expansion produced a NUL byte");
-      }
-      if (values.length === 0) removedByExpansion = true;
-      alternatives(fields, values, !part.quoted);
+    if (part.kind === "literal") {
+      append(fields, assertNoNul(part.value), !part.quoted);
+      continue;
     }
+    const values = await partValues(part, session, fileSystem, budget, runtime);
+    if (values.length === 0) removedByExpansion = true;
+    alternatives(fields, values, !part.quoted);
   }
   if (fields.length === 1 && fields[0]?.value === "" && removedByExpansion && !quoted) return [];
 
@@ -222,21 +278,31 @@ export async function expandWord(
   return output;
 }
 
-export function expandAssignmentValue(
+export async function expandScalarWord(
+  word: ShellWord,
+  session: ShellSession,
+  fileSystem: ShellFileSystem,
+  budget: ShellBudget,
+  runtime: ExpansionRuntime,
+): Promise<string> {
+  return await scalarParts(word.parts, session, fileSystem, budget, runtime);
+}
+
+export async function expandAssignmentValue(
   word: ShellWord,
   name: string,
   session: ShellSession,
-): string {
-  let output = "";
-  for (const [index, part] of word.parts.entries()) {
-    const value = index === 0 ? part.value.slice(name.length + 1) : part.value;
-    const assignmentPart: WordPart = { ...part, value };
-    for (const segment of partSegments(assignmentPart)) {
-      output += segment.literal ?? variable(segment.parameter ?? "", session);
-    }
-  }
-  if (output.includes("\0")) throw new VfsError("EINVAL", "shell expansion produced a NUL byte");
-  return output;
+  fileSystem: ShellFileSystem,
+  budget: ShellBudget,
+  runtime: ExpansionRuntime,
+): Promise<string> {
+  const [first, ...rest] = word.parts;
+  if (first?.kind !== "literal") throw new VfsError("EINVAL", "invalid assignment word");
+  const parts: WordPart[] = [
+    { ...first, value: first.value.slice(name.length + 1) },
+    ...rest,
+  ];
+  return await scalarParts(parts, session, fileSystem, budget, runtime);
 }
 
 export async function expandWords(
@@ -244,8 +310,53 @@ export async function expandWords(
   session: ShellSession,
   fileSystem: ShellFileSystem,
   budget: ShellBudget,
+  runtime: ExpansionRuntime,
 ): Promise<string[]> {
   const output: string[] = [];
-  for (const word of words) output.push(...await expandWord(word, session, fileSystem, budget));
+  for (const word of words) output.push(...await expandWord(word, session, fileSystem, budget, runtime));
   return output;
+}
+
+export async function expandCasePattern(
+  word: ShellWord,
+  session: ShellSession,
+  fileSystem: ShellFileSystem,
+  budget: ShellBudget,
+  runtime: ExpansionRuntime,
+): Promise<string> {
+  let pattern = "";
+  for (const part of word.parts) {
+    const value = await partValue(part, session, fileSystem, budget, runtime);
+    pattern += part.quoted ? escapeGlob(value) : value;
+  }
+  return pattern;
+}
+
+function escapeRegex(character: string): string {
+  return /[\\^$.*+?()[\]{}|]/u.test(character) ? `\\${character}` : character;
+}
+
+export function matchesCasePattern(value: string, pattern: string): boolean {
+  let source = "^";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index] ?? "";
+    if (character === "\\" && pattern[index + 1] !== undefined) {
+      source += escapeRegex(pattern[++index] ?? "");
+    } else if (character === "*") source += "[\\s\\S]*";
+    else if (character === "?") source += "[\\s\\S]";
+    else if (character === "[") {
+      const close = pattern.indexOf("]", index + 1);
+      if (close < 0) source += "\\[";
+      else {
+        let body = pattern.slice(index + 1, close);
+        const negated = body.startsWith("!");
+        if (negated) body = body.slice(1);
+        const escaped = [...body].map((item, bodyIndex) =>
+          item === "\\" || item === "]" || (item === "^" && bodyIndex === 0) ? `\\${item}` : item).join("");
+        source += `[${negated ? "^" : ""}${escaped}]`;
+        index = close;
+      }
+    } else source += escapeRegex(character);
+  }
+  return new RegExp(`${source}$`, "u").test(value);
 }

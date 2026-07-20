@@ -64,10 +64,10 @@ try {
     import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
     import { MemoryFileSystem } from "@corca-ai/cf-vfs/testing";
     if (MAX_INLINE_FILE_BYTES !== 8 * 1024 * 1024) throw new Error("inline limit");
-    if (BASH_COMPATIBILITY_VERSION !== 1) throw new Error("language version");
+    if (BASH_COMPATIBILITY_VERSION !== 2) throw new Error("language version");
     if (lsCommand.name !== "ls") throw new Error("ls export");
     const shell = new Shell({ fileSystem: new MemoryFileSystem(), commands: defaultShellCommands });
-    const result = await shell.executeText({ script: "printf package-ok" });
+    const result = await shell.executeText({ script: 'X=$(printf ok); printf "package-%s" "$X"' });
     if (result.stdout !== "package-ok") throw new Error("shell execution");
   `);
   await execFileAsync("node", ["probe.mjs"], { cwd: consumerDirectory });
