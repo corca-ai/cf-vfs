@@ -261,6 +261,69 @@ describe("stream-first shell runtime", () => {
       .toMatchObject({ exitCode: 126 });
   });
 
+  it("applies command, path, opaque-content, size, and cancellation boundaries to source", async () => {
+    const fileSystem = new MemoryFileSystem();
+    await fileSystem.writeFile("/allowed/library.sh", "printf allowed", { createParents: true });
+    await fileSystem.writeFile("/secret.sh", "printf secret");
+
+    const scoped = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      policy: {
+        readRoots: ["/allowed"],
+        writeRoots: ["/allowed"],
+        allowedCommands: ["source", "printf"],
+      },
+    });
+    await expect(scoped.executeText({ script: "source /allowed/library.sh" })).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: "allowed",
+    });
+    await expect(scoped.executeText({ script: "source /secret.sh" })).resolves.toMatchObject({
+      exitCode: 126,
+      stdout: "",
+    });
+
+    const commandDenied = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      policy: { allowedCommands: ["printf"] },
+    });
+    await expect(commandDenied.executeText({ script: "source /allowed/library.sh" }))
+      .resolves.toMatchObject({ exitCode: 126, stdout: "" });
+
+    const store = new MemoryOpaqueStore();
+    const opaqueFileSystem = new MemoryFileSystem({ opaqueStore: store });
+    await putOpaque(opaqueFileSystem, store, "/opaque.sh", "printf hidden");
+    const opaqueShell = new Shell({ fileSystem: opaqueFileSystem, commands: defaultShellCommands });
+    await expect(opaqueShell.executeText({ script: "source /opaque.sh" })).resolves.toMatchObject({
+      exitCode: 1,
+      stdout: "",
+      stderr: expect.stringContaining("opaque R2 content is not available"),
+    });
+
+    const limited = createBashHarness({ limits: { maxScriptBytes: 16 } });
+    await limited.fileSystem.writeFile("/large", "printf way-too-large");
+    await expect(limited.run("source /large")).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining("/large: sourced file exceeds the script byte limit"),
+    });
+
+    const bufferLimited = createBashHarness({ limits: { maxBufferedBytes: 1 } });
+    await bufferLimited.fileSystem.writeFile("/tiny.sh", "true");
+    await expect(bufferLimited.run("source /tiny.sh")).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining("/tiny.sh: shell buffered-byte limit exceeded"),
+    });
+
+    const cancelled = createBashHarness();
+    await cancelled.fileSystem.writeFile("/cancelled.sh", "printf no");
+    const abort = new AbortController();
+    abort.abort();
+    await expect(cancelled.run("source /cancelled.sh", { signal: abort.signal }))
+      .resolves.toMatchObject({ exitCode: 1, stdout: "" });
+  });
+
   it("keeps opaque bodies outside shell content commands", async () => {
     const store = new MemoryOpaqueStore();
     const fileSystem = new MemoryFileSystem({ opaqueStore: store });

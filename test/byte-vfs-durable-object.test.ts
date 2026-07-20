@@ -645,6 +645,22 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(result).toMatchObject({ exitCode: 0, stdout: "hello world", stderr: "" });
   });
 
+  it("sources an inline VFS unit through the Durable Object shell", async () => {
+    const stub = workspace("shell-source-rpc");
+    const result = await stub.executeText({
+      script: [
+        "cat > /library.sh <<'EOF'",
+        "VALUE=sourced",
+        "show() { printf '%s' \"$VALUE\"; }",
+        "return 7",
+        "EOF",
+        "source /library.sh argument || printf '%s|' \"$?\"",
+        "show",
+      ].join("\n"),
+    });
+    expect(result).toMatchObject({ exitCode: 0, stdout: "7|sourced", stderr: "" });
+  });
+
   it("uses caller-provided byte streams for the remote streaming boundary", async () => {
     const stub = workspace("shell-stream-rpc");
     const input = streamFromChunks([new TextEncoder().encode("streamed")]);

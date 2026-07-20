@@ -5,12 +5,14 @@ export const MAX_PIPELINE_EDGE_BYTES = 8 * 1024 * 1024;
 
 export const DEFAULT_SHELL_LIMITS: ShellLimits = {
   maxScriptBytes: 1024 * 1024,
+  maxTotalSourceBytes: 4 * 1024 * 1024,
   maxAstNodes: 10_000,
   maxNestingDepth: 64,
   maxCommands: 10_000,
   maxSteps: 100_000,
   maxLoopIterations: 10_000,
   maxFunctionDepth: 64,
+  maxSourceDepth: 16,
   maxCommandSubstitutionBytes: 1024 * 1024,
   maxPipelineBytes: 8 * 1024 * 1024,
   maxStdoutBytes: 8 * 1024 * 1024,

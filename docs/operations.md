@@ -36,10 +36,10 @@ Every execution owns one shared budget across all pipeline stages. Defaults:
 
 | Limit | Default |
 | --- | ---: |
-| script bytes | 1 MiB |
+| one submitted or sourced unit / cumulative source bytes | 1 MiB / 4 MiB |
 | AST nodes / nesting depth | 10,000 / 64 |
 | commands / steps / loop iterations | 10,000 / 100,000 / 10,000 |
-| function depth / one command-substitution output | 64 / 1 MiB |
+| function depth / source depth / one command-substitution output | 64 / 16 / 1 MiB |
 | pipeline bytes | 8 MiB |
 | stdout / stderr | 8 MiB each |
 | materialized stdout + stderr | 8 MiB |
@@ -53,9 +53,11 @@ Lower these per workload. A policy mutation limit can only tighten the runtime
 limit. Glob scans, traversal, decoded records, and output all charge their
 specific limit as well as relevant shared work/I/O limits.
 
-Nested scripts, pipelines, functions, loops, and command substitutions consume
-the same execution budget. Command substitutions also charge total I/O and
-their dedicated output limit; they do not create a fresh allowance.
+Nested scripts, sourced units, pipelines, functions, loops, and command
+substitutions consume the same execution budget. Sourced units additionally
+share cumulative source-byte and AST-node allowances. Command substitutions
+also charge total I/O and their dedicated output limit; neither construct
+creates a fresh allowance.
 
 `executeStream()` exposes real backpressure. Consume stdout and stderr
 concurrently; if a root output remains blocked beyond the idle timeout the

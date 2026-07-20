@@ -143,6 +143,22 @@
       "args": [],
       "stdout": "hello world\nnested\n$NAME\nworld\n",
       "exitCode": 0
+    },
+    {
+      "name": "source-current-scope-arguments-and-return",
+      "script": "cat > library.sh <<'EOF'\nX=sourced\nshow() { printf '%s' \"$X\"; }\nprintf '<%s:%s>|' \"$1\" \"$#\"\nreturn 7\nEOF\nX=outer\nsource ./library.sh argument || printf '%s|' \"$?\"\nshow\nprintf '|%s' \"$X\"",
+      "env": {},
+      "args": [],
+      "stdout": "<argument:1>|7|sourced|sourced",
+      "exitCode": 0
+    },
+    {
+      "name": "nested-source-failure-status",
+      "script": "cat > inner.sh <<'EOF'\nprintf inner\nreturn 4\nEOF\ncat > outer.sh <<'EOF'\n. ./inner.sh || printf ':%s|' \"$?\"\nreturn 6\nEOF\nsource ./outer.sh || printf ':%s' \"$?\"",
+      "env": {},
+      "args": [],
+      "stdout": "inner:4|:6",
+      "exitCode": 0
     }
   ]
 }

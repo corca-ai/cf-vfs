@@ -73,7 +73,7 @@ Supported syntax:
 
 The complete submitted script is parsed before any command runs. Unsupported
 backticks, process substitution, C-style `for`, arrays, extended `[[ ]]`, brace
-expansion, arbitrary descriptors, background jobs, `source`/`.`, `select`, the
+expansion, arbitrary descriptors, background jobs, `select`, the
 `function` keyword, `time`, `coproc`, and malformed syntax produce status 2
 before a partial mutation. `eval`, traps, job control, shell options other than
 `pipefail`, and OS process features are unavailable commands or usage errors.
@@ -110,6 +110,19 @@ A downstream normal early close maps the upstream edge's `EPIPE` to status 0.
 Consequently `cat large | head -n 1` remains successful under `pipefail` while
 real non-zero upstream statuses are still selected from right to left.
 
+### Version 3 work in progress: sourced units
+
+The default registry includes `source` and `.`. They resolve only explicit
+absolute or `cwd`-relative VFS paths; there is no `PATH` search. A sourced file
+must be inline, bounded valid UTF-8 without NUL, and is completely parsed before
+that unit executes. It runs in the current session, so variables, functions,
+options, and `cwd` changes persist. Supplied positional arguments are temporary,
+`return` stops only the sourced unit, and `exit` retains whole-shell behavior.
+
+Sourced units share cumulative source-byte, AST-node, execution, I/O, mutation,
+deadline, and cancellation budgets with the caller. The exported compatibility
+version remains 2 until every issue in the declared Version 3 profile is complete.
+
 See [POSIX and Bash compatibility](posix-compatibility.md) for deterministic
 locale, glob, and redirection details and [the parser spike](parser-spike.md)
 for parser selection.
@@ -122,9 +135,9 @@ the smallest registry they need. The dedicated `ls` subpath and ordinary
 `cat`/`grep` barrel imports are covered by bundle tests proving unrelated
 command implementations are absent; the default preset is covered separately.
 
-| Group | Commands and principal Version 2 options |
+| Registry group | Available commands and principal options |
 | --- | --- |
-| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `unset`, `local`, `return`, `break`, `continue`, `exit`, `set -o pipefail`, `test`, `[` |
+| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `unset`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set -o pipefail`, `test`, `[` |
 | namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f`, `ls -l -d`, `find -name -type -maxdepth`, `stat`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | streaming text/bytes | `cat`, `grep -i -v -n -F -c`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed s/old/new/[g]` |
 | bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch` |

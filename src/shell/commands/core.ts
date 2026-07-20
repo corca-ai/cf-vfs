@@ -1,7 +1,13 @@
 import { VfsError } from "../../core/errors.js";
 import { normalizePath } from "../../core/path.js";
 import type { ShellCommandContext } from "../types.js";
-import { defineCommand, parseInteger, writeText } from "./helpers.js";
+import {
+  commandPath,
+  defineCommand,
+  parseInteger,
+  readFileText,
+  writeText,
+} from "./helpers.js";
 
 export const colonCommand = /* @__PURE__ */ defineCommand(":", () => 0);
 export const trueCommand = /* @__PURE__ */ defineCommand("true", () => 0);
@@ -130,6 +136,40 @@ export const unsetCommand = /* @__PURE__ */ defineCommand("unset", (context, arg
   return 0;
 });
 
+function defineSourceCommand(name: "source" | ".") {
+  return defineCommand(name, async (context, argv, fds) => {
+    const [path, ...args] = argv;
+    if (path === undefined) throw new VfsError("EINVAL", `${name}: missing file operand`);
+    const normalized = commandPath(context, path);
+    let source;
+    try {
+      source = await readFileText(
+        context,
+        normalized,
+        context.budget.limits.maxScriptBytes,
+      );
+    } catch (error) {
+      if (error instanceof VfsError
+        && error.code === "E2BIG"
+        && error.message === "buffered command input limit exceeded") {
+        throw new VfsError("E2BIG", "sourced file exceeds the script byte limit", normalized);
+      }
+      throw error;
+    }
+    try {
+      if (source.value.includes("\0")) {
+        throw new VfsError("EINVAL", "sourced file contains a NUL byte", normalized);
+      }
+      return await context.executeSource(source.value, normalized, args, fds);
+    } finally {
+      source.release();
+    }
+  });
+}
+
+export const sourceCommand = /* @__PURE__ */ defineSourceCommand("source");
+export const dotCommand = /* @__PURE__ */ defineSourceCommand(".");
+
 export const localCommand = /* @__PURE__ */ defineCommand("local", (context, argv) => {
   const frame = context.session.localFrames.at(-1);
   if (context.session.functionDepth === 0 || frame === undefined) {
@@ -144,8 +184,8 @@ export const localCommand = /* @__PURE__ */ defineCommand("local", (context, arg
 });
 
 export const returnCommand = /* @__PURE__ */ defineCommand("return", (context, argv) => {
-  if (context.session.functionDepth === 0) {
-    throw new VfsError("EINVAL", "return: can only be used in a function");
+  if (context.session.functionDepth === 0 && context.session.sourceDepth === 0) {
+    throw new VfsError("EINVAL", "return: can only be used in a function or sourced file");
   }
   if (argv.length > 1) throw new VfsError("EINVAL", "return: too many arguments");
   const status = argv[0] === undefined

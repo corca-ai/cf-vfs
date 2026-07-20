@@ -55,6 +55,7 @@ function cloneSession(session: ShellSession): ShellSession {
     pipefail: session.pipefail,
     functions: new Map(session.functions),
     functionDepth: session.functionDepth,
+    sourceDepth: session.sourceDepth,
     loopDepth: session.loopDepth,
     localFrames: session.localFrames.map((frame) => new Map(frame)),
     flow: { type: "none" },
@@ -63,6 +64,10 @@ function cloneSession(session: ShellSession): ShellSession {
 
 function statusFor(error: VfsError): number {
   return error.code === "EINVAL" ? 2 : error.code === "EACCES" ? 126 : 1;
+}
+
+function formatError(error: VfsError): string {
+  return `${error.path === undefined ? "" : `${error.path}: `}${error.message}`;
 }
 
 async function closeDescriptors(fds: ShellFileDescriptors): Promise<void> {
@@ -89,6 +94,40 @@ interface Runtime {
   policy: ShellPolicy;
   signal: AbortSignal;
   limits: ShellLimits;
+  parserBudget: ParserBudget;
+}
+
+interface ParserBudget {
+  sourceBytes: number;
+  astNodes: number;
+}
+
+function parseScriptUnit(
+  source: string,
+  limits: ShellLimits,
+  budget: ParserBudget,
+  path?: string,
+): ScriptNode {
+  const sourceBytes = new TextEncoder().encode(source).byteLength;
+  if (sourceBytes > limits.maxScriptBytes) {
+    throw new VfsError("E2BIG", "shell source exceeds the script byte limit", path);
+  }
+  if (budget.sourceBytes + sourceBytes > limits.maxTotalSourceBytes) {
+    throw new VfsError("E2BIG", "shell total source byte limit exceeded", path);
+  }
+  budget.sourceBytes += sourceBytes;
+  try {
+    const parsed = parseShellScript(
+      source,
+      limits.maxAstNodes - budget.astNodes,
+      limits.maxNestingDepth,
+      (count) => { budget.astNodes += count; },
+    );
+    return parsed;
+  } catch (error) {
+    if (path === undefined || !isVfsError(error)) throw error;
+    throw new VfsError(error.code, error.message, path);
+  }
 }
 
 interface CollectedSubstitution {
@@ -301,6 +340,34 @@ async function runFunction(
   }
 }
 
+async function runSourcedUnit(
+  source: string,
+  path: string,
+  args: readonly string[],
+  session: ShellSession,
+  fds: ShellFileDescriptors,
+  runtime: Runtime,
+): Promise<number> {
+  if (session.sourceDepth >= runtime.limits.maxSourceDepth) {
+    throw new VfsError("E2BIG", "shell source nesting limit exceeded", path);
+  }
+  const parsed = parseScriptUnit(source, runtime.limits, runtime.parserBudget, path);
+  const previousArgs = session.args;
+  if (args.length > 0) session.args = [...args];
+  session.sourceDepth += 1;
+  try {
+    let status = await runScript(parsed, session, fds, runtime);
+    if (session.flow.type === "return") {
+      status = session.flow.status;
+      session.flow = { type: "none" };
+    }
+    return status;
+  } finally {
+    session.sourceDepth -= 1;
+    if (args.length > 0) session.args = previousArgs;
+  }
+}
+
 async function executeSimpleCommand(
   prepared: PreparedSimpleCommand,
   session: ShellSession,
@@ -339,6 +406,8 @@ async function executeSimpleCommand(
           signal: runtime.signal,
           budget: runtime.budget,
           policy: runtime.policy,
+          executeSource: async (source, path, sourceArgs, sourceFds) =>
+            await runSourcedUnit(source, path, sourceArgs, session, sourceFds, runtime),
         },
         argv,
         fds,
@@ -543,7 +612,7 @@ async function runCommandNode(
       throw error;
     }
     semanticFailure = true;
-    const message = `${error.path === undefined ? "" : `${error.path}: `}${error.message}`;
+    const message = formatError(error);
     try {
       await fallbackStderr.write(new TextEncoder().encode(`${message}\n`));
     } finally {
@@ -682,22 +751,14 @@ export class Shell {
   }
 
   executeStream(options: ExecuteStreamOptions): ShellExecution {
-    const scriptBytes = new TextEncoder().encode(options.script).byteLength;
+    const parserBudget: ParserBudget = { sourceBytes: 0, astNodes: 0 };
     let parsed: ScriptNode | undefined;
     let parseError: VfsError | undefined;
-    if (scriptBytes > this.limits.maxScriptBytes) {
-      parseError = new VfsError("E2BIG", "shell source exceeds the script byte limit");
-    } else {
-      try {
-        parsed = parseShellScript(
-          options.script,
-          this.limits.maxAstNodes,
-          this.limits.maxNestingDepth,
-        );
-      } catch (error) {
-        if (!isVfsError(error)) throw error;
-        parseError = error;
-      }
+    try {
+      parsed = parseScriptUnit(options.script, this.limits, parserBudget);
+    } catch (error) {
+      if (!isVfsError(error)) throw error;
+      parseError = error;
     }
     const controller = new AbortController();
     const cancelled = (reason: unknown): VfsError => isVfsError(reason)
@@ -745,6 +806,7 @@ export class Shell {
       pipefail: false,
       functions: new Map(),
       functionDepth: 0,
+      sourceDepth: 0,
       loopDepth: 0,
       localFrames: [],
       flow: { type: "none" },
@@ -777,6 +839,7 @@ export class Shell {
           policy: this.policy,
           signal: controller.signal,
           limits: this.limits,
+          parserBudget,
         });
         await closeDescriptors(rootFds);
         return { exitCode };
@@ -785,7 +848,7 @@ export class Shell {
           await Promise.allSettled([rootFds[1].abort(error), rootFds[2].abort(error)]);
           throw error;
         }
-        const message = error.message;
+        const message = formatError(error);
         if (!controller.signal.aborted || error.code === "ETIMEDOUT") {
           try {
             await rootFds[2].write(new TextEncoder().encode(`${message}\n`));

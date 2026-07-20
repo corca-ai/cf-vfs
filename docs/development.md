@@ -64,11 +64,16 @@ and reject unsupported forms deliberately. Add both local parser/expansion
 tests and a pinned Bash differential fixture where Bash defines the intended
 behavior.
 
+Sourced units are separate parse units: read them only through the scoped VFS,
+parse the whole bounded file before executing that file, and charge cumulative
+source bytes and AST nodes to the caller's execution. Never give `source` a
+`PATH` lookup or access to opaque bodies.
+
 Regenerate the fixture only after reviewing the semantic change:
 
 ```sh
 npm run test:bash-fixtures:regenerate
-git diff -- test/fixtures/bash-v2.json
+git diff -- test/fixtures/bash-compat.json
 ```
 
 The generator uses `bash:5.3.3`, `LC_ALL=C`, and `TZ=UTC`. Docker is required

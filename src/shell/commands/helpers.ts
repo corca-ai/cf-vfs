@@ -242,8 +242,9 @@ export async function collectText(
   context: ShellCommandContext,
   stream: ReadableStream<Uint8Array>,
   path?: string,
+  maximumBytes?: number,
 ): Promise<BufferLease<string>> {
-  const bytes = await collectStream(context, stream);
+  const bytes = await collectStream(context, stream, maximumBytes);
   try {
     return {
       value: new TextDecoder("utf-8", { fatal: true }).decode(bytes.value),
@@ -273,10 +274,18 @@ export async function readFileBytes(
 export async function readFileText(
   context: ShellCommandContext,
   path: string,
+  maximumBytes?: number,
 ): Promise<BufferLease<string>> {
   const normalized = commandPath(context, path);
   const read = await context.fileSystem.readFile(normalized);
-  return await collectText(context, read.stream, normalized);
+  try {
+    return await collectText(context, read.stream, normalized, maximumBytes);
+  } catch (error) {
+    if (error instanceof VfsError && error.path === undefined) {
+      throw new VfsError(error.code, error.message, normalized);
+    }
+    throw error;
+  }
 }
 
 export async function pipeToSink(

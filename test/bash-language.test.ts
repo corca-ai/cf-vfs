@@ -514,6 +514,136 @@ describe("Bash v2 here-documents and here-strings", () => {
   ]);
 });
 
+describe("Bash v3 sourced units", () => {
+  bashCases([
+    {
+      name: "executes a sourced unit in the current variable, function, and cwd scope",
+      files: {
+        "/lib/setup.sh": "X=sourced; cd /work; speak() { printf function; }",
+        "/work/.keep": "",
+      },
+      script: `X=outer; source /lib/setup.sh; printf '%s:%s|' "$X" "$PWD"; speak`,
+      stdout: "sourced:/work|function",
+    },
+    {
+      name: "temporarily replaces positional arguments supplied to source",
+      files: { "/args.sh": `printf '<%s:%s:%s>' "$1" "$2" "$#"` },
+      script: `source /args.sh one "two words"; printf '|%s:%s' "$1" "$#"`,
+      args: ["outer"],
+      stdout: "<one:two words:2>|outer:1",
+    },
+    {
+      name: "inherits caller positional arguments when source receives none",
+      files: { "/args.sh": `printf '<%s:%s>' "$1" "$#"` },
+      script: ". /args.sh",
+      args: ["inherited"],
+      stdout: "<inherited:1>",
+    },
+    {
+      name: "returns from only the sourced unit with the requested status",
+      files: { "/return.sh": "printf before; return 7; printf no" },
+      script: `. /return.sh || printf ':%s' "$?"; printf after`,
+      stdout: "before:7after",
+    },
+    {
+      name: "preserves whole-shell exit from a sourced unit",
+      files: { "/exit.sh": "printf before; exit 9; printf no" },
+      script: "source /exit.sh; printf no",
+      exitCode: 9,
+      stdout: "before",
+    },
+    {
+      name: "parses a complete sourced unit before mutating from that unit",
+      files: { "/broken.sh": "printf changed > /side; if true; then :" },
+      script: "source /broken.sh",
+      exitCode: 2,
+      stderrIncludes: ["/broken.sh", "expected fi"],
+      missingFiles: ["/side"],
+    },
+    {
+      name: "resolves a bare source path only relative to cwd without PATH search",
+      files: { "/bin/library": "printf no", "/work/.keep": "" },
+      cwd: "/work",
+      script: "source library",
+      exitCode: 1,
+      stderrIncludes: "/work/library",
+    },
+    {
+      name: "reports missing and directory source operands as shell failures",
+      files: { "/directory/entry": "" },
+      script: "source /missing || . /directory",
+      exitCode: 1,
+      stderrIncludes: ["/missing", "/directory"],
+    },
+    {
+      name: "rejects invalid UTF-8 source content",
+      files: { "/invalid.sh": new Uint8Array([0xff]) },
+      script: "source /invalid.sh",
+      exitCode: 1,
+      stderrIncludes: ["/invalid.sh", "valid UTF-8"],
+    },
+    {
+      name: "rejects NUL in source content",
+      files: { "/nul.sh": new Uint8Array([0x70, 0x72, 0x69, 0x6e, 0x74, 0x66, 0, 0x78]) },
+      script: "source /nul.sh",
+      exitCode: 2,
+      stderrIncludes: ["/nul.sh", "NUL byte"],
+    },
+  ]);
+
+  it("shares source nesting, total bytes, and AST nodes across sourced units", async () => {
+    const nested = createBashHarness({
+      limits: {
+        maxSourceDepth: 2,
+        maxTotalSourceBytes: 1024,
+        maxAstNodes: 100,
+      },
+    });
+    await nested.fileSystem.writeFile("/recursive.sh", "source /recursive.sh");
+    await expect(nested.run("source /recursive.sh")).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining("/recursive.sh: shell source nesting limit exceeded"),
+    });
+
+    const mutuallyRecursive = createBashHarness({
+      limits: {
+        maxSourceDepth: 2,
+        maxTotalSourceBytes: 1024,
+        maxAstNodes: 100,
+      },
+    });
+    await mutuallyRecursive.fileSystem.writeFile("/a.sh", "source /b.sh");
+    await mutuallyRecursive.fileSystem.writeFile("/b.sh", "source /a.sh");
+    await expect(mutuallyRecursive.run("source /a.sh")).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining("/a.sh: shell source nesting limit exceeded"),
+    });
+
+    const sourceBytes = createBashHarness({ limits: { maxTotalSourceBytes: 36 } });
+    await sourceBytes.fileSystem.writeFile("/one.sh", "true");
+    await sourceBytes.fileSystem.writeFile("/two.sh", "true");
+    await expect(sourceBytes.run("source /one.sh; source /two.sh")).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining("/two.sh: shell total source byte limit exceeded"),
+    });
+
+    const astNodes = createBashHarness({ limits: { maxAstNodes: 12 } });
+    await astNodes.fileSystem.writeFile("/one.sh", "true");
+    await astNodes.fileSystem.writeFile("/two.sh", "true");
+    await expect(astNodes.run("source /one.sh; source /two.sh")).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining("/two.sh: shell AST node limit exceeded"),
+    });
+
+    const failedAstNodes = createBashHarness({ limits: { maxAstNodes: 35 } });
+    await failedAstNodes.fileSystem.writeFile("/bad.sh", "true; true; true; if true; then :");
+    await expect(failedAstNodes.run("source /bad.sh || source /bad.sh")).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining("/bad.sh: shell AST node limit exceeded"),
+    });
+  });
+});
+
 const rejectedSyntax: ReadonlyArray<readonly [name: string, syntax: string, diagnostic: string]> = [
   ["backtick substitution", "printf `printf x`", "backtick command substitution"],
   ["process substitution", "cat <(printf x)", "redirection requires a word"],
@@ -522,8 +652,6 @@ const rejectedSyntax: ReadonlyArray<readonly [name: string, syntax: string, diag
   ["brace expansion", "printf {a,b}", "brace expansion"],
   ["background job", "printf no & printf background", "expected command separator"],
   ["arbitrary descriptor", "printf x 3>/other", "arbitrary file descriptors"],
-  ["source keyword", "source /script", "reserved syntax source"],
-  ["dot source keyword", ". /script", "reserved syntax ."],
   ["select loop", "select X in a; do :; done", "reserved syntax select"],
   ["function keyword", "function f { :; }", "reserved syntax function"],
   ["C-style for loop", "for ((N=0; N<1; N++)); do :; done", "unexpected character"],

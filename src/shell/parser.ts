@@ -161,7 +161,7 @@ const REDIRECTIONS = new Set<Operator>([
 ]);
 const UNSUPPORTED_RESERVED = new Set([
   "then", "elif", "else", "fi", "do", "done", "in", "esac",
-  "select", "function", "time", "coproc", "[[", "]]", "source", ".",
+  "select", "function", "time", "coproc", "[[", "]]",
 ]);
 
 function byteOffset(source: string, offset: number): number {
@@ -171,15 +171,22 @@ function byteOffset(source: string, offset: number): number {
 class ParseContext {
   readonly maximumNodes: number;
   readonly maximumDepth: number;
+  private readonly accountNodes: (count: number) => void;
   nodes = 0;
 
-  constructor(maximumNodes: number, maximumDepth: number) {
+  constructor(
+    maximumNodes: number,
+    maximumDepth: number,
+    accountNodes: (count: number) => void,
+  ) {
     this.maximumNodes = maximumNodes;
     this.maximumDepth = maximumDepth;
+    this.accountNodes = accountNodes;
   }
 
   add(count = 1): void {
     this.nodes += count;
+    this.accountNodes(count);
     if (this.nodes > this.maximumNodes) throw new VfsError("E2BIG", "shell AST node limit exceeded");
   }
 
@@ -1184,8 +1191,9 @@ export function parseShellScript(
   script: string,
   maximumNodes: number,
   maximumDepth = 64,
+  accountNodes: (count: number) => void = () => undefined,
 ): ScriptNode {
-  const context = new ParseContext(maximumNodes, maximumDepth);
+  const context = new ParseContext(maximumNodes, maximumDepth, accountNodes);
   const parsed = parseInternal(script, context, 0, 1);
   const result = { ...parsed, nodeCount: context.nodes };
   validateScriptDepth(result, maximumDepth, 1);

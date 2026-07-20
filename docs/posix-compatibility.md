@@ -33,9 +33,13 @@ ordinary redirection, here-documents, here-strings, and pathname expansion. See
 
 The parser rejects unsupported syntax before running any command. In
 particular, process substitution, backticks, arrays, brace expansion, extended
-tests, C-style `for`, source-file execution, background jobs, and arbitrary
-descriptors are not approximated. The language version is exported as
-`BASH_COMPATIBILITY_VERSION`.
+tests, C-style `for`, background jobs, and arbitrary descriptors are not
+approximated. The language version is exported as `BASH_COMPATIBILITY_VERSION`.
+
+Version 3 source-file work is available while the complete Version 3 profile
+is still in progress. `source` and `.` read only an explicit inline VFS path,
+never search `PATH`, parse the complete sourced unit before executing it, and
+share all relevant budgets with the caller. Opaque files remain unavailable.
 
 Deliberate deterministic choices include:
 

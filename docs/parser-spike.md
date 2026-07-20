@@ -1,6 +1,7 @@
 # Parser technology spike
 
-Initial decision: 2026-07-20. Repeated for Bash Version 2: 2026-07-21.
+Initial decision: 2026-07-20. Repeated for Bash Version 2: 2026-07-21. Reviewed
+for sourced units: 2026-07-21.
 Version 2 keeps the repository's handwritten lexer/parser after adding command
 substitution, here-documents, nested control structures, functions, and
 arithmetic. This is a decision for the declared finite execution grammar, not
@@ -24,7 +25,7 @@ The runtime must parse the complete submitted script before any mutation,
 preserve quoted and unquoted fragments for controlled expansion, report byte
 locations, and reject every out-of-profile construct deterministically. A full
 Bash grammar would solve recognition but not the capability decision: a second
-walk would still have to reject arrays, source execution, backgrounding,
+walk would still have to reject arrays, backgrounding,
 arbitrary descriptors, and error-recovered partial trees, then convert allowed
 nodes into the bounded executor AST.
 
@@ -33,6 +34,10 @@ keeps the direct VFS bundle parser-free, keeps the shell bundle small, and
 makes parser node/byte limits straightforward. It is tested with positive and
 negative fixtures plus pinned Bash differential cases.
 
+The `source` / `.` addition does not add grammar: it reads a bounded inline VFS
+file and invokes the same complete-unit parser under cumulative byte, node, and
+nesting budgets. That reuse does not change the Version 2 parser selection.
+
 The main cost is maintenance: shell lexical rules interact in subtle ways. No
 one should extend it with ad-hoc string splitting. Each new construct needs a
 grammar/AST design, source-span tests, rejection-boundary tests, budget impact,
@@ -40,8 +45,8 @@ and differential fixtures.
 
 ## Reconsideration triggers
 
-Repeat the spike before source-file execution, arrays, process substitution,
-extended tests, C-style loops, or another similarly large language version.
+Repeat the spike before arrays, process substitution, extended tests, C-style
+loops, or another similarly large language version.
 Also repeat it if lexer/parser fixes begin dominating shell maintenance. Prefer
 a mature grammar when its parser/binding can:
 

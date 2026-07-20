@@ -45,6 +45,7 @@ export interface ShellSession {
   pipefail: boolean;
   functions: Map<string, FunctionDefinitionNode>;
   functionDepth: number;
+  sourceDepth: number;
   loopDepth: number;
   localFrames: Array<Map<string, string | undefined>>;
   flow: ShellFlow;
@@ -64,12 +65,14 @@ export interface ShellPolicy {
 
 export interface ShellLimits {
   maxScriptBytes: number;
+  maxTotalSourceBytes: number;
   maxAstNodes: number;
   maxNestingDepth: number;
   maxCommands: number;
   maxSteps: number;
   maxLoopIterations: number;
   maxFunctionDepth: number;
+  maxSourceDepth: number;
   maxCommandSubstitutionBytes: number;
   maxPipelineBytes: number;
   maxStdoutBytes: number;
@@ -91,6 +94,12 @@ export interface ShellCommandContext {
   signal: AbortSignal;
   budget: ShellBudget;
   policy: ShellPolicy;
+  executeSource(
+    source: string,
+    path: string,
+    args: readonly string[],
+    fds: ShellFileDescriptors,
+  ): Promise<number>;
 }
 
 export interface ShellProcess {
