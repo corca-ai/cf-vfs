@@ -356,12 +356,7 @@ async function prepareSimpleCommand(
     runtime.budget,
     expansion,
   );
-  const substitutionStatus = expansion.lastSubstitutionStatus();
-  return {
-    assignments,
-    argv,
-    ...(substitutionStatus === undefined ? {} : { substitutionStatus }),
-  };
+  return { assignments, argv };
 }
 
 function restoreVariables(
@@ -846,7 +841,7 @@ async function runCommandNode(
   const expansion = expansionRuntime(initialFds, runtime);
   try {
     runtime.budget.command();
-    const prepared = node.type === "command"
+    let prepared = node.type === "command"
       ? await prepareSimpleCommand(node, session, runtime, expansion)
       : undefined;
     let applied;
@@ -868,6 +863,10 @@ async function runCommandNode(
     semanticStderr = fds[2];
     redirected = applied.redirected;
     shouldCancelInput ||= applied.inputRedirected;
+    if (prepared !== undefined) {
+      const substitutionStatus = expansion.lastSubstitutionStatus();
+      if (substitutionStatus !== undefined) prepared = { ...prepared, substitutionStatus };
+    }
     const status = await executeCommandNode(
       node,
       prepared,

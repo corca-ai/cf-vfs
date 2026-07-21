@@ -447,12 +447,12 @@ export async function expandWord(
 ): Promise<string[]> {
   const fields: Field[] = [{ value: "", pattern: "", characters: 0 }];
   let materializedCharacters = 0;
-  let quoted = false;
+  let preservesEmptyField = false;
   let removedByExpansion = false;
   for (const part of word.parts) {
-    quoted ||= part.quoted;
     if (part.kind === "literal") {
       const value = assertNoNul(part.value);
+      preservesEmptyField ||= part.quoted;
       budget.expansionWork(value.length);
       const characters = codePointLength(value);
       budget.checkExpansionOutput(materializedCharacters + characters, fields.length);
@@ -470,10 +470,11 @@ export async function expandWord(
       fields.length,
     );
     if (expanded.values.length === 0) removedByExpansion = true;
+    else preservesEmptyField ||= part.quoted;
     alternatives(fields, expanded, !part.quoted);
     materializedCharacters += expanded.characters;
   }
-  if (fields.length === 1 && fields[0]?.value === "" && removedByExpansion && !quoted) {
+  if (fields.length === 1 && fields[0]?.value === "" && removedByExpansion && !preservesEmptyField) {
     budget.expansionOutput(0, 0);
     return [];
   }

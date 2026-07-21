@@ -826,9 +826,9 @@ class Lexer {
         parentheses += 1;
         index += 1;
       } else if (character === ")" && parentheses > 0) parentheses -= 1;
-      else if (character === "}" && parentheses === 0) {
-        if (braces === 0) return index;
-        braces -= 1;
+      else if (character === "}") {
+        if (braces > 0) braces -= 1;
+        else if (parentheses === 0) return index;
       }
     }
     throw this.error("unterminated parameter expansion", this.offset);
@@ -837,6 +837,40 @@ class Lexer {
   private readCommandSubstitution(): ScriptNode {
     const start = this.offset;
     const contentStart = this.offset + 2;
+    const attempted = new Set<number>();
+    let lastSyntaxError: VfsError | undefined;
+
+    const parseCandidate = (close: number): { script: ScriptNode; nodes: number } | undefined => {
+      attempted.add(close);
+      const probe = new ParseContext(
+        this.context.remainingNodes(),
+        this.context.maximumDepth,
+        () => undefined,
+        () => this.context.checkDeadline(),
+      );
+      try {
+        const script = parseInternal(
+          this.source.slice(contentStart, close),
+          probe,
+          this.absoluteOffset(contentStart),
+          this.depth + 1,
+        );
+        return { script, nodes: probe.nodes };
+      } catch (error) {
+        if (!(error instanceof VfsError) || error.code !== "EINVAL") throw error;
+        lastSyntaxError = error;
+        return undefined;
+      }
+    };
+
+    const accept = (close: number): ScriptNode | undefined => {
+      const parsed = parseCandidate(close);
+      if (parsed === undefined) return undefined;
+      this.context.add(parsed.nodes);
+      this.offset = close + 1;
+      return parsed.script;
+    };
+
     let depth = 1;
     let quote: "'" | "\"" | undefined;
     let index = contentStart;
@@ -857,20 +891,27 @@ class Lexer {
       }
       if (character === "(") depth += 1;
       else if (character === ")") {
-        depth -= 1;
-        if (depth === 0) break;
+        if (depth > 1) {
+          depth -= 1;
+          continue;
+        }
+        const script = accept(index);
+        if (script !== undefined) return script;
       }
     }
-    if (depth !== 0) throw this.error("unterminated command substitution", start);
-    this.context.depth(this.depth + 1);
-    const script = parseInternal(
-      this.source.slice(contentStart, index),
-      this.context,
-      this.absoluteOffset(contentStart),
-      this.depth + 1,
-    );
-    this.offset = index + 1;
-    return script;
+
+    // Quotes, case patterns, and here-document bodies can contain parentheses
+    // that are not shell grouping syntax. Let the actual lexer and parser
+    // disambiguate any candidates skipped by the fast balanced scan above.
+    for (index = contentStart; index < this.source.length; index += 1) {
+      this.checkOffset(index);
+      if (this.source[index] !== ")" || attempted.has(index)) continue;
+      const script = accept(index);
+      if (script !== undefined) return script;
+    }
+
+    if (lastSyntaxError !== undefined) throw lastSyntaxError;
+    throw this.error("unterminated command substitution", start);
   }
 
   private readArithmeticExpansion(): ArithmeticNode {
@@ -1043,6 +1084,21 @@ class Parser {
     return false;
   }
 
+  private requiredList(stop: StopSet, description: string, requireSeparator: boolean): ScriptNode {
+    const body = this.parse(stop);
+    const token = this.peek();
+    if (body.lists.length === 0) {
+      if (token === undefined) {
+        throw new VfsError("EINVAL", `${description} requires a non-empty command list at end of script`);
+      }
+      throw this.tokenError(`${description} requires a non-empty command list`, token);
+    }
+    if (requireSeparator && token !== undefined && !this.isSeparator(this.tokens[this.index - 1])) {
+      throw this.tokenError(`${description} requires a separator before its terminator`, token);
+    }
+    return body;
+  }
+
   private tokenError(message: string, token: Token): VfsError {
     const offset = token.type === "word" ? token.word.sourceOffset : token.offset;
     return new VfsError("EINVAL", `${message} at byte ${offset}`);
@@ -1113,6 +1169,7 @@ class Parser {
       if (token.value === "{") return this.group(false);
       if (token.value === "(") return this.group(true);
       if (token.value === "&") throw this.tokenError("background jobs are not supported", token);
+      if (REDIRECTIONS.has(token.value)) return this.simpleCommand();
       throw this.tokenError("expected command", token);
     }
     if (token.type === "arithmetic-command") return this.arithmeticCommand();
@@ -1140,7 +1197,11 @@ class Parser {
       const open = this.take();
       const sourceOffset = open.type === "operator" ? open.offset : 0;
       const close: Operator = subshell ? ")" : "}";
-      const body = this.parse({ operators: new Set([close]) });
+      const body = this.requiredList(
+        { operators: new Set([close]) },
+        subshell ? "subshell" : "brace group",
+        !subshell,
+      );
       if (this.peek() === undefined) {
         throw new VfsError("EINVAL", `expected ${close} at byte ${sourceOffset}`);
       }
@@ -1155,10 +1216,18 @@ class Parser {
     return this.withDepth(() => {
       const sourceOffset = this.takeWordOffset();
       const branches: IfCommandNode["branches"] = [];
-      let condition = this.parse({ words: new Set(["then"]) });
+      let condition = this.requiredList(
+        { words: new Set(["then"]) },
+        "if condition",
+        true,
+      );
       this.expectWord("then");
       while (true) {
-        const body = this.parse({ words: new Set(["elif", "else", "fi"]) });
+        const body = this.requiredList(
+          { words: new Set(["elif", "else", "fi"]) },
+          "if branch",
+          true,
+        );
         branches.push({ condition, body });
         const next = this.peek();
         if (next?.type !== "word") throw next === undefined
@@ -1167,14 +1236,22 @@ class Parser {
         const keyword = staticWord(next.word);
         if (keyword === "elif") {
           this.take();
-          condition = this.parse({ words: new Set(["then"]) });
+          condition = this.requiredList(
+            { words: new Set(["then"]) },
+            "elif condition",
+            true,
+          );
           this.expectWord("then");
           continue;
         }
         let alternate: ScriptNode | undefined;
         if (keyword === "else") {
           this.take();
-          alternate = this.parse({ words: new Set(["fi"]) });
+          alternate = this.requiredList(
+            { words: new Set(["fi"]) },
+            "else branch",
+            true,
+          );
         }
         this.expectWord("fi");
         const redirections = this.redirections();
@@ -1193,9 +1270,17 @@ class Parser {
   private loopCommand(until: boolean): LoopCommandNode {
     return this.withDepth(() => {
       const sourceOffset = this.takeWordOffset();
-      const condition = this.parse({ words: new Set(["do"]) });
+      const condition = this.requiredList(
+        { words: new Set(["do"]) },
+        until ? "until condition" : "while condition",
+        true,
+      );
       this.expectWord("do");
-      const body = this.parse({ words: new Set(["done"]) });
+      const body = this.requiredList(
+        { words: new Set(["done"]) },
+        until ? "until body" : "while body",
+        true,
+      );
       this.expectWord("done");
       const redirections = this.redirections();
       this.add();
@@ -1224,7 +1309,11 @@ class Parser {
       }
       this.skipSeparators();
       this.expectWord("do");
-      const body = this.parse({ words: new Set(["done"]) });
+      const body = this.requiredList(
+        { words: new Set(["done"]) },
+        "for body",
+        true,
+      );
       this.expectWord("done");
       const redirections = this.redirections();
       this.add();

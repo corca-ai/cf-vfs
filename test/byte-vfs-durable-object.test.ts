@@ -645,6 +645,14 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(result).toMatchObject({ exitCode: 0, stdout: "hello world", stderr: "" });
   });
 
+  it("does not create or reject a missing touch -c target through RPC", async () => {
+    const stub = workspace("shell-touch-no-create-rpc");
+    const result = await stub.executeText({
+      script: "touch /existing; touch -c /missing /existing; [[ ! -e /missing && -e /existing ]]",
+    });
+    expect(result).toMatchObject({ exitCode: 0, stdout: "", stderr: "" });
+  });
+
   it("sources an inline VFS unit through the Durable Object shell", async () => {
     const stub = workspace("shell-source-rpc");
     const result = await stub.executeText({

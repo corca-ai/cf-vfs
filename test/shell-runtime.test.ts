@@ -4,7 +4,7 @@ import { defineCommand, writeText } from "../src/shell/commands/helpers.js";
 import { Shell } from "../src/shell/shell.js";
 import { MemoryFileSystem } from "../src/vfs/memory.js";
 import { putOpaque } from "../src/vfs/opaque.js";
-import { readAllBytes } from "../src/vfs/streams.js";
+import { readAllBytes, streamFromChunks } from "../src/vfs/streams.js";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import { createBashHarness } from "./helpers/bash.js";
 
@@ -58,6 +58,39 @@ describe("stream-first shell runtime", () => {
       .toBe("/src/a.ts\n/src/b.ts\n");
   });
 
+  it("lets touch -c ignore only missing targets", async () => {
+    const { fileSystem, shell } = createBashHarness();
+    expect(await shell.executeText({
+      script: "touch /existing; touch -c /missing /existing; [[ ! -e /missing && -e /existing ]]",
+    })).toMatchObject({ exitCode: 0, stderr: "" });
+    expect(() => fileSystem.stat("/missing"))
+      .toThrowError(expect.objectContaining({ code: "ENOENT" }));
+
+    const restricted = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      policy: { writeRoots: ["/allowed"] },
+    });
+    expect(await restricted.executeText({ script: "touch -c /forbidden" }))
+      .toMatchObject({ exitCode: 126, stderr: expect.stringContaining("writable roots") });
+  });
+
+  it.each([
+    ["pwd", "pwd -Z"],
+    ["mktemp", "mktemp -d candidate.XXXXXX"],
+    ["fold", "fold -x"],
+    ["nl", "nl -x"],
+    ["fold missing width", "fold -w"],
+  ])("rejects unsupported or incomplete %s options with usage status", async (_name, script) => {
+    const { fileSystem, shell } = createBashHarness();
+    const result = await shell.executeText({ script });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr.length).toBeGreaterThan(0);
+    expect((await fileSystem.list("/")).map((entry) => entry.name)).not.toContainEqual(
+      expect.stringMatching(/^candidate\./u),
+    );
+  });
+
   it("preserves arbitrary bytes through cat without UTF-8 materialization", async () => {
     const { fileSystem, shell } = createBashHarness();
     await fileSystem.writeFile("/binary", new Uint8Array([0xff, 0, 1, 2]));
@@ -70,6 +103,110 @@ describe("stream-first shell runtime", () => {
     expect([...stdout]).toEqual([0xff, 0, 1, 2]);
     expect(stderr.byteLength).toBe(0);
     expect(status.exitCode).toBe(0);
+  });
+
+  it("preserves arbitrary bytes in byte-oriented head, tail, and wc modes", async () => {
+    const { fileSystem, shell } = createBashHarness();
+    await fileSystem.writeFile("/binary", new Uint8Array([0x61, 0xff, 0x0a, 0x00]));
+
+    for (const [script, expected] of [
+      ["head -c 2 /binary", [0x61, 0xff]],
+      ["tail -c 3 /binary", [0xff, 0x0a, 0x00]],
+    ] as const) {
+      const execution = shell.executeStream({ script });
+      const [stdout, stderr, status] = await Promise.all([
+        readAllBytes(execution.stdout, 16),
+        readAllBytes(execution.stderr, 128),
+        execution.completed,
+      ]);
+      expect([...stdout], script).toEqual(expected);
+      expect(stderr.byteLength, script).toBe(0);
+      expect(status.exitCode, script).toBe(0);
+    }
+
+    expect(await shell.executeText({ script: "wc -c /binary" })).toMatchObject({
+      exitCode: 0,
+      stdout: "4 /binary\n",
+      stderr: "",
+    });
+  });
+
+  it("rejects invalid UTF-8 in line-oriented head and wc modes", async () => {
+    const { fileSystem, shell } = createBashHarness();
+    await fileSystem.writeFile("/invalid", new Uint8Array([0x61, 0xff, 0x0a]));
+
+    for (const script of [
+      "head -n 1 /invalid > /head-output",
+      "tail -n 1 /invalid",
+      "wc -l /invalid",
+      "wc -w /invalid",
+      "wc /invalid",
+    ]) {
+      const result = await shell.executeText({ script });
+      expect(result.exitCode, script).toBe(1);
+      expect(result.stderr, script).toContain("valid UTF-8");
+    }
+    expect((await fileSystem.stat("/head-output")).sizeBytes).toBe(0);
+  });
+
+  it("handles split UTF-8 sequences consistently in head, tail, and wc text modes", async () => {
+    const { shell } = createBashHarness();
+    const source = new TextEncoder().encode("가\n나 다\n");
+    const input = (chunkBytes: number): ReadableStream<Uint8Array> => streamFromChunks(
+      Array.from({ length: Math.ceil(source.byteLength / chunkBytes) }, (_unused, index) =>
+        source.slice(index * chunkBytes, (index + 1) * chunkBytes)),
+    );
+    const expected = new Map([
+      ["head -n 1", "가\n"],
+      ["tail -n 1", "나 다\n"],
+      ["wc -l", "2\n"],
+      ["wc -w", "3\n"],
+      ["wc", `2 3 ${source.byteLength}\n`],
+    ]);
+    for (const chunkBytes of [1, 2, 4]) {
+      for (const [script, stdout] of expected) {
+        expect(await shell.executeText({ script, stdin: input(chunkBytes) }), `${script}, ${chunkBytes}`)
+          .toEqual({ exitCode: 0, stdout, stderr: "" });
+      }
+    }
+  });
+
+  it("validates only the consumed head text regardless of source chunk boundaries", async () => {
+    const { shell } = createBashHarness();
+    for (const chunks of [
+      [new Uint8Array([0x61, 0x0a, 0xff, 0x0a])],
+      [new Uint8Array([0x61, 0x0a]), new Uint8Array([0xff, 0x0a])],
+    ]) {
+      expect(await shell.executeText({
+        script: "head -n 1",
+        stdin: streamFromChunks(chunks),
+      })).toEqual({ exitCode: 0, stdout: "a\n", stderr: "" });
+    }
+  });
+
+  it("keeps split invalid bytes opaque in head, tail, and wc byte modes", async () => {
+    const { shell } = createBashHarness();
+    const chunks = (): ReadableStream<Uint8Array> => streamFromChunks([
+      Uint8Array.of(0x61),
+      Uint8Array.of(0xff),
+      Uint8Array.of(0x0a),
+    ]);
+    for (const [script, expected] of [
+      ["head -c 2", [0x61, 0xff]],
+      ["tail -c 2", [0xff, 0x0a]],
+    ] as const) {
+      const execution = shell.executeStream({ script, stdin: chunks() });
+      const [stdout, stderr, status] = await Promise.all([
+        readAllBytes(execution.stdout, 16),
+        readAllBytes(execution.stderr, 128),
+        execution.completed,
+      ]);
+      expect([...stdout], script).toEqual(expected);
+      expect(stderr.byteLength, script).toBe(0);
+      expect(status.exitCode, script).toBe(0);
+    }
+    expect(await shell.executeText({ script: "wc -c", stdin: chunks() }))
+      .toEqual({ exitCode: 0, stdout: "3\n", stderr: "" });
   });
 
   it("commits normal-close redirections even for a non-zero command", async () => {
@@ -706,6 +843,148 @@ describe("stream-first shell runtime", () => {
     });
   });
 
+  it("uses C-locale case folding and word boundaries", async () => {
+    const { shell } = createBashHarness();
+    const result = await shell.executeText({
+      script: [
+        "printf 'k\\nK\\nK\\n' | grep -i k",
+        "printf 'k\\nK\\nK\\n' | grep -F -i k",
+        "printf 'a b c\\td\\n' | wc -w",
+      ].join("; "),
+    });
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: "k\nK\nk\nK\n3\n",
+      stderr: "",
+    });
+  });
+
+  it("normalizes and deduplicates final unterminated text records", async () => {
+    const { shell } = createBashHarness();
+    const result = await shell.executeText({
+      script: [
+        "printf 'x\\nx' | uniq",
+        "printf 'x\\ny' | uniq",
+        "printf 'x\\nx' | sort -u",
+        "printf 'x\\ny' | sort -u",
+        "printf '1\\n01\\n1' | sort -n -u",
+      ].join("; "),
+    });
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: "x\nx\ny\nx\nx\ny\n01\n",
+      stderr: "",
+    });
+  });
+
+  it("preserves delimiter-free cut records and validates Unicode delimiters", async () => {
+    const { shell } = createBashHarness();
+    expect(await shell.executeText({
+      script: [
+        "printf 'plain\\na:b\\n' | cut -d : -f 2",
+        "printf ':a::b:\\n' | cut -d : -f 1,3,5",
+        "printf 'left💥right\\nplain\\n' | cut -d 💥 -f 2",
+      ].join("; "),
+    })).toEqual({
+      exitCode: 0,
+      stdout: "plain\nb\n::\nright\nplain\n",
+      stderr: "",
+    });
+
+    for (const script of ["cut -d", "cut -d :: -f 1"]) {
+      expect(await shell.executeText({ script })).toMatchObject({ exitCode: 2 });
+    }
+  });
+
+  it("numbers only non-empty lines with nl by default", async () => {
+    const { shell } = createBashHarness();
+    expect(await shell.executeText({
+      script: "printf '\\n\\n' | nl; printf '\\na\\n\\nb\\n\\n' | nl",
+    })).toEqual({
+      exitCode: 0,
+      stdout: [
+        "       \n",
+        "       \n",
+        "       \n",
+        "     1\ta\n",
+        "       \n",
+        "     2\tb\n",
+        "       \n",
+      ].join(""),
+      stderr: "",
+    });
+  });
+
+  it("uses the last head and tail count mode without mixing option state", async () => {
+    const { shell } = createBashHarness();
+    expect(await shell.executeText({
+      script: [
+        "printf 'a\\nb\\nc\\n' | head -c 1 -n 2",
+        "printf 'a\\nb\\nc\\n' | head -n 2 -c 1",
+        "printf 'a\\nb\\nc\\n' | tail -c 1 -n 2",
+        "printf 'a\\nb\\nc\\n' | tail -n 2 -c 1",
+      ].join("; "),
+    })).toEqual({
+      exitCode: 0,
+      stdout: "a\nb\nab\nc\n\n",
+      stderr: "",
+    });
+  });
+
+  it("merges paired, unpaired, and duplicate join keys in sorted order", async () => {
+    const { fileSystem, shell } = createBashHarness();
+    await fileSystem.writeFile("/left-join", "b Lb1\nb Lb2\nd Ld\nf Lf\n");
+    await fileSystem.writeFile("/right-join", "a Ra\nb Rb1\nb Rb2\nc Rc\nf Rf\ng Rg\n");
+    expect(await shell.executeText({
+      script: "join -a 1 -a 2 /left-join /right-join",
+    })).toEqual({
+      exitCode: 0,
+      stdout: [
+        "a Ra\n",
+        "b Lb1 Rb1\n",
+        "b Lb1 Rb2\n",
+        "b Lb2 Rb1\n",
+        "b Lb2 Rb2\n",
+        "c Rc\n",
+        "d Ld\n",
+        "f Lf Rf\n",
+        "g Rg\n",
+      ].join(""),
+      stderr: "",
+    });
+  });
+
+  it("validates join input order using UTF-8 byte comparison", async () => {
+    const { fileSystem, shell } = createBashHarness();
+    await fileSystem.writeFile("/reversed-join", "𐀀 left\n left\n");
+    await fileSystem.writeFile("/sorted-join", " right\n𐀀 right\n");
+    const result = await shell.executeText({ script: "join /reversed-join /sorted-join" });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("not sorted");
+  });
+
+  it("uses UTF-8 byte order consistently between sort and comm", async () => {
+    const { fileSystem, shell } = createBashHarness();
+    await fileSystem.writeFile("/unsorted", "𐀀\n\n");
+    const result = await shell.executeText({
+      script: "sort /unsorted > /left; sort /unsorted > /right; comm /left /right",
+    });
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: "\t\t\n\t\t𐀀\n",
+      stderr: "",
+    });
+  });
+
+  it("rejects comm inputs that are reversed in UTF-8 byte order", async () => {
+    const { fileSystem, shell } = createBashHarness();
+    await fileSystem.writeFile("/reversed", "𐀀\n\n");
+    await fileSystem.writeFile("/right", "\n𐀀\n");
+    const result = await shell.executeText({ script: "comm /reversed /right" });
+    expect(result).toMatchObject({ exitCode: 2, stdout: "" });
+    expect(result.stderr).toContain("not sorted");
+  });
+
   it("smoke-tests the remaining default utility families through the shell", async () => {
     const { fileSystem, shell } = createBashHarness();
     const result = await shell.executeText({
@@ -778,6 +1057,19 @@ describe("stream-first shell runtime", () => {
     expect(await shell.executeText({ script: "rm -r /tree" }))
       .toMatchObject({ exitCode: 1 });
     expect(fileSystem.stat("/tree/a").kind).toBe("file");
+  });
+
+  it("sorts signed decimal numeric prefixes without precision loss", async () => {
+    const { shell } = createBashHarness();
+    const result = await shell.executeText({
+      script: "sort -n",
+      stdin: "9007199254740993\ninvalid\n2x\n1.5\n1.05\n-0.5\n-10\n9007199254740992\n01\n1\n",
+    });
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: "-10\n-0.5\ninvalid\n01\n1\n1.05\n1.5\n2x\n9007199254740992\n9007199254740993\n",
+      stderr: "",
+    });
   });
 
   it("holds materialized input leases until a multi-file command finishes", async () => {

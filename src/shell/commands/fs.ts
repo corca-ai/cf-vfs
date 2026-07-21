@@ -52,7 +52,13 @@ export const touchCommand = /* @__PURE__ */ defineCommand("touch", async (contex
     else paths.push(value);
   }
   if (paths.length === 0) throw new VfsError("EINVAL", "touch: missing operand");
-  for (const path of paths) await context.fileSystem.touch(commandPath(context, path), { create });
+  for (const path of paths) {
+    try {
+      await context.fileSystem.touch(commandPath(context, path), { create });
+    } catch (error) {
+      if (!(!create && error instanceof VfsError && error.code === "ENOENT")) throw error;
+    }
+  }
   return 0;
 });
 
@@ -264,7 +270,9 @@ export const realpathCommand = /* @__PURE__ */ defineCommand("realpath", async (
 });
 
 export const mktempCommand = /* @__PURE__ */ defineCommand("mktemp", async (context, argv, fds) => {
-  const template = argv.at(-1)?.startsWith("-") === false ? argv.at(-1) ?? "tmp.XXXXXX" : "tmp.XXXXXX";
+  if (argv.length > 1) throw new VfsError("EINVAL", "mktemp: accepts at most one template");
+  const template = argv[0] ?? "tmp.XXXXXX";
+  if (template.startsWith("-")) throw new VfsError("EINVAL", `mktemp: unsupported option ${template}`);
   if (!template.includes("XXXXXX")) throw new VfsError("EINVAL", "mktemp: template must contain XXXXXX");
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const suffix = crypto.randomUUID().replaceAll("-", "").slice(0, 6);

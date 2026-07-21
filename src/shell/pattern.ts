@@ -1,4 +1,5 @@
 import { VfsError } from "../core/errors.js";
+import { parseBracketExpression } from "../core/bracket.js";
 import type { ShellBudget } from "./types.js";
 
 type PatternToken =
@@ -38,31 +39,6 @@ function boundedCharacters(value: string, budget: PatternBudget): string[] {
   return [...value];
 }
 
-function classToken(body: readonly string[]): PatternToken | undefined {
-  let index = 0;
-  const negated = body[0] === "!";
-  if (negated) index += 1;
-  if (index >= body.length) return undefined;
-  const values: string[] = [];
-  while (index < body.length) {
-    const value = body[index++] ?? "";
-    if (value === "\\" && index < body.length) values.push(body[index++] ?? "");
-    else values.push(value);
-  }
-  const ranges: Array<readonly [number, number]> = [];
-  for (let offset = 0; offset < values.length; offset += 1) {
-    const start = values[offset] ?? "";
-    if (values[offset + 1] === "-" && values[offset + 2] !== undefined) {
-      const end = values[offset + 2] ?? "";
-      const left = codePoint(start);
-      const right = codePoint(end);
-      ranges.push(left <= right ? [left, right] : [right, left]);
-      offset += 2;
-    } else ranges.push([codePoint(start), codePoint(start)]);
-  }
-  return { kind: "class", negated, ranges };
-}
-
 function compilePattern(pattern: string, budget: PatternBudget): CompiledPattern {
   const characters = [...pattern];
   budget.expansionWork(characters.length);
@@ -82,21 +58,15 @@ function compilePattern(pattern: string, budget: PatternBudget): CompiledPattern
       continue;
     }
     if (character === "[") {
-      let close = index + 1;
-      let escaped = false;
-      for (; close < characters.length; close += 1) {
-        const candidate = characters[close] ?? "";
-        if (escaped) escaped = false;
-        else if (candidate === "\\") escaped = true;
-        else if (candidate === "]") break;
-      }
-      if (close < characters.length) {
-        const token = classToken(characters.slice(index + 1, close));
-        if (token !== undefined) {
-          tokens.push(token);
-          index = close;
-          continue;
-        }
+      const expression = parseBracketExpression(characters, index);
+      if (expression !== undefined) {
+        tokens.push({
+          kind: "class",
+          negated: expression.negated,
+          ranges: expression.ranges,
+        });
+        index = expression.close;
+        continue;
       }
     }
     tokens.push({ kind: "literal", value: character });

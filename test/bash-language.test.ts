@@ -35,6 +35,22 @@ describe("Bash v2 words, assignments, and statuses", () => {
       stdout: "<one>\n<two words>\n<three>\n",
     },
     {
+      name: "expands quoted $@ to no fields without positional arguments",
+      script: `count() { printf '<%s>' "$#"; }; count "$@"`,
+      stdout: "<0>",
+    },
+    {
+      name: "preserves empty positional arguments in quoted $@",
+      script: `show() { printf '<%s>' "$#"; for value; do printf '|<%s>' "$value"; done; }; show "$@"`,
+      args: ["", "two words"],
+      stdout: "<2>|<>|<two words>",
+    },
+    {
+      name: "lets another quoted fragment preserve an empty word next to empty $@",
+      script: `count() { printf '<%s>' "$#"; }; count "$@"""`,
+      stdout: "<1>",
+    },
+    {
       name: "attaches surrounding quoted text to the first and last $@ fields",
       script: `printf '<%s>\n' "pre$@post"`,
       args: ["one", "two", "three"],
@@ -76,6 +92,71 @@ describe("Bash v2 words, assignments, and statuses", () => {
       name: "updates $? after each completed list",
       script: `false; printf '%s|' "$?"; true; printf '%s' "$?"`,
       stdout: "1|0",
+    },
+    {
+      name: "formats exact Bash integer arguments and reports invalid suffixes",
+      script: "printf '[%d]|[%d]|[%d]|[%d]|[%d]|[%d]|[%d]' 9007199254740993 010 0x10 nope 08 +10 '2#10' 2> /errors; printf '|status=%s' \"$?\"",
+      stdout: "[9007199254740993]|[8]|[16]|[0]|[0]|[10]|[2]|status=1",
+      expectedFiles: {
+        "/errors": "printf: nope: invalid number\nprintf: 08: invalid octal number\nprintf: 2#10: invalid number\n",
+      },
+    },
+    {
+      name: "preserves unknown printf format and percent-b escapes",
+      script: `printf '\\q|%b' '\\q'`,
+      stdout: "\\q|\\q",
+    },
+    {
+      name: "compares large test integers without precision loss",
+      script: "test 9007199254740992 -ne 9007199254740993 && test 9007199254740992 -lt 9007199254740993 && [ -9007199254740993 -lt -9007199254740992 ] && [[ 9007199254740993 -gt 9007199254740992 ]] && printf yes",
+      stdout: "yes",
+    },
+    {
+      name: "preserves trailing-slash directory requirements in test and bracket",
+      files: { "/plain": "body", "/tree/file": "body" },
+      script: "test '!' -e /plain/ && test '!' -f /plain/ && [ '!' -s /plain/ ] && test -e /tree/ && [ -d /tree/ ] && [[ ! -e /plain/ && -d /tree/ ]] && printf yes",
+      stdout: "yes",
+    },
+    {
+      name: "uses the last redirection substitution status for an assignment-only command",
+      script: `X= > "$(printf first; false)"; printf '%s|' "$?"; X=$(false) > "$(printf second; true)"; printf '%s' "$?"`,
+      stdout: "1|0",
+      expectedFiles: { "/first": "", "/second": "" },
+    },
+    {
+      name: "expands redirection operands after assignment words regardless of source order",
+      script: `> "$(printf target; false)" X=$(true); printf '%s' "$?"`,
+      stdout: "1",
+      expectedFiles: { "/target": "" },
+    },
+    {
+      name: "creates a file with a redirection-only simple command",
+      script: "> /created",
+      expectedFiles: { "/created": "" },
+    },
+    {
+      name: "truncates a file with a redirection-only simple command",
+      files: { "/target": "old" },
+      script: "> /target",
+      expectedFiles: { "/target": "" },
+    },
+    {
+      name: "opens append output with a redirection-only simple command",
+      files: { "/target": "kept" },
+      script: ">> /target; >> /created",
+      expectedFiles: { "/target": "kept", "/created": "" },
+    },
+    {
+      name: "opens input with a redirection-only simple command",
+      files: { "/input": "unused" },
+      script: `< /input; printf '%s' "$?"`,
+      stdout: "0",
+    },
+    {
+      name: "reports a missing input redirection without a command",
+      script: "< /missing",
+      exitCode: 1,
+      stderrIncludes: "no such file or directory",
     },
   ]);
 });
@@ -163,6 +244,16 @@ describe("Bash v2 control flow and scopes", () => {
       script: `X='*'; case "$X" in "*") printf literal ;; *) printf wildcard ;; esac`,
       stdout: "literal",
     },
+    {
+      name: "matches leading closing brackets and negated bracket classes",
+      script: "case ']' in []a]) printf leading;; *) printf no;; esac; case a in [!]]) printf '|negated';; *) printf no;; esac",
+      stdout: "leading|negated",
+    },
+    {
+      name: "ignores descending ranges without discarding later class literals",
+      script: "case a in [z-a]) printf no;; *) printf descending;; esac; case c in [z-ac]) printf '|tail';; *) printf no;; esac",
+      stdout: "descending|tail",
+    },
   ]);
 });
 
@@ -183,6 +274,20 @@ describe("Bash v2 functions", () => {
       name: "uses an explicit return status",
       script: `stop() { return 7; }; stop || printf '%s' "$?"`,
       stdout: "7",
+    },
+    {
+      name: "wraps signed return and exit statuses to eight bits",
+      script: "status() { return \"$1\"; }; status -1; printf '%s|' \"$?\"; status -257; printf '%s|' \"$?\"; status 0; printf '%s|' \"$?\"; status 255; printf '%s|' \"$?\"; status 256; printf '%s|' \"$?\"; (exit -1); printf '%s' \"$?\"",
+      stdout: "255|255|0|255|0|255",
+    },
+    {
+      name: "rejects non-numeric signed return and exit statuses",
+      script: "status() { return \"$1\"; }; status invalid 2> /return-error; printf '%s|' \"$?\"; (exit invalid) 2> /exit-error; printf '%s' \"$?\"",
+      stdout: "2|2",
+      expectedFiles: {
+        "/return-error": "return status must be an integer\n",
+        "/exit-error": "exit status must be an integer\n",
+      },
     },
     {
       name: "uses the previous status for a bare return",
@@ -291,6 +396,11 @@ describe("Bash v2 parameter expansion", () => {
       name: "evaluates nested parameter operator words lazily",
       script: `unset X Y; printf '%s' "\${X:-\${Y:-deep}}"`,
       stdout: "deep",
+    },
+    {
+      name: "nests parameter expansion inside command substitution inside parameter expansion",
+      script: `unset X Y; printf '<%s>' "\${X:-$(printf %s \${Y:-deep})}"`,
+      stdout: "<deep>",
     },
     {
       name: "persists assignment performed by := expansion",
@@ -514,6 +624,11 @@ describe("Bash v2 arithmetic", () => {
     { name: "applies multiplication before addition", script: `printf '%s' "$((2 + 3 * 4))"`, stdout: "14" },
     { name: "honors arithmetic parentheses", script: `printf '%s' "$(((2 + 3) * 4))"`, stdout: "20" },
     { name: "accepts hexadecimal literals", script: `printf '%s' "$((0x10 + 1))"`, stdout: "17" },
+    {
+      name: "interprets leading-zero literals and variable values as octal",
+      script: `VALUE=010; printf '%s|%s' "$((010))" "$((VALUE))"`,
+      stdout: "8|8",
+    },
     { name: "supports logical and bitwise unary operators", script: `printf '%s|%s' "$((!0))" "$((~0))"`, stdout: "1|-1" },
     {
       name: "persists assignment and prefix update side effects",
@@ -557,6 +672,20 @@ describe("Bash v2 arithmetic", () => {
       script: "((1 / 0))",
       exitCode: 2,
       stderrIncludes: "division by zero",
+    },
+    {
+      name: "rejects an invalid octal literal before an earlier mutation",
+      script: `printf changed > /side; printf '%s' "$((08))"`,
+      exitCode: 2,
+      stderrIncludes: "invalid octal literal",
+      missingFiles: ["/side"],
+    },
+    {
+      name: "rejects a negative arithmetic exponent",
+      script: `printf changed > /side; printf '%s' "$((2 ** -1))"`,
+      exitCode: 2,
+      stderrIncludes: "negative",
+      expectedFiles: { "/side": "changed" },
     },
   ]);
 });
@@ -1341,6 +1470,16 @@ describe("Bash v2 command substitution", () => {
       stdout: "<nested>",
     },
     {
+      name: "does not close command substitution at a case pattern delimiter",
+      script: `printf '<%s>' "$(case x in x) printf ok ;; esac)"`,
+      stdout: "<ok>",
+    },
+    {
+      name: "does not close command substitution in a here-document body",
+      script: "printf '<%s>' \"$(cat <<EOF\n)\nEOF\n)\"",
+      stdout: "<)>",
+    },
+    {
       name: "uses substitution status for assignment-only commands",
       script: `VALUE=$(false); printf '%s|' "$?"; VALUE=$(true); printf '%s' "$?"`,
       stdout: "1|0",
@@ -1891,8 +2030,30 @@ const rejectedSyntax: ReadonlyArray<readonly [name: string, syntax: string, diag
   ["unsupported $$", "printf $$", "special parameter"],
 ];
 
+const malformedCompoundSyntax: ReadonlyArray<readonly [name: string, syntax: string, diagnostic: string]> = [
+  ["empty subshell", "()", "non-empty command list"],
+  ["empty brace group", "{ }", "non-empty command list"],
+  ["empty if condition", "if then printf yes; fi", "non-empty command list"],
+  ["empty if body", "if true; then fi", "non-empty command list"],
+  ["empty while condition", "while do break; done", "non-empty command list"],
+  ["empty while body", "while false; do done", "non-empty command list"],
+  ["empty for body", "for item in value; do done", "non-empty command list"],
+  ["unterminated brace list", "{ printf ok }", "separator"],
+  ["unterminated if condition", "if true then printf yes; fi", "reserved syntax fi"],
+  ["unterminated if body", "if true; then true fi", "expected fi"],
+  ["unterminated final case body", "case x in x) printf ok esac", "expected esac"],
+];
+
 describe("Bash v2 deterministic rejection", () => {
   bashCases(rejectedSyntax.map(([name, syntax, diagnostic]): BashCase => ({
+    name: `rejects ${name} before an earlier mutation`,
+    script: `printf changed > /side; ${syntax}`,
+    exitCode: 2,
+    stderrIncludes: diagnostic,
+    missingFiles: ["/side"],
+  })));
+
+  bashCases(malformedCompoundSyntax.map(([name, syntax, diagnostic]): BashCase => ({
     name: `rejects ${name} before an earlier mutation`,
     script: `printf changed > /side; ${syntax}`,
     exitCode: 2,
@@ -1969,6 +2130,12 @@ describe("Bash v2 pathname expansion", () => {
       files: { "/g/a1": "", "/g/a2": "", "/g/ab": "" },
       script: "printf '<%s>\\n' /g/a[12] /g/no*",
       stdout: "</g/a1>\n</g/a2>\n</g/no*>\n",
+    },
+    {
+      name: "applies safe Bash bracket semantics to pathname expansion",
+      files: { "/a": "", "/z": "", "/c": "", "/]": "" },
+      script: "printf '<%s>\\n' /[]a] /[z-a] /[z-ac]",
+      stdout: "</]>\n</a>\n</[z-a]>\n</c>\n",
     },
     {
       name: "does not include dotfiles unless the pattern starts with dot",

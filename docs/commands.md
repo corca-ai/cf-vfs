@@ -302,9 +302,11 @@ command implementations are absent; the default preset is covered separately.
 | bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch` |
 
 Text utilities use fatal incremental UTF-8 decoding unless the operation is
-explicitly byte-based. Invalid UTF-8 is `EIO`. `cat`, byte `head`, byte `wc`,
-and `cmp` preserve arbitrary bytes. Line length and record count are bounded
-independently from byte count. Commands batch small output into roughly 64 KiB
+explicitly byte-based. Invalid UTF-8 is `EIO`. `cat`, byte `head`/`tail`, byte
+`wc`, and `cmp` preserve arbitrary bytes. When both `-n` and `-c` are supplied
+to `head` or `tail`, the last mode option completely determines the mode and
+count. Line length and record count are bounded independently from byte count.
+Commands batch small output into roughly 64 KiB
 slabs. `sort`, `tail`, `paste`, `diff`, `comm`, `join`, `patch`, hashing, and
 atomic VFS commits buffer only at their semantic barriers.
 

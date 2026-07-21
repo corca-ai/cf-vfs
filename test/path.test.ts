@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { globToRegExp, matchesGlob } from "../src/core/glob.js";
 import {
   normalizePath,
   normalizePathPreservingTrailingSlash,
@@ -29,5 +30,18 @@ describe("path normalization", () => {
     expect(() => normalizePath("/before\0after")).toThrowError(
       expect.objectContaining({ code: "EINVAL", path: "/before\0after" }),
     );
+  });
+});
+
+describe("glob bracket expressions", () => {
+  it("handles leading closing brackets, negation, and descending ranges safely", () => {
+    expect(matchesGlob("]", "[]a]")).toBe(true);
+    expect(matchesGlob("a", "[]a]")).toBe(true);
+    expect(matchesGlob("]", "[!]]")).toBe(false);
+    expect(matchesGlob("a", "[!]]")).toBe(true);
+    expect(matchesGlob("a", "[z-a]")).toBe(false);
+    expect(matchesGlob("z", "[z-a]")).toBe(false);
+    expect(matchesGlob("c", "[z-ac]")).toBe(true);
+    expect(() => globToRegExp("[z-a]")).not.toThrow();
   });
 });

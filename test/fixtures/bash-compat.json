@@ -44,6 +44,14 @@
       "exitCode": 0
     },
     {
+      "name": "quoted-at-empty-argv-count",
+      "script": "show() { printf '<%s>' \"$#\"; for value; do printf ':<%s>' \"$value\"; done; }\nshow \"$@\"\nprintf '|'\nshow '' 'two words'",
+      "env": {},
+      "args": [],
+      "stdout": "<0>|<2>:<>:<two words>",
+      "exitCode": 0
+    },
+    {
       "name": "printf-repeat",
       "script": "printf '[%s]\\n' one two three",
       "env": {},
@@ -52,11 +60,35 @@
       "exitCode": 0
     },
     {
+      "name": "printf-exact-integers-invalid-status-and-unknown-escapes",
+      "script": "printf '[%d]|[%d]|[%d]|[%d]|[%d]|[%d]|[%d]' 9007199254740993 010 0x10 nope 08 +10 '2#10' 2>errors\nprintf '|status=%s|' \"$?\"\nprintf '\\q|%b' '\\q'",
+      "env": {},
+      "args": [],
+      "stdout": "[9007199254740993]|[8]|[16]|[0]|[0]|[10]|[2]|status=1|\\q|\\q",
+      "exitCode": 0
+    },
+    {
       "name": "assignment-order",
       "script": "unset A B; A=1 B=$A; printf 'A=<%s> B=<%s>\\n' \"$A\" \"$B\"",
       "env": {},
       "args": [],
       "stdout": "A=<1> B=<1>\n",
+      "exitCode": 0
+    },
+    {
+      "name": "test-large-integers-and-trailing-slashes",
+      "script": "touch plain\nmkdir tree\ntest 9007199254740992 -ne 9007199254740993 && [ 9007199254740992 -lt 9007199254740993 ] && [[ 9007199254740993 -gt 9007199254740992 ]] && test '!' -e plain/ && [ '!' -f plain/ ] && test -d tree/ && printf yes",
+      "env": {},
+      "args": [],
+      "stdout": "yes",
+      "exitCode": 0
+    },
+    {
+      "name": "touch-no-create-missing-target",
+      "script": "touch -c missing\nprintf '%s|' \"$?\"\n[[ ! -e missing ]] && printf absent",
+      "env": {},
+      "args": [],
+      "stdout": "0|absent",
       "exitCode": 0
     },
     {
@@ -76,6 +108,54 @@
       "env": {},
       "args": [],
       "stdout": "a\n0\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sort-n-exact-decimal-order",
+      "script": "printf '9007199254740993\\ninvalid\\n2x\\n1.5\\n1.05\\n-0.5\\n-10\\n9007199254740992\\n01\\n1\\n' | sort -n",
+      "env": {},
+      "args": [],
+      "stdout": "-10\n-0.5\ninvalid\n01\n1\n1.05\n1.5\n2x\n9007199254740992\n9007199254740993\n",
+      "exitCode": 0
+    },
+    {
+      "name": "comm-utf8-byte-order",
+      "script": "printf '𐀀\\n\\n' > unsorted\nsort unsorted > left\nsort unsorted > right\ncomm left right",
+      "env": {},
+      "args": [],
+      "stdout": "\t\t\n\t\t𐀀\n",
+      "exitCode": 0
+    },
+    {
+      "name": "c-locale-case-folding-and-word-boundaries",
+      "script": "printf 'k\\nK\\nK\\n' | grep -i k\nprintf '<%d>\\n' \"$(printf 'a b c\\td\\n' | wc -w)\"",
+      "env": {},
+      "args": [],
+      "stdout": "k\nK\n<3>\n",
+      "exitCode": 0
+    },
+    {
+      "name": "final-unterminated-record-deduplication",
+      "script": "printf 'x\\nx' | uniq\nprintf 'x\\ny' | uniq\nprintf 'x\\nx' | sort -u\nprintf 'x\\ny' | sort -u\nprintf '1\\n01\\n1' | sort -n -u",
+      "env": {},
+      "args": [],
+      "stdout": "x\nx\ny\nx\nx\ny\n01\n",
+      "exitCode": 0
+    },
+    {
+      "name": "cut-delimiter-free-and-empty-fields",
+      "script": "printf 'plain\\na:b\\n' | cut -d : -f 2\nprintf ':a::b:\\n' | cut -d : -f 1,3,5",
+      "env": {},
+      "args": [],
+      "stdout": "plain\nb\n::\n",
+      "exitCode": 0
+    },
+    {
+      "name": "nl-default-skips-blank-lines",
+      "script": "printf '\\n\\n' | nl\nprintf '\\na\\n\\nb\\n\\n' | nl",
+      "env": {},
+      "args": [],
+      "stdout": "       \n       \n       \n     1\ta\n       \n     2\tb\n       \n",
       "exitCode": 0
     },
     {
@@ -105,6 +185,14 @@
       "exitCode": 0
     },
     {
+      "name": "bracket-expression-case-and-pathname-semantics",
+      "script": "case ']' in []a]) printf leading;; *) printf no;; esac\ncase a in [!]]) printf '|negated';; *) printf no;; esac\ncase a in [z-a]) printf no;; *) printf '|descending';; esac\ncase c in [z-ac]) printf '|tail\\n';; *) printf no;; esac\ntouch a z c ']'\nprintf '<%s>\\n' []a] [z-a] [z-ac]",
+      "env": {},
+      "args": [],
+      "stdout": "leading|negated|descending|tail\n<]>\n<a>\n<[z-a]>\n<c>\n",
+      "exitCode": 0
+    },
+    {
       "name": "groups-and-subshells",
       "script": "X=outer; { X=group; }; printf '%s|' \"$X\"; (X=sub; printf '%s|' \"$X\"); printf '%s' \"$X\"",
       "env": {},
@@ -121,6 +209,14 @@
       "exitCode": 0
     },
     {
+      "name": "signed-return-and-exit-statuses",
+      "script": "status() { return \"$1\"; }\nstatus -1; printf '%s|' \"$?\"\nstatus 0; printf '%s|' \"$?\"\nstatus 255; printf '%s|' \"$?\"\nstatus 256; printf '%s|' \"$?\"\nstatus invalid 2>return-error; printf '%s|' \"$?\"\n(exit -1); printf '%s|' \"$?\"\n(exit invalid) 2>exit-error; printf '%s' \"$?\"",
+      "env": {},
+      "args": [],
+      "stdout": "255|0|255|0|2|255|2",
+      "exitCode": 0
+    },
+    {
       "name": "substitution-parameter-arithmetic",
       "script": "unset X EMPTY; EMPTY=; printf '<%s>|' \"${X:-default}\"; printf '<%s>|' \"${EMPTY-default}\"; printf '<%s>|' \"${X:=assigned}\"; printf '<%s>|' \"${X:+alternate}\"; printf '<%s>|' \"${#X}\"; printf '<%s>|' \"$(printf 'line\\n\\n')\"; N=2; printf '%s|' \"$((N * 3))\"; ((N += 4)); printf '%s' \"$N\"",
       "env": {},
@@ -129,11 +225,51 @@
       "exitCode": 0
     },
     {
+      "name": "arithmetic-octal-and-invalid-exponents",
+      "script": "VALUE=010\nprintf '<%s>|<%s>|' \"$((010))\" \"$((VALUE))\"\nprintf '%s\\n' 'printf x \"$((08))\"' > bad-octal\n. ./bad-octal 2>octal-error && printf no || printf 'octal-failed|'\nprintf '%s\\n' 'printf x \"$((2**-1))\"' > bad-exponent\n. ./bad-exponent 2>exponent-error && printf no || printf exponent-failed",
+      "env": {},
+      "args": [],
+      "stdout": "<8>|<8>|octal-failed|exponent-failed",
+      "exitCode": 0
+    },
+    {
       "name": "assignment-substitution-status",
       "script": "VALUE=$(false); printf '%s|' \"$?\"; VALUE=$(true); printf '%s' \"$?\"",
       "env": {},
       "args": [],
       "stdout": "1|0",
+      "exitCode": 0
+    },
+    {
+      "name": "redirection-substitution-status",
+      "script": "X= > \"$(printf first; false)\"; printf '%s|' \"$?\"; X=$(false) > \"$(printf second; true)\"; printf '%s|' \"$?\"; > \"$(printf third; false)\" X=$(true); printf '%s' \"$?\"",
+      "env": {},
+      "args": [],
+      "stdout": "1|0|1",
+      "exitCode": 0
+    },
+    {
+      "name": "nested-parameter-command-substitution",
+      "script": "unset X Y; printf '<%s>' \"${X:-$(printf %s ${Y:-deep})}\"",
+      "env": {},
+      "args": [],
+      "stdout": "<deep>",
+      "exitCode": 0
+    },
+    {
+      "name": "command-substitution-case-and-heredoc-delimiters",
+      "script": "printf '<%s>|' \"$(case x in x) printf ok ;; esac)\"\nprintf '<%s>' \"$(cat <<EOF\n)\nEOF\n)\"",
+      "env": {},
+      "args": [],
+      "stdout": "<ok>|<)>",
+      "exitCode": 0
+    },
+    {
+      "name": "malformed-compound-command-statuses",
+      "script": "printf '%s\\n' '()' > bad1\nprintf '%s\\n' '{ }' > bad2\nprintf '%s\\n' 'if then printf yes; fi' > bad3\nprintf '%s\\n' 'if true; then fi' > bad4\nprintf '%s\\n' 'while do break; done' > bad5\nprintf '%s\\n' 'while false; do done' > bad6\nprintf '%s\\n' '{ printf ok }' > bad7\n. ./bad1 2>err1; printf '%s|' \"$?\"\n. ./bad2 2>err2; printf '%s|' \"$?\"\n. ./bad3 2>err3; printf '%s|' \"$?\"\n. ./bad4 2>err4; printf '%s|' \"$?\"\n. ./bad5 2>err5; printf '%s|' \"$?\"\n. ./bad6 2>err6; printf '%s|' \"$?\"\n. ./bad7 2>err7; printf '%s' \"$?\"",
+      "env": {},
+      "args": [],
+      "stdout": "2|2|2|2|2|2|2",
       "exitCode": 0
     },
     {
