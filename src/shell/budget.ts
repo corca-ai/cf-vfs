@@ -23,6 +23,9 @@ export const DEFAULT_SHELL_LIMITS: ShellLimits = {
   maxLineBytes: 1024 * 1024,
   maxBufferedRecords: 100_000,
   maxGlobMatches: 10_000,
+  maxExpansionWork: 10_000_000,
+  maxExpansionChars: 1024 * 1024,
+  maxExpansionFields: 10_000,
   maxMutations: 10_000,
   deadlineMs: 30_000,
   outputIdleTimeoutMs: 5_000,
@@ -57,6 +60,9 @@ export class ExecutionBudget implements ShellBudget {
   private ioBytes = 0;
   private mutations = 0;
   private globMatches = 0;
+  private expansionWorkUnits = 0;
+  private expansionCharacters = 0;
+  private expansionFields = 0;
   private bufferedBytes = 0;
 
   constructor(limits: ShellLimits, now: () => number) {
@@ -117,6 +123,30 @@ export class ExecutionBudget implements ShellBudget {
     if (this.globMatches > this.limits.maxGlobMatches) {
       throw new VfsError("E2BIG", "pathname expansion match limit exceeded");
     }
+  }
+
+  expansionWork(count = 1): void {
+    this.checkDeadline();
+    this.expansionWorkUnits += count;
+    if (this.expansionWorkUnits > this.limits.maxExpansionWork) {
+      throw new VfsError("E2BIG", "shell expansion work limit exceeded");
+    }
+  }
+
+  checkExpansionOutput(characters: number, fields = 1): void {
+    this.checkDeadline();
+    if (this.expansionCharacters + characters > this.limits.maxExpansionChars) {
+      throw new VfsError("E2BIG", "shell expansion character limit exceeded");
+    }
+    if (this.expansionFields + fields > this.limits.maxExpansionFields) {
+      throw new VfsError("E2BIG", "shell expansion field limit exceeded");
+    }
+  }
+
+  expansionOutput(characters: number, fields = 1): void {
+    this.checkExpansionOutput(characters, fields);
+    this.expansionCharacters += characters;
+    this.expansionFields += fields;
   }
 
   buffered(bytes: number): () => void {

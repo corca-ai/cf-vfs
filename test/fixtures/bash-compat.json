@@ -222,6 +222,46 @@
       ],
       "stdout": "?:<x>:2|::<b>:3|",
       "exitCode": 0
+    },
+    {
+      "name": "parameter-pattern-removal",
+      "script": "X=abcabc; printf '<%s>|<%s>|<%s>|<%s>|<%s>' \"${X#a*c}\" \"${X##a*c}\" \"${X%a*}\" \"${X%%a*}\" \"${X#z*}\"",
+      "env": {},
+      "args": [],
+      "stdout": "<abc>|<>|<abc>|<>|<abcabc>",
+      "exitCode": 0
+    },
+    {
+      "name": "parameter-pattern-replacement",
+      "script": "X=abcabc; R=Z; printf '<%s>|<%s>|<%s>|<%s>' \"${X/a*c/R}\" \"${X//a?/R}\" \"${X//a/${R:-x}}\" \"${X//z*/R}\"",
+      "env": {},
+      "args": [],
+      "stdout": "<R>|<RcRc>|<ZbcZbc>|<abcabc>",
+      "exitCode": 0
+    },
+    {
+      "name": "parameter-substring-profile",
+      "script": "X=abcdef; OFFSET=2; printf '<%s>|<%s>|<%s>|<%s>|<%s>' \"${X:1}\" \"${X:1:3}\" \"${X: -2}\" \"${X:${OFFSET}:2}\" \"${X:99}\"",
+      "env": {},
+      "args": [],
+      "stdout": "<bcdef>|<bcd>|<ef>|<cd>|<>",
+      "exitCode": 0
+    },
+    {
+      "name": "parameter-pattern-quoting-and-deletion",
+      "script": "X='a*b/a'; P='a*'; printf '<%s>|<%s>|<%s>|<%s>' \"${X#\"$P\"}\" \"${X#$P}\" \"${X//\\//:}\" \"${X//a}\"",
+      "env": {},
+      "args": [],
+      "stdout": "<b/a>|<*b/a>|<a*b:a>|<*b/>",
+      "exitCode": 0
+    },
+    {
+      "name": "parameter-pattern-split-and-glob-order",
+      "script": "mkdir -p g; : > g/a; : > g/b; Y='left right'; G='g/*tail'; printf '<%s>\\n' ${Y#z}; printf '[%s]\\n' ${G%tail}",
+      "env": {},
+      "args": [],
+      "stdout": "<left>\n<right>\n[g/a]\n[g/b]\n",
+      "exitCode": 0
     }
   ]
 }

@@ -1,7 +1,8 @@
 # Parser technology spike
 
 Initial decision: 2026-07-20. Repeated for Bash Version 2: 2026-07-21. Reviewed
-for sourced units and positional built-ins: 2026-07-21.
+for sourced units, positional built-ins, and bounded scalar parameter
+operators: 2026-07-21.
 Version 2 keeps the repository's handwritten lexer/parser after adding command
 substitution, here-documents, nested control structures, functions, and
 arithmetic. This is a decision for the declared finite execution grammar, not
@@ -39,6 +40,13 @@ file and invokes the same complete-unit parser under cumulative byte, node, and
 nesting budgets. That reuse does not change the Version 2 parser selection.
 Likewise, `read -r`, `shift`, and `getopts` are ordinary argv-based built-ins;
 their stream cursor and session state do not expand the grammar.
+
+Pattern removal, replacement, and substring operators add a small
+discriminated parameter-expansion AST and delimiter-aware parsing within an
+already recognized `${...}` fragment. They do not add a new command-level
+grammar or weaken complete-unit rejection. Nested pattern, replacement, offset,
+and length words use the existing fragment parser and depth budget, so this
+bounded addition does not cross a reconsideration trigger.
 
 The main cost is maintenance: shell lexical rules interact in subtle ways. No
 one should extend it with ad-hoc string splitting. Each new construct needs a

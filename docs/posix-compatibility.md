@@ -44,6 +44,10 @@ relevant budgets with the caller. Opaque files remain unavailable.
 and positional primitives used by reusable VFS scripts. `read` has no prompt,
 timeout, terminal, or readline behavior; it uses bounded virtual fd 0 and the
 fixed whitespace `IFS` profile.
+Scalar parameter expansion additionally supports shortest/longest shell-pattern
+prefix and suffix removal, first/global pattern replacement, and bounded
+Unicode-code-point substrings. Patterns use the declared glob syntax without
+pathname or dotfile rules, and quoted fragments remain literal.
 
 Deliberate deterministic choices include:
 
@@ -58,6 +62,12 @@ Deliberate deterministic choices include:
 - `getopts` exposes `OPTIND` and `OPTARG`, accepts only short options and
   required option arguments, uses leading `:` for silent error results, and
   resets its hidden cluster cursor on an `OPTIND` assignment;
+- parameter-pattern matching is locale-independent and work-bounded; substring
+  operands are nonempty expanded `-?[0-9]+` decimal integers after trimming,
+  negative offsets clamp from the end, and empty operands, leading `+`, and
+  negative lengths are rejected. Arrays, indirect expansion,
+  extglob, anchored replacement, and Bash's optional `&` replacement behavior
+  remain outside the profile;
 - subshells and command substitutions also clone session state; command
   substitution output must be bounded valid UTF-8 and contain no NUL;
 - arithmetic wraps deterministically at signed 64 bits instead of using the

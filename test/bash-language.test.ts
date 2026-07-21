@@ -299,6 +299,195 @@ describe("Bash v2 parameter expansion", () => {
   ]);
 });
 
+describe("Bash v3 bounded parameter patterns and substrings", () => {
+  bashCases([
+    {
+      name: "removes the shortest and longest matching prefixes",
+      script: "X=abcabc; printf '<%s>|<%s>' \"${X#a*c}\" \"${X##a*c}\"",
+      stdout: "<abc>|<>",
+    },
+    {
+      name: "removes the shortest and longest matching suffixes",
+      script: "X=abcabc; printf '<%s>|<%s>' \"${X%a*}\" \"${X%%a*}\"",
+      stdout: "<abc>|<>",
+    },
+    {
+      name: "leaves values unchanged for missing and empty patterns",
+      script: "X=abc; printf '<%s>|<%s>|<%s>' \"${X#z*}\" \"${X#}\" \"${X//}\"",
+      stdout: "<abc>|<abc>|<abc>",
+    },
+    {
+      name: "honors quoted and escaped pattern metacharacters",
+      script: "X='a*b'; P='a*'; printf '<%s>|<%s>|<%s>' \"${X#'a*'}\" \"${X#a\\*}\" \"${X##$P}\"",
+      stdout: "<b>|<b>|<>",
+    },
+    {
+      name: "supports bracket ranges and negated classes without pathname rules",
+      script: "X='a/b2'; printf '<%s>|<%s>|<%s>' \"${X#[a-z]}\" \"${X#?[/]}\" \"${X##[!z]*}\"",
+      stdout: "</b2>|<b2>|<>",
+    },
+    {
+      name: "expands nested words in removal patterns",
+      script: "X=abcabc; PREFIX=a; printf '%s' \"${X##${PREFIX}*}\"",
+      stdout: "",
+    },
+    {
+      name: "replaces the first longest match and every non-overlapping match",
+      script: "X=abcabc; printf '<%s>|<%s>|<%s>' \"${X/a*c/R}\" \"${X//a?/R}\" \"${X//?/R}\"",
+      stdout: "<R>|<RcRc>|<RRRRRR>",
+    },
+    {
+      name: "supports deletion, nested replacement expansion, and no-match replacement",
+      script: "X=abcabc; R=Z; printf '<%s>|<%s>|<%s>' \"${X//a}\" \"${X//a/${R:-x}}\" \"${X//z*/R}\"",
+      stdout: "<bcbc>|<ZbcZbc>|<abcabc>",
+    },
+    {
+      name: "escapes replacement delimiters and quoted pattern stars",
+      script: "X='a/b/a'; printf '<%s>|' \"${X//\\//:}\"; X='a*b'; printf '<%s>' \"${X/'*'/X}\"",
+      stdout: "<a:b:a>|<aXb>",
+    },
+    {
+      name: "handles Unicode pattern replacements by code point",
+      script: "X='가나다가'; printf '<%s>' \"${X//가/X}\"",
+      stdout: "<X나다X>",
+    },
+    {
+      name: "slices by code point with positive, negative, and nested offsets",
+      script: "X='가나다라마바사'; OFFSET=2; printf '<%s>|<%s>|<%s>|<%s>' \"${X:1}\" \"${X:1:3}\" \"${X: -2}\" \"${X:${OFFSET}:2}\"",
+      stdout: "<나다라마바사>|<나다라>|<바사>|<다라>",
+    },
+    {
+      name: "clamps substring offsets and accepts zero length",
+      script: "X=abc; printf '<%s>|<%s>|<%s>' \"${X:99}\" \"${X: -99}\" \"${X:1:0}\"",
+      stdout: "<>|<abc>|<>",
+    },
+    {
+      name: "treats unset and empty scalar values as empty",
+      script: "unset X; EMPTY=; printf '<%s>|<%s>|<%s>' \"${X##*}\" \"${EMPTY//a/b}\" \"${X:0:2}\"",
+      stdout: "<>|<>|<>",
+    },
+    {
+      name: "preserves quoted and unquoted field behavior after slicing",
+      script: "X='a b'; printf '<%s>\\n' ${X:0}; printf '[%s]' \"${X:0}\"",
+      stdout: "<a>\n<b>\n[a b]",
+    },
+    {
+      name: "applies pathname expansion after an unquoted pattern result",
+      files: { "/g/a": "", "/g/b": "" },
+      script: "X='/g/*tail'; printf '<%s>\\n' ${X%tail}",
+      stdout: "</g/a>\n</g/b>\n",
+    },
+    {
+      name: "rejects negative and non-integer substring lengths deterministically",
+      script: "X=abc; printf '%s' \"${X:0:-1}\" || printf '%s|' \"$?\"; LENGTH=x; printf '%s' \"${X:0:${LENGTH}}\"",
+      exitCode: 2,
+      stdout: "2|",
+      stderrIncludes: ["must not be negative", "must expand to an integer"],
+    },
+    {
+      name: "keeps Version 2 default operators on the at parameter",
+      args: ["argument"],
+      script: "printf '<%s>|<%s>' \"${@:-fallback}\" \"${@+set}\"",
+      stdout: "<argument>|<set>",
+    },
+  ]);
+
+  it("bounds pattern work, produced characters, and produced fields", async () => {
+    const work = createBashHarness({ limits: { maxExpansionWork: 20 } });
+    await expect(work.run("X=aaaaaaaa; printf '%s' \"${X##*a*a*a*a*a*b}\"")).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining("shell expansion work limit exceeded"),
+    });
+
+    const characters = createBashHarness({ limits: { maxExpansionChars: 20 } });
+    await expect(characters.run("X=aaaa; printf '%s' \"${X//a/xxx}\"")).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining("shell expansion character limit exceeded"),
+    });
+
+    const fields = createBashHarness({ limits: { maxExpansionFields: 4 } });
+    await expect(fields.run("printf '%s' \"$@\"", { args: ["a", "b", "c"] })).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining("shell expansion field limit exceeded"),
+    });
+
+    const splitFields = createBashHarness({ limits: { maxExpansionFields: 4 } });
+    await expect(splitFields.run(": $X", {
+      env: { X: Array.from({ length: 100 }, (_, index) => String(index)).join(" ") },
+    })).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining("shell expansion field limit exceeded"),
+    });
+
+    const bracketWork = createBashHarness({ limits: { maxExpansionWork: 500 } });
+    await expect(bracketWork.run(`printf '%s' \"${"${X//["}${"a".repeat(200)}${"]/x}"}\"`, {
+      env: { X: "b".repeat(20) },
+    })).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining("shell expansion work limit exceeded"),
+    });
+
+    const substringWork = createBashHarness({ limits: { maxExpansionWork: 100 } });
+    await expect(substringWork.run("printf '%s' \"${X:99:1}\"", {
+      env: { X: "a".repeat(1_000) },
+    })).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: expect.stringContaining("shell expansion work limit exceeded"),
+    });
+  });
+
+  bashCases([
+    {
+      name: "rejects too many substring separators before an earlier mutation",
+      script: "printf changed > /side; printf '%s' \"${X:1:2:3}\"",
+      exitCode: 2,
+      stderrIncludes: "at most one length",
+      missingFiles: ["/side"],
+    },
+    {
+      name: "rejects an empty substring offset before an earlier mutation",
+      script: "printf changed > /side; printf '%s' \"${X:}\"",
+      exitCode: 2,
+      stderrIncludes: "must not be empty",
+      missingFiles: ["/side"],
+    },
+    {
+      name: "rejects an explicitly empty substring offset",
+      script: "printf changed > /side; printf '%s' \"${X::1}\"",
+      exitCode: 2,
+      stderrIncludes: "must not be empty",
+      missingFiles: ["/side"],
+    },
+    {
+      name: "rejects an explicitly empty substring length",
+      script: "printf changed > /side; printf '%s' \"${X:1:}\"",
+      exitCode: 2,
+      stderrIncludes: "must not be empty",
+      missingFiles: ["/side"],
+    },
+    {
+      name: "rejects a leading plus in a substring operand",
+      script: "X=abc; printf '%s' \"${X: +1}\"",
+      exitCode: 2,
+      stderrIncludes: "must expand to an integer",
+    },
+    {
+      name: "rejects anchored replacement before an earlier mutation",
+      script: "printf changed > /side; printf '%s' \"${X/#a/b}\"",
+      exitCode: 2,
+      stderrIncludes: "anchored parameter replacement is not supported",
+      missingFiles: ["/side"],
+    },
+    {
+      name: "rejects array-style slicing before an earlier mutation",
+      script: "printf changed > /side; printf '%s' \"${@:1}\"",
+      exitCode: 2,
+      stderrIncludes: "array-style parameter operations are not supported",
+      missingFiles: ["/side"],
+    },
+  ]);
+});
+
 describe("Bash v2 arithmetic", () => {
   const operatorCases: ReadonlyArray<readonly [name: string, expression: string, output: string]> = [
     ["associates exponentiation from the right", "2 ** 3 ** 2", "512"],

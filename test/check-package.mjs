@@ -59,25 +59,42 @@ try {
   );
   await writeFile(join(consumerDirectory, "probe.mjs"), `
     import { MAX_INLINE_FILE_BYTES } from "@corca-ai/cf-vfs";
-    import { Shell, BASH_COMPATIBILITY_VERSION } from "@corca-ai/cf-vfs/shell";
+    import { Shell, BASH_COMPATIBILITY_VERSION, parseShellScript } from "@corca-ai/cf-vfs/shell";
     import { lsCommand } from "@corca-ai/cf-vfs/shell/commands/ls";
     import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
     import { MemoryFileSystem } from "@corca-ai/cf-vfs/testing";
     if (MAX_INLINE_FILE_BYTES !== 8 * 1024 * 1024) throw new Error("inline limit");
     if (BASH_COMPATIBILITY_VERSION !== 2) throw new Error("language version");
     if (lsCommand.name !== "ls") throw new Error("ls export");
+    const parsed = parseShellScript('printf "%s" "$VALUE"', 100);
+    const expansion = parsed.lists[0].first.commands[0].words[2].parts[0].expansion;
+    if ("kind" in expansion || expansion.length !== false || expansion.operator !== undefined) {
+      throw new Error("Version 2 parameter AST compatibility");
+    }
     const shell = new Shell({ fileSystem: new MemoryFileSystem(), commands: defaultShellCommands });
     const result = await shell.executeText({ script: 'X=$(printf ok); printf "package-%s" "$X"' });
     if (result.stdout !== "package-ok") throw new Error("shell execution");
   `);
   await execFileAsync("node", ["probe.mjs"], { cwd: consumerDirectory });
   await writeFile(join(consumerDirectory, "probe.ts"), `
-    import { Shell, type ExecuteBytesResult, type ExecuteTextResult } from "@corca-ai/cf-vfs/shell";
+    import {
+      Shell,
+      type ExecuteBytesResult,
+      type ExecuteTextResult,
+      type ParameterExpansion,
+      type ParameterOperator,
+      type ShellWord,
+    } from "@corca-ai/cf-vfs/shell";
     import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
     import { MemoryFileSystem } from "@corca-ai/cf-vfs/testing";
     const shell = new Shell({ fileSystem: new MemoryFileSystem(), commands: defaultShellCommands });
     const text: Promise<ExecuteTextResult> = shell.executeText({ script: "printf text" });
     const bytes: Promise<ExecuteBytesResult> = shell.executeBytes({ script: "printf bytes" });
+    const legacyExpansion: ParameterExpansion = { name: "VALUE", length: false };
+    const legacyLength: boolean = legacyExpansion.length;
+    const legacyOperator: ParameterOperator | undefined = legacyExpansion.operator;
+    const legacyWord: ShellWord | undefined = legacyExpansion.word;
+    void [legacyLength, legacyOperator, legacyWord];
     void Promise.all([text, bytes]);
   `);
   await writeFile(join(consumerDirectory, "tsconfig.json"), JSON.stringify({

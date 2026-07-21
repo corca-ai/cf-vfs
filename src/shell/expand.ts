@@ -1,14 +1,23 @@
 import { VfsError } from "../core/errors.js";
 import { compareUtf8, dirname, normalizePath } from "../core/path.js";
 import { evaluateArithmetic } from "./arithmetic.js";
+import {
+  matchesShellPattern,
+  removeShellPattern,
+  replaceShellPattern,
+} from "./pattern.js";
 import type { ParameterExpansion, ShellWord, WordPart } from "./parser.js";
 import type { ShellBudget, ShellFileSystem, ShellSession } from "./types.js";
-
-const IFS = /[ \t\n]+/u;
 
 interface Field {
   value: string;
   pattern: string;
+  characters: number;
+}
+
+interface ExpandedValues {
+  values: string[];
+  characters: number;
 }
 
 export interface ExpansionRuntime {
@@ -148,8 +157,10 @@ async function glob(
   });
 }
 
-function split(value: string): string[] {
-  return value.split(IFS).filter((piece) => piece.length > 0);
+function codePointLength(value: string): number {
+  let characters = 0;
+  for (const _character of value) characters += 1;
+  return characters;
 }
 
 function append(fields: Field[], value: string, activeGlob: boolean): void {
@@ -157,14 +168,54 @@ function append(fields: Field[], value: string, activeGlob: boolean): void {
   if (field === undefined) return;
   field.value += value;
   field.pattern += activeGlob ? value : escapeGlob(value);
+  field.characters += codePointLength(value);
 }
 
-function alternatives(fields: Field[], values: readonly string[], activeGlob: boolean): void {
+function alternatives(
+  fields: Field[],
+  expanded: ExpandedValues,
+  activeGlob: boolean,
+): void {
+  const { values } = expanded;
   if (values.length === 0) return;
   append(fields, values[0] ?? "", activeGlob);
   for (const value of values.slice(1)) {
-    fields.push({ value, pattern: activeGlob ? value : escapeGlob(value) });
+    fields.push({
+      value,
+      pattern: activeGlob ? value : escapeGlob(value),
+      characters: codePointLength(value),
+    });
   }
+}
+
+function splitValues(
+  inputs: readonly string[],
+  quoted: boolean,
+  budget: ShellBudget,
+  existingCharacters: number,
+  existingFields: number,
+): ExpandedValues {
+  const values: string[] = [];
+  let characters = 0;
+  const add = (value: string): void => {
+    const added = codePointLength(value);
+    const nextCount = values.length + 1;
+    budget.checkExpansionOutput(
+      existingCharacters + characters + added,
+      existingFields + Math.max(0, nextCount - 1),
+    );
+    values.push(value);
+    characters += added;
+  };
+  for (const input of inputs) {
+    budget.expansionWork(input.length);
+    if (quoted) {
+      add(input);
+      continue;
+    }
+    for (const match of input.matchAll(/[^ \t\n]+/gu)) add(match[0]);
+  }
+  return { values, characters };
 }
 
 function assertNoNul(value: string): string {
@@ -180,8 +231,78 @@ async function scalarParts(
   runtime: ExpansionRuntime,
 ): Promise<string> {
   let output = "";
-  for (const part of parts) output += await partValue(part, session, fileSystem, budget, runtime);
+  let characters = 0;
+  for (const part of parts) {
+    const value = await partValue(part, session, fileSystem, budget, runtime);
+    budget.expansionWork(value.length);
+    characters += codePointLength(value);
+    budget.checkExpansionOutput(characters, 0);
+    output += value;
+  }
   return assertNoNul(output);
+}
+
+async function patternParts(
+  word: ShellWord,
+  session: ShellSession,
+  fileSystem: ShellFileSystem,
+  budget: ShellBudget,
+  runtime: ExpansionRuntime,
+): Promise<string> {
+  let pattern = "";
+  let characters = 0;
+  for (const part of word.parts) {
+    const value = await partValue(part, session, fileSystem, budget, runtime);
+    const fragment = part.quoted ? escapeGlob(value) : value;
+    budget.expansionWork(fragment.length);
+    characters += codePointLength(fragment);
+    budget.checkExpansionOutput(characters, 0);
+    pattern += fragment;
+  }
+  return assertNoNul(pattern);
+}
+
+function substringByCodePoint(
+  value: string,
+  offset: number,
+  length: number | undefined,
+  budget: ShellBudget,
+): string {
+  let start = offset;
+  if (start < 0) {
+    budget.expansionWork(value.length);
+    start = Math.max(codePointLength(value) + start, 0);
+  }
+  budget.expansionWork(value.length);
+  const end = length === undefined ? Number.POSITIVE_INFINITY : start + length;
+  let codePoints = 0;
+  let codeUnits = 0;
+  let startCodeUnit = value.length;
+  let endCodeUnit = value.length;
+  for (const character of value) {
+    if (codePoints === start) startCodeUnit = codeUnits;
+    if (codePoints === end) {
+      endCodeUnit = codeUnits;
+      break;
+    }
+    codePoints += 1;
+    codeUnits += character.length;
+  }
+  if (codePoints === start) startCodeUnit = codeUnits;
+  if (codePoints === end) endCodeUnit = codeUnits;
+  return value.slice(startCodeUnit, endCodeUnit);
+}
+
+function expansionInteger(value: string, label: string): number {
+  const normalized = value.trim();
+  if (!/^-?[0-9]+$/u.test(normalized)) {
+    throw new VfsError("EINVAL", `${label} must expand to an integer`);
+  }
+  const parsed = Number(normalized);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new VfsError("EINVAL", `${label} must expand to a safe integer`);
+  }
+  return parsed;
 }
 
 async function parameterValue(
@@ -192,25 +313,68 @@ async function parameterValue(
   runtime: ExpansionRuntime,
 ): Promise<string> {
   const state = variableState(expansion.name, session);
-  if (expansion.length) return String([...state.value].length);
-  const operator = expansion.operator;
-  if (operator === undefined) return state.value;
-  const checkNull = operator.startsWith(":");
-  const absent = !state.set || (checkNull && state.value.length === 0);
-  const operand = async (): Promise<string> => expansion.word === undefined
-    ? ""
-    : await scalarParts(expansion.word.parts, session, fileSystem, budget, runtime);
-  if (operator.endsWith("-")) return absent ? await operand() : state.value;
-  if (operator.endsWith("+")) return absent ? "" : await operand();
-  if (operator.endsWith("=")) {
+  if (!("kind" in expansion)) {
+    if (expansion.length) {
+      budget.expansionWork(state.value.length);
+      return String(codePointLength(state.value));
+    }
+    const operator = expansion.operator;
+    if (operator === undefined) return state.value;
+    const checkNull = operator.startsWith(":");
+    const absent = !state.set || (checkNull && state.value.length === 0);
+    const operand = async (): Promise<string> => expansion.word === undefined
+      ? ""
+      : await scalarParts(expansion.word.parts, session, fileSystem, budget, runtime);
+    if (operator.endsWith("-")) return absent ? await operand() : state.value;
+    if (operator.endsWith("+")) return absent ? "" : await operand();
+    if (operator.endsWith("=")) {
+      if (!absent) return state.value;
+      const value = await operand();
+      assignParameter(expansion.name, value, session);
+      return value;
+    }
     if (!absent) return state.value;
-    const value = await operand();
-    assignParameter(expansion.name, value, session);
-    return value;
+    const message = await operand();
+    throw new VfsError("EINVAL", message || `${expansion.name}: parameter is unset or empty`);
   }
-  if (!absent) return state.value;
-  const message = await operand();
-  throw new VfsError("EINVAL", message || `${expansion.name}: parameter is unset or empty`);
+  if (expansion.kind === "remove") {
+    const pattern = await patternParts(expansion.pattern, session, fileSystem, budget, runtime);
+    return removeShellPattern(
+      state.value,
+      pattern,
+      expansion.removalOperator.startsWith("#") ? "prefix" : "suffix",
+      expansion.removalOperator.length === 2,
+      budget,
+    );
+  }
+  if (expansion.kind === "replace") {
+    const pattern = await patternParts(expansion.pattern, session, fileSystem, budget, runtime);
+    const replacement = await scalarParts(
+      expansion.replacement.parts,
+      session,
+      fileSystem,
+      budget,
+      runtime,
+    );
+    return replaceShellPattern(state.value, pattern, replacement, expansion.all, budget);
+  }
+  if (expansion.kind === "substring") {
+    const offset = expansionInteger(
+      await scalarParts(expansion.offset.parts, session, fileSystem, budget, runtime),
+      "substring offset",
+    );
+    const length = expansion.substringLength === undefined
+      ? undefined
+      : expansionInteger(
+        await scalarParts(expansion.substringLength.parts, session, fileSystem, budget, runtime),
+        "substring length",
+      );
+    if (length !== undefined && length < 0) {
+      throw new VfsError("EINVAL", "substring length must not be negative");
+    }
+    return substringByCodePoint(state.value, offset, length, budget);
+  }
+  throw new VfsError("EINVAL", "unsupported parameter expansion");
 }
 
 async function partValue(
@@ -236,12 +400,18 @@ async function partValues(
   fileSystem: ShellFileSystem,
   budget: ShellBudget,
   runtime: ExpansionRuntime,
-): Promise<string[]> {
-  if (part.kind === "parameter" && part.expansion.name === "@" && part.expansion.operator === undefined) {
-    return part.quoted ? [...session.args] : session.args.flatMap(split);
+  existingCharacters: number,
+  existingFields: number,
+): Promise<ExpandedValues> {
+  if (part.kind === "parameter"
+    && part.expansion.name === "@"
+    && !("kind" in part.expansion)
+    && !part.expansion.length
+    && part.expansion.operator === undefined) {
+    return splitValues(session.args, part.quoted, budget, existingCharacters, existingFields);
   }
   const value = await partValue(part, session, fileSystem, budget, runtime);
-  return part.quoted ? [value] : split(value);
+  return splitValues([value], part.quoted, budget, existingCharacters, existingFields);
 }
 
 export async function expandWord(
@@ -251,30 +421,58 @@ export async function expandWord(
   budget: ShellBudget,
   runtime: ExpansionRuntime,
 ): Promise<string[]> {
-  const fields: Field[] = [{ value: "", pattern: "" }];
+  const fields: Field[] = [{ value: "", pattern: "", characters: 0 }];
+  let materializedCharacters = 0;
   let quoted = false;
   let removedByExpansion = false;
   for (const part of word.parts) {
     quoted ||= part.quoted;
     if (part.kind === "literal") {
-      append(fields, assertNoNul(part.value), !part.quoted);
+      const value = assertNoNul(part.value);
+      budget.expansionWork(value.length);
+      const characters = codePointLength(value);
+      budget.checkExpansionOutput(materializedCharacters + characters, fields.length);
+      append(fields, value, !part.quoted);
+      materializedCharacters += characters;
       continue;
     }
-    const values = await partValues(part, session, fileSystem, budget, runtime);
-    if (values.length === 0) removedByExpansion = true;
-    alternatives(fields, values, !part.quoted);
+    const expanded = await partValues(
+      part,
+      session,
+      fileSystem,
+      budget,
+      runtime,
+      materializedCharacters,
+      fields.length,
+    );
+    if (expanded.values.length === 0) removedByExpansion = true;
+    alternatives(fields, expanded, !part.quoted);
+    materializedCharacters += expanded.characters;
   }
-  if (fields.length === 1 && fields[0]?.value === "" && removedByExpansion && !quoted) return [];
+  if (fields.length === 1 && fields[0]?.value === "" && removedByExpansion && !quoted) {
+    budget.expansionOutput(0, 0);
+    return [];
+  }
 
   const output: string[] = [];
+  let outputCharacters = 0;
   for (const field of fields) {
     if (firstGlobMeta(field.pattern) < 0) {
+      budget.checkExpansionOutput(outputCharacters + field.characters, output.length + 1);
       output.push(field.value);
+      outputCharacters += field.characters;
       continue;
     }
     const matches = await glob(field.value, field.pattern, session, fileSystem, budget);
-    output.push(...(matches.length === 0 ? [field.value] : matches));
+    for (const value of matches.length === 0 ? [field.value] : matches) {
+      budget.expansionWork(value.length);
+      const characters = codePointLength(value);
+      budget.checkExpansionOutput(outputCharacters + characters, output.length + 1);
+      output.push(value);
+      outputCharacters += characters;
+    }
   }
+  budget.expansionOutput(outputCharacters, output.length);
   return output;
 }
 
@@ -285,7 +483,9 @@ export async function expandScalarWord(
   budget: ShellBudget,
   runtime: ExpansionRuntime,
 ): Promise<string> {
-  return await scalarParts(word.parts, session, fileSystem, budget, runtime);
+  const value = await scalarParts(word.parts, session, fileSystem, budget, runtime);
+  budget.expansionOutput(codePointLength(value));
+  return value;
 }
 
 export async function expandAssignmentValue(
@@ -302,7 +502,9 @@ export async function expandAssignmentValue(
     { ...first, value: first.value.slice(name.length + 1) },
     ...rest,
   ];
-  return await scalarParts(parts, session, fileSystem, budget, runtime);
+  const value = await scalarParts(parts, session, fileSystem, budget, runtime);
+  budget.expansionOutput(codePointLength(value));
+  return value;
 }
 
 export async function expandWords(
@@ -324,39 +526,11 @@ export async function expandCasePattern(
   budget: ShellBudget,
   runtime: ExpansionRuntime,
 ): Promise<string> {
-  let pattern = "";
-  for (const part of word.parts) {
-    const value = await partValue(part, session, fileSystem, budget, runtime);
-    pattern += part.quoted ? escapeGlob(value) : value;
-  }
+  const pattern = await patternParts(word, session, fileSystem, budget, runtime);
+  budget.expansionOutput(codePointLength(pattern));
   return pattern;
 }
 
-function escapeRegex(character: string): string {
-  return /[\\^$.*+?()[\]{}|]/u.test(character) ? `\\${character}` : character;
-}
-
-export function matchesCasePattern(value: string, pattern: string): boolean {
-  let source = "^";
-  for (let index = 0; index < pattern.length; index += 1) {
-    const character = pattern[index] ?? "";
-    if (character === "\\" && pattern[index + 1] !== undefined) {
-      source += escapeRegex(pattern[++index] ?? "");
-    } else if (character === "*") source += "[\\s\\S]*";
-    else if (character === "?") source += "[\\s\\S]";
-    else if (character === "[") {
-      const close = pattern.indexOf("]", index + 1);
-      if (close < 0) source += "\\[";
-      else {
-        let body = pattern.slice(index + 1, close);
-        const negated = body.startsWith("!");
-        if (negated) body = body.slice(1);
-        const escaped = [...body].map((item, bodyIndex) =>
-          item === "\\" || item === "]" || (item === "^" && bodyIndex === 0) ? `\\${item}` : item).join("");
-        source += `[${negated ? "^" : ""}${escaped}]`;
-        index = close;
-      }
-    } else source += escapeRegex(character);
-  }
-  return new RegExp(`${source}$`, "u").test(value);
+export function matchesCasePattern(value: string, pattern: string, budget?: ShellBudget): boolean {
+  return matchesShellPattern(value, pattern, budget);
 }

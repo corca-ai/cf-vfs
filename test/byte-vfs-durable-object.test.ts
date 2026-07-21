@@ -684,6 +684,23 @@ describe("byte-oriented Durable Object filesystem", () => {
     });
   });
 
+  it("expands bounded parameter patterns and substrings through RPC", async () => {
+    const stub = workspace("shell-parameter-v3-rpc");
+    const result = await stub.executeText({
+      script: [
+        "VALUE=src/components/button.ts",
+        "BASE=${VALUE##*/}",
+        "STEM=${BASE%.ts}",
+        "printf '%s|%s|%s' \"${STEM//t/T}\" \"${VALUE:4:10}\" \"${VALUE: -2}\"",
+      ].join("\n"),
+    });
+    expect(result).toMatchObject({
+      exitCode: 0,
+      stdout: "buTTon|components|ts",
+      stderr: "",
+    });
+  });
+
   it("uses caller-provided byte streams for the remote streaming boundary", async () => {
     const stub = workspace("shell-stream-rpc");
     const input = streamFromChunks([new TextEncoder().encode("streamed")]);

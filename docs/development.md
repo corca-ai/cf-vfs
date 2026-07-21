@@ -77,6 +77,14 @@ split across chunks, partial EOF, cancellation, and line/buffer limits.
 The top-level executor owns fd 0 for its lifetime and must cancel any unread
 root input on every success, failure, or cancellation exit.
 
+Parameter patterns must go through the bounded matcher in `src/shell/pattern.ts`.
+Do not translate untrusted glob syntax to a JavaScript regular expression or
+reuse pathname matching rules: parameter matching is scalar, has no dotfile or
+separator rule, and must charge every candidate transition to the shared
+expansion budget. Preserve quoted word fragments before compiling a pattern,
+and charge materialized characters and fields after expansion. Add adversarial
+limit tests as well as the ordinary semantic matrix.
+
 Regenerate the fixture only after reviewing the semantic change:
 
 ```sh

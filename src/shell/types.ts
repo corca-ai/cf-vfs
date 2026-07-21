@@ -96,6 +96,9 @@ export interface ShellLimits {
   maxLineBytes: number;
   maxBufferedRecords: number;
   maxGlobMatches: number;
+  maxExpansionWork: number;
+  maxExpansionChars: number;
+  maxExpansionFields: number;
   maxMutations: number;
   deadlineMs: number;
   outputIdleTimeoutMs: number;
@@ -178,6 +181,9 @@ export interface ShellBudget {
   io(bytes: number): void;
   mutation(count?: number): void;
   glob(count?: number): void;
+  expansionWork(count?: number): void;
+  checkExpansionOutput(characters: number, fields?: number): void;
+  expansionOutput(characters: number, fields?: number): void;
   buffered(bytes: number): () => void;
   checkDeadline(): void;
 }

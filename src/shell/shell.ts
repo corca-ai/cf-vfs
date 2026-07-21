@@ -545,7 +545,9 @@ async function executeCompoundCommand(
             runtime.budget,
             expansion,
           );
-          if (matchesCasePattern(value, pattern)) return await runScript(clause.body, session, fds, runtime);
+          if (matchesCasePattern(value, pattern, runtime.budget)) {
+            return await runScript(clause.body, session, fds, runtime);
+          }
         }
       }
       return 0;

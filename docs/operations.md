@@ -40,6 +40,7 @@ Every execution owns one shared budget across all pipeline stages. Defaults:
 | AST nodes / nesting depth | 10,000 / 64 |
 | commands / steps / loop iterations | 10,000 / 100,000 / 10,000 |
 | function depth / source depth / one command-substitution output | 64 / 16 / 1 MiB |
+| expansion work / produced characters / produced fields | 10,000,000 / 1 MiB / 10,000 |
 | pipeline bytes | 8 MiB |
 | stdout / stderr | 8 MiB each |
 | materialized stdout + stderr | 8 MiB |
@@ -58,6 +59,15 @@ substitutions consume the same execution budget. Sourced units additionally
 share cumulative source-byte and AST-node allowances. Command substitutions
 also charge total I/O and their dedicated output limit; neither construct
 creates a fresh allowance.
+
+Parameter-pattern expansion uses a dynamic-programming matcher rather than a
+regular expression. Candidate matching, removal, and replacement charge the
+shared expansion-work counter. Every completed word expansion charges its
+materialized character and field counts, including values later subject to
+field splitting or pathname expansion. The limits are cumulative across child
+shell scopes and fail before returning a truncated expansion. A scalar pattern
+operand is also capped by the absolute character limit before it is copied into
+the matcher's code-point representation.
 
 `read -r` consumes fd 0 with a fatal streaming UTF-8 decoder. It retains at
 most the unread suffix of one upstream chunk plus one decoded line under the

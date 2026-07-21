@@ -148,6 +148,32 @@ consumer even when an upstream stream chunk contains several records.
 At execution completion, any unread root stdin is cancelled so a retained
 record suffix and an RPC producer cannot outlive the shell execution.
 
+Version 3 also extends scalar parameter expansion with:
+
+- `${name#pattern}`, `${name##pattern}`, `${name%pattern}`, and
+  `${name%%pattern}` for shortest or longest prefix/suffix removal;
+- `${name/pattern/replacement}` and `${name//pattern/replacement}` for the
+  first or every non-overlapping match; and
+- `${name:offset}` and `${name:offset:length}` for Unicode-code-point
+  substrings.
+
+The pattern language is the same bounded `*`, `?`, bracket/range, and escape
+language used by pathname expansion, but it never scans the filesystem and has
+no pathname-separator or leading-dot rule. Quoted pattern fragments are
+literal. Pattern and replacement words may contain nested expansion before
+matching. An omitted replacement deletes matches, and empty pattern matches do
+not cause repeated insertions.
+
+Substring operands trim surrounding whitespace and must then match the
+nonempty strict-decimal form `-?[0-9]+`; explicit empty operands and a leading
+`+` are rejected rather than interpreted as Bash arithmetic expressions. A
+negative offset counts from the end and clamps to zero; a non-negative offset
+past the end produces an empty value. Length must be non-negative. Negative
+lengths, arrays, indirect expansion, extglob,
+locale-dependent ranges, anchored replacement forms such as `${name/#p/r}`,
+and special `&` replacement interpolation are unsupported. Unquoted results
+then undergo the ordinary field-splitting and pathname-expansion phases.
+
 See [POSIX and Bash compatibility](posix-compatibility.md) for deterministic
 locale, glob, and redirection details and [the parser spike](parser-spike.md)
 for parser selection.

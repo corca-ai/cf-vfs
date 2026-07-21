@@ -10,13 +10,41 @@ export interface LiteralWordPart {
 }
 
 export type ParameterOperator = "-" | ":-" | "=" | ":=" | "+" | ":+" | "?" | ":?";
+export type ParameterDefaultOperator = ParameterOperator;
 
-export interface ParameterExpansion {
+/** The Version 2 AST shape, retained for parser API compatibility. */
+export interface BasicParameterExpansion {
   name: string;
   length: boolean;
   operator?: ParameterOperator;
   word?: ShellWord;
 }
+
+interface AdvancedParameterExpansionBase {
+  name: string;
+  length: false;
+  operator?: undefined;
+  word?: undefined;
+}
+
+export type ParameterExpansion =
+  | BasicParameterExpansion
+  | (AdvancedParameterExpansionBase & {
+    kind: "remove";
+    removalOperator: "#" | "##" | "%" | "%%";
+    pattern: ShellWord;
+  })
+  | (AdvancedParameterExpansionBase & {
+    kind: "replace";
+    all: boolean;
+    pattern: ShellWord;
+    replacement: ShellWord;
+  })
+  | (AdvancedParameterExpansionBase & {
+    kind: "substring";
+    offset: ShellWord;
+    substringLength?: ShellWord;
+  });
 
 export interface ParameterWordPart {
   kind: "parameter";
@@ -166,6 +194,39 @@ const UNSUPPORTED_RESERVED = new Set([
 
 function byteOffset(source: string, offset: number): number {
   return new TextEncoder().encode(source.slice(0, offset)).byteLength;
+}
+
+function topLevelDelimiters(source: string, delimiter: "/" | ":"): number[] {
+  const offsets: number[] = [];
+  let braces = 0;
+  let parentheses = 0;
+  let quote: "'" | "\"" | undefined;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === "\\" && quote !== "'") {
+      index += 1;
+      continue;
+    }
+    if (quote !== undefined) {
+      if (character === quote) quote = undefined;
+      continue;
+    }
+    if (character === "'" || character === "\"") {
+      quote = character;
+      continue;
+    }
+    if (source.startsWith("${", index)) {
+      braces += 1;
+      index += 1;
+    } else if (source.startsWith("$(", index)) {
+      parentheses += 1;
+      index += 1;
+    } else if (character === "(" && parentheses > 0) parentheses += 1;
+    else if (character === ")" && parentheses > 0) parentheses -= 1;
+    else if (character === "}" && braces > 0) braces -= 1;
+    else if (character === delimiter && braces === 0 && parentheses === 0) offsets.push(index);
+  }
+  return offsets;
 }
 
 class ParseContext {
@@ -521,19 +582,105 @@ class Lexer {
     if (length) throw this.error("parameter length expansion does not accept an operator", start);
     const operator = ([":-", ":=", ":+", ":?", "-", "=", "+", "?"] as const)
       .find((candidate) => this.source.startsWith(candidate, this.offset));
-    if (operator === undefined) throw this.error("unsupported parameter expansion operator", this.offset);
-    this.offset += operator.length;
-    const operandStart = this.offset;
-    const close = this.findParameterClose();
-    const operandSource = this.source.slice(operandStart, close);
-    const word = parseExpansionWord(
-      operandSource,
-      this.context,
-      this.absoluteOffset(operandStart),
-      this.depth + 1,
-    );
-    this.offset = close + 1;
-    return { name, length: false, operator, word };
+    if (operator !== undefined) {
+      this.offset += operator.length;
+      const operandStart = this.offset;
+      const close = this.findParameterClose();
+      const word = parseExpansionWord(
+        this.source.slice(operandStart, close),
+        this.context,
+        this.absoluteOffset(operandStart),
+        this.depth + 1,
+      );
+      this.offset = close + 1;
+      return { name, length: false, operator, word };
+    }
+    if (name === "@") {
+      throw this.error("array-style parameter operations are not supported", start);
+    }
+    const removal = (["##", "%%", "#", "%"] as const)
+      .find((candidate) => this.source.startsWith(candidate, this.offset));
+    if (removal !== undefined) {
+      this.offset += removal.length;
+      const patternStart = this.offset;
+      const close = this.findParameterClose();
+      const pattern = parseExpansionWord(
+        this.source.slice(patternStart, close),
+        this.context,
+        this.absoluteOffset(patternStart),
+        this.depth + 1,
+      );
+      this.offset = close + 1;
+      return { kind: "remove", name, length: false, removalOperator: removal, pattern };
+    }
+    if (this.source[this.offset] === "/") {
+      const all = this.source[this.offset + 1] === "/";
+      this.offset += all ? 2 : 1;
+      const patternStart = this.offset;
+      const close = this.findParameterClose();
+      const contents = this.source.slice(patternStart, close);
+      const separator = topLevelDelimiters(contents, "/")[0];
+      const patternSource = separator === undefined ? contents : contents.slice(0, separator);
+      const replacementSource = separator === undefined ? "" : contents.slice(separator + 1);
+      if (patternSource.startsWith("#") || patternSource.startsWith("%")) {
+        throw this.error("anchored parameter replacement is not supported", patternStart);
+      }
+      const pattern = parseExpansionWord(
+        patternSource,
+        this.context,
+        this.absoluteOffset(patternStart),
+        this.depth + 1,
+      );
+      const replacementStart = patternStart + (separator ?? contents.length) + (separator === undefined ? 0 : 1);
+      const replacement = parseExpansionWord(
+        replacementSource,
+        this.context,
+        this.absoluteOffset(replacementStart),
+        this.depth + 1,
+      );
+      this.offset = close + 1;
+      return { kind: "replace", name, length: false, all, pattern, replacement };
+    }
+    if (this.source[this.offset] === ":") {
+      this.offset += 1;
+      const offsetStart = this.offset;
+      const close = this.findParameterClose();
+      const contents = this.source.slice(offsetStart, close);
+      const separators = topLevelDelimiters(contents, ":");
+      if (separators.length > 1) {
+        throw this.error("substring expansion accepts at most one length", offsetStart);
+      }
+      const separator = separators[0];
+      const offsetSource = separator === undefined ? contents : contents.slice(0, separator);
+      const lengthSource = separator === undefined ? undefined : contents.slice(separator + 1);
+      if (offsetSource.trim().length === 0 || lengthSource?.trim().length === 0) {
+        throw this.error("substring offset and length must not be empty", offsetStart);
+      }
+      const offset = parseExpansionWord(
+        offsetSource,
+        this.context,
+        this.absoluteOffset(offsetStart),
+        this.depth + 1,
+      );
+      const lengthStart = offsetStart + (separator ?? contents.length) + 1;
+      const substringLength = lengthSource === undefined
+        ? undefined
+        : parseExpansionWord(
+          lengthSource,
+          this.context,
+          this.absoluteOffset(lengthStart),
+          this.depth + 1,
+        );
+      this.offset = close + 1;
+      return {
+        kind: "substring",
+        name,
+        length: false,
+        offset,
+        ...(substringLength === undefined ? {} : { substringLength }),
+      };
+    }
+    throw this.error("unsupported parameter expansion operator", this.offset);
   }
 
   private findParameterClose(): number {
@@ -1129,8 +1276,23 @@ function validateWordDepth(word: ShellWord, maximumDepth: number, depth: number)
   if (depth > maximumDepth) throw new VfsError("E2BIG", "shell nesting depth limit exceeded");
   for (const part of word.parts) {
     if (part.kind === "command") validateScriptDepth(part.script, maximumDepth, depth + 1);
-    else if (part.kind === "parameter" && part.expansion.word !== undefined) {
-      validateWordDepth(part.expansion.word, maximumDepth, depth + 1);
+    else if (part.kind === "parameter") {
+      const expansion = part.expansion;
+      if (!("kind" in expansion)) {
+        if (expansion.word !== undefined) {
+          validateWordDepth(expansion.word, maximumDepth, depth + 1);
+        }
+      } else if (expansion.kind === "remove") {
+        validateWordDepth(expansion.pattern, maximumDepth, depth + 1);
+      } else if (expansion.kind === "replace") {
+        validateWordDepth(expansion.pattern, maximumDepth, depth + 1);
+        validateWordDepth(expansion.replacement, maximumDepth, depth + 1);
+      } else if (expansion.kind === "substring") {
+        validateWordDepth(expansion.offset, maximumDepth, depth + 1);
+        if (expansion.substringLength !== undefined) {
+          validateWordDepth(expansion.substringLength, maximumDepth, depth + 1);
+        }
+      }
     }
   }
 }
