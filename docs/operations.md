@@ -79,6 +79,21 @@ owned by a scope terminated for nounset is aborted rather than publishing its
 partial buffered output, including when a parent later observes an isolated
 scope's status.
 
+Errexit adds no allowance and never resets a shared budget. Its suppression is
+an explicit AST evaluation context passed through lists, pipelines, compound
+commands, functions, and sourced units. A triggering ordinary status requests
+shell flow only after the command's stdout/stderr settle; enclosing descriptor
+owners then close normally before the flow leaves them. Root completion and RPC
+therefore preserve the exact status and all backpressure. Multi-stage
+pipelines settle every stage and edge before `pipefail` selects a status.
+Cancellation, deadline, idle timeout, output or
+buffer overflow, nounset, and unexpected invariants continue through their
+existing abort paths instead of being converted into catchable errexit flow.
+Internal evaluation results also carry whether a non-zero status came from a
+suppressed position. Non-subshell compounds preserve that provenance, while a
+function, source, subshell, or multi-stage pipeline boundary deliberately
+re-exposes its returned status for the caller's errexit decision.
+
 Double-bracket boolean, grouping, and predicate nodes consume the shared AST,
 nesting, step, and expansion budgets. Operand expansion is scalar, so it never
 starts a pathname scan. Equality patterns reuse the dynamic-programming scalar

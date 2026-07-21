@@ -43,6 +43,7 @@ export interface ShellSession {
   exitRequested: boolean;
   requestedExitCode: number;
   pipefail: boolean;
+  errexit?: boolean;
   nounset?: boolean;
   functions: Map<string, FunctionDefinitionNode>;
   functionDepth: number;
@@ -67,6 +68,7 @@ export interface ShellLocalGetoptsFrame {
 
 export type ShellFlow =
   | { type: "none" }
+  | { type: "errexit" }
   | { type: "return"; status: number }
   | { type: "break" | "continue"; levels: number };
 

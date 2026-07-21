@@ -60,6 +60,7 @@ function cloneSession(session: ShellSession): ShellSession {
     exitRequested: false,
     requestedExitCode: 0,
     pipefail: session.pipefail,
+    errexit: session.errexit === true,
     nounset: session.nounset === true,
     functions: new Map(session.functions),
     functionDepth: session.functionDepth,
@@ -86,15 +87,15 @@ function formatError(error: VfsError): string {
 }
 
 async function runIsolatedShellScope(
-  run: () => Promise<number>,
+  run: () => Promise<EvaluationResult>,
   stderr: ShellSink,
-): Promise<number> {
+): Promise<EvaluationResult> {
   try {
     return await run();
   } catch (error) {
     if (!(error instanceof ShellNounsetError)) throw error;
     await stderr.write(new TextEncoder().encode(`${formatError(error)}\n`));
-    return statusFor(error);
+    return evaluationResult(statusFor(error));
   }
 }
 
@@ -123,6 +124,44 @@ interface Runtime {
   signal: AbortSignal;
   limits: ShellLimits;
   parserBudget: ParserBudget;
+}
+
+interface EvaluationContext {
+  readonly errexitSuppressed: boolean;
+}
+
+interface EvaluationResult {
+  readonly status: number;
+  readonly errexitEligible: boolean;
+}
+
+const ACTIVE_EVALUATION_CONTEXT: EvaluationContext = Object.freeze({
+  errexitSuppressed: false,
+});
+const SUPPRESSED_EVALUATION_CONTEXT: EvaluationContext = Object.freeze({
+  errexitSuppressed: true,
+});
+
+function suppressErrexit(context: EvaluationContext): EvaluationContext {
+  return context.errexitSuppressed ? context : SUPPRESSED_EVALUATION_CONTEXT;
+}
+
+function evaluationResult(status: number, errexitEligible = true): EvaluationResult {
+  return { status, errexitEligible };
+}
+
+function requestErrexit(
+  status: number,
+  session: ShellSession,
+  context: EvaluationContext,
+): void {
+  if (status !== 0
+    && session.errexit === true
+    && !context.errexitSuppressed
+    && !session.exitRequested
+    && session.flow.type === "none") {
+    session.flow = { type: "errexit" };
+  }
 }
 
 interface ParserBudget {
@@ -226,6 +265,7 @@ function expansionRuntime(fds: ShellFileDescriptors, runtime: Runtime): Expansio
         account: (bytes) => runtime.budget.io(bytes),
       });
       const child = cloneSession(session);
+      child.errexit = false;
       const childFds: ShellFileDescriptors = {
         0: fds[0],
         1: output.sink,
@@ -234,7 +274,13 @@ function expansionRuntime(fds: ShellFileDescriptors, runtime: Runtime): Expansio
       const completed = (async () => {
         try {
           return await runIsolatedShellScope(
-            async () => await runScript(script, child, childFds, runtime),
+            async () => await runScript(
+              script,
+              child,
+              childFds,
+              runtime,
+              ACTIVE_EVALUATION_CONTEXT,
+            ),
             fds[2],
           );
         } finally {
@@ -243,14 +289,14 @@ function expansionRuntime(fds: ShellFileDescriptors, runtime: Runtime): Expansio
       })();
       let retained: CollectedSubstitution | undefined;
       try {
-        const [collected, status] = await Promise.all([
+        const [collected, result] = await Promise.all([
           collectSubstitutionOutput(output.readable, runtime).then((value) => {
             retained = value;
             return value;
           }),
           completed,
         ]);
-        lastStatus = status;
+        lastStatus = result.status;
         let value: string;
         try {
           value = new TextDecoder("utf-8", { fatal: true }).decode(collected.bytes);
@@ -343,6 +389,7 @@ async function runFunction(
   session: ShellSession,
   fds: ShellFileDescriptors,
   runtime: Runtime,
+  context: EvaluationContext,
 ): Promise<number> {
   if (session.functionDepth >= runtime.limits.maxFunctionDepth) {
     throw new VfsError("E2BIG", "shell function recursion limit exceeded");
@@ -355,13 +402,14 @@ async function runFunction(
   session.localFrames.push(frame);
   session.localGetoptsFrames.push(getoptsFrame);
   try {
-    let status = await runCommandNode(
+    let status = (await runCommandNode(
       definition.body,
       session,
       { 0: fds[0], 1: fds[1].clone(), 2: fds[2].clone() },
       runtime,
       false,
-    );
+      context,
+    )).status;
     if (session.flow.type === "return") {
       status = session.flow.status;
       session.flow = { type: "none" };
@@ -388,6 +436,7 @@ async function runSourcedUnit(
   session: ShellSession,
   fds: ShellFileDescriptors,
   runtime: Runtime,
+  context: EvaluationContext,
 ): Promise<number> {
   if (session.sourceDepth >= runtime.limits.maxSourceDepth) {
     throw new VfsError("E2BIG", "shell source nesting limit exceeded", path);
@@ -397,7 +446,7 @@ async function runSourcedUnit(
   if (args.length > 0) session.args = [...args];
   session.sourceDepth += 1;
   try {
-    let status = await runScript(parsed, session, fds, runtime);
+    let status = (await runScript(parsed, session, fds, runtime, context)).status;
     if (session.flow.type === "return") {
       status = session.flow.status;
       session.flow = { type: "none" };
@@ -414,6 +463,7 @@ async function executeSimpleCommand(
   session: ShellSession,
   fds: ShellFileDescriptors,
   runtime: Runtime,
+  context: EvaluationContext,
 ): Promise<number> {
   if (prepared.argv.length === 0) {
     for (const value of prepared.assignments) session.env.set(value.name, value.value);
@@ -433,7 +483,7 @@ async function executeSimpleCommand(
   try {
     let exitCode: number;
     if (definition !== undefined) {
-      exitCode = await runFunction(definition, argv, session, fds, runtime);
+      exitCode = await runFunction(definition, argv, session, fds, runtime, context);
     } else {
       const command = runtime.commands.get(name);
       if (command === undefined) {
@@ -448,7 +498,7 @@ async function executeSimpleCommand(
           budget: runtime.budget,
           policy: runtime.policy,
           executeSource: async (source, path, sourceArgs, sourceFds) =>
-            await runSourcedUnit(source, path, sourceArgs, session, sourceFds, runtime),
+            await runSourcedUnit(source, path, sourceArgs, session, sourceFds, runtime, context),
         },
         argv,
         fds,
@@ -638,10 +688,11 @@ async function runLoopBody(
   session: ShellSession,
   fds: ShellFileDescriptors,
   runtime: Runtime,
-): Promise<{ status: number; action: "break" | "continue" | "propagate" | "none" }> {
+  context: EvaluationContext,
+): Promise<{ result: EvaluationResult; action: "break" | "continue" | "propagate" | "none" }> {
   runtime.budget.loop();
-  const status = await runScript(body, session, fds, runtime);
-  return { status, action: consumeLoopFlow(session) };
+  const result = await runScript(body, session, fds, runtime, context);
+  return { result, action: consumeLoopFlow(session) };
 }
 
 async function executeCompoundCommand(
@@ -650,35 +701,53 @@ async function executeCompoundCommand(
   fds: ShellFileDescriptors,
   runtime: Runtime,
   expansion: ExpansionRuntime,
-): Promise<number> {
+  context: EvaluationContext,
+): Promise<EvaluationResult> {
   switch (node.type) {
     case "group": {
       const target = node.subshell ? cloneSession(session) : session;
-      return await runScript(node.body, target, fds, runtime);
+      const result = await runScript(node.body, target, fds, runtime, context);
+      return node.subshell ? evaluationResult(result.status) : result;
     }
     case "if": {
       for (const branch of node.branches) {
-        const condition = await runScript(branch.condition, session, fds, runtime);
+        const condition = await runScript(
+          branch.condition,
+          session,
+          fds,
+          runtime,
+          suppressErrexit(context),
+        );
         if (session.exitRequested || session.flow.type !== "none") return condition;
-        if (condition === 0) return await runScript(branch.body, session, fds, runtime);
+        if (condition.status === 0) {
+          return await runScript(branch.body, session, fds, runtime, context);
+        }
       }
-      return node.alternate === undefined ? 0 : await runScript(node.alternate, session, fds, runtime);
+      return node.alternate === undefined
+        ? evaluationResult(0)
+        : await runScript(node.alternate, session, fds, runtime, context);
     }
     case "loop": {
-      let status = 0;
+      let result = evaluationResult(0);
       session.loopDepth += 1;
       try {
         while (true) {
-          const condition = await runScript(node.condition, session, fds, runtime);
+          const condition = await runScript(
+            node.condition,
+            session,
+            fds,
+            runtime,
+            suppressErrexit(context),
+          );
           if (session.exitRequested || session.flow.type !== "none") return condition;
-          if ((condition === 0) === node.until) break;
-          const result = await runLoopBody(node.body, session, fds, runtime);
-          status = result.status;
-          if (result.action === "break") break;
-          if (result.action === "propagate") return status;
-          if (session.exitRequested || flowActive(session)) return status;
+          if ((condition.status === 0) === node.until) break;
+          const iteration = await runLoopBody(node.body, session, fds, runtime, context);
+          result = iteration.result;
+          if (iteration.action === "break") break;
+          if (iteration.action === "propagate") return result;
+          if (session.exitRequested || flowActive(session)) return result;
         }
-        return status;
+        return result;
       } finally {
         session.loopDepth -= 1;
       }
@@ -687,18 +756,18 @@ async function executeCompoundCommand(
       const values = node.words === undefined
         ? [...session.args]
         : await expandWords(node.words, session, runtime.fileSystem, runtime.budget, expansion);
-      let status = 0;
+      let result = evaluationResult(0);
       session.loopDepth += 1;
       try {
         for (const value of values) {
           session.env.set(node.name, value);
-          const result = await runLoopBody(node.body, session, fds, runtime);
-          status = result.status;
-          if (result.action === "break") break;
-          if (result.action === "propagate") return status;
-          if (session.exitRequested || flowActive(session)) return status;
+          const iteration = await runLoopBody(node.body, session, fds, runtime, context);
+          result = iteration.result;
+          if (iteration.action === "break") break;
+          if (iteration.action === "propagate") return result;
+          if (session.exitRequested || flowActive(session)) return result;
         }
-        return status;
+        return result;
       } finally {
         session.loopDepth -= 1;
       }
@@ -721,17 +790,21 @@ async function executeCompoundCommand(
             expansion,
           );
           if (matchesCasePattern(value, pattern, runtime.budget)) {
-            return await runScript(clause.body, session, fds, runtime);
+            return await runScript(clause.body, session, fds, runtime, context);
           }
         }
       }
-      return 0;
+      return evaluationResult(0);
     }
     case "arithmetic-command": {
-      return evaluateArithmetic(node.expression, session.env, session.nounset === true) === 0n ? 1 : 0;
+      return evaluationResult(
+        evaluateArithmetic(node.expression, session.env, session.nounset === true) === 0n ? 1 : 0,
+      );
     }
     case "double-bracket": {
-      return await evaluateConditional(node.expression, session, runtime, expansion) ? 0 : 1;
+      return evaluationResult(
+        await evaluateConditional(node.expression, session, runtime, expansion) ? 0 : 1,
+      );
     }
   }
 }
@@ -743,16 +816,17 @@ async function executeCommandNode(
   fds: ShellFileDescriptors,
   runtime: Runtime,
   expansion: ExpansionRuntime,
-): Promise<number> {
+  context: EvaluationContext,
+): Promise<EvaluationResult> {
   if (node.type === "command") {
     if (prepared === undefined) throw new VfsError("EIO", "simple command was not expanded");
-    return await executeSimpleCommand(prepared, session, fds, runtime);
+    return evaluationResult(await executeSimpleCommand(prepared, session, fds, runtime, context));
   }
   if (node.type === "function-definition") {
     session.functions.set(node.name, node);
-    return 0;
+    return evaluationResult(0);
   }
-  return await executeCompoundCommand(node, session, fds, runtime, expansion);
+  return await executeCompoundCommand(node, session, fds, runtime, expansion, context);
 }
 
 async function runCommandNode(
@@ -761,7 +835,8 @@ async function runCommandNode(
   initialFds: ShellFileDescriptors,
   runtime: Runtime,
   cancelUnreadInput: boolean,
-): Promise<number> {
+  context: EvaluationContext,
+): Promise<EvaluationResult> {
   let fds = initialFds;
   let redirected: ReadonlySet<1 | 2> = new Set();
   const fallbackStderr = initialFds[2].clone();
@@ -793,14 +868,22 @@ async function runCommandNode(
     semanticStderr = fds[2];
     redirected = applied.redirected;
     shouldCancelInput ||= applied.inputRedirected;
-    const status = await executeCommandNode(node, prepared, session, fds, runtime, expansion);
+    const status = await executeCommandNode(
+      node,
+      prepared,
+      session,
+      fds,
+      runtime,
+      expansion,
+      context,
+    );
     semanticStderr = fallbackStderr;
     await closeDescriptors(fds);
     return status;
   } catch (error) {
     if (isDownstreamClosedError(error)) {
       await Promise.allSettled([fds[1].close(), fds[2].close()]);
-      return 0;
+      return evaluationResult(0);
     }
     if (!isVfsError(error)) {
       await Promise.allSettled([fds[1].abort(error), fds[2].abort(error)]);
@@ -819,7 +902,7 @@ async function runCommandNode(
     } finally {
       await Promise.allSettled([fds[1].close(), fds[2].close()]);
     }
-    return statusFor(error);
+    return evaluationResult(statusFor(error));
   } finally {
     if (shouldCancelInput) {
       await fds[0].cancel(new VfsError("EPIPE", "command stopped reading input")).catch(() => undefined);
@@ -834,12 +917,15 @@ async function runPipeline(
   session: ShellSession,
   outerFds: ShellFileDescriptors,
   runtime: Runtime,
-): Promise<number> {
+  context: EvaluationContext,
+): Promise<EvaluationResult> {
   const stages: Array<{
     node: CommandNode;
     session: ShellSession;
     fds: ShellFileDescriptors;
+    context: EvaluationContext;
   }> = [];
+  const pipelineContext = pipeline.negated ? suppressErrexit(context) : context;
   let input = outerFds[0];
   for (const [index, node] of pipeline.commands.entries()) {
     const last = index === pipeline.commands.length - 1;
@@ -860,30 +946,54 @@ async function runPipeline(
       node,
       session: pipeline.commands.length === 1 ? session : cloneSession(session),
       fds: { 0: input, 1: output, 2: outerFds[2].clone() },
+      context: index === pipeline.commands.length - 1
+        ? pipelineContext
+        : suppressErrexit(pipelineContext),
     });
     if (nextInput !== undefined) input = nextInput;
   }
   const isolated = pipeline.commands.length > 1
     || (pipeline.commands[0]?.type === "group" && pipeline.commands[0].subshell);
-  const statuses = await Promise.all(stages.map((stage, index) => isolated
+  const results = await Promise.all(stages.map((stage, index) => isolated
     ? runIsolatedShellScope(
-      async () => await runCommandNode(stage.node, stage.session, stage.fds, runtime, index > 0),
+      async () => await runCommandNode(
+        stage.node,
+        stage.session,
+        stage.fds,
+        runtime,
+        index > 0,
+        stage.context,
+      ),
       outerFds[2],
     )
-    : runCommandNode(stage.node, stage.session, stage.fds, runtime, index > 0)));
-  let status = statuses.at(-1) ?? 0;
+    : runCommandNode(
+      stage.node,
+      stage.session,
+      stage.fds,
+      runtime,
+      index > 0,
+      stage.context,
+    )));
+  let selected = results.at(-1) ?? evaluationResult(0);
   if (session.pipefail) {
-    for (let index = statuses.length - 1; index >= 0; index -= 1) {
-      const candidate = statuses[index] ?? 0;
-      if (candidate !== 0) {
-        status = candidate;
+    for (let index = results.length - 1; index >= 0; index -= 1) {
+      const candidate = results[index];
+      if (candidate !== undefined && candidate.status !== 0) {
+        selected = candidate;
         break;
       }
     }
   }
-  if (pipeline.negated) status = status === 0 ? 1 : 0;
-  session.lastExitCode = status;
-  return status;
+  const status = pipeline.negated ? (selected.status === 0 ? 1 : 0) : selected.status;
+  const result = evaluationResult(
+    status,
+    !pipelineContext.errexitSuppressed
+      && !pipeline.negated
+      && (pipeline.commands.length > 1 || selected.errexitEligible),
+  );
+  session.lastExitCode = result.status;
+  if (result.errexitEligible) requestErrexit(result.status, session, pipelineContext);
+  return result;
 }
 
 async function runAndOr(
@@ -891,15 +1001,29 @@ async function runAndOr(
   session: ShellSession,
   fds: ShellFileDescriptors,
   runtime: Runtime,
-): Promise<number> {
-  let status = await runPipeline(node.first, session, fds, runtime);
-  for (const item of node.rest) {
+  context: EvaluationContext,
+): Promise<EvaluationResult> {
+  let result = await runPipeline(
+    node.first,
+    session,
+    fds,
+    runtime,
+    node.rest.length === 0 ? context : suppressErrexit(context),
+  );
+  for (const [index, item] of node.rest.entries()) {
     if (session.exitRequested || session.flow.type !== "none") break;
-    if ((item.operator === "&&" && status === 0) || (item.operator === "||" && status !== 0)) {
-      status = await runPipeline(item.pipeline, session, fds, runtime);
+    if ((item.operator === "&&" && result.status === 0)
+      || (item.operator === "||" && result.status !== 0)) {
+      result = await runPipeline(
+        item.pipeline,
+        session,
+        fds,
+        runtime,
+        index === node.rest.length - 1 ? context : suppressErrexit(context),
+      );
     }
   }
-  return status;
+  return result;
 }
 
 async function runScript(
@@ -907,16 +1031,17 @@ async function runScript(
   session: ShellSession,
   fds: ShellFileDescriptors,
   runtime: Runtime,
-): Promise<number> {
-  let status = 0;
+  context: EvaluationContext = ACTIVE_EVALUATION_CONTEXT,
+): Promise<EvaluationResult> {
+  let result = evaluationResult(0);
   for (const list of script.lists) {
     runtime.budget.step();
-    status = await runAndOr(list, session, fds, runtime);
-    session.lastExitCode = status;
-    if (session.exitRequested) return session.requestedExitCode;
-    if (session.flow.type !== "none") return status;
+    result = await runAndOr(list, session, fds, runtime, context);
+    session.lastExitCode = result.status;
+    if (session.exitRequested) return evaluationResult(session.requestedExitCode);
+    if (session.flow.type !== "none") return result;
   }
-  return status;
+  return result;
 }
 
 export class Shell {
@@ -1011,6 +1136,7 @@ export class Shell {
       exitRequested: false,
       requestedExitCode: 0,
       pipefail: false,
+      errexit: false,
       nounset: false,
       functions: new Map(),
       functionDepth: 0,
@@ -1043,7 +1169,7 @@ export class Shell {
           return { exitCode: parseError.code === "EINVAL" ? 2 : 1 };
         }
         if (parsed === undefined) throw new VfsError("EIO", "parser produced no script");
-        const exitCode = await runScript(parsed, session, rootFds, {
+        const result = await runScript(parsed, session, rootFds, {
           commands: this.commands,
           fileSystem: scoped,
           budget,
@@ -1053,7 +1179,7 @@ export class Shell {
           parserBudget,
         });
         await closeDescriptors(rootFds);
-        return { exitCode };
+        return { exitCode: result.status };
       } catch (error) {
         if (!isVfsError(error)) {
           await Promise.allSettled([rootFds[1].abort(error), rootFds[2].abort(error)]);

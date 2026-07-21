@@ -93,6 +93,20 @@ or the top-level execution. The boundary reports the diagnostic, preserves
 status 1, and settles descriptors. Do not add errexit-style suppression rules
 to nounset.
 
+Errexit suppression belongs to the AST evaluation context. Pass it through
+groups, functions, sourced units, and isolated scopes; do not infer it from a
+command name or inspect parent syntax from a leaf command. Only a completed
+pipeline requests errexit, after descriptor settlement and after applying
+`pipefail` and `!`. Non-final `&&`/`||` pipelines, loop and if conditions,
+non-final pipeline stages, and inverted pipelines receive a suppressed context.
+Keep explicit `return`/loop/exit flow distinct, and clear errexit only at the
+documented command-substitution clone boundary.
+Preserve the result's errexit-eligibility bit through non-subshell compound
+commands so a protected final failure is not retriggered at a group, `if`,
+`case`, or loop boundary. Reset eligibility at function, source, subshell, and
+multi-stage pipeline boundaries, where the returned status is a new command or
+pipeline result.
+
 Keep `[[ ... ]]` in its dedicated parser AST. Do not lower it to the `test`
 built-in or pre-expand it into argv: quote provenance on the right side of
 `==`/`!=` determines which pattern fragments are active, and boolean branches

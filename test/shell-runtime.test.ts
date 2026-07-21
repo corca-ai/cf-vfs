@@ -75,9 +75,10 @@ describe("stream-first shell runtime", () => {
   it("commits normal-close redirections even for a non-zero command", async () => {
     const { fileSystem, shell } = createBashHarness();
     await fileSystem.writeFile("/file", "old");
-    const result = await shell.executeText({ script: "false > /file" });
+    const result = await shell.executeText({ script: "set -e; false > /file; touch /after" });
     expect(result.exitCode).toBe(1);
     expect((await fileSystem.stat("/file")).sizeBytes).toBe(0);
+    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
   });
 
   it("honors left-to-right fd duplication", async () => {
@@ -144,11 +145,14 @@ describe("stream-first shell runtime", () => {
     });
     const { fileSystem, shell } = createBashHarness({ extraCommands: [mutateTarget] });
     await fileSystem.writeFile("/target", "old");
-    const result = await shell.executeText({ script: "mutate-target > /target" });
+    const result = await shell.executeText({
+      script: "set -e; mutate-target > /target; touch /after",
+    });
     expect(result).toMatchObject({ exitCode: 1 });
     expect(result.stderr).toContain("mutation token");
     expect(new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/target").stream, 16)))
       .toBe("old");
+    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
   });
 
   it("keeps parent shell state for ordinary builtins but clones pipeline stages", async () => {
@@ -457,13 +461,39 @@ describe("stream-first shell runtime", () => {
     expect(status.exitCode).toBe(0);
   });
 
+  it("settles both backpressured outputs before resolving an errexit status", async () => {
+    const failAfterOutput = defineCommand("fail-after-output", async (_context, _argv, fds) => {
+      const chunk = new Uint8Array(128 * 1024);
+      await Promise.all([fds[1].write(chunk), fds[2].write(chunk)]);
+      return 7;
+    });
+    const { fileSystem, shell } = createBashHarness({ extraCommands: [failAfterOutput] });
+    const execution = shell.executeStream({
+      script: "set -e; fail-after-output; touch /after",
+    });
+    let completed = false;
+    void execution.completed.then(() => { completed = true; });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    const [output, error, status] = await Promise.all([
+      readAllBytes(execution.stdout, 256 * 1024),
+      readAllBytes(execution.stderr, 256 * 1024),
+      execution.completed,
+    ]);
+    expect(output.byteLength).toBe(128 * 1024);
+    expect(error.byteLength).toBe(128 * 1024);
+    expect(status.exitCode).toBe(7);
+    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
+  });
+
   it("treats a downstream head close as a successful pipeline edge under pipefail", async () => {
     const { fileSystem, shell } = createBashHarness({
       fileSystem: new MemoryFileSystem({ chunkBytes: 1024 }),
     });
     await fileSystem.writeFile("/many", "first\n" + "next\n".repeat(1000));
     const result = await shell.executeText({
-      script: "set -o pipefail; cat /many | head -n 1; printf '%s\\n' $?",
+      script: "set -e; set -o pipefail; cat /many | head -n 1; printf '%s\\n' $?",
     });
     expect(result).toMatchObject({ exitCode: 0, stdout: "first\n0\n", stderr: "" });
   });
@@ -476,10 +506,13 @@ describe("stream-first shell runtime", () => {
     });
     const { fileSystem, shell } = createBashHarness({ extraCommands: [spam] });
     await fileSystem.writeFile("/target", "old");
-    const result = await shell.executeText({ script: "spam > /target" });
+    const result = await shell.executeText({
+      script: "set -e; spam > /target; touch /after",
+    });
     expect(result.exitCode).toBe(1);
     expect(new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/target").stream, 16)))
       .toBe("old");
+    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
   });
 
   it("rolls back an atomic redirection when the caller cancels execution", async () => {
@@ -497,7 +530,9 @@ describe("stream-first shell runtime", () => {
     });
     const { fileSystem, shell } = createBashHarness({ extraCommands: [waiting] });
     await fileSystem.writeFile("/target", "old");
-    const execution = shell.executeStream({ script: "waiting > /target" });
+    const execution = shell.executeStream({
+      script: "set -e; waiting > /target; touch /after",
+    });
     const stdout = readAllBytes(execution.stdout, 16).catch(() => new Uint8Array());
     const stderr = readAllBytes(execution.stderr, 1024).catch(() => new Uint8Array());
     await started;
@@ -506,6 +541,7 @@ describe("stream-first shell runtime", () => {
     await Promise.all([stdout, stderr]);
     expect(new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/target").stream, 16)))
       .toBe("old");
+    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
   });
 
   it("wakes a backpressured producer when the execution deadline expires", async () => {
@@ -515,11 +551,12 @@ describe("stream-first shell runtime", () => {
     const fileSystem = new MemoryFileSystem();
     const shell = new Shell({
       fileSystem,
-      commands: [produce],
+      commands: [...defaultShellCommands, produce],
       limits: { deadlineMs: 20, maxStdoutBytes: 64 * 1024 * 1024 },
     });
-    const execution = shell.executeStream({ script: "produce" });
+    const execution = shell.executeStream({ script: "set -e; produce; touch /after" });
     await expect(execution.completed).resolves.toEqual({ exitCode: 1 });
+    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
   });
 
   it("wakes a pending stdin read on cancellation", async () => {
@@ -529,7 +566,7 @@ describe("stream-first shell runtime", () => {
       limits: { deadlineMs: 1_000 },
     });
     const execution = shell.executeStream({
-      script: "cat",
+      script: "set -e; cat; touch /after",
       stdin: new ReadableStream<Uint8Array>({ pull: () => new Promise(() => undefined) }),
     });
     const stdout = readAllBytes(execution.stdout, 16).catch(() => new Uint8Array());
@@ -554,7 +591,7 @@ describe("stream-first shell runtime", () => {
       return 0;
     });
     const { shell } = createBashHarness({ extraCommands: [waitForCancel] });
-    const execution = shell.executeStream({ script: "wait-for-cancel" });
+    const execution = shell.executeStream({ script: "set -e; wait-for-cancel; touch /after" });
     const reader = execution.stdout.getReader();
     await reader.read();
     await reader.cancel();
@@ -566,17 +603,19 @@ describe("stream-first shell runtime", () => {
     const produce = defineCommand("produce", async (_context, _argv, fds) => {
       while (true) await fds[1].write(new Uint8Array(128 * 1024));
     });
+    const fileSystem = new MemoryFileSystem();
     const shell = new Shell({
-      fileSystem: new MemoryFileSystem(),
-      commands: [produce],
+      fileSystem,
+      commands: [...defaultShellCommands, produce],
       limits: {
         deadlineMs: 1_000,
         outputIdleTimeoutMs: 20,
         maxStdoutBytes: 64 * 1024 * 1024,
       },
     });
-    await expect(shell.executeStream({ script: "produce" }).completed)
+    await expect(shell.executeStream({ script: "set -e; produce; touch /after" }).completed)
       .resolves.toEqual({ exitCode: 1 });
+    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
   });
 
   it("rejects completed for a command invariant failure", async () => {
@@ -584,7 +623,7 @@ describe("stream-first shell runtime", () => {
       throw new Error("command invariant failed");
     });
     const { shell } = createBashHarness({ extraCommands: [broken] });
-    const execution = shell.executeStream({ script: "broken" });
+    const execution = shell.executeStream({ script: "set -e; broken; touch /after" });
     await expect(execution.completed).rejects.toThrow("command invariant failed");
     await expect(readAllBytes(execution.stdout, 1024)).rejects.toThrow("command invariant failed");
     await expect(readAllBytes(execution.stderr, 1024)).rejects.toThrow("command invariant failed");
@@ -595,15 +634,17 @@ describe("stream-first shell runtime", () => {
       await fds[1].write(new Uint8Array(1024));
       return 0;
     });
+    const fileSystem = new MemoryFileSystem();
     const shell = new Shell({
-      fileSystem: new MemoryFileSystem(),
-      commands: [produce],
+      fileSystem,
+      commands: [...defaultShellCommands, produce],
       limits: { maxStdoutBytes: 512 },
     });
-    await expect(shell.executeText({ script: "produce" })).resolves.toMatchObject({
+    await expect(shell.executeText({ script: "set -e; produce; touch /after" })).resolves.toMatchObject({
       exitCode: 1,
       stdout: "",
     });
+    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
   });
 
   it("settles command-budget overflow and rejects invalid plugin exit statuses", async () => {

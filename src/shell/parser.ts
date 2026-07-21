@@ -1,7 +1,7 @@
 import { VfsError } from "../core/errors.js";
 import { ArithmeticSyntaxError, parseArithmetic, type ArithmeticNode } from "./arithmetic.js";
 
-export const BASH_COMPATIBILITY_VERSION = 3 as const;
+export const BASH_COMPATIBILITY_VERSION = 4 as const;
 
 export interface LiteralWordPart {
   kind: "literal";

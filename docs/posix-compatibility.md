@@ -25,7 +25,7 @@ they are not Durable Object state and have no shared seek offset.
 
 ## Shell language
 
-Bash Version 3 supports simple commands and assignments; quoting and escapes;
+Bash Version 4 supports simple commands and assignments; quoting and escapes;
 selected parameter, command, and arithmetic expansion; lists and pipelines;
 groups, subshells, control structures, functions, and selected flow built-ins;
 ordinary redirection, here-documents, here-strings, and pathname expansion. See
@@ -58,6 +58,10 @@ decimal integer comparisons, boolean grouping with short-circuiting, and
 metadata-only `-e`/`-f`/`-d` predicates. It performs neither field splitting
 nor pathname expansion. Opaque entries participate as regular-file metadata
 without exposing R2 content.
+Version 4 adds deterministic non-interactive errexit through `set -e`/`+e` and
+`set -o`/`+o errexit`. It uses Bash's structural condition, list, pipeline, and
+inversion suppression rules, including propagation through invoked compound
+commands, functions, sources, and subshells.
 
 Deliberate deterministic choices include:
 
@@ -87,6 +91,11 @@ Deliberate deterministic choices include:
   `&&`, `||`, `if`, and `!` cannot catch an implicit nounset failure in the
   same scope. This matches the pinned Bash 5.3.3 stdin-script profile; the
   runtime does not reproduce Bash's invocation-mode-specific status quirks;
+- errexit is evaluated from AST position rather than command name. Functions,
+  groups, and sources share the current option; subshells and pipeline stages
+  clone it; command substitution clears inherited errexit like default
+  non-POSIX Bash. `pipefail` is resolved before the parent termination decision,
+  and normal downstream `EPIPE` remains success;
 - subshells and command substitutions also clone session state; command
   substitution output must be bounded valid UTF-8 and contain no NUL;
 - arithmetic wraps deterministically at signed 64 bits instead of using the
@@ -101,7 +110,7 @@ Differential fixtures are pinned against `bash:5.3.3` with the same locale and
 timezone. They cover representative supported quoting, assignment and
 positional expansion, control, pipeline, redirection, glob, and status
 behavior. Explicit rejection tests cover syntax deliberately outside Version
-3. Neither suite implies compatibility outside the declared subset.
+4. Neither suite implies compatibility outside the declared subset.
 
 ## Atomic redirection divergence
 
@@ -111,6 +120,8 @@ the complete inline file only when that descriptor closes successfully. A
 parse failure, later redirection-open failure, cancellation, deadline, output
 overflow, or unexpected runtime failure leaves the old target intact. A
 normally completed command can still commit output when its status is nonzero.
+The same normal-close rule applies when that status triggers errexit; descriptor
+settlement precedes the termination decision.
 
 This divergence is intentional: it prevents a bounded cloud execution from
 leaving a misleading truncated or partial file. Append redirection similarly

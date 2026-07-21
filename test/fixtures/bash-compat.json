@@ -342,6 +342,78 @@
       "args": [],
       "stdout": "yes",
       "exitCode": 0
+    },
+    {
+      "name": "errexit-option-forms-and-simple-failure",
+      "script": "set -e; set +e; false; printf a; set -o errexit; set +o errexit; false; printf b; set -e; printf '|'; false; printf no",
+      "env": {},
+      "args": [],
+      "stdout": "ab|",
+      "exitCode": 1
+    },
+    {
+      "name": "errexit-list-condition-and-negation-suppression",
+      "script": "set -e; false && printf no; printf 'and|'; true || printf no; printf 'or|'; if false; then printf no; else printf 'if|'; fi; while false; do printf no; done; until true; do printf no; done; ! true; printf 'not|'; true && false; printf no",
+      "env": {},
+      "args": [],
+      "stdout": "and|or|if|not|",
+      "exitCode": 1
+    },
+    {
+      "name": "errexit-compound-suppression-propagation",
+      "script": "set -e; run() { false; printf f; }; run || printf no; { false; printf g; } || printf no; (false; printf s) || printf no; printf '|'; run; printf no",
+      "env": {},
+      "args": [],
+      "stdout": "fgs|",
+      "exitCode": 1
+    },
+    {
+      "name": "errexit-pipeline-and-pipefail",
+      "script": "set -e; false | true; printf 'default|'; set -o pipefail; false | true; printf no",
+      "env": {},
+      "args": [],
+      "stdout": "default|",
+      "exitCode": 1
+    },
+    {
+      "name": "errexit-command-substitution-clears-option",
+      "script": "set -e; VALUE=$(false; printf value); printf '%s|' \"$VALUE\"; printf '%s' \"$(set -e; false; printf no)\"; printf '|after'",
+      "env": {},
+      "args": [],
+      "stdout": "value||after",
+      "exitCode": 0
+    },
+    {
+      "name": "errexit-assignment-substitution-status",
+      "script": "set -e; VALUE=$(false); printf no",
+      "env": {},
+      "args": [],
+      "stdout": "",
+      "exitCode": 1
+    },
+    {
+      "name": "errexit-source-and-delayed-enable",
+      "script": "printf 'false\\nprintf sourced' > library.sh; set +e; run() { set -e; false; printf body; }; run || printf fallback; printf '|'; source ./library.sh || printf fallback; printf '|'; source ./library.sh; printf no",
+      "env": {},
+      "args": [],
+      "stdout": "body|sourced|",
+      "exitCode": 1
+    },
+    {
+      "name": "errexit-preserves-protected-compound-status",
+      "script": "set -e; { false && true; }; printf g; if true; then false && true; fi; printf i; case x in x) false && true ;; esac; printf c; for item in x; do false && true; done; printf f; (false && true); printf no",
+      "env": {},
+      "args": [],
+      "stdout": "gicf",
+      "exitCode": 1
+    },
+    {
+      "name": "errexit-rechecks-protected-function-status",
+      "script": "set -e; run() { false && true; }; run; printf no",
+      "env": {},
+      "args": [],
+      "stdout": "",
+      "exitCode": 1
     }
   ]
 }

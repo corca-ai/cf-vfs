@@ -3,14 +3,14 @@
 Initial decision: 2026-07-20. Repeated for Bash Version 2: 2026-07-21. Reviewed
 for sourced units, positional built-ins, bounded scalar parameter operators,
 and the bounded double-bracket conditional: 2026-07-21.
-Version 3 keeps the repository's handwritten lexer/parser after adding command
+Version 4 keeps the repository's handwritten lexer/parser after adding command
 substitution, here-documents, nested control structures, functions, and
 arithmetic. This is a decision for the declared finite execution grammar, not
 a claim that handwritten parsing is preferable for full Bash.
 
 ## Candidates
 
-| Candidate | Evidence | Fit for Version 3 |
+| Candidate | Evidence | Fit for Version 4 |
 | --- | --- | --- |
 | handwritten finite-subset parser | built `dist/shell/parser.js` is 57,730 raw bytes before minification; produces the exact execution AST, byte offsets, queued here-document bodies, and explicit unsupported-syntax errors | selected, but its maintenance advantage has narrowed |
 | [`sh-syntax` 0.6.0](https://www.npmjs.com/package/sh-syntax/v/0.6.0) | mvdan/sh-based Bash parser distributed through Wasm; approximately 794 KB npm unpacked | best mature candidate; still adds Wasm initialization and requires a strict capability-validation/AST conversion pass |
@@ -51,6 +51,11 @@ bounded addition does not cross a reconsideration trigger.
 Nounset adds no grammar. Its four forms are ordinary argv handled by the
 existing `set` built-in, and unset checks operate on the existing parameter and
 arithmetic AST nodes. It therefore does not change the parser decision.
+
+Errexit also adds no grammar. Its four exact `set` forms are ordinary argv, and
+suppression is execution context derived from already parsed list, pipeline,
+condition, inversion, and compound-command nodes. It therefore does not change
+the parser decision or add a parser dependency.
 
 The Version 3 `[[ ... ]]` subset does add command grammar, but it is a closed
 precedence parser over the existing quote-preserving word tokens. Its dedicated

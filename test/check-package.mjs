@@ -64,7 +64,7 @@ try {
     import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
     import { MemoryFileSystem } from "@corca-ai/cf-vfs/testing";
     if (MAX_INLINE_FILE_BYTES !== 8 * 1024 * 1024) throw new Error("inline limit");
-    if (BASH_COMPATIBILITY_VERSION !== 3) throw new Error("language version");
+    if (BASH_COMPATIBILITY_VERSION !== 4) throw new Error("language version");
     if (lsCommand.name !== "ls") throw new Error("ls export");
     const parsed = parseShellScript('printf "%s" "$VALUE"', 100);
     const expansion = parsed.lists[0].first.commands[0].words[2].parts[0].expansion;

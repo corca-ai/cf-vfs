@@ -718,6 +718,39 @@ describe("byte-oriented Durable Object filesystem", () => {
     });
   });
 
+  it("propagates deterministic errexit contexts through the Durable Object shell", async () => {
+    const stub = workspace("shell-errexit-v4-rpc");
+    const result = await stub.executeText({
+      script: [
+        "cat > /failure.sh <<'EOF'",
+        "false",
+        "printf sourced",
+        "EOF",
+        "set -e",
+        "run() { false; printf function; }",
+        "run || printf fallback",
+        "source /failure.sh || printf fallback",
+        "(false; printf sub) || printf fallback",
+        "VALUE=$(false; printf value)",
+        "printf '|%s|' \"$VALUE\"",
+        "set -o pipefail",
+        "false | true",
+        "touch /after",
+      ].join("\n"),
+    });
+    expect(result).toEqual({
+      exitCode: 1,
+      stdout: "functionsourcedsub|value|",
+      stderr: "",
+    });
+    await expect(stub.executeText({ script: "[[ ! -e /after ]]" })).resolves.toMatchObject({
+      exitCode: 0,
+    });
+    await expect(stub.executeText({
+      script: "set -e; fail() { return 7; }; fail; printf no",
+    })).resolves.toEqual({ exitCode: 7, stdout: "", stderr: "" });
+  });
+
   it("exposes opaque files to double-bracket metadata predicates without reading R2", async () => {
     const stub = workspace("shell-double-bracket-opaque-v3");
     const upload = await stub.beginOpaqueUpload("/asset", { expectedSizeBytes: 4 });

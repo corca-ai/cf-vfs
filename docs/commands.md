@@ -1,7 +1,7 @@
 # Shell, commands, and direct API
 
 The primary command interface is Bash-compatible source, not a JSON dispatcher.
-`BASH_COMPATIBILITY_VERSION` is currently `3`.
+`BASH_COMPATIBILITY_VERSION` is currently `4`.
 
 ## Execution APIs
 
@@ -46,7 +46,7 @@ unexpected command/runtime invariant rejects `completed`.
 | command unavailable by policy | 126 |
 | command not found | 127 |
 
-## Bash Version 3
+## Bash Version 4
 
 Supported syntax:
 
@@ -73,11 +73,11 @@ Supported syntax:
 
 The complete submitted script is parsed before any command runs. Unsupported
 backticks, process substitution, C-style `for`, arrays, extended-test operators
-outside the Version 3 `[[ ... ]]` profile, brace expansion, arbitrary
+outside the documented `[[ ... ]]` profile, brace expansion, arbitrary
 descriptors, background jobs, `select`, the
 `function` keyword, `time`, `coproc`, and malformed syntax produce status 2
 before a partial mutation. `eval`, traps, job control, shell options outside
-the documented `pipefail` and Version 3 `nounset` profile, and OS process
+the documented `errexit`, `nounset`, and `pipefail` profile, and OS process
 features are unavailable commands or usage errors.
 
 Pipeline stages receive cloned shell state; an ordinary single built-in uses
@@ -86,7 +86,8 @@ recognized before expansion, their right-hand sides do not split or glob, and
 normally restore after a command. Consecutive assignment-only right-hand sides
 observe earlier assignments. `export` and `unset` mutate parent state outside
 a pipeline. `set -o pipefail` and `set +o pipefail` are supported. Version 3
-also supports `set -u`, `set +u`, `set -o nounset`, and `set +o nounset`.
+supports `set -u`, `set +u`, `set -o nounset`, and `set +o nounset`; Version 4
+adds the four errexit forms documented below.
 
 Ordinary groups and function bodies use the current session. Pipelines,
 parenthesized subshells, and command substitutions clone variables, functions,
@@ -228,6 +229,59 @@ namespace metadata without reading their bodies. Regex `=~`, single `=`, and
 inode, ownership, timestamp-order, device, socket, size, and permission tests
 are rejected as unsupported syntax.
 
+### Version 4 deterministic errexit
+
+`set -e`, `set +e`, `set -o errexit`, and `set +o errexit` update the current
+shell option. With errexit enabled, a non-zero pipeline status terminates the
+current non-interactive shell scope with that exact status before the next
+command. This is structured shell flow, not a runtime exception:
+`execution.completed`, `executeText()`, and Durable Object RPC resolve normally
+with the triggering status.
+
+The baseline is the [GNU Bash `set -e` profile](https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html),
+with the command-substitution rule described by Bash's
+[`inherit_errexit`](https://www.gnu.org/software/bash/manual/html_node/The-Shopt-Builtin.html)
+option made fixed and deterministic as described below.
+
+Errexit is suppressed structurally for an `if`/`elif`, `while`, or `until`
+condition; every non-final pipeline in an `&&` or `||` list; all but the final
+stage of a pipeline; and a pipeline whose status is inverted with `!`. A
+suppressed context propagates through brace groups, functions, sourced units,
+and subshell bodies. Consequently, enabling `-e` inside a suppressed function
+or compound command changes the option immediately but does not affect commands
+in that invocation; it takes effect after the guarded command completes.
+A non-subshell `if`, loop, `case`, or brace group that returns non-zero solely
+because its last evaluated pipeline was suppressed preserves that provenance
+and does not trigger again at its outer compound boundary. Function, source,
+subshell, and multi-stage pipeline boundaries expose their returned non-zero
+status as a new command or pipeline result and may trigger there.
+
+Functions, brace groups, and sourced units share the caller's option. A
+parenthesized subshell and each multi-stage pipeline stage clone it. Command
+substitution deliberately follows default non-POSIX Bash: it clones the shell
+session but clears inherited errexit. An explicit `set -e` inside the
+substitution is effective there. Its failure status controls an assignment-only
+command, but a surrounding command that succeeds still determines its own
+status.
+
+`pipefail` is applied before the parent decides whether to terminate, preserving
+the rightmost non-zero stage status. Normal downstream early close remains
+status 0. Explicit `return`, `exit`, `break`, and `continue` retain their own
+flow; a non-zero function or source return can trigger errexit at its invocation
+boundary. Nounset and fatal budget, deadline, cancellation, and output failures
+remain unconditional failures rather than gaining errexit suppression.
+
+Errexit cannot leave a command invocation until that invocation settles its
+descriptors. Therefore a normally closed atomic redirection commits output
+produced before an ordinary non-zero status, including the prefix written by a
+compound command. Redirection open/close failure, mutation-token conflict,
+cancellation, deadline, overflow, or runtime invariant failure keeps the
+existing abort/discard behavior.
+
+Only the four exact forms above are added. Combined flags such as `set -eu`,
+option listings, `$-`, POSIX mode, `inherit_errexit`, `ERR` traps, and
+`errtrace` remain unsupported.
+
 See [POSIX and Bash compatibility](posix-compatibility.md) for deterministic
 locale, glob, and redirection details and [the parser spike](parser-spike.md)
 for parser selection.
@@ -242,7 +296,7 @@ command implementations are absent; the default preset is covered separately.
 
 | Registry group | Available commands and principal options |
 | --- | --- |
-| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (`-u`, `+u`, `-o/+o nounset`, `-o/+o pipefail`), `test`, `[` |
+| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (`-e/+e`, `-o/+o errexit`, `-u/+u`, `-o/+o nounset`, `-o/+o pipefail`), `test`, `[` |
 | namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f`, `ls -l -d`, `find -name -type -maxdepth`, `stat`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | streaming text/bytes | `cat`, `grep -i -v -n -F -c`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed s/old/new/[g]` |
 | bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch` |
