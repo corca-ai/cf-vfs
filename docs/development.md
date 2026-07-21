@@ -100,9 +100,10 @@ must expand lazily. New operators require parser-time rejection tests, runtime
 budget tests, and a decision about metadata policy, opaque files, ordering, and
 invalid operands. Reuse scalar expansion and the bounded pattern matcher; do
 not add regular expressions or pathname glob scans inside a conditional.
-Keep source byte offsets linear-time: reuse the lexer's UTF-8 prefix-offset
-table and preserve parser deadline checks. Re-encoding `source.slice(0,
-offset)` per token makes a bounded near-limit script quadratic.
+Keep source byte offsets linear-time: reuse the lexer's sparse UTF-8 byte-offset
+checkpoints and preserve parser deadline checks. Re-encoding
+`source.slice(0, offset)` per token makes a bounded near-limit script
+quadratic.
 
 Regenerate the fixture only after reviewing the semantic change:
 

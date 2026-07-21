@@ -1,7 +1,7 @@
 # Shell, commands, and direct API
 
 The primary command interface is Bash-compatible source, not a JSON dispatcher.
-`BASH_COMPATIBILITY_VERSION` is currently `2`.
+`BASH_COMPATIBILITY_VERSION` is currently `3`.
 
 ## Execution APIs
 
@@ -46,7 +46,7 @@ unexpected command/runtime invariant rejects `completed`.
 | command unavailable by policy | 126 |
 | command not found | 127 |
 
-## Bash Version 2
+## Bash Version 3
 
 Supported syntax:
 
@@ -112,7 +112,7 @@ A downstream normal early close maps the upstream edge's `EPIPE` to status 0.
 Consequently `cat large | head -n 1` remains successful under `pipefail` while
 real non-zero upstream statuses are still selected from right to left.
 
-### Version 3 work in progress
+### Version 3 additions
 
 The default registry includes `source` and `.`. They resolve only explicit
 absolute or `cwd`-relative VFS paths; there is no `PATH` search. A sourced file
@@ -122,8 +122,7 @@ options, and `cwd` changes persist. Supplied positional arguments are temporary,
 `return` stops only the sourced unit, and `exit` retains whole-shell behavior.
 
 Sourced units share cumulative source-byte, AST-node, execution, I/O, mutation,
-deadline, and cancellation budgets with the caller. The exported compatibility
-version remains 2 until every issue in the declared Version 3 profile is complete.
+deadline, and cancellation budgets with the caller.
 
 The default registry also includes the deliberately non-interactive
 

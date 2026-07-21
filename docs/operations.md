@@ -87,10 +87,11 @@ charge operand length before bounded linear work. Metadata predicates perform
 only policy-checked namespace `stat` calls; an opaque regular file never causes
 an R2 body read.
 
-The execution deadline starts before complete-unit parsing. The lexer builds
-one linear UTF-8 prefix-offset table per unit instead of re-encoding every
-source prefix at each token, and checks the shared deadline while building it.
-Sourced units use the same execution deadline and cumulative parser budgets.
+The execution deadline starts before complete-unit parsing. In one linear scan,
+the lexer builds sparse UTF-8 byte-offset checkpoints per unit instead of
+re-encoding every source prefix at each token, and checks the shared deadline
+while building them. Sourced units use the same execution deadline and
+cumulative parser budgets.
 
 `read -r` consumes fd 0 with a fatal streaming UTF-8 decoder. It retains at
 most the unread suffix of one upstream chunk plus one decoded line under the

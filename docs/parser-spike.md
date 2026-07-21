@@ -3,14 +3,14 @@
 Initial decision: 2026-07-20. Repeated for Bash Version 2: 2026-07-21. Reviewed
 for sourced units, positional built-ins, bounded scalar parameter operators,
 and the bounded double-bracket conditional: 2026-07-21.
-Version 2 keeps the repository's handwritten lexer/parser after adding command
+Version 3 keeps the repository's handwritten lexer/parser after adding command
 substitution, here-documents, nested control structures, functions, and
 arithmetic. This is a decision for the declared finite execution grammar, not
 a claim that handwritten parsing is preferable for full Bash.
 
 ## Candidates
 
-| Candidate | Evidence | Fit for Version 2 |
+| Candidate | Evidence | Fit for Version 3 |
 | --- | --- | --- |
 | handwritten finite-subset parser | built `dist/shell/parser.js` is 57,730 raw bytes before minification; produces the exact execution AST, byte offsets, queued here-document bodies, and explicit unsupported-syntax errors | selected, but its maintenance advantage has narrowed |
 | [`sh-syntax` 0.6.0](https://www.npmjs.com/package/sh-syntax/v/0.6.0) | mvdan/sh-based Bash parser distributed through Wasm; approximately 794 KB npm unpacked | best mature candidate; still adds Wasm initialization and requires a strict capability-validation/AST conversion pass |
@@ -37,7 +37,7 @@ negative fixtures plus pinned Bash differential cases.
 
 The `source` / `.` addition does not add grammar: it reads a bounded inline VFS
 file and invokes the same complete-unit parser under cumulative byte, node, and
-nesting budgets. That reuse does not change the Version 2 parser selection.
+nesting budgets. That reuse does not change the parser selection.
 Likewise, `read -r`, `shift`, and `getopts` are ordinary argv-based built-ins;
 their stream cursor and session state do not expand the grammar.
 
@@ -58,7 +58,7 @@ AST accepts only the declared unary, binary, boolean, and grouping operators;
 unsupported operators and incomplete expressions fail during complete-unit
 parsing. Conditional nodes charge the shared AST and nesting limits, while
 their scalar and pattern expansions use the existing bounded expansion and
-pattern machinery. A linear UTF-8 prefix-offset table avoids per-token prefix
+pattern machinery. Sparse UTF-8 byte-offset checkpoints avoid per-token prefix
 re-encoding, and complete-unit parsing now participates in the execution
 deadline. This contained addition does not justify a Wasm parser and conversion
 layer, but it narrows the handwritten parser's maintenance margin.

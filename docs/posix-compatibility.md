@@ -7,7 +7,7 @@ host filesystem access.
 
 ## Filesystem boundary
 
-| Area | Version 2 behavior |
+| Area | `cf-vfs` behavior |
 | --- | --- |
 | Paths | `/`-separated canonical Unicode strings with `.`, `..`, repeated-separator, name-length, path-length, and trailing-slash validation. Shell-relative paths resolve from `cwd`. Paths are not arbitrary POSIX byte strings. |
 | Regular files | Inline files contain arbitrary bytes and are limited to 8 MiB. Opaque files are immutable R2 generations whose metadata participates in the namespace but whose bodies are unavailable to shell commands. |
@@ -25,7 +25,7 @@ they are not Durable Object state and have no shared seek offset.
 
 ## Shell language
 
-Bash Version 2 supports simple commands and assignments; quoting and escapes;
+Bash Version 3 supports simple commands and assignments; quoting and escapes;
 selected parameter, command, and arithmetic expansion; lists and pipelines;
 groups, subshells, control structures, functions, and selected flow built-ins;
 ordinary redirection, here-documents, here-strings, and pathname expansion. See
@@ -37,10 +37,10 @@ out-of-profile extended-test operators, C-style `for`, background jobs, and
 arbitrary descriptors are not approximated. The language version is exported
 as `BASH_COMPATIBILITY_VERSION`.
 
-Version 3 work is available while the complete Version 3 profile is still in
-progress. `source` and `.` read only an explicit inline VFS path, never search
-`PATH`, parse the complete sourced unit before executing it, and share all
-relevant budgets with the caller. Opaque files remain unavailable.
+Version 3 additionally includes `source` and `.`, which read only an explicit
+inline VFS path, never search `PATH`, parse the complete sourced unit before
+executing it, and share all relevant budgets with the caller. Opaque files
+remain unavailable.
 `read -r`, `shift`, and short-option `getopts` provide the non-interactive input
 and positional primitives used by reusable VFS scripts. `read` has no prompt,
 timeout, terminal, or readline behavior; it uses bounded virtual fd 0 and the
@@ -101,7 +101,7 @@ Differential fixtures are pinned against `bash:5.3.3` with the same locale and
 timezone. They cover representative supported quoting, assignment and
 positional expansion, control, pipeline, redirection, glob, and status
 behavior. Explicit rejection tests cover syntax deliberately outside Version
-2. Neither suite implies compatibility outside the declared subset.
+3. Neither suite implies compatibility outside the declared subset.
 
 ## Atomic redirection divergence
 
