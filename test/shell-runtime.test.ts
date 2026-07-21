@@ -248,6 +248,29 @@ describe("stream-first shell runtime", () => {
     expect(await shell.executeText({ script: "rm /allowed/input" })).toMatchObject({ exitCode: 126 });
   });
 
+  it("enforces read policy for double-bracket metadata predicates", async () => {
+    const fileSystem = new MemoryFileSystem();
+    await fileSystem.writeFile("/allowed/input", "ok", { createParents: true });
+    await fileSystem.writeFile("/secret", "no");
+    const shell = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      policy: { readRoots: ["/allowed"] },
+    });
+    expect(await shell.executeText({ script: "[[ -f /allowed/input ]]" })).toMatchObject({
+      exitCode: 0,
+      stderr: "",
+    });
+    expect(await shell.executeText({ script: "[[ -e /secret ]]" })).toMatchObject({
+      exitCode: 126,
+      stderr: expect.stringContaining("outside the readable roots"),
+    });
+    expect(await shell.executeText({ script: "[[ -e /allowed/../secret ]]" })).toMatchObject({
+      exitCode: 126,
+      stderr: expect.stringContaining("outside the readable roots"),
+    });
+  });
+
   it("allows script functions under command policy while checking their bodies", async () => {
     const fileSystem = new MemoryFileSystem();
     const shell = new Shell({

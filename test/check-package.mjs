@@ -71,6 +71,12 @@ try {
     if ("kind" in expansion || expansion.length !== false || expansion.operator !== undefined) {
       throw new Error("Version 2 parameter AST compatibility");
     }
+    const conditional = parseShellScript("[[ value == v* ]]", 100)
+      .lists[0]?.first.commands[0];
+    if (conditional?.type !== "double-bracket"
+      || conditional.expression.type !== "conditional-binary") {
+      throw new Error("Version 3 double-bracket AST export");
+    }
     const shell = new Shell({ fileSystem: new MemoryFileSystem(), commands: defaultShellCommands });
     const result = await shell.executeText({ script: 'X=$(printf ok); printf "package-%s" "$X"' });
     if (result.stdout !== "package-ok") throw new Error("shell execution");

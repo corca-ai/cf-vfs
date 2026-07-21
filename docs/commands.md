@@ -72,8 +72,9 @@ Supported syntax:
 - comments beginning with `#` at a word boundary.
 
 The complete submitted script is parsed before any command runs. Unsupported
-backticks, process substitution, C-style `for`, arrays, extended `[[ ]]`, brace
-expansion, arbitrary descriptors, background jobs, `select`, the
+backticks, process substitution, C-style `for`, arrays, extended-test operators
+outside the Version 3 `[[ ... ]]` profile, brace expansion, arbitrary
+descriptors, background jobs, `select`, the
 `function` keyword, `time`, `coproc`, and malformed syntax produce status 2
 before a partial mutation. `eval`, traps, job control, shell options outside
 the documented `pipefail` and Version 3 `nounset` profile, and OS process
@@ -203,6 +204,30 @@ substitutions clone the option. An implicit nounset failure terminates only
 such an isolated scope; its status can then participate in `||`, pipeline
 status/`pipefail`, or command-substitution status in the parent. Option changes
 inside an isolated scope do not escape.
+
+The bounded `[[ ... ]]` compound conditional supports a nonempty word test;
+unary `-n`, `-z`, `-e`, `-f`, and `-d`; string `==`, `!=`, `<`, and `>`;
+strict-decimal integer `-eq`, `-ne`, `-lt`, `-le`, `-gt`, and `-ge`; and
+prefix `!`, `&&`, `||`, plus parenthesized grouping. `&&` binds more tightly
+than `||`, and both short-circuit. The complete conditional grammar is parsed
+before execution, so missing operands, unmatched delimiters, and unsupported
+operators cannot follow an earlier mutation in the same submitted unit.
+
+Conditional operands use scalar expansion without field splitting or pathname
+expansion. For `==` and `!=`, an unquoted right-hand fragment is the bounded
+shell-pattern language; quoted or escaped fragments are literal. `<` and `>`
+use deterministic UTF-8 byte order. Integer operands must be expanded
+`-?[0-9]+` values; they are compared without a JavaScript-number range limit,
+and invalid text is a status-2 semantic error. Unlike Bash arithmetic
+conditionals, variable names and arithmetic expressions are not accepted as
+integer operands.
+
+`-e`, `-f`, and `-d` resolve canonical absolute or `cwd`-relative VFS paths.
+An empty or missing path is false. Read-policy denial remains status 126 rather
+than being hidden as false. Opaque R2 entries satisfy `-e` and `-f` from their
+namespace metadata without reading their bodies. Regex `=~`, single `=`, and
+inode, ownership, timestamp-order, device, socket, size, and permission tests
+are rejected as unsupported syntax.
 
 See [POSIX and Bash compatibility](posix-compatibility.md) for deterministic
 locale, glob, and redirection details and [the parser spike](parser-spike.md)

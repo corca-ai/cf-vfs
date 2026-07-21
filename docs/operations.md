@@ -79,6 +79,19 @@ owned by a scope terminated for nounset is aborted rather than publishing its
 partial buffered output, including when a parent later observes an isolated
 scope's status.
 
+Double-bracket boolean, grouping, and predicate nodes consume the shared AST,
+nesting, step, and expansion budgets. Operand expansion is scalar, so it never
+starts a pathname scan. Equality patterns reuse the dynamic-programming scalar
+matcher and its transition accounting. Lexical and strict-decimal comparisons
+charge operand length before bounded linear work. Metadata predicates perform
+only policy-checked namespace `stat` calls; an opaque regular file never causes
+an R2 body read.
+
+The execution deadline starts before complete-unit parsing. The lexer builds
+one linear UTF-8 prefix-offset table per unit instead of re-encoding every
+source prefix at each token, and checks the shared deadline while building it.
+Sourced units use the same execution deadline and cumulative parser budgets.
+
 `read -r` consumes fd 0 with a fatal streaming UTF-8 decoder. It retains at
 most the unread suffix of one upstream chunk plus one decoded line under the
 shared buffered-byte budget, applies the one-line and total-I/O limits, and

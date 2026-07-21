@@ -718,6 +718,18 @@ describe("byte-oriented Durable Object filesystem", () => {
     });
   });
 
+  it("exposes opaque files to double-bracket metadata predicates without reading R2", async () => {
+    const stub = workspace("shell-double-bracket-opaque-v3");
+    const upload = await stub.beginOpaqueUpload("/asset", { expectedSizeBytes: 4 });
+    await new R2OpaqueStore(env.VFS_TEST_BUCKET).putIfAbsent(upload.objectKey, "body");
+    await stub.commitOpaqueUpload(upload.uploadId);
+    const result = await stub.executeText({
+      script: "[[ -e /asset && -f /asset && ! -d /asset ]] && printf opaque",
+    });
+    expect(result).toEqual({ exitCode: 0, stdout: "opaque", stderr: "" });
+    expect((await stub.stat("/asset")).contentClass).toBe("opaque");
+  });
+
   it("uses caller-provided byte streams for the remote streaming boundary", async () => {
     const stub = workspace("shell-stream-rpc");
     const input = streamFromChunks([new TextEncoder().encode("streamed")]);

@@ -318,6 +318,30 @@
       ],
       "stdout": "2|<one><two words>|<alternate>",
       "exitCode": 0
+    },
+    {
+      "name": "double-bracket-strings-and-patterns",
+      "script": "mkdir -p tree; : > tree/file; VALUE='two words'; GLOB='tree/*'; PATTERN='a*'; [[ -n $VALUE && $VALUE == \"two words\" && $GLOB == 'tree/*' && abc == $PATTERN && abc != \"$PATTERN\" ]] && printf yes",
+      "env": {},
+      "args": [],
+      "stdout": "yes",
+      "exitCode": 0
+    },
+    {
+      "name": "double-bracket-booleans-integers-and-ordering",
+      "script": "set -u; [[ 01 -eq 1 && 1 -ne 2 && -2 -lt -1 && -1 -le -1 && 3 -gt 2 && 2 -ge 2 && alpha < beta && beta > alpha && ( x == x || $MISSING ) && ( x != x && $MISSING || x ) && ! -z x ]] && printf yes",
+      "env": {},
+      "args": [],
+      "stdout": "yes",
+      "exitCode": 0
+    },
+    {
+      "name": "double-bracket-vfs-metadata-profile",
+      "script": "mkdir -p tree; printf x > tree/file; [[ -e tree/file && -f tree/file && -d tree && ! -e tree/missing ]] && printf yes",
+      "env": {},
+      "args": [],
+      "stdout": "yes",
+      "exitCode": 0
     }
   ]
 }

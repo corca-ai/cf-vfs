@@ -77,6 +77,10 @@ export class ExecutionBudget implements ShellBudget {
     }
   }
 
+  remainingDeadlineMs(): number {
+    return Math.max(0, this.limits.deadlineMs - (this.now() - this.startedAtMs));
+  }
+
   step(count = 1): void {
     this.checkDeadline();
     this.steps += count;

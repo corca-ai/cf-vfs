@@ -1,5 +1,5 @@
 import { isVfsError, VfsError } from "../core/errors.js";
-import { normalizePath } from "../core/path.js";
+import { compareUtf8, normalizePath, normalizePathPreservingTrailingSlash } from "../core/path.js";
 import { bodyToStream, readAllBytes } from "../vfs/streams.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 import { ExecutionBudget, resolveShellLimits } from "./budget.js";
@@ -19,6 +19,7 @@ import {
   parseShellScript,
   type AndOrNode,
   type CommandNode,
+  type ConditionalExpression,
   type CompoundCommandNode,
   type FunctionDefinitionNode,
   type PipelineNode,
@@ -133,6 +134,7 @@ function parseScriptUnit(
   source: string,
   limits: ShellLimits,
   budget: ParserBudget,
+  executionBudget: Pick<ShellBudget, "checkDeadline">,
   path?: string,
 ): ScriptNode {
   const sourceBytes = new TextEncoder().encode(source).byteLength;
@@ -149,6 +151,7 @@ function parseScriptUnit(
       limits.maxAstNodes - budget.astNodes,
       limits.maxNestingDepth,
       (count) => { budget.astNodes += count; },
+      () => executionBudget.checkDeadline(),
     );
     return parsed;
   } catch (error) {
@@ -389,7 +392,7 @@ async function runSourcedUnit(
   if (session.sourceDepth >= runtime.limits.maxSourceDepth) {
     throw new VfsError("E2BIG", "shell source nesting limit exceeded", path);
   }
-  const parsed = parseScriptUnit(source, runtime.limits, runtime.parserBudget, path);
+  const parsed = parseScriptUnit(source, runtime.limits, runtime.parserBudget, runtime.budget, path);
   const previousArgs = session.args;
   if (args.length > 0) session.args = [...args];
   session.sourceDepth += 1;
@@ -476,6 +479,158 @@ function consumeLoopFlow(session: ShellSession): "break" | "continue" | "propaga
 
 function flowActive(session: ShellSession): boolean {
   return session.flow.type !== "none";
+}
+
+interface NormalizedConditionalInteger {
+  negative: boolean;
+  digits: string;
+}
+
+function normalizeConditionalInteger(
+  value: string,
+  budget: ShellBudget,
+): NormalizedConditionalInteger {
+  budget.expansionWork(value.length);
+  if (!/^-?[0-9]+$/u.test(value)) {
+    throw new VfsError("EINVAL", "[[: integer expression expected");
+  }
+  const negative = value.startsWith("-");
+  const unsigned = negative ? value.slice(1) : value;
+  const digits = unsigned.replace(/^0+/u, "") || "0";
+  return { negative: negative && digits !== "0", digits };
+}
+
+function compareConditionalIntegers(
+  left: string,
+  right: string,
+  budget: ShellBudget,
+): number {
+  const first = normalizeConditionalInteger(left, budget);
+  const second = normalizeConditionalInteger(right, budget);
+  if (first.negative !== second.negative) return first.negative ? -1 : 1;
+  let order = first.digits.length - second.digits.length;
+  if (order === 0 && first.digits !== second.digits) order = first.digits < second.digits ? -1 : 1;
+  return first.negative ? -order : order;
+}
+
+async function evaluateConditional(
+  expression: ConditionalExpression,
+  session: ShellSession,
+  runtime: Runtime,
+  expansion: ExpansionRuntime,
+): Promise<boolean> {
+  type Pending =
+    | { type: "not" }
+    | { type: "boolean"; operator: "&&" | "||"; right: ConditionalExpression };
+  const pending: Pending[] = [];
+  let current = expression;
+
+  evaluate: while (true) {
+    runtime.budget.step();
+    if (current.type === "conditional-not") {
+      pending.push({ type: "not" });
+      current = current.expression;
+      continue;
+    }
+    if (current.type === "conditional-group") {
+      current = current.expression;
+      continue;
+    }
+    if (current.type === "conditional-boolean") {
+      pending.push({ type: "boolean", operator: current.operator, right: current.right });
+      current = current.left;
+      continue;
+    }
+
+    let value: boolean;
+    if (current.type === "conditional-word") {
+      value = (await expandScalarWord(
+        current.word,
+        session,
+        runtime.fileSystem,
+        runtime.budget,
+        expansion,
+      )).length > 0;
+    } else if (current.type === "conditional-unary") {
+      const operand = await expandScalarWord(
+        current.operand,
+        session,
+        runtime.fileSystem,
+        runtime.budget,
+        expansion,
+      );
+      if (current.operator === "-n") value = operand.length > 0;
+      else if (current.operator === "-z") value = operand.length === 0;
+      else if (operand.length === 0) value = false;
+      else {
+        try {
+          const stat = await runtime.fileSystem.stat(
+            normalizePathPreservingTrailingSlash(operand, session.cwd),
+          );
+          if (current.operator === "-e") value = true;
+          else if (current.operator === "-f") value = stat.kind === "file";
+          else value = stat.kind === "directory";
+        } catch (error) {
+          if (error instanceof VfsError && (error.code === "ENOENT" || error.code === "ENOTDIR")) {
+            value = false;
+          } else throw error;
+        }
+      }
+    } else {
+      const left = await expandScalarWord(
+        current.left,
+        session,
+        runtime.fileSystem,
+        runtime.budget,
+        expansion,
+      );
+      if (current.operator === "==" || current.operator === "!=") {
+        const pattern = await expandCasePattern(
+          current.right,
+          session,
+          runtime.fileSystem,
+          runtime.budget,
+          expansion,
+        );
+        const matches = matchesCasePattern(left, pattern, runtime.budget);
+        value = current.operator === "==" ? matches : !matches;
+      } else {
+        const right = await expandScalarWord(
+          current.right,
+          session,
+          runtime.fileSystem,
+          runtime.budget,
+          expansion,
+        );
+        if (current.operator === "<" || current.operator === ">") {
+          runtime.budget.expansionWork(left.length + right.length);
+          const order = compareUtf8(left, right);
+          value = current.operator === "<" ? order < 0 : order > 0;
+        } else {
+          const order = compareConditionalIntegers(left, right, runtime.budget);
+          if (current.operator === "-eq") value = order === 0;
+          else if (current.operator === "-ne") value = order !== 0;
+          else if (current.operator === "-lt") value = order < 0;
+          else if (current.operator === "-le") value = order <= 0;
+          else if (current.operator === "-gt") value = order > 0;
+          else value = order >= 0;
+        }
+      }
+    }
+
+    while (true) {
+      const frame = pending.pop();
+      if (frame === undefined) return value;
+      if (frame.type === "not") {
+        value = !value;
+        continue;
+      }
+      const shortCircuited = frame.operator === "&&" ? !value : value;
+      if (shortCircuited) continue;
+      current = frame.right;
+      continue evaluate;
+    }
+  }
 }
 
 async function runLoopBody(
@@ -575,6 +730,9 @@ async function executeCompoundCommand(
     case "arithmetic-command": {
       return evaluateArithmetic(node.expression, session.env, session.nounset === true) === 0n ? 1 : 0;
     }
+    case "double-bracket": {
+      return await evaluateConditional(node.expression, session, runtime, expansion) ? 0 : 1;
+    }
   }
 }
 
@@ -607,6 +765,7 @@ async function runCommandNode(
   let fds = initialFds;
   let redirected: ReadonlySet<1 | 2> = new Set();
   const fallbackStderr = initialFds[2].clone();
+  let semanticStderr = fallbackStderr;
   let semanticFailure = false;
   let shouldCancelInput = cancelUnreadInput;
   const expansion = expansionRuntime(initialFds, runtime);
@@ -631,9 +790,11 @@ async function runCommandNode(
       throw error;
     }
     fds = applied.fds;
+    semanticStderr = fds[2];
     redirected = applied.redirected;
     shouldCancelInput ||= applied.inputRedirected;
     const status = await executeCommandNode(node, prepared, session, fds, runtime, expansion);
+    semanticStderr = fallbackStderr;
     await closeDescriptors(fds);
     return status;
   } catch (error) {
@@ -654,7 +815,7 @@ async function runCommandNode(
     semanticFailure = true;
     const message = formatError(error);
     try {
-      await fallbackStderr.write(new TextEncoder().encode(`${message}\n`));
+      await semanticStderr.write(new TextEncoder().encode(`${message}\n`));
     } finally {
       await Promise.allSettled([fds[1].close(), fds[2].close()]);
     }
@@ -798,10 +959,11 @@ export class Shell {
 
   executeStream(options: ExecuteStreamOptions): ShellExecution {
     const parserBudget: ParserBudget = { sourceBytes: 0, astNodes: 0 };
+    const budget = new ExecutionBudget(this.limits, this.now);
     let parsed: ScriptNode | undefined;
     let parseError: VfsError | undefined;
     try {
-      parsed = parseScriptUnit(options.script, this.limits, parserBudget);
+      parsed = parseScriptUnit(options.script, this.limits, parserBudget, budget);
     } catch (error) {
       if (!isVfsError(error)) throw error;
       parseError = error;
@@ -816,7 +978,6 @@ export class Shell {
       if (options.signal.aborted) externalAbort();
       else options.signal.addEventListener("abort", externalAbort, { once: true });
     }
-    const budget = new ExecutionBudget(this.limits, this.now);
     const scoped = new ScopedFileSystem(this.fileSystem, this.policy, budget);
     const stdout = createBytePipe({
       maximumBytes: this.limits.maxStdoutBytes,
@@ -868,7 +1029,7 @@ export class Shell {
     session.env.set("TZ", "UTC");
     const timeout = setTimeout(() => {
       controller.abort(new VfsError("ETIMEDOUT", "shell execution deadline exceeded"));
-    }, this.limits.deadlineMs);
+    }, budget.remainingDeadlineMs());
     const rootFds: ShellFileDescriptors = {
       0: shellInput(options.stdin ?? emptyInput()),
       1: stdout.sink,

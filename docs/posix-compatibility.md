@@ -32,9 +32,10 @@ ordinary redirection, here-documents, here-strings, and pathname expansion. See
 [Shell, commands, and direct API](commands.md) for the exact grammar and limits.
 
 The parser rejects unsupported syntax before running any command. In
-particular, process substitution, backticks, arrays, brace expansion, extended
-tests, C-style `for`, background jobs, and arbitrary descriptors are not
-approximated. The language version is exported as `BASH_COMPATIBILITY_VERSION`.
+particular, process substitution, backticks, arrays, brace expansion,
+out-of-profile extended-test operators, C-style `for`, background jobs, and
+arbitrary descriptors are not approximated. The language version is exported
+as `BASH_COMPATIBILITY_VERSION`.
 
 Version 3 work is available while the complete Version 3 profile is still in
 progress. `source` and `.` read only an explicit inline VFS path, never search
@@ -52,6 +53,11 @@ Nounset is available through both short and named `set` forms. An evaluated
 implicit unset reference terminates its current shell scope with status 1;
 functions, sourced units, and groups share the caller scope, while subshells,
 pipeline stages, and command substitutions are isolated scopes.
+The bounded `[[ ... ]]` profile adds scalar word and string tests, strict
+decimal integer comparisons, boolean grouping with short-circuiting, and
+metadata-only `-e`/`-f`/`-d` predicates. It performs neither field splitting
+nor pathname expansion. Opaque entries participate as regular-file metadata
+without exposing R2 content.
 
 Deliberate deterministic choices include:
 
@@ -72,6 +78,11 @@ Deliberate deterministic choices include:
   negative lengths are rejected. Arrays, indirect expansion,
   extglob, anchored replacement, and Bash's optional `&` replacement behavior
   remain outside the profile;
+- `[[ == ]]` and `[[ != ]]` use the same bounded pattern language on an
+  unquoted right operand, while lexical comparison uses UTF-8 byte order.
+  Integer predicates require strict expanded decimal text instead of Bash
+  arithmetic expressions; regex, file ordering, permission, and special-file
+  operators remain outside the profile;
 - `set -u` does not acquire errexit's condition-sensitive suppression rules:
   `&&`, `||`, `if`, and `!` cannot catch an implicit nounset failure in the
   same scope. This matches the pinned Bash 5.3.3 stdin-script profile; the

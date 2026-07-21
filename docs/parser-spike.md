@@ -1,8 +1,8 @@
 # Parser technology spike
 
 Initial decision: 2026-07-20. Repeated for Bash Version 2: 2026-07-21. Reviewed
-for sourced units, positional built-ins, and bounded scalar parameter
-operators: 2026-07-21.
+for sourced units, positional built-ins, bounded scalar parameter operators,
+and the bounded double-bracket conditional: 2026-07-21.
 Version 2 keeps the repository's handwritten lexer/parser after adding command
 substitution, here-documents, nested control structures, functions, and
 arithmetic. This is a decision for the declared finite execution grammar, not
@@ -12,7 +12,7 @@ a claim that handwritten parsing is preferable for full Bash.
 
 | Candidate | Evidence | Fit for Version 2 |
 | --- | --- | --- |
-| handwritten finite-subset parser | built `dist/shell/parser.js` is 42,177 raw bytes before minification; produces the exact execution AST, byte offsets, queued here-document bodies, and explicit unsupported-syntax errors | selected, but its maintenance advantage has narrowed |
+| handwritten finite-subset parser | built `dist/shell/parser.js` is 57,730 raw bytes before minification; produces the exact execution AST, byte offsets, queued here-document bodies, and explicit unsupported-syntax errors | selected, but its maintenance advantage has narrowed |
 | [`sh-syntax` 0.6.0](https://www.npmjs.com/package/sh-syntax/v/0.6.0) | mvdan/sh-based Bash parser distributed through Wasm; approximately 794 KB npm unpacked | best mature candidate; still adds Wasm initialization and requires a strict capability-validation/AST conversion pass |
 | [`bash-parser` 0.5.0](https://www.npmjs.com/package/bash-parser/v/0.5.0) | version published in 2017; broad dependency graph and a full-language-shaped AST | larger legacy dependency surface; unsupported constructs still need validation |
 | [`tree-sitter-bash` 0.25.1](https://www.npmjs.com/package/tree-sitter-bash/v/0.25.1) | current error-recovering editor grammar; approximately 20.3 MB npm unpacked with native/Wasm integration concerns | strong syntax-tooling choice, disproportionate for this strict Worker execution grammar |
@@ -52,6 +52,17 @@ Nounset adds no grammar. Its four forms are ordinary argv handled by the
 existing `set` built-in, and unset checks operate on the existing parameter and
 arithmetic AST nodes. It therefore does not change the parser decision.
 
+The Version 3 `[[ ... ]]` subset does add command grammar, but it is a closed
+precedence parser over the existing quote-preserving word tokens. Its dedicated
+AST accepts only the declared unary, binary, boolean, and grouping operators;
+unsupported operators and incomplete expressions fail during complete-unit
+parsing. Conditional nodes charge the shared AST and nesting limits, while
+their scalar and pattern expansions use the existing bounded expansion and
+pattern machinery. A linear UTF-8 prefix-offset table avoids per-token prefix
+re-encoding, and complete-unit parsing now participates in the execution
+deadline. This contained addition does not justify a Wasm parser and conversion
+layer, but it narrows the handwritten parser's maintenance margin.
+
 The main cost is maintenance: shell lexical rules interact in subtle ways. No
 one should extend it with ad-hoc string splitting. Each new construct needs a
 grammar/AST design, source-span tests, rejection-boundary tests, budget impact,
@@ -59,8 +70,9 @@ and differential fixtures.
 
 ## Reconsideration triggers
 
-Repeat the spike before arrays, process substitution, extended tests, C-style
-loops, or another similarly large language version.
+Repeat the spike before arrays, process substitution, regex or substantially
+broader extended tests, C-style loops, or another similarly large language
+version.
 Also repeat it if lexer/parser fixes begin dominating shell maintenance. Prefer
 a mature grammar when its parser/binding can:
 
