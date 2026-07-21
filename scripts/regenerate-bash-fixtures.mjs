@@ -22,8 +22,14 @@ async function run(fixture) {
     child.once("error", reject);
     child.once("close", resolve);
   });
-  if (stderr !== "") throw new Error(`${fixture.name}: ${stderr}`);
-  return { ...fixture, stdout, exitCode };
+  const normalizedStderr = stderr.replace(/^bash: line [0-9]+: /gmu, "");
+  const { stderr: _previousStderr, ...fixtureWithoutOutput } = fixture;
+  return {
+    ...fixtureWithoutOutput,
+    stdout,
+    exitCode,
+    ...(normalizedStderr === "" ? {} : { stderr: normalizedStderr }),
+  };
 }
 
 fixtures.cases = await Promise.all(fixtures.cases.map(run));

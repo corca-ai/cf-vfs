@@ -1,4 +1,5 @@
 import { VfsError } from "../core/errors.js";
+import { ShellNounsetError } from "./errors.js";
 
 type UnaryOperator = "+" | "-" | "!" | "~";
 type UpdateOperator = "++" | "--";
@@ -338,11 +339,13 @@ function truth(value: bigint): bigint {
   return value === 0n ? 0n : 1n;
 }
 
-function readVariable(name: string, env: ReadonlyMap<string, string>): bigint {
-  const value = env.get(name) ?? "";
-  if (!/^[+-]?(?:[0-9]+|0[xX][0-9a-f]+)$/iu.test(value)) return 0n;
+function readVariable(name: string, env: ReadonlyMap<string, string>, nounset: boolean): bigint {
+  const value = env.get(name);
+  if (value === undefined && nounset) throw new ShellNounsetError(name);
+  const normalized = value ?? "";
+  if (!/^[+-]?(?:[0-9]+|0[xX][0-9a-f]+)$/iu.test(normalized)) return 0n;
   try {
-    return int64(BigInt(value));
+    return int64(BigInt(normalized));
   } catch {
     return 0n;
   }
@@ -386,43 +389,51 @@ function assignmentBinary(operator: AssignmentOperator): BinaryOperator | undefi
   return operator.slice(0, -1) as BinaryOperator;
 }
 
-export function evaluateArithmetic(node: ArithmeticNode, env: Map<string, string>): bigint {
+export function evaluateArithmetic(
+  node: ArithmeticNode,
+  env: Map<string, string>,
+  nounset = false,
+): bigint {
   switch (node.type) {
     case "integer": return int64(node.value);
-    case "variable": return readVariable(node.name, env);
+    case "variable": return readVariable(node.name, env, nounset);
     case "unary": {
-      const operand = evaluateArithmetic(node.operand, env);
+      const operand = evaluateArithmetic(node.operand, env, nounset);
       if (node.operator === "+") return operand;
       if (node.operator === "-") return int64(-operand);
       if (node.operator === "!") return operand === 0n ? 1n : 0n;
       return int64(~operand);
     }
     case "update": {
-      const previous = readVariable(node.name, env);
+      const previous = readVariable(node.name, env, nounset);
       const value = int64(previous + (node.operator === "++" ? 1n : -1n));
       env.set(node.name, String(value));
       return node.prefix ? value : previous;
     }
     case "binary": {
-      const left = evaluateArithmetic(node.left, env);
+      const left = evaluateArithmetic(node.left, env, nounset);
       if (node.operator === "&&" && left === 0n) return 0n;
       if (node.operator === "||" && left !== 0n) return 1n;
-      return binary(node.operator, left, evaluateArithmetic(node.right, env));
+      return binary(node.operator, left, evaluateArithmetic(node.right, env, nounset));
     }
     case "conditional": return evaluateArithmetic(
-      evaluateArithmetic(node.condition, env) === 0n ? node.alternate : node.consequent,
+      evaluateArithmetic(node.condition, env, nounset) === 0n ? node.alternate : node.consequent,
       env,
+      nounset,
     );
     case "assignment": {
-      const right = evaluateArithmetic(node.value, env);
       const operation = assignmentBinary(node.operator);
-      const value = operation === undefined ? right : binary(operation, readVariable(node.name, env), right);
+      const left = operation === undefined ? undefined : readVariable(node.name, env, nounset);
+      const right = evaluateArithmetic(node.value, env, nounset);
+      const value = operation === undefined
+        ? right
+        : binary(operation, left ?? 0n, right);
       env.set(node.name, String(value));
       return value;
     }
     case "comma": {
       let value = 0n;
-      for (const expression of node.expressions) value = evaluateArithmetic(expression, env);
+      for (const expression of node.expressions) value = evaluateArithmetic(expression, env, nounset);
       return value;
     }
   }

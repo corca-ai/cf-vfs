@@ -48,6 +48,10 @@ Scalar parameter expansion additionally supports shortest/longest shell-pattern
 prefix and suffix removal, first/global pattern replacement, and bounded
 Unicode-code-point substrings. Patterns use the declared glob syntax without
 pathname or dotfile rules, and quoted fragments remain literal.
+Nounset is available through both short and named `set` forms. An evaluated
+implicit unset reference terminates its current shell scope with status 1;
+functions, sourced units, and groups share the caller scope, while subshells,
+pipeline stages, and command substitutions are isolated scopes.
 
 Deliberate deterministic choices include:
 
@@ -68,6 +72,10 @@ Deliberate deterministic choices include:
   negative lengths are rejected. Arrays, indirect expansion,
   extglob, anchored replacement, and Bash's optional `&` replacement behavior
   remain outside the profile;
+- `set -u` does not acquire errexit's condition-sensitive suppression rules:
+  `&&`, `||`, `if`, and `!` cannot catch an implicit nounset failure in the
+  same scope. This matches the pinned Bash 5.3.3 stdin-script profile; the
+  runtime does not reproduce Bash's invocation-mode-specific status quirks;
 - subshells and command substitutions also clone session state; command
   substitution output must be bounded valid UTF-8 and contain no NUL;
 - arithmetic wraps deterministically at signed 64 bits instead of using the

@@ -69,6 +69,16 @@ shell scopes and fail before returning a truncated expansion. A scalar pattern
 operand is also capped by the absolute character limit before it is copied into
 the matcher's code-point representation.
 
+Nounset performs constant-time environment membership checks at expansion
+sites and does not create a separate allowance. Arithmetic recursion and lazy
+parameter words continue to use the existing bounded AST and shared execution
+budget. Isolated scopes clone the option flag but never clone or reset any
+budget; nounset termination settles their active descriptors through the same
+pipeline, substitution, and atomic-redirection cleanup paths. A redirection
+owned by a scope terminated for nounset is aborted rather than publishing its
+partial buffered output, including when a parent later observes an isolated
+scope's status.
+
 `read -r` consumes fd 0 with a fatal streaming UTF-8 decoder. It retains at
 most the unread suffix of one upstream chunk plus one decoded line under the
 shared buffered-byte budget, applies the one-line and total-I/O limits, and

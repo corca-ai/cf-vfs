@@ -262,6 +262,62 @@
       "args": [],
       "stdout": "<left>\n<right>\n[g/a]\n[g/b]\n",
       "exitCode": 0
+    },
+    {
+      "name": "nounset-defaults-and-positionals",
+      "script": "set -u; unset A; EMPTY=; printf '<%s>|<%s>|<%s>|<%s>|' \"${A-default}\" \"${EMPTY-default}\" \"${A+alternate}\" \"${EMPTY:+alternate}\"; printf '%s:<%s>:<%s>' \"$#\" \"$1\" \"$2\"",
+      "env": {},
+      "args": [
+        "one",
+        "two"
+      ],
+      "stdout": "<default>|<>|<>|<>|2:<one>:<two>",
+      "exitCode": 0
+    },
+    {
+      "name": "nounset-arithmetic-and-disable-forms",
+      "script": "set -o nounset; ((VALUE = 1)); ((0 && MISSING)) || :; ((1 || MISSING)); set +o nounset; printf '%s:<%s>' \"$VALUE\" \"$MISSING\"; set -u; set +u",
+      "env": {},
+      "args": [],
+      "stdout": "1:<>",
+      "exitCode": 0
+    },
+    {
+      "name": "nounset-isolated-disable-scopes",
+      "script": "set -u; (set +u; printf '<%s>' \"$MISSING\"); VALUE=$(set +u; printf '<%s>' \"$MISSING\"); printf '|%s' \"$VALUE\"",
+      "env": {},
+      "args": [],
+      "stdout": "<>|<>",
+      "exitCode": 0
+    },
+    {
+      "name": "nounset-top-level-failure",
+      "script": "set -u; printf before; printf '%s' \"$MISSING\" || printf caught; printf after",
+      "env": {},
+      "args": [],
+      "stdout": "before",
+      "exitCode": 1,
+      "stderr": "MISSING: unbound variable\n"
+    },
+    {
+      "name": "nounset-isolated-failure-statuses",
+      "script": "set -u; (printf '%s' \"$MISSING\"); SUB=$?; printf '%s' \"$MISSING\" | cat; PIPE=$?; VALUE=$(printf '%s' \"$MISSING\"); COMMAND=$?; printf '%s:%s:%s:<%s>' \"$SUB\" \"$PIPE\" \"$COMMAND\" \"$VALUE\"",
+      "env": {},
+      "args": [],
+      "stdout": "1:0:1:<>",
+      "exitCode": 0,
+      "stderr": "MISSING: unbound variable\nMISSING: unbound variable\nMISSING: unbound variable\n"
+    },
+    {
+      "name": "nounset-braced-at-fields",
+      "script": "set -u; printf '%s|' \"${#@}\"; printf '<%s>' \"${@-default}\"; printf '|<%s>' \"${@+alternate}\"",
+      "env": {},
+      "args": [
+        "one",
+        "two words"
+      ],
+      "stdout": "2|<one><two words>|<alternate>",
+      "exitCode": 0
     }
   ]
 }

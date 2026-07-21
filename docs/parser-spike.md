@@ -48,6 +48,10 @@ grammar or weaken complete-unit rejection. Nested pattern, replacement, offset,
 and length words use the existing fragment parser and depth budget, so this
 bounded addition does not cross a reconsideration trigger.
 
+Nounset adds no grammar. Its four forms are ordinary argv handled by the
+existing `set` built-in, and unset checks operate on the existing parameter and
+arithmetic AST nodes. It therefore does not change the parser decision.
+
 The main cost is maintenance: shell lexical rules interact in subtle ways. No
 one should extend it with ad-hoc string splitting. Each new construct needs a
 grammar/AST design, source-span tests, rejection-boundary tests, budget impact,

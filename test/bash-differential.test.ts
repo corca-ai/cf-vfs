@@ -10,5 +10,6 @@ describe(`Bash differential fixtures (${fixtures.image}, LC_ALL=${fixtures.local
     args: fixture.args,
     exitCode: fixture.exitCode,
     stdout: fixture.stdout,
+    stderr: "stderr" in fixture && typeof fixture.stderr === "string" ? fixture.stderr : "",
   })));
 });

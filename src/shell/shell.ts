@@ -4,6 +4,7 @@ import { bodyToStream, readAllBytes } from "../vfs/streams.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 import { ExecutionBudget, resolveShellLimits } from "./budget.js";
 import { optindGeneration, ShellEnvironment } from "./environment.js";
+import { ShellNounsetError } from "./errors.js";
 import {
   expandAssignmentValue,
   expandCasePattern,
@@ -58,6 +59,7 @@ function cloneSession(session: ShellSession): ShellSession {
     exitRequested: false,
     requestedExitCode: 0,
     pipefail: session.pipefail,
+    nounset: session.nounset === true,
     functions: new Map(session.functions),
     functionDepth: session.functionDepth,
     sourceDepth: session.sourceDepth,
@@ -73,11 +75,26 @@ function cloneSession(session: ShellSession): ShellSession {
 }
 
 function statusFor(error: VfsError): number {
-  return error.code === "EINVAL" ? 2 : error.code === "EACCES" ? 126 : 1;
+  return error instanceof ShellNounsetError
+    ? 1
+    : error.code === "EINVAL" ? 2 : error.code === "EACCES" ? 126 : 1;
 }
 
 function formatError(error: VfsError): string {
   return `${error.path === undefined ? "" : `${error.path}: `}${error.message}`;
+}
+
+async function runIsolatedShellScope(
+  run: () => Promise<number>,
+  stderr: ShellSink,
+): Promise<number> {
+  try {
+    return await run();
+  } catch (error) {
+    if (!(error instanceof ShellNounsetError)) throw error;
+    await stderr.write(new TextEncoder().encode(`${formatError(error)}\n`));
+    return statusFor(error);
+  }
 }
 
 async function closeDescriptors(fds: ShellFileDescriptors): Promise<void> {
@@ -213,7 +230,10 @@ function expansionRuntime(fds: ShellFileDescriptors, runtime: Runtime): Expansio
       };
       const completed = (async () => {
         try {
-          return await runScript(script, child, childFds, runtime);
+          return await runIsolatedShellScope(
+            async () => await runScript(script, child, childFds, runtime),
+            fds[2],
+          );
         } finally {
           await closeDescriptors(childFds);
         }
@@ -553,7 +573,7 @@ async function executeCompoundCommand(
       return 0;
     }
     case "arithmetic-command": {
-      return evaluateArithmetic(node.expression, session.env) === 0n ? 1 : 0;
+      return evaluateArithmetic(node.expression, session.env, session.nounset === true) === 0n ? 1 : 0;
     }
   }
 }
@@ -627,7 +647,7 @@ async function runCommandNode(
     }
     const fatal = error.code === "E2BIG" || error.code === "EFBIG"
       || error.code === "ETIMEDOUT" || error.code === "ECANCELED";
-    if (fatal) {
+    if (fatal || error instanceof ShellNounsetError) {
       await abortRedirectedDescriptors(fds, redirected, error);
       throw error;
     }
@@ -682,8 +702,14 @@ async function runPipeline(
     });
     if (nextInput !== undefined) input = nextInput;
   }
-  const statuses = await Promise.all(stages.map((stage, index) =>
-    runCommandNode(stage.node, stage.session, stage.fds, runtime, index > 0)));
+  const isolated = pipeline.commands.length > 1
+    || (pipeline.commands[0]?.type === "group" && pipeline.commands[0].subshell);
+  const statuses = await Promise.all(stages.map((stage, index) => isolated
+    ? runIsolatedShellScope(
+      async () => await runCommandNode(stage.node, stage.session, stage.fds, runtime, index > 0),
+      outerFds[2],
+    )
+    : runCommandNode(stage.node, stage.session, stage.fds, runtime, index > 0)));
   let status = statuses.at(-1) ?? 0;
   if (session.pipefail) {
     for (let index = statuses.length - 1; index >= 0; index -= 1) {
@@ -824,6 +850,7 @@ export class Shell {
       exitRequested: false,
       requestedExitCode: 0,
       pipefail: false,
+      nounset: false,
       functions: new Map(),
       functionDepth: 0,
       sourceDepth: 0,
@@ -880,7 +907,7 @@ export class Shell {
           }
         }
         await Promise.allSettled([rootFds[1].close(), rootFds[2].close()]);
-        return { exitCode: error.code === "EINVAL" ? 2 : 1 };
+        return { exitCode: statusFor(error) };
       } finally {
         const inputReason = controller.signal.reason
           ?? new VfsError("EPIPE", "shell execution stopped reading input");

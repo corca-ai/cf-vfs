@@ -75,16 +75,17 @@ The complete submitted script is parsed before any command runs. Unsupported
 backticks, process substitution, C-style `for`, arrays, extended `[[ ]]`, brace
 expansion, arbitrary descriptors, background jobs, `select`, the
 `function` keyword, `time`, `coproc`, and malformed syntax produce status 2
-before a partial mutation. `eval`, traps, job control, shell options other than
-`pipefail`, and OS process features are unavailable commands or usage errors.
+before a partial mutation. `eval`, traps, job control, shell options outside
+the documented `pipefail` and Version 3 `nounset` profile, and OS process
+features are unavailable commands or usage errors.
 
 Pipeline stages receive cloned shell state; an ordinary single built-in uses
 parent state. Assignment-only commands persist. Command-prefix assignments are
 recognized before expansion, their right-hand sides do not split or glob, and
 normally restore after a command. Consecutive assignment-only right-hand sides
-observe earlier assignments. `export` and
-`unset` mutate parent state outside a pipeline. `set -o pipefail` and
-`set +o pipefail` are supported.
+observe earlier assignments. `export` and `unset` mutate parent state outside
+a pipeline. `set -o pipefail` and `set +o pipefail` are supported. Version 3
+also supports `set -u`, `set +u`, `set -o nounset`, and `set +o nounset`.
 
 Ordinary groups and function bodies use the current session. Pipelines,
 parenthesized subshells, and command substitutions clone variables, functions,
@@ -174,6 +175,35 @@ locale-dependent ranges, anchored replacement forms such as `${name/#p/r}`,
 and special `&` replacement interpolation are unsupported. Unquoted results
 then undergo the ordinary field-splitting and pathname-expansion phases.
 
+Deterministic nounset handling is available through `set -u`, `set +u`,
+`set -o nounset`, and `set +o nounset`. When enabled, a plain expansion of an
+unset scalar, a missing positional parameter, length/pattern/substring
+operations on an unset scalar, or an evaluated unset arithmetic reference
+terminates the current shell scope with status 1 and an `unbound variable`
+diagnostic. `&&`, `||`, `if`, and `!` do not suppress or catch that termination.
+This matches the pinned Bash 5.3.3 stdin-script profile; Bash has
+invocation-mode-specific exit-status differences that this runtime does not
+reproduce.
+
+Default, assignment, alternate-value, and error parameter operators still
+handle unset values according to their declared semantics. Their operand words
+remain lazy, so an unset reference in an unused word is not evaluated. Direct
+arithmetic assignment can create a variable, and short-circuited arithmetic
+branches are not read; updates and compound assignments read their target and
+therefore fail when it is unset.
+
+`$#` and `${#@}` report the positional-argument count. Plain `$@` remains safe
+with zero arguments. Braced default and alternate forms treat zero arguments as
+an unset `$@`; when arguments exist, forms that select `$@` preserve the
+individual argument fields instead of joining them.
+
+Functions, sourced units, and ordinary groups share option state and the
+current shell scope. Subshells, multi-stage pipelines, and command
+substitutions clone the option. An implicit nounset failure terminates only
+such an isolated scope; its status can then participate in `||`, pipeline
+status/`pipefail`, or command-substitution status in the parent. Option changes
+inside an isolated scope do not escape.
+
 See [POSIX and Bash compatibility](posix-compatibility.md) for deterministic
 locale, glob, and redirection details and [the parser spike](parser-spike.md)
 for parser selection.
@@ -188,7 +218,7 @@ command implementations are absent; the default preset is covered separately.
 
 | Registry group | Available commands and principal options |
 | --- | --- |
-| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set -o pipefail`, `test`, `[` |
+| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (`-u`, `+u`, `-o/+o nounset`, `-o/+o pipefail`), `test`, `[` |
 | namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f`, `ls -l -d`, `find -name -type -maxdepth`, `stat`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | streaming text/bytes | `cat`, `grep -i -v -n -F -c`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed s/old/new/[g]` |
 | bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch` |

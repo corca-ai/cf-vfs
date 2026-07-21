@@ -701,6 +701,23 @@ describe("byte-oriented Durable Object filesystem", () => {
     });
   });
 
+  it("contains nounset termination at an isolated RPC shell scope", async () => {
+    const stub = workspace("shell-nounset-v3-rpc");
+    const result = await stub.executeText({
+      script: [
+        "set -u",
+        "(printf '%s' \"$MISSING\") || printf '%s|' \"$?\"",
+        "set +u",
+        "printf '<%s>' \"$MISSING\"",
+      ].join("\n"),
+    });
+    expect(result).toMatchObject({
+      exitCode: 0,
+      stdout: "1|<>",
+      stderr: "MISSING: unbound variable\n",
+    });
+  });
+
   it("uses caller-provided byte streams for the remote streaming boundary", async () => {
     const stub = workspace("shell-stream-rpc");
     const input = streamFromChunks([new TextEncoder().encode("streamed")]);

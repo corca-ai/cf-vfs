@@ -85,6 +85,14 @@ expansion budget. Preserve quoted word fragments before compiling a pattern,
 and charge materialized characters and fields after expansion. Add adversarial
 limit tests as well as the ordinary semantic matrix.
 
+Implicit nounset failures use `ShellNounsetError`, not an ordinary command
+status. Let the error propagate through functions, sourced units, groups, and
+same-scope `&&`/`||` evaluation. Catch it only at a real cloned-shell boundary:
+a parenthesized subshell, a multi-stage pipeline stage, command substitution,
+or the top-level execution. The boundary reports the diagnostic, preserves
+status 1, and settles descriptors. Do not add errexit-style suppression rules
+to nounset.
+
 Regenerate the fixture only after reviewing the semantic change:
 
 ```sh

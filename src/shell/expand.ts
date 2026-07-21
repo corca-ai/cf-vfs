@@ -1,6 +1,7 @@
 import { VfsError } from "../core/errors.js";
 import { compareUtf8, dirname, normalizePath } from "../core/path.js";
 import { evaluateArithmetic } from "./arithmetic.js";
+import { ShellNounsetError } from "./errors.js";
 import {
   matchesShellPattern,
   removeShellPattern,
@@ -28,7 +29,7 @@ export interface ExpansionRuntime {
 function variableState(name: string, session: ShellSession): { set: boolean; value: string } {
   if (name === "?") return { set: true, value: String(session.lastExitCode) };
   if (name === "#") return { set: true, value: String(session.args.length) };
-  if (name === "@") return { set: true, value: session.args.join(" ") };
+  if (name === "@") return { set: session.args.length > 0, value: session.args.join(" ") };
   if (name === "0") return { set: true, value: session.env.get("0") ?? "cf-vfs" };
   if (/^[1-9][0-9]*$/u.test(name)) {
     const value = session.args[Number(name) - 1];
@@ -315,11 +316,18 @@ async function parameterValue(
   const state = variableState(expansion.name, session);
   if (!("kind" in expansion)) {
     if (expansion.length) {
+      if (expansion.name === "@") return String(session.args.length);
+      if (!state.set && session.nounset) throw new ShellNounsetError(expansion.name);
       budget.expansionWork(state.value.length);
       return String(codePointLength(state.value));
     }
     const operator = expansion.operator;
-    if (operator === undefined) return state.value;
+    if (operator === undefined) {
+      if (!state.set && session.nounset && expansion.name !== "@") {
+        throw new ShellNounsetError(expansion.name);
+      }
+      return state.value;
+    }
     const checkNull = operator.startsWith(":");
     const absent = !state.set || (checkNull && state.value.length === 0);
     const operand = async (): Promise<string> => expansion.word === undefined
@@ -335,8 +343,15 @@ async function parameterValue(
     }
     if (!absent) return state.value;
     const message = await operand();
+    if (session.nounset) {
+      throw new ShellNounsetError(
+        expansion.name,
+        message || `${expansion.name}: parameter is unset or empty`,
+      );
+    }
     throw new VfsError("EINVAL", message || `${expansion.name}: parameter is unset or empty`);
   }
+  if (!state.set && session.nounset) throw new ShellNounsetError(expansion.name);
   if (expansion.kind === "remove") {
     const pattern = await patternParts(expansion.pattern, session, fileSystem, budget, runtime);
     return removeShellPattern(
@@ -389,7 +404,7 @@ async function partValue(
     return assertNoNul(await parameterValue(part.expansion, session, fileSystem, budget, runtime));
   }
   if (part.kind === "arithmetic") {
-    return String(evaluateArithmetic(part.expression, session.env));
+    return String(evaluateArithmetic(part.expression, session.env, session.nounset === true));
   }
   return assertNoNul(await runtime.commandSubstitute(part.script, session));
 }
@@ -405,10 +420,19 @@ async function partValues(
 ): Promise<ExpandedValues> {
   if (part.kind === "parameter"
     && part.expansion.name === "@"
-    && !("kind" in part.expansion)
-    && !part.expansion.length
-    && part.expansion.operator === undefined) {
-    return splitValues(session.args, part.quoted, budget, existingCharacters, existingFields);
+    && !("kind" in part.expansion)) {
+    const expansion = part.expansion;
+    if (!expansion.length) {
+      const operator = expansion.operator;
+      const checkNull = operator?.startsWith(":") ?? false;
+      const absent = session.args.length === 0
+        || (checkNull && session.args.join(" ").length === 0);
+      const preservesArguments = operator === undefined
+        || (!absent && !operator.endsWith("+"));
+      if (preservesArguments) {
+        return splitValues(session.args, part.quoted, budget, existingCharacters, existingFields);
+      }
+    }
   }
   const value = await partValue(part, session, fileSystem, budget, runtime);
   return splitValues([value], part.quoted, budget, existingCharacters, existingFields);

@@ -414,11 +414,20 @@ export const exitCommand = /* @__PURE__ */ defineCommand("exit", (context, argv)
 
 export const setCommand = /* @__PURE__ */ defineCommand("set", (context, argv) => {
   if (argv.length === 0) return 0;
-  if (argv.length === 2 && argv[1] === "pipefail" && (argv[0] === "-o" || argv[0] === "+o")) {
-    context.session.pipefail = argv[0] === "-o";
+  if (argv.length === 1 && (argv[0] === "-u" || argv[0] === "+u")) {
+    context.session.nounset = argv[0] === "-u";
     return 0;
   }
-  throw new VfsError("EINVAL", "set: only -o pipefail and +o pipefail are supported");
+  if (argv.length === 2 && (argv[0] === "-o" || argv[0] === "+o")) {
+    if (argv[1] === "pipefail") context.session.pipefail = argv[0] === "-o";
+    else if (argv[1] === "nounset") context.session.nounset = argv[0] === "-o";
+    else throw new VfsError("EINVAL", `set: unsupported option name: ${argv[1]}`);
+    return 0;
+  }
+  throw new VfsError(
+    "EINVAL",
+    "set: supported forms are -u, +u, -o nounset, +o nounset, -o pipefail, and +o pipefail",
+  );
 });
 
 async function evaluateTest(context: ShellCommandContext, values: readonly string[]): Promise<boolean> {

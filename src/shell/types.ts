@@ -43,6 +43,7 @@ export interface ShellSession {
   exitRequested: boolean;
   requestedExitCode: number;
   pipefail: boolean;
+  nounset?: boolean;
   functions: Map<string, FunctionDefinitionNode>;
   functionDepth: number;
   sourceDepth: number;
