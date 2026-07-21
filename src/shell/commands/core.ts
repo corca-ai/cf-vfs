@@ -1,5 +1,5 @@
 import { VfsError } from "../../core/errors.js";
-import { normalizePath } from "../../core/path.js";
+import { normalizePath, normalizePathPreservingTrailingSlash } from "../../core/path.js";
 import { optindGeneration, setOptindFromGetopts } from "../environment.js";
 import { readInputRecord } from "../input.js";
 import type { ShellCommandContext } from "../types.js";
@@ -29,9 +29,11 @@ export const echoCommand = /* @__PURE__ */ defineCommand("echo", async (_context
 function formatPrintfOnce(format: string, values: readonly string[]): {
   output: string;
   consumed: number;
+  diagnostics: string[];
 } {
   let index = 0;
   let output = "";
+  const diagnostics: string[] = [];
   for (let offset = 0; offset < format.length; offset += 1) {
     const character = format[offset];
     if (character === "\\") {
@@ -40,7 +42,7 @@ function formatPrintfOnce(format: string, values: readonly string[]): {
       else if (next === "t") output += "\t";
       else if (next === "r") output += "\r";
       else if (next === "\\") output += "\\";
-      else output += next ?? "\\";
+      else output += next === undefined ? "\\" : `\\${next}`;
       continue;
     }
     if (character !== "%") {
@@ -50,11 +52,66 @@ function formatPrintfOnce(format: string, values: readonly string[]): {
     const specifier = format[++offset];
     if (specifier === "%") output += "%";
     else if (specifier === "s") output += values[index++] ?? "";
-    else if (specifier === "d") output += String(Number.parseInt(values[index++] ?? "0", 10) || 0);
+    else if (specifier === "d") {
+      const parsed = parsePrintfInteger(values[index++] ?? "0");
+      output += String(parsed.value);
+      if (parsed.diagnostic !== undefined) diagnostics.push(parsed.diagnostic);
+    }
     else if (specifier === "b") output += decodeBackslashEscapes(values[index++] ?? "");
     else throw new VfsError("EINVAL", `printf: unsupported conversion %${specifier ?? ""}`);
   }
-  return { output, consumed: index };
+  return { output, consumed: index, diagnostics };
+}
+
+const MIN_PRINTF_INTEGER = -(1n << 63n);
+const MAX_PRINTF_INTEGER = (1n << 63n) - 1n;
+
+function parsePrintfInteger(value: string): { value: bigint; diagnostic?: string } {
+  if (value.startsWith("'") || value.startsWith("\"")) {
+    const character = [...value.slice(1)][0];
+    if (character !== undefined) return { value: BigInt(character.codePointAt(0) ?? 0) };
+  }
+
+  const input = value.trimStart();
+  const sign = input.startsWith("-") ? -1n : 1n;
+  const unsigned = input.startsWith("-") || input.startsWith("+") ? input.slice(1) : input;
+  let digits = "";
+  let consumed = 0;
+  let radix: 8 | 10 | 16 = 10;
+  if (/^0[xX]/u.test(unsigned)) {
+    radix = 16;
+    digits = /^[0-9a-f]+/iu.exec(unsigned.slice(2))?.[0] ?? "";
+    consumed = 2 + digits.length;
+  } else if (unsigned.startsWith("0")) {
+    radix = 8;
+    digits = /^0[0-7]*/u.exec(unsigned)?.[0] ?? "";
+    consumed = digits.length;
+  } else {
+    digits = /^[0-9]+/u.exec(unsigned)?.[0] ?? "";
+    consumed = digits.length;
+  }
+
+  let parsed = 0n;
+  if (digits.length > 0) {
+    if (radix === 16) parsed = BigInt(`0x${digits}`);
+    else if (radix === 8) parsed = BigInt(`0o${digits}`);
+    else parsed = BigInt(digits);
+    parsed *= sign;
+  }
+
+  let diagnostic: string | undefined;
+  const remaining = unsigned.slice(consumed);
+  if (digits.length === 0 || remaining.length > 0) {
+    const message = radix === 8 && /^[89]/u.test(remaining)
+      ? "invalid octal number"
+      : "invalid number";
+    diagnostic = `printf: ${value}: ${message}\n`;
+  }
+  if (parsed < MIN_PRINTF_INTEGER || parsed > MAX_PRINTF_INTEGER) {
+    parsed = parsed < MIN_PRINTF_INTEGER ? MIN_PRINTF_INTEGER : MAX_PRINTF_INTEGER;
+    diagnostic = `printf: ${value}: Result not representable\n`;
+  }
+  return { value: parsed, ...(diagnostic === undefined ? {} : { diagnostic }) };
 }
 
 function decodeBackslashEscapes(value: string): string {
@@ -70,30 +127,42 @@ function decodeBackslashEscapes(value: string): string {
     else if (next === "t") output += "\t";
     else if (next === "r") output += "\r";
     else if (next === "\\") output += "\\";
-    else output += next ?? "\\";
+    else output += next === undefined ? "\\" : `\\${next}`;
   }
   return output;
 }
 
-function formatPrintf(format: string, values: readonly string[]): string {
+function formatPrintf(format: string, values: readonly string[]): {
+  output: string;
+  diagnostics: string[];
+} {
   let output = "";
+  const diagnostics: string[] = [];
   let offset = 0;
   do {
     const result = formatPrintfOnce(format, values.slice(offset));
     output += result.output;
+    diagnostics.push(...result.diagnostics);
     offset += result.consumed;
     if (result.consumed === 0) break;
   } while (offset < values.length);
-  return output;
+  return { output, diagnostics };
 }
 
 export const printfCommand = /* @__PURE__ */ defineCommand("printf", async (_context, argv, fds) => {
   if (argv.length === 0) throw new VfsError("EINVAL", "printf: missing format");
-  await writeText(fds[1], formatPrintf(argv[0] ?? "", argv.slice(1)));
-  return 0;
+  const formatted = formatPrintf(argv[0] ?? "", argv.slice(1));
+  await Promise.all([
+    writeText(fds[1], formatted.output),
+    formatted.diagnostics.length === 0
+      ? Promise.resolve()
+      : writeText(fds[2], formatted.diagnostics.join("")),
+  ]);
+  return formatted.diagnostics.length === 0 ? 0 : 1;
 });
 
-export const pwdCommand = /* @__PURE__ */ defineCommand("pwd", async (context, _argv, fds) => {
+export const pwdCommand = /* @__PURE__ */ defineCommand("pwd", async (context, argv, fds) => {
+  if (argv.length > 0) throw new VfsError("EINVAL", `pwd: unsupported option ${argv[0] ?? ""}`);
   await writeText(fds[1], `${context.session.cwd}\n`);
   return 0;
 });
@@ -375,7 +444,7 @@ export const returnCommand = /* @__PURE__ */ defineCommand("return", (context, a
   if (argv.length > 1) throw new VfsError("EINVAL", "return: too many arguments");
   const status = argv[0] === undefined
     ? context.session.lastExitCode
-    : parseInteger(argv[0], "return status") & 0xff;
+    : parseInteger(argv[0], "return status", Number.MIN_SAFE_INTEGER) & 0xff;
   context.session.flow = { type: "return", status };
   return status;
 });
@@ -406,7 +475,9 @@ export const continueCommand = /* @__PURE__ */ defineCommand("continue", (contex
 
 export const exitCommand = /* @__PURE__ */ defineCommand("exit", (context, argv) => {
   if (argv.length > 1) throw new VfsError("EINVAL", "exit: too many arguments");
-  const code = argv[0] === undefined ? context.session.lastExitCode : parseInteger(argv[0], "exit status");
+  const code = argv[0] === undefined
+    ? context.session.lastExitCode
+    : parseInteger(argv[0], "exit status", Number.MIN_SAFE_INTEGER);
   context.session.exitRequested = true;
   context.session.requestedExitCode = code & 0xff;
   return context.session.requestedExitCode;
@@ -433,6 +504,30 @@ export const setCommand = /* @__PURE__ */ defineCommand("set", (context, argv) =
   );
 });
 
+interface NormalizedTestInteger {
+  negative: boolean;
+  digits: string;
+}
+
+function normalizeTestInteger(value: string): NormalizedTestInteger {
+  if (!/^-?[0-9]+$/u.test(value)) {
+    throw new VfsError("EINVAL", "test: integer expression expected");
+  }
+  const negative = value.startsWith("-");
+  const unsigned = negative ? value.slice(1) : value;
+  const digits = unsigned.replace(/^0+/u, "") || "0";
+  return { negative: negative && digits !== "0", digits };
+}
+
+function compareTestIntegers(left: string, right: string): number {
+  const first = normalizeTestInteger(left);
+  const second = normalizeTestInteger(right);
+  if (first.negative !== second.negative) return first.negative ? -1 : 1;
+  let order = first.digits.length - second.digits.length;
+  if (order === 0 && first.digits !== second.digits) order = first.digits < second.digits ? -1 : 1;
+  return first.negative ? -order : order;
+}
+
 async function evaluateTest(context: ShellCommandContext, values: readonly string[]): Promise<boolean> {
   if (values.length === 0) return false;
   if (values[0] === "!") return !await evaluateTest(context, values.slice(1));
@@ -443,14 +538,19 @@ async function evaluateTest(context: ShellCommandContext, values: readonly strin
     if (unary === "-n") return operand.length > 0;
     if (unary === "-z") return operand.length === 0;
     if (unary === "-e" || unary === "-f" || unary === "-d" || unary === "-s") {
+      if (operand.length === 0) return false;
       try {
-        const stat = await context.fileSystem.stat(normalizePath(operand, context.session.cwd));
+        const stat = await context.fileSystem.stat(
+          normalizePathPreservingTrailingSlash(operand, context.session.cwd),
+        );
         if (unary === "-e") return true;
         if (unary === "-f") return stat.kind === "file";
         if (unary === "-d") return stat.kind === "directory";
         return stat.sizeBytes > 0;
       } catch (error) {
-        if (error instanceof VfsError && error.code === "ENOENT") return false;
+        if (error instanceof VfsError && (error.code === "ENOENT" || error.code === "ENOTDIR")) {
+          return false;
+        }
         throw error;
       }
     }
@@ -460,15 +560,13 @@ async function evaluateTest(context: ShellCommandContext, values: readonly strin
     if (operator === "=" || operator === "==") return left === right;
     if (operator === "!=") return left !== right;
     if (["-eq", "-ne", "-lt", "-le", "-gt", "-ge"].includes(operator)) {
-      if (!/^-?[0-9]+$/u.test(left) || !/^-?[0-9]+$/u.test(right)) {
-        throw new VfsError("EINVAL", "test: integer expression expected");
-      }
-      if (operator === "-eq") return Number(left) === Number(right);
-      if (operator === "-ne") return Number(left) !== Number(right);
-      if (operator === "-lt") return Number(left) < Number(right);
-      if (operator === "-le") return Number(left) <= Number(right);
-      if (operator === "-gt") return Number(left) > Number(right);
-      return Number(left) >= Number(right);
+      const order = compareTestIntegers(left, right);
+      if (operator === "-eq") return order === 0;
+      if (operator === "-ne") return order !== 0;
+      if (operator === "-lt") return order < 0;
+      if (operator === "-le") return order <= 0;
+      if (operator === "-gt") return order > 0;
+      return order >= 0;
     }
   }
   throw new VfsError("EINVAL", "test: unsupported expression");

@@ -54,6 +54,14 @@ function syntax(message: string, source: string, offset: number): ArithmeticSynt
   return new ArithmeticSyntaxError(message, source, offset);
 }
 
+function decimalOrOctalInteger(digits: string): bigint | undefined {
+  if (digits.length > 1 && digits.startsWith("0")) {
+    if (!/^[0-7]+$/u.test(digits)) return undefined;
+    return BigInt(`0o${digits}`);
+  }
+  return BigInt(digits);
+}
+
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
   let offset = 0;
@@ -75,7 +83,9 @@ function tokenize(source: string): Token[] {
       } else {
         const digits = /^[0-9]+/u.exec(source.slice(offset))?.[0] ?? "";
         offset += digits.length;
-        tokens.push({ type: "integer", value: BigInt(digits), offset: start });
+        const value = decimalOrOctalInteger(digits);
+        if (value === undefined) throw syntax("invalid octal literal", source, start);
+        tokens.push({ type: "integer", value, offset: start });
       }
       continue;
     }
@@ -345,7 +355,15 @@ function readVariable(name: string, env: ReadonlyMap<string, string>, nounset: b
   const normalized = value ?? "";
   if (!/^[+-]?(?:[0-9]+|0[xX][0-9a-f]+)$/iu.test(normalized)) return 0n;
   try {
-    return int64(BigInt(normalized));
+    const negative = normalized.startsWith("-");
+    const unsigned = normalized.startsWith("-") || normalized.startsWith("+")
+      ? normalized.slice(1)
+      : normalized;
+    const parsed = /^0[xX]/u.test(unsigned)
+      ? BigInt(unsigned)
+      : decimalOrOctalInteger(unsigned);
+    if (parsed === undefined) return 0n;
+    return int64(negative ? -parsed : parsed);
   } catch {
     return 0n;
   }
@@ -364,7 +382,7 @@ function binary(operator: BinaryOperator, left: bigint, right: bigint): bigint {
     case "/": return int64(divide(left, right, false));
     case "%": return int64(divide(left, right, true));
     case "**": {
-      if (right < 0n) return 0n;
+      if (right < 0n) throw new VfsError("EINVAL", "negative arithmetic exponent");
       if (right > 63n) throw new VfsError("E2BIG", "arithmetic exponent is too large");
       return int64(left ** right);
     }

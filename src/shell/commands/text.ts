@@ -20,6 +20,45 @@ function checkedLines(
   return lines;
 }
 
+interface NumericSortKey {
+  negative: boolean;
+  integer: string;
+  fraction: string;
+}
+
+const ZERO_NUMERIC_SORT_KEY: NumericSortKey = {
+  negative: false,
+  integer: "0",
+  fraction: "",
+};
+
+function numericSortKey(value: string): NumericSortKey {
+  const match = /^[ \t]*(-?)(?:(\d+)(?:\.(\d*))?|\.(\d+))/u.exec(value);
+  if (match === null) return ZERO_NUMERIC_SORT_KEY;
+  const integer = (match[2] ?? "").replace(/^0+/u, "") || "0";
+  const fraction = (match[3] ?? match[4] ?? "").replace(/0+$/u, "");
+  const zero = integer === "0" && fraction.length === 0;
+  return { negative: match[1] === "-" && !zero, integer, fraction };
+}
+
+function compareNumericSortKeys(left: NumericSortKey, right: NumericSortKey): number {
+  if (left.negative !== right.negative) return left.negative ? -1 : 1;
+  let order = left.integer.length - right.integer.length;
+  if (order === 0 && left.integer !== right.integer) order = left.integer < right.integer ? -1 : 1;
+  if (order === 0) {
+    const length = Math.max(left.fraction.length, right.fraction.length);
+    for (let index = 0; index < length; index += 1) {
+      const first = left.fraction.charCodeAt(index) || 48;
+      const second = right.fraction.charCodeAt(index) || 48;
+      if (first !== second) {
+        order = first - second;
+        break;
+      }
+    }
+  }
+  return left.negative ? -order : order;
+}
+
 export const sortCommand = /* @__PURE__ */ defineCommand("sort", async (context, argv, fds) => {
   let reverse = false;
   let unique = false;
@@ -34,26 +73,110 @@ export const sortCommand = /* @__PURE__ */ defineCommand("sort", async (context,
   }
   const collected = await inputTexts(context, paths, fds[0]);
   try {
-    let lines = checkedLines(
+    const lines = checkedLines(
       collected.value.map((input) => input.text).join(""),
       context.budget.limits.maxBufferedRecords,
       context.budget.limits.maxLineBytes,
     );
-    lines.sort((left, right) => {
-      const leftValue = left.endsWith("\n") ? left.slice(0, -1) : left;
-      const rightValue = right.endsWith("\n") ? right.slice(0, -1) : right;
-      const order = numeric
-        ? (Number(leftValue.trim()) || 0) - (Number(rightValue.trim()) || 0)
-        : compareUtf8(leftValue, rightValue);
+    let records = lines.map((line) => {
+      const value = line.endsWith("\n") ? line.slice(0, -1) : line;
+      return { value, ...(numeric ? { numericKey: numericSortKey(value) } : {}) };
+    });
+    const compareKeys = (left: typeof records[number], right: typeof records[number]): number => numeric
+      ? compareNumericSortKeys(
+        left.numericKey ?? ZERO_NUMERIC_SORT_KEY,
+        right.numericKey ?? ZERO_NUMERIC_SORT_KEY,
+      )
+      : compareUtf8(left.value, right.value);
+    records.sort((left, right) => {
+      let order = compareKeys(left, right);
+      if (order === 0) order = compareUtf8(left.value, right.value);
       return reverse ? -order : order;
     });
-    if (unique) lines = lines.filter((line, index) => index === 0 || line !== lines[index - 1]);
-    await writeText(fds[1], lines.join(""));
+    if (unique) {
+      records = records.filter((record, index) =>
+        index === 0 || compareKeys(record, records[index - 1] ?? record) !== 0);
+    }
+    await writeText(fds[1], records.map((record) => `${record.value}\n`).join(""));
     return 0;
   } finally {
     collected.release();
   }
 });
+
+function asciiLower(value: string): string {
+  return value.replace(/[A-Z]/gu, (character) => character.toLowerCase());
+}
+
+const C_WHITESPACE = " \t\n\v\f\r";
+
+function asciiCaseInsensitiveRegexSource(source: string): string {
+  let output = "";
+  for (let index = 0; index < source.length;) {
+    const character = source[index] ?? "";
+    if (character !== "\\") {
+      if (source.startsWith("(?<", index) && !["=", "!"].includes(source[index + 3] ?? "")) {
+        const end = source.indexOf(">", index + 3);
+        if (end >= 0) {
+          output += source.slice(index, end + 1);
+          index = end + 1;
+          continue;
+        }
+      }
+      output += asciiLower(character);
+      index += character.length;
+      continue;
+    }
+
+    const escaped = source[index + 1];
+    if (escaped === undefined) {
+      output += character;
+      break;
+    }
+    if ((escaped === "p" || escaped === "P") && source[index + 2] === "{") {
+      const end = source.indexOf("}", index + 3);
+      if (end >= 0) {
+        output += source.slice(index, end + 1);
+        index = end + 1;
+        continue;
+      }
+    }
+    if (escaped === "k" && source[index + 2] === "<") {
+      const end = source.indexOf(">", index + 3);
+      if (end >= 0) {
+        output += source.slice(index, end + 1);
+        index = end + 1;
+        continue;
+      }
+    }
+
+    const fixedHexDigits = escaped === "x" ? 2 : escaped === "u" ? 4 : 0;
+    if (fixedHexDigits > 0) {
+      const digits = source.slice(index + 2, index + 2 + fixedHexDigits);
+      if (digits.length === fixedHexDigits && /^[0-9a-f]+$/iu.test(digits)) {
+        const codePoint = Number.parseInt(digits, 16);
+        const folded = codePoint >= 0x41 && codePoint <= 0x5a ? codePoint + 0x20 : codePoint;
+        output += `\\${escaped}${folded.toString(16).padStart(fixedHexDigits, "0")}`;
+        index += 2 + fixedHexDigits;
+        continue;
+      }
+    }
+    if (escaped === "u" && source[index + 2] === "{") {
+      const end = source.indexOf("}", index + 3);
+      const digits = end < 0 ? "" : source.slice(index + 3, end);
+      if (end >= 0 && /^[0-9a-f]+$/iu.test(digits)) {
+        const codePoint = Number.parseInt(digits, 16);
+        const folded = codePoint >= 0x41 && codePoint <= 0x5a ? codePoint + 0x20 : codePoint;
+        output += `\\u{${folded.toString(16)}}`;
+        index = end + 1;
+        continue;
+      }
+    }
+    output += `\\${escaped}`;
+    index += 2;
+  }
+  return output;
+}
 
 export const grepCommand = /* @__PURE__ */ defineCommand("grep", async (context, argv, fds) => {
   let ignoreCase = false;
@@ -80,7 +203,7 @@ export const grepCommand = /* @__PURE__ */ defineCommand("grep", async (context,
   let regular: RegExp | undefined;
   if (!fixed) {
     try {
-      regular = new RegExp(pattern, ignoreCase ? "iu" : "u");
+      regular = new RegExp(ignoreCase ? asciiCaseInsensitiveRegexSource(pattern) : pattern, "u");
     } catch {
       throw new VfsError("EINVAL", "grep: invalid regular expression");
     }
@@ -96,8 +219,8 @@ export const grepCommand = /* @__PURE__ */ defineCommand("grep", async (context,
         index += 1;
       const candidate = line.endsWith("\n") ? line.slice(0, -1) : line;
       const found = fixed
-        ? (ignoreCase ? candidate.toLocaleLowerCase("en-US").includes(pattern.toLocaleLowerCase("en-US")) : candidate.includes(pattern))
-        : regular?.test(candidate) ?? false;
+        ? (ignoreCase ? asciiLower(candidate).includes(asciiLower(pattern)) : candidate.includes(pattern))
+        : regular?.test(ignoreCase ? asciiLower(candidate) : candidate) ?? false;
       regular && (regular.lastIndex = 0);
       if (found === invert) continue;
       matches += 1;
@@ -127,11 +250,15 @@ function sliceCount(argv: readonly string[], defaultCount: number): {
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index] ?? "";
     if (value === "-n" || value === "--lines") {
+      bytes = false;
       count = parseInteger(argv[++index] ?? "", "line count");
     } else if (value === "-c" || value === "--bytes") {
       bytes = true;
       count = parseInteger(argv[++index] ?? "", "byte count");
-    } else if (/^-[0-9]+$/u.test(value)) count = Number(value.slice(1));
+    } else if (/^-[0-9]+$/u.test(value)) {
+      bytes = false;
+      count = Number(value.slice(1));
+    }
     else if (value.startsWith("-")) throw new VfsError("EINVAL", `unsupported option ${value}`);
     else paths.push(value);
   }
@@ -140,7 +267,7 @@ function sliceCount(argv: readonly string[], defaultCount: number): {
 
 export const headCommand = /* @__PURE__ */ defineCommand("head", async (context, argv, fds) => {
   const options = sliceCount(argv, 10);
-  const headStream = async (stream: ReadableStream<Uint8Array>): Promise<void> => {
+  const headBytes = async (stream: ReadableStream<Uint8Array>): Promise<void> => {
     const reader = stream.getReader();
     let remaining = options.count;
     let finished = false;
@@ -156,26 +283,11 @@ export const headCommand = /* @__PURE__ */ defineCommand("head", async (context,
           break;
         }
         context.budget.io(result.value.byteLength);
-        if (options.bytes) {
-          const output = result.value.slice(0, remaining);
-          await writeBytes(fds[1], output);
-          remaining -= output.byteLength;
-          if (output.byteLength < result.value.byteLength || remaining === 0) {
-            await reader.cancel(new VfsError("EPIPE", "head reached its byte limit"));
-            break;
-          }
-          continue;
-        }
-        let end = result.value.byteLength;
-        for (let index = 0; index < result.value.byteLength; index += 1) {
-          if (result.value[index] === 0x0a && --remaining === 0) {
-            end = index + 1;
-            break;
-          }
-        }
-        await writeBytes(fds[1], result.value.slice(0, end));
-        if (end < result.value.byteLength || remaining === 0) {
-          await reader.cancel(new VfsError("EPIPE", "head reached its line limit"));
+        const output = result.value.slice(0, remaining);
+        await writeBytes(fds[1], output);
+        remaining -= output.byteLength;
+        if (output.byteLength < result.value.byteLength || remaining === 0) {
+          await reader.cancel(new VfsError("EPIPE", "head reached its byte limit"));
           break;
         }
       }
@@ -186,24 +298,116 @@ export const headCommand = /* @__PURE__ */ defineCommand("head", async (context,
       reader.releaseLock();
     }
   };
+  const headLines = async (stream: ReadableStream<Uint8Array>, path: string): Promise<void> => {
+    const reader = stream.getReader();
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    let remaining = options.count;
+    let currentLineBytes = 0;
+    let records = 0;
+    let finished = false;
+    const account = (bytes: Uint8Array): void => {
+      for (const byte of bytes) {
+        currentLineBytes += 1;
+        if (currentLineBytes > context.budget.limits.maxLineBytes) {
+          throw new VfsError("E2BIG", "line byte limit exceeded", path);
+        }
+        if (byte !== 0x0a) continue;
+        currentLineBytes = 0;
+        records += 1;
+        context.budget.step();
+        if (records > context.budget.limits.maxBufferedRecords) {
+          throw new VfsError("E2BIG", "input record limit exceeded", path);
+        }
+      }
+    };
+    try {
+      while (remaining > 0) {
+        const result = await readWithAbort(reader, context.signal);
+        if (result.done) {
+          let finalText: string;
+          try {
+            finalText = decoder.decode();
+          } catch {
+            throw new VfsError("EIO", "input is not valid UTF-8", path);
+          }
+          if (currentLineBytes > 0) {
+            records += 1;
+            context.budget.step();
+            if (records > context.budget.limits.maxBufferedRecords) {
+              throw new VfsError("E2BIG", "input record limit exceeded", path);
+            }
+          }
+          await writeText(fds[1], finalText);
+          finished = true;
+          break;
+        }
+        context.budget.io(result.value.byteLength);
+        let end = result.value.byteLength;
+        for (let index = 0; index < result.value.byteLength; index += 1) {
+          if (result.value[index] === 0x0a && --remaining === 0) {
+            end = index + 1;
+            break;
+          }
+        }
+        const bytes = result.value.slice(0, end);
+        let text: string;
+        try {
+          text = decoder.decode(bytes, { stream: remaining > 0 });
+        } catch {
+          throw new VfsError("EIO", "input is not valid UTF-8", path);
+        }
+        account(bytes);
+        await writeText(fds[1], text);
+        if (remaining === 0) {
+          await reader.cancel(new VfsError("EPIPE", "head reached its line limit"));
+          break;
+        }
+      }
+    } catch (error) {
+      await reader.cancel(error).catch(() => undefined);
+      throw error;
+    } finally {
+      if (!finished && remaining > 0) {
+        await reader.cancel(new VfsError("EPIPE", "head stopped reading input")).catch(() => undefined);
+      }
+      reader.releaseLock();
+    }
+  };
   for await (const input of inputStreams(context, options.paths, fds[0])) {
-    await headStream(input.stream);
+    if (options.bytes) {
+      await headBytes(input.stream);
+      continue;
+    }
+    if (options.count === 0) {
+      await input.stream.cancel(new VfsError("EPIPE", "head reached its line limit"));
+      continue;
+    }
+    await headLines(input.stream, input.name);
   }
   return 0;
 });
 
 export const tailCommand = /* @__PURE__ */ defineCommand("tail", async (context, argv, fds) => {
   const options = sliceCount(argv, 10);
+  if (options.bytes) {
+    for await (const input of inputStreams(context, options.paths, fds[0])) {
+      const collected = await collectStream(context, input.stream);
+      try {
+        await writeBytes(
+          fds[1],
+          collected.value.slice(Math.max(0, collected.value.byteLength - options.count)),
+        );
+      } finally {
+        collected.release();
+      }
+    }
+    return 0;
+  }
   const collected = await inputTexts(context, options.paths, fds[0]);
   try {
     for (const input of collected.value) {
-      if (options.bytes) {
-        const inputBytes = new TextEncoder().encode(input.text);
-        await writeBytes(fds[1], inputBytes.slice(Math.max(0, inputBytes.byteLength - options.count)));
-      } else {
-        const lines = splitLines(input.text);
-        await writeText(fds[1], lines.slice(Math.max(0, lines.length - options.count)).join(""));
-      }
+      const lines = splitLines(input.text);
+      await writeText(fds[1], lines.slice(Math.max(0, lines.length - options.count)).join(""));
     }
     return 0;
   } finally {
@@ -231,9 +435,10 @@ export const wcCommand = /* @__PURE__ */ defineCommand("wc", async (context, arg
     let byteCount = 0;
     let inWord = false;
     const needsWords = wordsOnly || (!linesOnly && !wordsOnly && !bytesOnly);
+    const needsText = linesOnly || needsWords;
     const accountText = (text: string): void => {
       for (const character of text) {
-        if (/\s/u.test(character)) inWord = false;
+        if (C_WHITESPACE.includes(character)) inWord = false;
         else if (!inWord) {
           wordCount += 1;
           inWord = true;
@@ -247,17 +452,19 @@ export const wcCommand = /* @__PURE__ */ defineCommand("wc", async (context, arg
         context.budget.io(read.value.byteLength);
         byteCount += read.value.byteLength;
         for (const byte of read.value) if (byte === 0x0a) lineCount += 1;
-        if (needsWords) {
+        if (needsText) {
           try {
-            accountText(decoder.decode(read.value, { stream: true }));
+            const text = decoder.decode(read.value, { stream: true });
+            if (needsWords) accountText(text);
           } catch {
             throw new VfsError("EIO", "input is not valid UTF-8", input.name);
           }
         }
       }
-      if (needsWords) {
+      if (needsText) {
         try {
-          accountText(decoder.decode());
+          const text = decoder.decode();
+          if (needsWords) accountText(text);
         } catch {
           throw new VfsError("EIO", "input is not valid UTF-8", input.name);
         }
@@ -312,17 +519,18 @@ export const uniqCommand = /* @__PURE__ */ defineCommand("uniq", async (context,
   let repeats = 0;
   const emit = async (): Promise<void> => {
     if (previous === undefined) return;
-    await output.write(`${count ? `${String(repeats).padStart(7)} ` : ""}${previous}`);
+    await output.write(`${count ? `${String(repeats).padStart(7)} ` : ""}${previous}\n`);
   };
   try {
     for await (const input of inputStreams(context, paths, fds[0])) {
       for await (const line of readTextLines(context, input.stream, input.name)) {
-        if (previous === undefined || previous === line) {
-          previous = line;
+        const value = line.endsWith("\n") ? line.slice(0, -1) : line;
+        if (previous === undefined || previous === value) {
+          previous = value;
           repeats += 1;
         } else {
           await emit();
-          previous = line;
+          previous = value;
           repeats = 1;
         }
       }
@@ -351,6 +559,9 @@ export const cutCommand = /* @__PURE__ */ defineCommand("cut", async (context, a
   if ((fields === undefined) === (characters === undefined)) {
     throw new VfsError("EINVAL", "cut: specify exactly one of -f or -c");
   }
+  if ([...delimiter].length !== 1) {
+    throw new VfsError("EINVAL", "cut: delimiter must be exactly one character");
+  }
   const output = new BufferedTextWriter(context, fds[1]);
   try {
     for await (const input of inputStreams(context, paths, fds[0])) {
@@ -359,7 +570,9 @@ export const cutCommand = /* @__PURE__ */ defineCommand("cut", async (context, a
         const content = newline ? line.slice(0, -1) : line;
         await output.write(fields === undefined
           ? [...content].filter((_character, index) => characters?.includes(index + 1)).join("") + newline
-          : content.split(delimiter).filter((_field, index) => fields?.includes(index + 1)).join(delimiter) + newline);
+          : (content.includes(delimiter)
+            ? content.split(delimiter).filter((_field, index) => fields?.includes(index + 1)).join(delimiter)
+            : content) + newline);
       }
     }
     await output.flush();
@@ -420,12 +633,22 @@ export const trCommand = /* @__PURE__ */ defineCommand("tr", async (context, arg
 });
 
 export const nlCommand = /* @__PURE__ */ defineCommand("nl", async (context, argv, fds) => {
+  for (const value of argv) {
+    if (value.startsWith("-") && value !== "-") {
+      throw new VfsError("EINVAL", `nl: unsupported option ${value}`);
+    }
+  }
   let lineNumber = 1;
   const output = new BufferedTextWriter(context, fds[1]);
   try {
     for await (const input of inputStreams(context, argv, fds[0])) {
       for await (const line of readTextLines(context, input.stream, input.name)) {
-        await output.write(`${String(lineNumber++).padStart(6)}\t${line}`);
+        const content = line.endsWith("\n") ? line.slice(0, -1) : line;
+        if (content.length === 0) {
+          await output.write(`       ${line.endsWith("\n") ? "\n" : ""}`);
+        } else {
+          await output.write(`${String(lineNumber++).padStart(6)}\t${line}`);
+        }
       }
     }
     await output.flush();
@@ -440,7 +663,9 @@ export const foldCommand = /* @__PURE__ */ defineCommand("fold", async (context,
   const paths: string[] = [];
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === "-w") width = parseInteger(argv[++index] ?? "", "width", 1);
-    else paths.push(argv[index] ?? "");
+    else if ((argv[index] ?? "").startsWith("-") && argv[index] !== "-") {
+      throw new VfsError("EINVAL", `fold: unsupported option ${argv[index] ?? ""}`);
+    } else paths.push(argv[index] ?? "");
   }
   const output = new BufferedTextWriter(context, fds[1]);
   try {
@@ -574,7 +799,7 @@ export const sedCommand = /* @__PURE__ */ defineCommand("sed", async (context, a
 
 function requireSorted(lines: readonly string[], name: string): void {
   for (let index = 1; index < lines.length; index += 1) {
-    if ((lines[index - 1] ?? "") > (lines[index] ?? "")) {
+    if (compareUtf8(lines[index - 1] ?? "", lines[index] ?? "") > 0) {
       throw new VfsError("EINVAL", `comm: ${name} is not sorted`);
     }
   }
@@ -622,7 +847,10 @@ export const commCommand = /* @__PURE__ */ defineCommand("comm", async (context,
         line = leftLine;
         leftIndex += 1;
         rightIndex += 1;
-      } else if (rightLine === undefined || (leftLine !== undefined && leftLine < rightLine)) {
+      } else if (
+        rightLine === undefined ||
+        (leftLine !== undefined && compareUtf8(leftLine, rightLine) < 0)
+      ) {
         column = 0;
         line = leftLine ?? "";
         leftIndex += 1;
@@ -648,7 +876,7 @@ export const commCommand = /* @__PURE__ */ defineCommand("comm", async (context,
 
 interface JoinLine {
   fields: string[];
-  index: number;
+  key: string;
   text: string;
 }
 
@@ -675,65 +903,84 @@ export const joinCommand = /* @__PURE__ */ defineCommand("join", async (context,
   if (paths.length !== 2) throw new VfsError("EINVAL", "join: requires two files");
   const collected = await inputTexts(context, paths, fds[0]);
   try {
-  const inputs = collected.value;
-  const parse = (text: string): JoinLine[] => checkedLines(
-    text,
-    context.budget.limits.maxBufferedRecords,
-    context.budget.limits.maxLineBytes,
-  ).map((line, index) => {
-    const value = line.replace(/\n$/u, "");
-    return {
-      fields: delimiter === " " ? value.trim().split(/[ \t]+/u) : value.split(delimiter),
-      index,
-      text: value,
+    const inputs = collected.value;
+    const parse = (text: string, field: number, file: 1 | 2): JoinLine[] => {
+      const lines = checkedLines(
+        text,
+        context.budget.limits.maxBufferedRecords,
+        context.budget.limits.maxLineBytes,
+      ).map((line, index) => {
+        const value = line.replace(/\n$/u, "");
+        const fields = delimiter === " " ? value.trim().split(/[ \t]+/u) : value.split(delimiter);
+        const key = fields[field - 1];
+        if (key === undefined) {
+          throw new VfsError("EINVAL", `join: file ${file} line ${index + 1} lacks field ${field}`);
+        }
+        return { fields, key, text: value };
+      });
+      for (let index = 1; index < lines.length; index += 1) {
+        if (compareUtf8(lines[index - 1]?.key ?? "", lines[index]?.key ?? "") > 0) {
+          throw new VfsError("EINVAL", `join: ${paths[file - 1] ?? `file ${file}`} is not sorted`);
+        }
+      }
+      return lines;
     };
-  });
-  const left = parse(inputs[0]?.text ?? "");
-  const right = parse(inputs[1]?.text ?? "");
-  const rightByKey = new Map<string, JoinLine[]>();
-  for (const line of right) {
-    const key = line.fields[rightField - 1];
-    if (key === undefined) throw new VfsError("EINVAL", `join: file 2 line ${line.index + 1} lacks field ${rightField}`);
-    const rows = rightByKey.get(key) ?? [];
-    rows.push(line);
-    rightByKey.set(key, rows);
-  }
-  const matchedRight = new Set<number>();
-  let rows = 0;
-  const output = new BufferedTextWriter(context, fds[1]);
-  const emit = async (line: string): Promise<void> => {
-    rows += 1;
-    if (rows > context.budget.limits.maxBufferedRecords) {
-      throw new VfsError("E2BIG", "join output record limit exceeded");
-    }
-    await output.write(`${line}\n`);
-  };
-  try {
-    for (const line of left) {
-      const key = line.fields[leftField - 1];
-      if (key === undefined) throw new VfsError("EINVAL", `join: file 1 line ${line.index + 1} lacks field ${leftField}`);
-      const matches = rightByKey.get(key) ?? [];
-      if (matches.length === 0) {
-        if (includeUnpaired.has(1)) await emit(line.text);
-        continue;
+    const left = parse(inputs[0]?.text ?? "", leftField, 1);
+    const right = parse(inputs[1]?.text ?? "", rightField, 2);
+    let rows = 0;
+    const output = new BufferedTextWriter(context, fds[1]);
+    const emit = async (line: string): Promise<void> => {
+      rows += 1;
+      if (rows > context.budget.limits.maxBufferedRecords) {
+        throw new VfsError("E2BIG", "join output record limit exceeded");
       }
-      for (const match of matches) {
-        matchedRight.add(match.index);
-        await emit([
-          key,
-          ...line.fields.filter((_field, index) => index !== leftField - 1),
-          ...match.fields.filter((_field, index) => index !== rightField - 1),
-        ].join(delimiter));
+      await output.write(`${line}\n`);
+    };
+    try {
+      let leftIndex = 0;
+      let rightIndex = 0;
+      while (leftIndex < left.length || rightIndex < right.length) {
+        const leftLine = left[leftIndex];
+        const rightLine = right[rightIndex];
+        const order = leftLine === undefined ? 1
+          : rightLine === undefined ? -1
+          : compareUtf8(leftLine.key, rightLine.key);
+        if (order < 0) {
+          if (includeUnpaired.has(1)) await emit(leftLine?.text ?? "");
+          leftIndex += 1;
+          continue;
+        }
+        if (order > 0) {
+          if (includeUnpaired.has(2)) await emit(rightLine?.text ?? "");
+          rightIndex += 1;
+          continue;
+        }
+
+        const key = leftLine?.key ?? "";
+        let leftEnd = leftIndex;
+        while (left[leftEnd]?.key === key) leftEnd += 1;
+        let rightEnd = rightIndex;
+        while (right[rightEnd]?.key === key) rightEnd += 1;
+        for (let leftMatch = leftIndex; leftMatch < leftEnd; leftMatch += 1) {
+          for (let rightMatch = rightIndex; rightMatch < rightEnd; rightMatch += 1) {
+            const leftRecord = left[leftMatch];
+            const rightRecord = right[rightMatch];
+            if (leftRecord === undefined || rightRecord === undefined) continue;
+            await emit([
+              key,
+              ...leftRecord.fields.filter((_field, index) => index !== leftField - 1),
+              ...rightRecord.fields.filter((_field, index) => index !== rightField - 1),
+            ].join(delimiter));
+          }
+        }
+        leftIndex = leftEnd;
+        rightIndex = rightEnd;
       }
+      await output.flush();
+    } finally {
+      output.abort();
     }
-    if (includeUnpaired.has(2)) {
-      for (const line of right) if (!matchedRight.has(line.index)) await emit(line.text);
-    }
-    await output.flush();
-  } finally {
-    output.abort();
-  }
-  return 0;
+    return 0;
   } finally {
     collected.release();
   }
