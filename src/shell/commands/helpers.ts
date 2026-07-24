@@ -122,7 +122,7 @@ export async function* inputStreams(
   }
   for (const path of argv) {
     if (path === "-") yield { name: "-", stream: stdin };
-    else yield { name: path, stream: (await readFile(context, path)).stream };
+    else yield { name: path, stream: readFile(context, path).stream };
   }
 }
 
@@ -257,18 +257,18 @@ export async function collectText(
   }
 }
 
-export async function readFile(
+export function readFile(
   context: ShellCommandContext,
   path: string,
-): Promise<InlineReadResult> {
-  return await context.fileSystem.readFile(commandPath(context, path));
+): InlineReadResult {
+  return context.fileSystem.readFile(commandPath(context, path));
 }
 
 export async function readFileBytes(
   context: ShellCommandContext,
   path: string,
 ): Promise<BufferLease<Uint8Array>> {
-  const read = await readFile(context, path);
+  const read = readFile(context, path);
   return await collectStream(context, read.stream);
 }
 
@@ -278,7 +278,7 @@ export async function readFileText(
   maximumBytes?: number,
 ): Promise<BufferLease<string>> {
   const normalized = commandPath(context, path);
-  const read = await context.fileSystem.readFile(normalized);
+  const read = context.fileSystem.readFile(normalized);
   try {
     return await collectText(context, read.stream, normalized, maximumBytes);
   } catch (error) {

@@ -416,6 +416,11 @@ they are not present on `ShellCommandContext.fileSystem`.
 Inline `readFile()` returns a stable bounded stream snapshot. Consume or cancel
 it to release the instance-wide materialization budget. Writes accept strings,
 buffers, typed views, or byte streams and publish once after normal collection.
+Metadata queries, inline snapshots, `touch`, `setMetadata`, `mkdir`, and opaque
+read-lease resolution are synchronous local operations. Stream ingestion, R2
+verification, garbage-alarm scheduling, and garbage draining return promises.
+Workers RPC still exposes every remote call as a promise; that transport
+contract is separate from the local `VirtualFileSystem` contract.
 
 Pagination cursors are keyset positions, not durable snapshots. Continue
 through empty filtered pages until `nextCursor` is null. A concurrent mutation

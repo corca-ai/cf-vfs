@@ -28,7 +28,8 @@ npm run check
 The complete check generates binding types, builds ESM and declarations,
 typechecks, runs memory/workerd tests, verifies docs and the `CLAUDE.md`
 symlink, installs and typechecks the packed tarball in a temporary consumer,
-checks the Wrangler tree-shaking fixtures, and runs every benchmark scenario.
+and checks the Wrangler tree-shaking fixtures. Performance benchmarks use the
+separate commands below.
 
 Useful focused commands:
 
@@ -39,9 +40,22 @@ npm test
 npm run test:docs
 npm run test:package
 npm run test:tree-shaking
-npm run test:benchmarks
 npm run bench
+npm run bench:do
+npm run bench:all
+npm run bench:check
+npm run bench:remote
+npm run bench:remote:check
 ```
+
+Performance runs are deliberately separate from `npm test` and `npm run
+check`. `bench:do` runs the workerd/SQLite operation benchmarks, while
+`bench:check` also validates the memory-backend scenarios and their broad
+regression ceilings. The Performance workflow runs that check weekly and can
+also be started manually. The remote commands exercise the separately deployed,
+token-protected benchmark Worker at `vfs.borca.ai`; see
+[the deployed benchmark notes](performance.md#deployed-benchmark) before
+deploying or rotating its secret.
 
 ## Changing the VFS
 
@@ -52,9 +66,10 @@ tests for SQL constraints, quotas, in-flight accounting, alarms, R2 calls, or
 crash recovery. Never retain a SQL cursor or transaction across `await`.
 
 Schema changes use explicit versioning and constraints/triggers that make
-invalid ownership combinations unrepresentable. This pre-1.0 `vfs2_` schema
-currently requires a fresh filesystem; introducing migration support is a
-separate product decision.
+invalid ownership combinations unrepresentable. The pre-deployment `vfs_`
+schema uses integer internal identities and currently requires a fresh
+filesystem; introducing compatibility migrations is a separate product
+decision.
 
 ## Changing the language or runtime
 

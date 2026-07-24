@@ -118,7 +118,7 @@ async function glob(
   const prefixPath = prefix.endsWith("/") && prefix !== "/" ? prefix.slice(0, -1) : prefix;
   let root = dirname(prefixPath);
   try {
-    const prefixStat = await fileSystem.stat(prefix);
+    const prefixStat = fileSystem.stat(prefix);
     if (prefixStat.kind === "directory") root = prefix;
   } catch {
     // A non-wildcard prefix may end in a partial filename.
@@ -128,7 +128,7 @@ async function glob(
   try {
     do {
       const remaining = budget.limits.maxGlobMatches - matches.length;
-      const page = await fileSystem.findPage({
+      const page = fileSystem.findPage({
         path: root,
         includeRoot: false,
         pathGlob: absolutePattern,

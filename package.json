@@ -100,24 +100,30 @@
     "build": "npm run clean && tsc -p tsconfig.build.json",
     "prepare": "npm run build",
     "prepublishOnly": "npm run check",
-    "typegen": "wrangler types worker-configuration.d.ts --config wrangler.test.jsonc --env-interface VfsTestEnv --include-runtime false",
-    "typecheck": "tsc --noEmit",
+    "typegen:test": "wrangler types worker-configuration.d.ts --config wrangler.test.jsonc --env-interface VfsTestEnv --include-runtime false",
+    "typegen:benchmark": "wrangler types bench/worker-configuration.d.ts --config wrangler.benchmark.jsonc --env-interface VfsBenchmarkEnv --include-runtime false",
+    "typegen": "npm run typegen:test && npm run typegen:benchmark",
+    "typecheck": "tsc --noEmit && tsc -p bench/tsconfig.remote.json",
     "test": "vitest run",
     "test:docs": "node test/check-docs.mjs",
     "test:package": "node test/check-package.mjs",
     "test:tree-shaking": "node test/check-tree-shaking.mjs",
     "bench": "npm run build && node bench/benchmarks.mjs",
+    "bench:do": "vitest run --config vitest.performance.config.ts --disableConsoleIntercept",
+    "bench:all": "npm run bench && npm run bench:do",
+    "bench:check": "npm run build && node bench/check-memory.mjs && npm run bench:do",
+    "bench:remote": "node bench/remote.mjs",
+    "bench:remote:check": "node bench/remote.mjs --check bench/remote-baseline-2026-07-24.json",
     "repl": "npm run build && node scripts/repl.mjs",
     "repl:sqlite": "npm run build && node scripts/repl-sqlite.mjs",
-    "test:benchmarks": "node test/check-benchmarks.mjs",
     "test:bash-fixtures:regenerate": "node scripts/regenerate-bash-fixtures.mjs",
-    "check": "npm run typegen && npm run build && npm run typecheck && npm test && npm run test:docs && npm run test:package && npm run test:tree-shaking && npm run test:benchmarks"
+    "check": "npm run typegen && npm run build && npm run typecheck && npm test && npm run test:docs && npm run test:package && npm run test:tree-shaking"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.18.6",
-    "@cloudflare/workers-types": "5.20260719.1",
+    "@cloudflare/workers-types": "5.20260724.1",
     "typescript": "7.0.2",
     "vitest": "4.1.10",
-    "wrangler": "4.112.0"
+    "wrangler": "4.114.0"
   }
 }

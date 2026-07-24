@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["esnext", "webworker"],
+    "types": [
+      "@cloudflare/workers-types",
+      "./worker-configuration.d.ts"
+    ]
+  },
+  "include": [
+    "./metered-sql.ts",
+    "./remote-suite.ts",
+    "./remote-worker.ts",
+    "./worker-configuration.d.ts"
+  ],
+  "exclude": []
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cf-vfs-benchmark",
+  "main": "bench/remote-worker.ts",
+  "account_id": "b23e9b2e3a9159dd7eb3fa51f839c5c5",
+  "compatibility_date": "2026-07-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "vfs.borca.ai",
+      "custom_domain": true
+    }
+  ],
+  "secrets": {
+    "required": ["BENCHMARK_TOKEN"]
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01
+    }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "BENCHMARK",
+        "class_name": "VfsBenchmark"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["VfsBenchmark"]
+    }
+  ]
+}

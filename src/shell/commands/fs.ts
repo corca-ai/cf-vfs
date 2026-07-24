@@ -57,7 +57,7 @@ export const catCommand = /* @__PURE__ */ defineCommand("cat", async (context, a
   }
   for (const path of argv) {
     if (path === "-") await pipeToSink(context, fds[0], fds[1]);
-    else await pipeToSink(context, (await context.fileSystem.readFile(commandPath(context, path))).stream, fds[1]);
+    else await pipeToSink(context, context.fileSystem.readFile(commandPath(context, path)).stream, fds[1]);
   }
   return 0;
 });
@@ -76,7 +76,7 @@ export const mkdirCommand = /* @__PURE__ */ defineCommand("mkdir", async (contex
   }
   if (parsed.operands.length === 0) throw new VfsError("EINVAL", "mkdir: missing operand");
   for (const path of parsed.operands) {
-    await context.fileSystem.mkdir(commandPath(context, path), recursive, mode);
+    context.fileSystem.mkdir(commandPath(context, path), recursive, mode);
   }
   return 0;
 });
@@ -87,7 +87,7 @@ export const touchCommand = /* @__PURE__ */ defineCommand("touch", async (contex
   if (parsed.operands.length === 0) throw new VfsError("EINVAL", "touch: missing operand");
   for (const path of parsed.operands) {
     try {
-      await context.fileSystem.touch(commandPath(context, path), { create });
+      context.fileSystem.touch(commandPath(context, path), { create });
     } catch (error) {
       if (!(!create && error instanceof VfsError && error.code === "ENOENT")) throw error;
     }
@@ -114,20 +114,20 @@ export const rmdirCommand = /* @__PURE__ */ defineCommand("rmdir", async (contex
   if (argv.length === 0) throw new VfsError("EINVAL", "rmdir: missing operand");
   for (const path of argv) {
     const normalized = commandPath(context, path);
-    const stat = await context.fileSystem.stat(normalized);
+    const stat = context.fileSystem.stat(normalized);
     if (stat.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", normalized);
     await context.fileSystem.remove(normalized);
   }
   return 0;
 });
 
-async function destinationPath(
+function destinationPath(
   context: Parameters<typeof commandPath>[0],
   source: string,
   targetValue: string,
-): Promise<string> {
+): string {
   const target = commandPath(context, targetValue);
-  const stat = await context.fileSystem.inspectWriteTarget(target);
+  const stat = context.fileSystem.inspectWriteTarget(target);
   if (stat === null) return target;
   return stat.kind === "directory" ? `${target === "/" ? "" : target}/${basename(source)}` : target;
 }
@@ -138,7 +138,7 @@ export const mvCommand = /* @__PURE__ */ defineCommand("mv", async (context, arg
   const values = parsed.operands;
   if (values.length !== 2) throw new VfsError("EINVAL", "mv: requires source and destination");
   const source = commandPath(context, values[0]);
-  const target = await destinationPath(context, source, values[1] ?? "");
+  const target = destinationPath(context, source, values[1] ?? "");
   await context.fileSystem.move(source, target, { replace });
   return 0;
 });
@@ -150,7 +150,7 @@ export const cpCommand = /* @__PURE__ */ defineCommand("cp", async (context, arg
   const values = parsed.operands;
   if (values.length !== 2) throw new VfsError("EINVAL", "cp: requires source and destination");
   const source = commandPath(context, values[0]);
-  const target = await destinationPath(context, source, values[1] ?? "");
+  const target = destinationPath(context, source, values[1] ?? "");
   await context.fileSystem.copy(source, target, { replace, recursive });
   return 0;
 });
@@ -186,7 +186,7 @@ export const findCommand = /* @__PURE__ */ defineCommand("find", async (context,
   try {
     for (const root of roots) {
       const normalized = commandPath(context, root);
-      const entries = await context.fileSystem.find({
+      const entries = context.fileSystem.find({
         path: normalized,
         includeRoot: true,
         ...(name === undefined ? {} : { name }),
@@ -216,7 +216,9 @@ function statText(stat: VfsStat): string {
 
 export const statCommand = /* @__PURE__ */ defineCommand("stat", async (context, argv, fds) => {
   if (argv.length === 0) throw new VfsError("EINVAL", "stat: missing operand");
-  for (const path of argv) await writeText(fds[1], statText(await context.fileSystem.stat(commandPath(context, path))));
+  for (const path of argv) {
+    await writeText(fds[1], statText(context.fileSystem.stat(commandPath(context, path))));
+  }
   return 0;
 });
 
@@ -228,8 +230,8 @@ export const chmodCommand = /* @__PURE__ */ defineCommand("chmod", async (contex
   const permission = Number.parseInt(modeValue, 8);
   for (const path of paths) {
     const normalized = commandPath(context, path);
-    const stat = await context.fileSystem.stat(normalized);
-    await context.fileSystem.setMetadata(normalized, {
+    const stat = context.fileSystem.stat(normalized);
+    context.fileSystem.setMetadata(normalized, {
       mode: (stat.kind === "directory" ? 0o040000 : 0o100000) | permission,
     });
   }
@@ -240,7 +242,7 @@ export const duCommand = /* @__PURE__ */ defineCommand("du", async (context, arg
   const paths = argv.length === 0 ? ["."] : [...argv];
   for (const path of paths) {
     const normalized = commandPath(context, path);
-    const entries = await context.fileSystem.find({ path: normalized, includeRoot: true });
+    const entries = context.fileSystem.find({ path: normalized, includeRoot: true });
     const size = entries.reduce((total, stat) => total + (stat.kind === "file" ? stat.sizeBytes : 0), 0);
     await writeText(fds[1], `${Math.ceil(size / 1024)}\t${path}\n`);
   }
@@ -250,7 +252,7 @@ export const duCommand = /* @__PURE__ */ defineCommand("du", async (context, arg
 export const treeCommand = /* @__PURE__ */ defineCommand("tree", async (context, argv, fds) => {
   const rootValue = argv[0] ?? ".";
   const root = commandPath(context, rootValue);
-  const entries = await context.fileSystem.find({ path: root, includeRoot: true });
+  const entries = context.fileSystem.find({ path: root, includeRoot: true });
   const output = new BufferedTextWriter(context, fds[1]);
   try {
     for (const entry of entries) {
@@ -281,7 +283,7 @@ export const realpathCommand = /* @__PURE__ */ defineCommand("realpath", async (
   if (argv.length === 0) throw new VfsError("EINVAL", "realpath: missing operand");
   for (const path of argv) {
     const normalized = normalizePath(path, context.session.cwd);
-    await context.fileSystem.stat(normalized);
+    context.fileSystem.stat(normalized);
     await writeText(fds[1], `${normalized}\n`);
   }
   return 0;
@@ -309,7 +311,7 @@ export const mktempCommand = /* @__PURE__ */ defineCommand("mktemp", async (cont
 export const fileCommand = /* @__PURE__ */ defineCommand("file", async (context, argv, fds) => {
   if (argv.length === 0) throw new VfsError("EINVAL", "file: missing operand");
   for (const path of argv) {
-    const stat = await context.fileSystem.stat(commandPath(context, path));
+    const stat = context.fileSystem.stat(commandPath(context, path));
     const description = stat.kind === "directory"
       ? "directory"
       : stat.contentClass === "opaque" ? "opaque R2 content" : "inline data";

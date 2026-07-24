@@ -2,9 +2,13 @@
 
 The runtime optimizes for bounded memory, predictable failure, and cloud
 backpressure before microbenchmark latency. Run `npm run bench` for the Node
-memory-backend scenarios and `npm test -- storage-benchmark` for workerd SQL
-metrics. The checked-in [local baseline](../bench/baseline-2026-07-20.md)
-records the environment and raw interpretation.
+memory-backend scenarios, `npm run bench:do` for workerd/SQLite operation
+metrics, or `npm run bench:all` for both. `npm run bench:check` applies the
+regression guards used by the separately scheduled Performance workflow.
+These commands are deliberately excluded from ordinary unit tests and
+`npm run check`. The checked-in [memory baseline](../bench/baseline-2026-07-20.md)
+and [Durable Object baseline](../bench/do-baseline-2026-07-24.md) record their
+environments and interpretation.
 
 ## Stream and storage cost model
 
@@ -24,14 +28,18 @@ line, record, and heap budgets bound that materialization.
 Inline VFS reads are intentionally eager. SQLite's synchronous cursor is fully
 consumed into at most 8 MiB before a stream is returned, establishing a stable
 snapshot without holding a cursor or transaction across `await`. Writes collect
-directly into fixed slabs and publish once. This is usually faster and simpler
-than a paged pull protocol at this size, but concurrent snapshots and writes
-are capped by the instance-wide in-flight budget.
+directly into fixed slabs and publish once. Append reads and rewrites only the
+last partial chunk plus newly added chunks; earlier chunks stay inside SQLite.
+This is usually faster and simpler than a paged pull protocol at this size, but
+concurrent snapshots and writes are capped by the instance-wide in-flight
+budget.
 
 Opaque work is payload-size-independent inside the metadata DO. Upload/download
 bytes go directly to R2; the DO performs metadata SQL plus one R2 `HEAD` during
-commit. Copy and move perform no R2 body operation. GC batches up to 100 keys
-into one idempotent delete request.
+commit. Recursive copy, move, and remove use a constant number of SQL statements
+instead of one statement sequence per entry. Inline copy keeps BLOBs inside
+SQLite through `INSERT ... SELECT`; copy and move perform no R2 body operation.
+GC batches up to 100 keys into one idempotent delete request.
 
 ## Covered scenarios
 
@@ -53,10 +61,60 @@ SQL fields, logical R2 Class A/B/free-delete operations, and a
 marginal Standard-storage operation-cost estimate. SQL fields are explicitly
 `null` for the memory backend rather than presented as zero.
 
-The workerd storage benchmark meters `SqlStorageCursor.rowsRead` and
-`rowsWritten`, `databaseSize`, and physical inline chunk count for a 1 MiB
-overwrite plus snapshot. Cursor metrics are the platform billing-oriented
-values; an ordinary `COUNT(*)` is deliberately outside that meter.
+The separate workerd storage benchmark meters statements,
+`SqlStorageCursor.rowsRead` and `rowsWritten`, cursor consumption methods,
+`databaseSize`, physical inline chunk count, and amortized local latency. It
+covers a 1 MiB overwrite plus snapshot, 1 MiB and 8 MiB tail-only append,
+point reads and overwrites, filtered scans, warm schema initialization, and
+set-based subtree copy/move/remove at multiple sizes. Cursor metrics are the
+platform billing-oriented values; diagnostic SQL used to inspect a result is
+deliberately outside that meter.
+
+Stable structural guards, rather than tight wall-clock thresholds, fail the
+benchmark when a point query stops fully consuming its cursor, an overwrite
+adds SQL/row work, append starts rewriting size-proportional chunks, or
+recursive namespace operations return to per-entry SQL calls. Latencies remain
+visible for trend comparison because local and hosted-runner timing is noisy.
+
+## Deployed benchmark
+
+`wrangler.benchmark.jsonc` deploys a dedicated `cf-vfs-benchmark` Worker and
+SQLite-backed Durable Object to `vfs.borca.ai`. It does not publish the npm
+package, reuse an application's Durable Object namespace, or appear in the
+package's `files` allowlist. A deployment therefore affects only this benchmark
+service and its Cloudflare account usage.
+
+The public `/health` route performs no storage work. `POST /benchmark` requires
+the `BENCHMARK_TOKEN` secret and accepts only the bounded `quick` and `full`
+profiles. Every run uses a new Durable Object ID and calls `deleteAll()` before
+returning, so benchmark contents are not retained.
+
+Production Workers intentionally freeze `performance.now()` and `Date.now()`
+between I/O events. The deployed benchmark therefore measures each operation
+at the calling Worker across a Durable Object RPC boundary, rather than
+pretending an in-object synchronous timer is meaningful. Fast point operations
+are batched and reported as amortized per-operation values. Append and subtree
+mutations use one operation per RPC and include Cloudflare-internal RPC plus
+storage input/output-gate latency. The response also reports an empty-RPC
+control and total Worker-to-DO suite time; `bench/remote.mjs` adds the external
+client round-trip. See Cloudflare's
+[timer behavior](https://developers.cloudflare.com/workers/runtime-apis/performance/)
+and the checked-in
+[deployed baseline](../bench/remote-baseline-2026-07-24.md).
+
+Keep the secret outside version control:
+
+```sh
+npx wrangler secret put BENCHMARK_TOKEN --config wrangler.benchmark.jsonc
+CF_VFS_BENCHMARK_TOKEN=... npm run bench:remote
+```
+
+For repeated local runs, `.dev.vars.benchmark` may contain
+`BENCHMARK_TOKEN=...`; `.dev.vars*` is ignored. `npm run bench:remote:check`
+compares stable SQL costs exactly and applies deliberately broad production
+latency ceilings against the checked-in deployed baseline. A custom domain is
+appropriate here because the Worker is the origin. Do not attach this config
+to an existing hostname or application Worker.
 
 ## Interpreting the baseline
 
@@ -87,6 +145,10 @@ Repeated indexed statements are not free: CPU, rows visited, index updates,
 database bytes, and time on the object's single thread still matter. Review
 rows and bytes rather than statement count alone. Prefer pagination and range
 scans for large namespaces, and use deployed analytics for billed rows.
+Namespace reads anchor `vfs_entries` to an operation-appropriate named index
+before joining path versions. This prevents SQLite from choosing the compact
+`WITHOUT ROWID` token table first and scanning every entry for a point lookup;
+the benchmark guards a populated `stat()` at two rows read.
 
 Current platform constraints include a finite per-object SQLite capacity, a
 128 MiB Worker isolate memory limit, SQL value/statement limits, and separate

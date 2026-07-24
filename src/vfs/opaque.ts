@@ -51,7 +51,7 @@ export async function readOpaque(
   range?: Parameters<OpaqueStore["getStream"]>[1],
   leaseMs?: number,
 ): Promise<{ stat: OpaqueFileStat; stream: ReadableStream<Uint8Array> }> {
-  const lease = await fileSystem.resolveOpaqueRead(path, leaseMs);
+  const lease = fileSystem.resolveOpaqueRead(path, leaseMs);
   const stream = await store.getStream(lease.object.key, range);
   if (stream === null) {
     throw new VfsError("EIO", "opaque R2 object is missing", lease.stat.path);

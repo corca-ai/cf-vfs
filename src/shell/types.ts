@@ -1,4 +1,4 @@
-import type { Awaitable, VfsStat, VirtualFileSystem } from "../vfs/types.js";
+import type { VfsStat, VirtualFileSystem } from "../vfs/types.js";
 import type { FunctionDefinitionNode } from "./parser.js";
 
 export type ShellFileSystem = Pick<
@@ -19,7 +19,7 @@ export type ShellFileSystem = Pick<
   | "move"
   | "copy"
 > & {
-  inspectWriteTarget(path: string): Awaitable<VfsStat | null>;
+  inspectWriteTarget(path: string): VfsStat | null;
 };
 
 export interface ShellSink {

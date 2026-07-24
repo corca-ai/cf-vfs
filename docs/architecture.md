@@ -64,31 +64,45 @@ Write behavior:
    rows, update metadata and usage, and publish one new revision/token.
 4. Release the buffered-byte reservation before any external await.
 
+Append keeps existing full chunks in place. It reads only the final stored
+chunk, fills that tail, and inserts any new suffix chunks in the same
+transaction.
+
 No cursor or SQLite transaction crosses an `await`. `SQLITE_FULL` is translated
 to `ENOSPC`. Per-workspace inline logical bytes, entry count, database
 headroom, and per-instance materialized bytes are separate limits.
 
 ## Namespace and ABA protection
 
-`vfs2_entries` is the namespace source of truth. `vfs2_path_versions` retains a
-tombstone token even while a path is absent. Every create, content replace,
-metadata update, move, and delete changes the token. An absent → create →
-delete sequence therefore invalidates a reservation captured while absent.
+`vfs_entries` is the namespace source of truth and uses compact SQLite
+`INTEGER PRIMARY KEY` identities. `vfs_state` owns a random workspace epoch.
+`vfs_path_versions` owns a monotonic version per path and retains it as a
+tombstone even while that path is absent; the public token combines epoch and
+the path version. A single UPSERT increments an ordinary path mutation.
+Set-based subtree mutations increment all affected path versions inside
+SQLite. Every create, content replace, metadata update, move, and delete
+therefore changes the relevant token. An absent → create → delete sequence
+invalidates a reservation captured while absent.
 
 The schema also contains:
 
-- `vfs2_inline_chunks(entry_id, chunk_index, body)`;
-- `vfs2_opaque_objects` with R2 key, size, ETag, version, optional verified
+- `vfs_inline_chunks(entry_id, chunk_index, body)`;
+- `vfs_opaque_objects` with R2 key, size, ETag, version, optional verified
   digest and MIME type, and read-retention deadline;
-- `vfs2_upload_sessions` with `open`, `verifying`, `committed`, and `garbage`
+- `vfs_upload_sessions` with `open`, `verifying`, `committed`, and `garbage`
   states plus CAS token/lease and idempotent receipt;
-- `vfs2_gc_queue` with due time, attempts, retry time, and last error;
-- `vfs2_usage` for atomic logical-byte and entry quotas.
+- `vfs_gc_queue` with due time, attempts, retry time, and last error;
+- `vfs_usage` for atomic logical-byte and entry quotas.
 
 Checks and triggers reject invalid directory/content combinations, dangling
 opaque references, orphan inline chunks, and deletion of referenced content.
 Opaque liveness is derived from the indexed entry rows with `NOT EXISTS`; no
 stored reference count can drift.
+
+Recursive namespace mutations stay inside SQLite. Copy uses `INSERT ... SELECT`
+for entries and an entry-ID join for inline BLOB chunks, move uses one range
+`UPDATE`, and remove uses set-based token publication, GC queuing, and range
+deletes. JavaScript receives only aggregate counts and result metadata.
 
 ## Opaque R2 lifecycle
 
@@ -160,8 +174,12 @@ limits are always per unit. Interactive units cannot overlap.
 
 ## Migration policy
 
-This pre-1.0 redesign deliberately removes the structured executor and the old
-text/binary schema. The new tables use the `vfs2_` prefix and require a fresh
-filesystem. There is no automatic migration of deployed legacy data. Export
-old data and import it through the byte and opaque APIs before switching a
-production binding.
+This pre-deployment, pre-1.0 redesign deliberately replaces earlier local
+schemas. The tables use the `vfs_` prefix and require a fresh filesystem;
+there is no compatibility migration from the experimental `vfs2_` layout.
+
+Schema initialization is gated by `vfs_schema_migrations`; ordinary Durable
+Object restarts perform only the migration-table bootstrap and version check.
+The explicit table is intentional because Durable Objects do not support
+[`PRAGMA user_version`](https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/#initialize-storage-and-run-migrations-in-the-constructor).
+A schema change runs `PRAGMA optimize` after its tables and indexes are installed.
