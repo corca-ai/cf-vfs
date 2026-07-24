@@ -4,9 +4,61 @@ import { readAllBytes } from "../../src/vfs/streams.js";
 
 export type VfsFactory = () => VirtualFileSystem | Promise<VirtualFileSystem>;
 
+async function readText(fileSystem: VirtualFileSystem, path: string): Promise<string> {
+  return new TextDecoder().decode(
+    await readAllBytes((await fileSystem.readFile(path)).stream, 1024),
+  );
+}
+
+function gatedBody(value: string): {
+  readonly stream: ReadableStream<Uint8Array>;
+  readonly pulled: Promise<void>;
+  close(): void;
+} {
+  let release: (() => void) | undefined;
+  let markPulled: (() => void) | undefined;
+  const closed = new Promise<void>((resolve) => { release = resolve; });
+  const pulled = new Promise<void>((resolve) => { markPulled = resolve; });
+  let sent = false;
+  return {
+    stream: new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (!sent) {
+          sent = true;
+          controller.enqueue(new TextEncoder().encode(value));
+          markPulled?.();
+          return;
+        }
+        return closed.then(() => controller.close());
+      },
+    }),
+    pulled,
+    close() {
+      release?.();
+    },
+  };
+}
+
+export function streamThatFailsAfter(value: string): ReadableStream<Uint8Array> {
+  let sent = false;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (!sent) {
+        sent = true;
+        controller.enqueue(new TextEncoder().encode(value));
+        return;
+      }
+      controller.error(new Error("source failed"));
+    },
+  });
+}
+
 export function runVfsConformance(
   factory: VfsFactory,
-  options: { negativeMutationRaces?: boolean } = {},
+  options: {
+    negativeMutationRaces?: boolean;
+    failedInputStreams?: boolean;
+  } = {},
 ): void {
   it("conforms: preserves arbitrary bytes through streamed snapshots", async () => {
     const fileSystem = await factory();
@@ -23,6 +75,55 @@ export function runVfsConformance(
     expect([...await readAllBytes(snapshot.stream, 16)]).toEqual([...original]);
     expect([...await readAllBytes((await fileSystem.readFile("/bytes")).stream, 16)])
       .toEqual([9]);
+  });
+
+  it("conforms: keeps a streamed create absent until the complete body is published", async () => {
+    const fileSystem = await factory();
+    const body = gatedBody("complete");
+    const writing = fileSystem.writeFile("/streamed-create", body.stream);
+    await body.pulled;
+
+    try {
+      expect((await fileSystem.list("/")).map((entry) => entry.path))
+        .not.toContain("/streamed-create");
+    } finally {
+      body.close();
+      await writing;
+    }
+    expect(await readText(fileSystem, "/streamed-create")).toBe("complete");
+  });
+
+  it("conforms: keeps the previous generation visible until a streamed replacement closes", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/streamed-replace", "old");
+    const body = gatedBody("new");
+    const writing = fileSystem.writeFile("/streamed-replace", body.stream);
+    await body.pulled;
+
+    try {
+      expect(await readText(fileSystem, "/streamed-replace")).toBe("old");
+    } finally {
+      body.close();
+      await writing;
+    }
+    expect(await readText(fileSystem, "/streamed-replace")).toBe("new");
+  });
+
+  if (options.failedInputStreams !== false) it("conforms: publishes no partial generation when an input stream fails", async () => {
+    const fileSystem = await factory();
+    await expect(fileSystem.writeFile(
+      "/failed-create",
+      streamThatFailsAfter("partial"),
+    )).rejects.toThrow("source failed");
+    expect((await fileSystem.list("/")).map((entry) => entry.path))
+      .not.toContain("/failed-create");
+
+    await fileSystem.writeFile("/failed-replace", "old");
+    await expect(fileSystem.writeFile(
+      "/failed-replace",
+      streamThatFailsAfter("partial"),
+    )).rejects.toThrow("source failed");
+    expect(await readText(fileSystem, "/failed-replace")).toBe("old");
   });
 
   it("conforms: accepts the current mutation token and publishes a new one", async () => {

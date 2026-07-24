@@ -6,7 +6,10 @@ import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
 import { readAllBytes, streamFromChunks } from "../src/vfs/streams.js";
 import type { VirtualFileSystem } from "../src/vfs/types.js";
-import { runVfsConformance } from "./helpers/vfs-conformance.js";
+import {
+  runVfsConformance,
+  streamThatFailsAfter,
+} from "./helpers/vfs-conformance.js";
 import type { TestWorkspaceVfs } from "./worker.js";
 
 function workspace(name: string): DurableObjectStub<TestWorkspaceVfs> {
@@ -18,7 +21,7 @@ describe("byte-oriented Durable Object filesystem", () => {
     let conformanceId = 0;
     runVfsConformance(
       () => workspace(`conformance-${conformanceId++}`) as unknown as VirtualFileSystem,
-      { negativeMutationRaces: false },
+      { negativeMutationRaces: false, failedInputStreams: false },
     );
   });
 
@@ -78,6 +81,39 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(result.copyError).toMatchObject({ code: "EINVAL", path: "/same" });
     expect(result.appendError).toMatchObject({ code: "EREVISION", path: "/same" });
     expect(result.stat.sizeBytes).toBe(4);
+  });
+
+  it("publishes no partial generation when an input stream fails inside the object", async () => {
+    const stub = workspace("failed-stream");
+    const result = await runInDurableObject(stub, async (instance) => {
+      let createError: unknown;
+      try {
+        await instance.writeFile("/new", streamThatFailsAfter("partial"));
+      } catch (caught) {
+        createError = caught;
+      }
+      const pathsAfterCreate = instance.list("/").map((entry) => entry.path);
+
+      await instance.writeFile("/file", "old");
+      let replaceError: unknown;
+      try {
+        await instance.writeFile("/file", streamThatFailsAfter("partial"));
+      } catch (caught) {
+        replaceError = caught;
+      }
+      const body = await readAllBytes(instance.readFile("/file").stream, 16);
+      return {
+        createError,
+        pathsAfterCreate,
+        replaceError,
+        body: new TextDecoder().decode(body),
+      };
+    });
+
+    expect(result.createError).toEqual(expect.objectContaining({ message: "source failed" }));
+    expect(result.pathsAfterCreate).not.toContain("/new");
+    expect(result.replaceError).toEqual(expect.objectContaining({ message: "source failed" }));
+    expect(result.body).toBe("old");
   });
 
   it("enforces schema combinations with CHECK constraints", async () => {
@@ -229,8 +265,9 @@ describe("byte-oriented Durable Object filesystem", () => {
          FROM vfs2_upload_sessions s WHERE id = ?`,
         upload.uploadId,
       ).one();
+      const pathsAfterFailure = fileSystem.list("/").map((entry) => entry.path);
       const committed = await fileSystem.commitOpaqueUpload(upload.uploadId);
-      return { message, afterFailure, committed };
+      return { message, afterFailure, pathsAfterFailure, committed };
     });
     expect(result.message).toBe("transient R2 head failure");
     expect(result.afterFailure).toEqual({
@@ -239,7 +276,65 @@ describe("byte-oriented Durable Object filesystem", () => {
       verification_lease_until_ms: null,
       queued: 0,
     });
+    expect(result.pathsAfterFailure).not.toContain("/asset");
     expect(result.committed).toMatchObject({ path: "/asset", contentClass: "opaque" });
+  });
+
+  it("keeps the previous generation visible until opaque replacement verification commits", async () => {
+    const stub = workspace("opaque-publication");
+    const result = await runInDurableObject(stub, async (_instance, state) => {
+      let markHeadStarted: (() => void) | undefined;
+      let releaseHead: (() => void) | undefined;
+      const headStarted = new Promise<void>((resolve) => { markHeadStarted = resolve; });
+      const headGate = new Promise<void>((resolve) => { releaseHead = resolve; });
+      const backing = new MemoryOpaqueStore();
+      const fileSystem = new DurableObjectFileSystem(state.storage, {
+        workspaceId: "opaque-publication",
+        opaqueStore: {
+          putIfAbsent: (...args) => backing.putIfAbsent(...args),
+          async head(key) {
+            markHeadStarted?.();
+            await headGate;
+            return backing.head(key);
+          },
+          getStream: (...args) => backing.getStream(...args),
+          delete: (...args) => backing.delete(...args),
+        },
+      });
+      await fileSystem.writeFile("/asset", "old");
+      const upload = await fileSystem.beginOpaqueUpload("/asset");
+      await backing.putIfAbsent(upload.objectKey, "new");
+
+      const committing = fileSystem.commitOpaqueUpload(upload.uploadId);
+      await headStarted;
+      const during = await (async () => {
+        try {
+          return {
+            stat: fileSystem.stat("/asset"),
+            body: new TextDecoder().decode(
+              await readAllBytes(fileSystem.readFile("/asset").stream, 16),
+            ),
+          };
+        } finally {
+          releaseHead?.();
+        }
+      })();
+      const committed = await committing;
+      const published = await backing.getStream(upload.objectKey);
+      if (published === null) throw new Error("committed opaque generation is missing");
+      return {
+        during,
+        committed,
+        after: fileSystem.stat("/asset"),
+        body: new TextDecoder().decode(await readAllBytes(published, 16)),
+      };
+    });
+
+    expect(result.during.stat).toMatchObject({ contentClass: "inline", sizeBytes: 3 });
+    expect(result.during.body).toBe("old");
+    expect(result.committed).toMatchObject({ contentClass: "opaque", sizeBytes: 3 });
+    expect(result.after).toEqual(result.committed);
+    expect(result.body).toBe("new");
   });
 
   it("validates committed receipts and expires them without removing the file", async () => {
@@ -357,16 +452,28 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(await env.VFS_TEST_BUCKET.head(upload.objectKey)).toBeNull();
   });
 
-  it("defers deletion for a bounded opaque read lease", async () => {
+  it("keeps a leased opaque generation readable after replacement and eviction", async () => {
     const stub = workspace("opaque-read-lease");
     const upload = await stub.beginOpaqueUpload("/asset");
-    await new R2OpaqueStore(env.VFS_TEST_BUCKET).putIfAbsent(upload.objectKey, "body");
+    const store = new R2OpaqueStore(env.VFS_TEST_BUCKET);
+    await store.putIfAbsent(upload.objectKey, "old");
     await stub.commitOpaqueUpload(upload.uploadId);
     const lease = await stub.resolveOpaqueRead("/asset", 60_000);
 
-    await stub.remove("/asset");
+    const replacement = await stub.beginOpaqueUpload("/asset");
+    await store.putIfAbsent(replacement.objectKey, "replacement");
+    await stub.commitOpaqueUpload(replacement.uploadId);
+    await evictDurableObject(stub);
+
     expect(await stub.drainGarbage()).toEqual({ deleted: 0, remaining: 1 });
-    expect(await env.VFS_TEST_BUCKET.head(lease.object.key)).not.toBeNull();
+    const oldBody = await store.getStream(lease.object.key);
+    if (oldBody === null) throw new Error("leased opaque generation is missing");
+    expect(new TextDecoder().decode(await readAllBytes(oldBody, 16))).toBe("old");
+    expect(await stub.stat("/asset")).toMatchObject({
+      contentClass: "opaque",
+      sizeBytes: 11,
+    });
+    expect(await env.VFS_TEST_BUCKET.head(replacement.objectKey)).not.toBeNull();
   });
 
   it("persists upload-expiry cleanup across eviction and tolerates a duplicate alarm", async () => {
