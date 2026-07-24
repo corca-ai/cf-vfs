@@ -136,8 +136,10 @@ stream.
 Inline bodies are arbitrary bytes with an absolute 8 MiB per-file ceiling.
 Configure lower per-file limits, workspace logical-byte quota, entry quota,
 instance-wide in-flight buffered bytes, maximum database bytes, and reserved
-database headroom. The default logical inline quota is 512 MiB, entry quota is
-100,000, and in-flight materialization quota is 32 MiB.
+database headroom. The default SQLite chunk is 256 KiB and the Durable Object
+backend accepts at most 1 MiB per chunk, below Cloudflare's 2 MB BLOB/row
+limit. The default logical inline quota is 512 MiB, entry quota is 100,000, and
+in-flight materialization quota is 32 MiB.
 
 A read snapshot holds in-flight capacity until its stream completes or is
 cancelled. Streaming writes collect into fixed slabs, recheck the path token,

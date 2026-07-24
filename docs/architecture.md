@@ -16,6 +16,14 @@ metadata Durable Object: paths, tokens, upload CAS, leases, GC intent
 upload/download gateway: R2 body bytes; never relayed through metadata DO
 ```
 
+R2 is a capacity and transfer tier, not merely a latency optimization. A
+SQLite-backed Durable Object has a finite per-object database capacity, while
+workspace bodies can exceed it. Inline SQLite content therefore remains a
+bounded, shell-readable working set; opaque R2 generations carry larger or
+long-lived capacity without passing their bytes through the metadata object.
+The application chooses the content class explicitly rather than relying on an
+automatic size crossover.
+
 ## Package boundaries
 
 - `src/core` contains path, glob, error, diff, and unified-patch primitives.
@@ -52,7 +60,9 @@ metering, output gates, alarms, RPC, and eviction.
 ## Inline files
 
 An inline file is arbitrary bytes, not necessarily UTF-8. SQLite stores fixed
-chunks under a stable entry ID. A file is limited to 8 MiB.
+chunks under a stable entry ID. A file is limited to 8 MiB. The default 256 KiB
+chunk stays well below Cloudflare's 2 MB SQLite BLOB/row ceiling; the Durable
+Object backend rejects chunk configurations above 1 MiB.
 
 Read behavior:
 

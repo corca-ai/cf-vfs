@@ -224,6 +224,24 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(statError).toMatchObject({ code: "ENOENT", path: "/blocked" });
   });
 
+  it("rejects chunks that approach the Durable Object SQLite row limit", async () => {
+    const stub = workspace("sqlite-chunk-limit");
+    const error = await runInDurableObject(stub, (_instance, state) => {
+      try {
+        new DurableObjectFileSystem(state.storage, {
+          chunkBytes: 2 * 1024 * 1024,
+        });
+        return null;
+      } catch (caught) {
+        return caught;
+      }
+    });
+    expect(error).toMatchObject({
+      code: "EINVAL",
+      message: "chunkBytes cannot exceed 1048576 for SQLite storage",
+    });
+  });
+
   it("does not create persistent path-version rows for absent token reads", async () => {
     const stub = workspace("absent-token-read");
     const result = await runInDurableObject(stub, (instance, state) => {

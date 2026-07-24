@@ -42,6 +42,11 @@ instead of one statement sequence per entry. Inline copy keeps BLOBs inside
 SQLite through `INSERT ... SELECT`; copy and move perform no R2 body operation.
 GC batches up to 100 keys into one idempotent delete request.
 
+R2 remains the capacity and direct-transfer tier when workspace bodies would
+outgrow one Durable Object. The benchmarks do not infer an automatic
+SQLite-to-R2 size threshold because the two content classes have different
+capacity, streaming, shell-access, and lifecycle semantics.
+
 ## Covered scenarios
 
 The executable benchmark covers:
@@ -67,10 +72,11 @@ removed Map backend, these scenarios execute the production schema and VFS SQL.
 The separate workerd storage benchmark meters statements,
 `SqlStorageCursor.rowsRead` and `rowsWritten`, cursor consumption methods,
 `databaseSize`, physical inline chunk count, and amortized local latency. It
-covers a 1 MiB overwrite plus snapshot, 1 MiB and 8 MiB tail-only append,
-point reads and overwrites, filtered scans, warm schema initialization, and
-set-based subtree copy/move/remove at multiple sizes. Cursor metrics are the
-platform billing-oriented values; diagnostic SQL used to inspect a result is
+covers 512 randomly read 8–12 KiB BLOBs and their storage amplification,
+a 1 MiB overwrite plus snapshot, 1 MiB and 8 MiB tail-only append, point reads
+and overwrites, filtered scans, warm schema initialization, and set-based
+subtree copy/move/remove at multiple sizes. Cursor metrics are the platform
+billing-oriented values; diagnostic SQL used to inspect a result is
 deliberately outside that meter.
 
 Stable structural guards, rather than tight wall-clock thresholds, fail the
