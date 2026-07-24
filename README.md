@@ -63,9 +63,9 @@ started](docs/getting-started.md) for the Wrangler bindings, migration, and
 direct-to-R2 upload path.
 
 From a repository checkout, run `npm run repl` for a local line-oriented
-session backed by the in-memory VFS. `npm run repl:sqlite` runs the same
+session backed by Node's in-memory SQLite. `npm run repl:sqlite` runs the same
 terminal UI against a disposable SQLite-backed Durable Object in local
-workerd.
+workerd, exercising Cloudflare's storage API as well as the shared SQL VFS.
 
 This is an application runtime, not an operating-system shell or POSIX ABI. It
 does not launch processes, mount a host filesystem, or provide OS TTY/job

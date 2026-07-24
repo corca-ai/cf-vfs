@@ -90,14 +90,15 @@ input-buffer layer. Both entry points share the single execution path in
 `Shell`; interactive behavior is an adapter around a reusable `ShellSession`.
 
 For repository development, `npm run repl` opens a session over
-`MemoryFileSystem`. `npm run repl:sqlite` starts local workerd with a
-SQLite-backed Durable Object, stores its state in a temporary directory, and
-removes that directory on exit. Both commands use the same terminal UI. These
-are line-oriented language sessions, not OS TTYs: process launching, job
-control, terminal modes, and curses applications remain unavailable. The
-SQLite mode persists VFS data in the disposable database; cwd, variables,
-functions, and options remain runtime session state and reset if the local
-Durable Object or dev server restarts.
+Node's built-in in-memory SQLite. `npm run repl:sqlite` starts local workerd
+with a SQLite-backed Durable Object, stores its state in a temporary directory,
+and removes that directory on exit. Both execute the same SQL VFS and use the
+same terminal UI; the latter additionally exercises Cloudflare's storage and
+RPC boundary. These are line-oriented language sessions, not OS TTYs: process
+launching, job control, terminal modes, and curses applications remain
+unavailable. VFS data is disposable in both modes; cwd, variables, functions,
+and options remain runtime session state and reset if the process, local
+Durable Object, or dev server restarts.
 
 ## Bash Version 4
 

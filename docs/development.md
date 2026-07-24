@@ -4,12 +4,12 @@
 
 ```text
 src/core/             path, glob, error, diff, and patch primitives
-src/vfs/              byte VFS contract, memory/SQL backends, streams, opaque lifecycle
+src/vfs/              byte VFS contract, SQL core/adapters, streams, opaque lifecycle
 src/shell/            parser, expansion, FDs, pipes, redirection, policy, budgets
 src/shell/commands/   argv-based built-ins and utilities
 src/storage/          Cloudflare R2 and SQL compatibility entry points
-src/testing/          deterministic memory adapters
-test/                 shared conformance, workerd, package, docs, and bundle checks
+src/testing/          Node in-memory SQLite and deterministic R2 adapters
+test/                 Node SQLite, workerd, package, docs, and bundle checks
 bench/                executable scenarios and checked-in local baseline
 scripts/              fixture regeneration
 docs/                 documentation, starting at index.md
@@ -26,7 +26,7 @@ npm run check
 ```
 
 The complete check generates binding types, builds ESM and declarations,
-typechecks, runs memory/workerd tests, verifies docs and the `CLAUDE.md`
+typechecks, runs Node SQLite/workerd tests, verifies docs and the `CLAUDE.md`
 symlink, installs and typechecks the packed tarball in a temporary consumer,
 and checks the Wrangler tree-shaking fixtures. Performance benchmarks use the
 separate commands below.
@@ -50,7 +50,7 @@ npm run bench:remote:check
 
 Performance runs are deliberately separate from `npm test` and `npm run
 check`. `bench:do` runs the workerd/SQLite operation benchmarks, while
-`bench:check` also validates the memory-backend scenarios and their broad
+`bench:check` also validates the Node in-memory SQLite scenarios and their broad
 regression ceilings. The Performance workflow runs that check weekly and can
 also be started manually. The remote commands exercise the separately deployed,
 token-protected benchmark Worker at `vfs.borca.ai`; see
@@ -59,11 +59,12 @@ deploying or rotating its secret.
 
 ## Changing the VFS
 
-Add capabilities to `VirtualFileSystem` only when both memory and Durable
-Object implementations can provide the same documented semantics. Add cases
-to `test/helpers/vfs-conformance.ts` for common behavior, then backend-specific
-tests for SQL constraints, quotas, in-flight accounting, alarms, R2 calls, or
-crash recovery. Never retain a SQL cursor or transaction across `await`.
+Add capabilities to `VirtualFileSystem` in the shared SQL implementation.
+Add cases to `test/helpers/vfs-conformance.ts` for common behavior, then
+adapter-specific tests for Cloudflare cursor metrics, alarms, RPC, eviction, or
+crash recovery. Node tests should cover SQL constraints, quotas, in-flight
+accounting, R2 lifecycle, and shell behavior without duplicating VFS semantics.
+Never retain a SQL cursor or transaction across `await`.
 
 Schema changes use explicit versioning and constraints/triggers that make
 invalid ownership combinations unrepresentable. The pre-deployment `vfs_`
@@ -145,8 +146,9 @@ The generator uses `bash:5.3.3`, `LC_ALL=C`, and `TZ=UTC`. Docker is required
 only for regeneration, not ordinary tests.
 
 Use the test DSL in `test/helpers/bash.ts` for ordinary language behavior. It
-creates an isolated in-memory VFS for each case, accepts a string or an array
-of commands, and defaults to status 0 with empty stdout and stderr:
+creates an isolated Node in-memory SQLite database for each case, accepts a
+string or an array of commands, and defaults to status 0 with empty stdout and
+stderr:
 
 ```ts
 bashCases([

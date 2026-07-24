@@ -7,20 +7,21 @@ import type {
   ShellCommand,
   ShellOptions,
 } from "../../src/shell/types.js";
-import { MemoryFileSystem } from "../../src/vfs/memory.js";
+import type { NodeSqlFileSystem } from "../../src/testing/node.js";
 import { readAllBytes } from "../../src/vfs/streams.js";
 import { MAX_INLINE_FILE_BYTES, type ByteBody } from "../../src/vfs/types.js";
+import { createTestFileSystem } from "./node-sql.js";
 
 export type BashSource = string | readonly string[];
 
 export interface BashHarnessOptions extends Omit<ShellOptions, "fileSystem" | "commands"> {
-  fileSystem?: MemoryFileSystem;
+  fileSystem?: NodeSqlFileSystem;
   commands?: readonly ShellCommand[];
   extraCommands?: readonly ShellCommand[];
 }
 
 export interface BashHarness {
-  fileSystem: MemoryFileSystem;
+  fileSystem: NodeSqlFileSystem;
   shell: Shell;
   run(source: BashSource, options?: Omit<ExecuteTextOptions, "script">): Promise<ExecuteTextResult>;
   readText(path: string): Promise<string>;
@@ -51,7 +52,7 @@ function sourceText(source: BashSource): string {
 
 export function createBashHarness(options: BashHarnessOptions = {}): BashHarness {
   const {
-    fileSystem = new MemoryFileSystem(),
+    fileSystem = createTestFileSystem(),
     commands = defaultShellCommands,
     extraCommands = [],
     ...shellOptions
@@ -75,7 +76,7 @@ export function createBashHarness(options: BashHarnessOptions = {}): BashHarness
 }
 
 async function arrangeFiles(
-  fileSystem: MemoryFileSystem,
+  fileSystem: NodeSqlFileSystem,
   files: Readonly<Record<string, ByteBody>>,
 ): Promise<void> {
   for (const [path, body] of Object.entries(files)) {

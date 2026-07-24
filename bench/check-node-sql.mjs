@@ -39,7 +39,7 @@ for (const name of [
   assert(Number.isSafeInteger(row.peakExternalDeltaBytes) && row.peakExternalDeltaBytes >= 0);
   assert(Number.isSafeInteger(row.peakRssDeltaBytes) && row.peakRssDeltaBytes >= 0);
   assert(row.durationMs < 10_000, `${name} exceeded the 10s local regression ceiling`);
-  assert.equal(row.backend, "memory");
+  assert.equal(row.backend, "node-sqlite-memory");
   assert.equal(row.sqlRowsRead, null);
   assert.equal(row.sqlRowsWritten, null);
   assert.equal(row.databaseBytes, null);

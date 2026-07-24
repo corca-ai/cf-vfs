@@ -2,11 +2,12 @@ import { once } from "node:events";
 import process from "node:process";
 import { defaultShellCommands } from "../dist/shell/commands/default.js";
 import { InteractiveShell } from "../dist/shell/interactive.js";
-import { MemoryFileSystem } from "../dist/vfs/memory.js";
+import { NodeSqlFileSystem } from "../dist/testing/node.js";
 import { runRepl } from "./repl-ui.mjs";
 
+const fileSystem = new NodeSqlFileSystem();
 const shell = new InteractiveShell({
-  fileSystem: new MemoryFileSystem(),
+  fileSystem,
   commands: defaultShellCommands,
   env: { HOME: "/" },
 });
@@ -25,31 +26,35 @@ async function writeOutput(stream, output) {
   }
 }
 
-await runRepl({
-  get cwd() {
-    return shell.cwd;
-  },
-  get isClosed() {
-    return shell.isClosed;
-  },
-  get lastExitCode() {
-    return shell.lastExitCode;
-  },
-  async run(source) {
-    const execution = shell.runStream({ script: source });
-    currentExecution = execution;
-    try {
-      const [, , result] = await Promise.all([
-        writeOutput(execution.stdout, process.stdout),
-        writeOutput(execution.stderr, process.stderr),
-        execution.completed,
-      ]);
-      return result;
-    } finally {
-      currentExecution = undefined;
-    }
-  },
-  cancel() {
-    currentExecution?.cancel();
-  },
-}, "cf-vfs interactive shell (memory backend)");
+try {
+  await runRepl({
+    get cwd() {
+      return shell.cwd;
+    },
+    get isClosed() {
+      return shell.isClosed;
+    },
+    get lastExitCode() {
+      return shell.lastExitCode;
+    },
+    async run(source) {
+      const execution = shell.runStream({ script: source });
+      currentExecution = execution;
+      try {
+        const [, , result] = await Promise.all([
+          writeOutput(execution.stdout, process.stdout),
+          writeOutput(execution.stderr, process.stderr),
+          execution.completed,
+        ]);
+        return result;
+      } finally {
+        currentExecution = undefined;
+      }
+    },
+    cancel() {
+      currentExecution?.cancel();
+    },
+  }, "cf-vfs interactive shell (Node in-memory SQLite)");
+} finally {
+  fileSystem.close();
+}

@@ -19,8 +19,9 @@ upload/download gateway: R2 body bytes; never relayed through metadata DO
 ## Package boundaries
 
 - `src/core` contains path, glob, error, diff, and unified-patch primitives.
-- `src/vfs` contains the byte contract, stream helpers, deterministic memory
-  implementation, SQLite implementation, opaque facade, and VFS DO base.
+- `src/vfs` contains the byte contract, stream helpers, one adapter-driven
+  SQLite implementation, the Durable Object storage adapter, opaque facade,
+  and VFS DO base.
 - `src/shell` contains versioned Bash-compatible parsing, expansion, and arithmetic,
   manual pipe pumps, sessions, sourced-unit execution, redirections, budgets,
   capability policy, and execution APIs.
@@ -30,13 +31,23 @@ upload/download gateway: R2 body bytes; never relayed through metadata DO
 - `src/shell/commands` contains argv-based built-ins and utilities. The full
   registry is a separate module.
 - `src/storage/r2.ts` is the immutable `R2OpaqueStore` adapter.
-- `src/testing` contains deterministic in-memory VFS and R2 substitutes.
+- `src/testing/node.ts` adapts Node 24's built-in in-memory SQLite to the same
+  SQL VFS for local tests and tools. `src/testing/opaque-store.ts` is the
+  deterministic R2 substitute.
 
 The root and `/vfs` exports do not import shell code. The `/shell` export does
 not import the interactive adapter or Durable Object platform code.
 `/shell/interactive` opts into persistent sessions explicitly. Worker-only
 bases are under `/durable-object`. Package and Wrangler tests verify those
-boundaries.
+boundaries. The Node-only SQLite adapter has its own `/testing/node` subpath so
+it cannot pull `node:sqlite` into a Worker bundle.
+
+`src/vfs/sql.ts` owns all filesystem semantics and depends only on a narrow
+synchronous SQL, transaction, database-size, and alarm port.
+`src/vfs/do-sql.ts` maps that port to `DurableObjectStorage`; the Node testing
+adapter maps it to `DatabaseSync(":memory:")` and an in-process alarm slot.
+Cloudflare integration tests remain authoritative for platform-specific cursor
+metering, output gates, alarms, RPC, and eviction.
 
 ## Inline files
 

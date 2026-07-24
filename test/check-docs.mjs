@@ -15,7 +15,7 @@ const documents = [
   "docs/performance.md",
   "docs/operations.md",
   "docs/development.md",
-  "bench/baseline-2026-07-20.md",
+  "bench/node-sql-baseline-2026-07-25.md",
 ];
 
 let combined = "";
@@ -33,7 +33,14 @@ for (const document of documents) {
   }
 }
 
-for (const stale of ["CommandExecutor", "R2BinaryStore", "ENOTTEXT", "drainBinaryGarbage"]){
+for (const stale of [
+  "CommandExecutor",
+  "R2BinaryStore",
+  "ENOTTEXT",
+  "drainBinaryGarbage",
+  "MemoryFileSystem",
+  "vfs/memory",
+]) {
   assert(!combined.includes(stale), `documentation still references removed ${stale}`);
 }
 assert(combined.includes("BASH_COMPATIBILITY_VERSION"));

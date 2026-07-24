@@ -1,2 +1,2 @@
-export { MemoryFileSystem } from "../vfs/memory.js";
+export { MemoryOpaqueStore } from "./opaque-store.js";
 export * from "./opaque-store.js";

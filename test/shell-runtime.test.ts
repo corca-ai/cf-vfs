@@ -2,16 +2,16 @@ import { describe, expect, it } from "vitest";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { defineCommand, writeText } from "../src/shell/commands/helpers.js";
 import { Shell } from "../src/shell/shell.js";
-import { MemoryFileSystem } from "../src/vfs/memory.js";
 import { putOpaque } from "../src/vfs/opaque.js";
 import { readAllBytes, streamFromChunks } from "../src/vfs/streams.js";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
+import { createTestFileSystem } from "./helpers/node-sql.js";
 import { createBashHarness } from "./helpers/bash.js";
 
 describe("stream-first shell runtime", () => {
   it("keeps the per-edge pipeline limit at or below 8 MiB", () => {
     expect(() => new Shell({
-      fileSystem: new MemoryFileSystem(),
+      fileSystem: createTestFileSystem(),
       commands: defaultShellCommands,
       limits: { maxPipelineBytes: 8 * 1024 * 1024 + 1 },
     })).toThrowError(expect.objectContaining({ code: "EINVAL" }));
@@ -317,7 +317,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("uses write capability rather than read capability to inspect destinations", async () => {
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/input/a", "body", { createParents: true });
     await fileSystem.mkdir("/output");
     const shell = new Shell({
@@ -397,7 +397,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("shares loop, recursion, substitution, and parser nesting limits", async () => {
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     const loopLimited = new Shell({
       fileSystem,
       commands: defaultShellCommands,
@@ -441,7 +441,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("enforces command and path capabilities below utilities", async () => {
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/allowed/input", "ok", { createParents: true });
     await fileSystem.writeFile("/secret", "no");
     const shell = new Shell({
@@ -462,7 +462,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("enforces read policy for double-bracket metadata predicates", async () => {
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/allowed/input", "ok", { createParents: true });
     await fileSystem.writeFile("/secret", "no");
     const shell = new Shell({
@@ -485,7 +485,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("allows script functions under command policy while checking their bodies", async () => {
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     const shell = new Shell({
       fileSystem,
       commands: defaultShellCommands,
@@ -498,7 +498,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("applies command, path, opaque-content, size, and cancellation boundaries to source", async () => {
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/allowed/library.sh", "printf allowed", { createParents: true });
     await fileSystem.writeFile("/secret.sh", "printf secret");
 
@@ -529,7 +529,7 @@ describe("stream-first shell runtime", () => {
       .resolves.toMatchObject({ exitCode: 126, stdout: "" });
 
     const store = new MemoryOpaqueStore();
-    const opaqueFileSystem = new MemoryFileSystem({ opaqueStore: store });
+    const opaqueFileSystem = createTestFileSystem({ opaqueStore: store });
     await putOpaque(opaqueFileSystem, store, "/opaque.sh", "printf hidden");
     const opaqueShell = new Shell({ fileSystem: opaqueFileSystem, commands: defaultShellCommands });
     await expect(opaqueShell.executeText({ script: "source /opaque.sh" })).resolves.toMatchObject({
@@ -562,7 +562,7 @@ describe("stream-first shell runtime", () => {
 
   it("keeps opaque bodies outside shell content commands", async () => {
     const store = new MemoryOpaqueStore();
-    const fileSystem = new MemoryFileSystem({ opaqueStore: store });
+    const fileSystem = createTestFileSystem({ opaqueStore: store });
     await putOpaque(fileSystem, store, "/opaque", "secret");
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });
     const result = await shell.executeText({ script: "stat /opaque; cat /opaque" });
@@ -573,7 +573,7 @@ describe("stream-first shell runtime", () => {
 
   it("rejects opaque append but atomically replaces opaque content with inline output", async () => {
     const store = new MemoryOpaqueStore();
-    const fileSystem = new MemoryFileSystem({ opaqueStore: store });
+    const fileSystem = createTestFileSystem({ opaqueStore: store });
     const upload = await fileSystem.beginOpaqueUpload("/opaque");
     await store.putIfAbsent(upload.objectKey, "secret");
     await fileSystem.commitOpaqueUpload(upload.uploadId);
@@ -593,7 +593,7 @@ describe("stream-first shell runtime", () => {
 
   it("uses a trusted opaque digest without reading the R2 body", async () => {
     const store = new MemoryOpaqueStore({ verifySha256: true });
-    const fileSystem = new MemoryFileSystem({ opaqueStore: store });
+    const fileSystem = createTestFileSystem({ opaqueStore: store });
     await putOpaque(fileSystem, store, "/opaque", "body");
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });
     const result = await shell.executeText({ script: "sha256sum /opaque" });
@@ -698,7 +698,7 @@ describe("stream-first shell runtime", () => {
 
   it("treats a downstream head close as a successful pipeline edge under pipefail", async () => {
     const { fileSystem, shell } = createBashHarness({
-      fileSystem: new MemoryFileSystem({ chunkBytes: 1024 }),
+      fileSystem: createTestFileSystem({ chunkBytes: 1024 }),
     });
     await fileSystem.writeFile("/many", "first\n" + "next\n".repeat(1000));
     const result = await shell.executeText({
@@ -757,7 +757,7 @@ describe("stream-first shell runtime", () => {
     const produce = defineCommand("produce", async (_context, _argv, fds) => {
       while (true) await fds[1].write(new Uint8Array(128 * 1024));
     });
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     const shell = new Shell({
       fileSystem,
       commands: [...defaultShellCommands, produce],
@@ -770,7 +770,7 @@ describe("stream-first shell runtime", () => {
 
   it("wakes a pending stdin read on cancellation", async () => {
     const shell = new Shell({
-      fileSystem: new MemoryFileSystem(),
+      fileSystem: createTestFileSystem(),
       commands: defaultShellCommands,
       limits: { deadlineMs: 1_000 },
     });
@@ -812,7 +812,7 @@ describe("stream-first shell runtime", () => {
     const produce = defineCommand("produce", async (_context, _argv, fds) => {
       while (true) await fds[1].write(new Uint8Array(128 * 1024));
     });
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     const shell = new Shell({
       fileSystem,
       commands: [...defaultShellCommands, produce],
@@ -843,7 +843,7 @@ describe("stream-first shell runtime", () => {
       await fds[1].write(new Uint8Array(1024));
       return 0;
     });
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     const shell = new Shell({
       fileSystem,
       commands: [...defaultShellCommands, produce],
@@ -858,7 +858,7 @@ describe("stream-first shell runtime", () => {
 
   it("settles command-budget overflow and rejects invalid plugin exit statuses", async () => {
     const limited = new Shell({
-      fileSystem: new MemoryFileSystem(),
+      fileSystem: createTestFileSystem(),
       commands: defaultShellCommands,
       limits: { maxCommands: 1 },
     });
@@ -874,7 +874,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("does not expose mutable policy or the wrapped filesystem to commands", async () => {
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/secret", "secret");
     const probe = defineCommand("probe-policy", async (context) => {
       try {
@@ -1110,7 +1110,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("shares glob, record, and recursive mutation budgets across the execution", async () => {
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/tree/a", "a", { createParents: true });
     await fileSystem.writeFile("/tree/b", "b");
     await fileSystem.writeFile("/tree/c", "c");
@@ -1145,7 +1145,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("holds materialized input leases until a multi-file command finishes", async () => {
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/left-large", "a".repeat(900));
     await fileSystem.writeFile("/right-large", "b".repeat(900));
     const shell = new Shell({
@@ -1158,7 +1158,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("charges glob matches cumulatively across words", async () => {
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/g/a", "a", { createParents: true });
     await fileSystem.writeFile("/g/b", "b");
     const shell = new Shell({
@@ -1172,7 +1172,7 @@ describe("stream-first shell runtime", () => {
 
   it("rejects opaque bodies consistently across body-dependent utilities", async () => {
     const store = new MemoryOpaqueStore();
-    const fileSystem = new MemoryFileSystem({ opaqueStore: store });
+    const fileSystem = createTestFileSystem({ opaqueStore: store });
     await putOpaque(fileSystem, store, "/opaque", "body");
     await fileSystem.writeFile("/inline", "body\n");
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });
@@ -1203,7 +1203,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("charges every directory created by recursive mkdir before mutating", async () => {
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     const shell = new Shell({
       fileSystem,
       commands: defaultShellCommands,

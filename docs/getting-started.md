@@ -7,8 +7,8 @@ npm install @corca-ai/cf-vfs
 ```
 
 The package publishes ESM JavaScript and TypeScript declarations from `dist`.
-Direct VFS, shell, command, Durable Object, R2, and testing entry points are
-separate so a Worker only bundles what it imports.
+Direct VFS, shell, command, Durable Object, R2, and Node testing entry points
+are separate so a Worker only bundles what it imports.
 
 ## Compose a shell Durable Object
 
@@ -104,12 +104,20 @@ The root and `/vfs` entry points do not import the parser or utilities.
 
 ```ts
 import { readAllBytes } from "@corca-ai/cf-vfs/vfs";
-import { MemoryFileSystem } from "@corca-ai/cf-vfs/testing";
+import { NodeSqlFileSystem } from "@corca-ai/cf-vfs/testing/node";
 
-const fs = new MemoryFileSystem();
-await fs.writeFile("/bytes", new Uint8Array([0xff, 0x00, 0x01]));
-const body = await readAllBytes(fs.readFile("/bytes").stream, 8 * 1024 * 1024);
+const fs = new NodeSqlFileSystem();
+try {
+  await fs.writeFile("/bytes", new Uint8Array([0xff, 0x00, 0x01]));
+  const body = await readAllBytes(fs.readFile("/bytes").stream, 8 * 1024 * 1024);
+} finally {
+  fs.close();
+}
 ```
+
+`/testing/node` requires Node 24 and uses its built-in `node:sqlite`
+`DatabaseSync(":memory:")`. It executes the same schema and VFS implementation
+as the Durable Object adapter; it is not bundled into Worker entry points.
 
 ## Upload a large opaque body
 

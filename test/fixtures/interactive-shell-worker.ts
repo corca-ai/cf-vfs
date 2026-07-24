@@ -1,9 +1,9 @@
 import { trueCommand } from "../../src/shell/commands/core.js";
 import { InteractiveShell } from "../../src/shell/interactive.js";
-import { MemoryFileSystem } from "../../src/vfs/memory.js";
+import type { VirtualFileSystem } from "../../src/vfs/types.js";
 
 const shell = new InteractiveShell({
-  fileSystem: new MemoryFileSystem(),
+  fileSystem: Object.create(null) as VirtualFileSystem,
   commands: [trueCommand],
 });
 
