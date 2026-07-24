@@ -579,7 +579,7 @@ async function evaluateConditional(
       else if (operand.length === 0) value = false;
       else {
         try {
-          const stat = await runtime.fileSystem.stat(
+          const stat = runtime.fileSystem.stat(
             normalizePathPreservingTrailingSlash(operand, session.cwd),
           );
           if (current.operator === "-e") value = true;

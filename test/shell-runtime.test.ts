@@ -574,7 +574,7 @@ describe("stream-first shell runtime", () => {
   it("rejects opaque append but atomically replaces opaque content with inline output", async () => {
     const store = new MemoryOpaqueStore();
     const fileSystem = new MemoryFileSystem({ opaqueStore: store });
-    const upload = fileSystem.beginOpaqueUpload("/opaque");
+    const upload = await fileSystem.beginOpaqueUpload("/opaque");
     await store.putIfAbsent(upload.objectKey, "secret");
     await fileSystem.commitOpaqueUpload(upload.uploadId);
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });

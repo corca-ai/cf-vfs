@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 2,
+  "profile": "quick",
+  "timing": "caller-observed-rpc",
+  "baseline": {
+    "date": "2026-07-24",
+    "runs": 3,
+    "colo": "LAX",
+    "workerVersion": "5657305b-82e6-4d60-9164-f0c8fcdf5550"
+  },
+  "rpcOverhead": {
+    "medianMs": 5
+  },
+  "point": {
+    "stat": {
+      "medianMs": 0.04
+    },
+    "overwrite": {
+      "medianMs": 1.933333
+    },
+    "findPage": {
+      "medianMs": 7.5
+    },
+    "warmInitialize": {
+      "medianMs": 0.11
+    },
+    "statCost": {
+      "statements": 1,
+      "rowsRead": 2,
+      "rowsWritten": 0,
+      "nextCalls": 0,
+      "toArrayCalls": 1,
+      "oneCalls": 0
+    },
+    "overwriteCost": {
+      "statements": 13,
+      "rowsRead": 19,
+      "rowsWritten": 5
+    },
+    "populatedStatCost": {
+      "statements": 1,
+      "rowsRead": 2,
+      "rowsWritten": 0
+    }
+  },
+  "append": {
+    "1MiB": {
+      "duration": {
+        "medianMs": 48
+      },
+      "maxRowsWritten": 4
+    },
+    "8MiB": {
+      "duration": {
+        "medianMs": 47
+      },
+      "maxRowsWritten": 4
+    }
+  },
+  "subtree": {
+    "100": {
+      "copy": {
+        "medianMs": 47
+      },
+      "move": {
+        "medianMs": 45
+      },
+      "remove": {
+        "medianMs": 46
+      },
+      "statements": {
+        "copy": 11,
+        "move": 7,
+        "remove": 10
+      }
+    },
+    "1000": {
+      "copy": {
+        "medianMs": 65
+      },
+      "move": {
+        "medianMs": 65
+      },
+      "remove": {
+        "medianMs": 50
+      },
+      "statements": {
+        "copy": 11,
+        "move": 7,
+        "remove": 10
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { VfsError } from "../core/errors.js";
-import { matchesGlob } from "../core/glob.js";
+import { globToRegExp } from "../core/glob.js";
 import {
   basename,
   compareUtf8,
@@ -419,6 +419,10 @@ export class MemoryFileSystem implements VirtualFileSystem {
     const rootEntry = this.entry(root);
     const limit = options.limit ?? 1000;
     validatePositiveInteger(limit, "limit");
+    const namePattern = options.name === undefined ? undefined : globToRegExp(options.name);
+    const pathPattern = options.pathGlob === undefined
+      ? undefined
+      : globToRegExp(options.pathGlob);
     const all = [...this.entries.values()]
       .map((entry) => entry.stat)
       .filter((stat) => stat.path === root
@@ -431,8 +435,8 @@ export class MemoryFileSystem implements VirtualFileSystem {
     const entries = scanned.filter((stat) => {
       if (options.maxDepth !== undefined && depthFrom(root, stat.path) > options.maxDepth) return false;
       if (options.type !== undefined && stat.kind !== options.type) return false;
-      if (options.name !== undefined && !matchesGlob(stat.name, options.name)) return false;
-      if (options.pathGlob !== undefined && !matchesGlob(stat.path, options.pathGlob)) return false;
+      if (namePattern !== undefined && !namePattern.test(stat.name)) return false;
+      if (pathPattern !== undefined && !pathPattern.test(stat.path)) return false;
       return true;
     }).map(cloneStat);
     return {
@@ -640,7 +644,7 @@ export class MemoryFileSystem implements VirtualFileSystem {
     return cloneStat(this.createDirectory(normalized, now, mode).stat);
   }
 
-  remove(path: string, options: RemoveOptions = {}): RemoveResult {
+  async remove(path: string, options: RemoveOptions = {}): Promise<RemoveResult> {
     const normalized = this.normalizeAccessPath(path);
     if (normalized === "/") throw new VfsError("EINVAL", "cannot remove root", normalized);
     const root = this.entry(normalized);
@@ -657,7 +661,7 @@ export class MemoryFileSystem implements VirtualFileSystem {
     return { removed: descendants.length + 1, opaqueObjectsQueuedForDeletion: queued };
   }
 
-  move(from: string, to: string, options: MoveOptions = {}): MoveResult {
+  async move(from: string, to: string, options: MoveOptions = {}): Promise<MoveResult> {
     const source = this.normalizeAccessPath(from);
     const target = this.normalizeAccessPath(to, true);
     if (source === "/") throw new VfsError("EINVAL", "cannot move root", source);
@@ -711,7 +715,7 @@ export class MemoryFileSystem implements VirtualFileSystem {
     };
   }
 
-  copy(from: string, to: string, options: CopyOptions = {}): CopyResult {
+  async copy(from: string, to: string, options: CopyOptions = {}): Promise<CopyResult> {
     const source = this.normalizeAccessPath(from);
     const target = this.normalizeAccessPath(to, true);
     if (source === target) {
@@ -788,10 +792,10 @@ export class MemoryFileSystem implements VirtualFileSystem {
     };
   }
 
-  beginOpaqueUpload(
+  async beginOpaqueUpload(
     path: string,
     options: BeginOpaqueUploadOptions = {},
-  ): OpaqueUploadReservation {
+  ): Promise<OpaqueUploadReservation> {
     if (this.opaqueStore === undefined) {
       throw new VfsError("ENOTSUP", "opaque storage is not configured");
     }
@@ -981,7 +985,7 @@ export class MemoryFileSystem implements VirtualFileSystem {
     return cloneStat(stat);
   }
 
-  abortOpaqueUpload(uploadId: string): void {
+  async abortOpaqueUpload(uploadId: string): Promise<void> {
     const session = this.uploads.get(uploadId);
     if (session === undefined || session.state === "garbage") return;
     if (session.state === "committed") return;

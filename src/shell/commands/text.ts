@@ -789,7 +789,7 @@ export const diffCommand = /* @__PURE__ */ defineCommand("diff", async (context,
 export const sha256sumCommand = /* @__PURE__ */ defineCommand("sha256sum", async (context, argv, fds) => {
   if (argv.length === 0) throw new VfsError("EINVAL", "sha256sum: missing operand");
   for (const path of argv) {
-    const stat = await context.fileSystem.stat(commandPath(context, path));
+    const stat = context.fileSystem.stat(commandPath(context, path));
     if (stat.kind !== "file") throw new VfsError("EISDIR", "is a directory", stat.path);
     if (stat.contentClass === "opaque") {
       if (stat.verifiedSha256 === undefined) {
@@ -1025,8 +1025,8 @@ export const patchCommand = /* @__PURE__ */ defineCommand("patch", async (contex
     throw new VfsError("EINVAL", "patch: usage: patch FILE [PATCHFILE]");
   }
   const path = commandPath(context, argv[0]);
-  const token = await context.fileSystem.getMutationToken(path);
-  const current = await context.fileSystem.readFile(path);
+  const token = context.fileSystem.getMutationToken(path);
+  const current = context.fileSystem.readFile(path);
   const source = await collectText(context, current.stream, path);
   try {
     const patch = argv[1] === undefined

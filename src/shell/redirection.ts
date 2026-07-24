@@ -14,15 +14,15 @@ import type {
   ShellSink,
 } from "./types.js";
 
-async function atomicFileSink(
+function atomicFileSink(
   fileSystem: ShellFileSystem,
   path: string,
   append: boolean,
   maximumBytes: number,
   budget: ShellBudget,
-): Promise<ShellSink> {
-  const stat = await fileSystem.inspectWriteTarget(path);
-  const mutationToken = await fileSystem.getMutationToken(path);
+): ShellSink {
+  const stat = fileSystem.inspectWriteTarget(path);
+  const mutationToken = fileSystem.getMutationToken(path);
   const exists = stat !== null;
   if (stat !== null) {
     if (stat.kind === "directory") throw new VfsError("EISDIR", "is a directory", path);
@@ -134,7 +134,7 @@ export async function applyRedirections(
       }
       const path = await targetPath(redirection.target, session, fileSystem, budget, runtime);
       if (redirection.operator === "<") {
-        const replacement = (await fileSystem.readFile(path)).stream;
+        const replacement = fileSystem.readFile(path).stream;
         if (cancelReplacedInput || inputRedirected) {
           await fds[0].cancel(new VfsError("EPIPE", "pipeline input was replaced by redirection"));
         }
@@ -143,7 +143,7 @@ export async function applyRedirections(
         continue;
       }
       const descriptor = redirection.operator.startsWith("2") ? 2 : 1;
-      const replacement = await atomicFileSink(
+      const replacement = atomicFileSink(
         fileSystem,
         path,
         redirection.operator.endsWith(">>"),

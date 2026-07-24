@@ -175,7 +175,7 @@ export const pwdCommand = /* @__PURE__ */ defineCommand("pwd", async (context, a
 export const cdCommand = /* @__PURE__ */ defineCommand("cd", async (context, argv) => {
   if (argv.length > 1) throw new VfsError("EINVAL", "cd: too many arguments");
   const target = normalizePath(argv[0] ?? context.session.env.get("HOME") ?? "/", context.session.cwd);
-  const stat = await context.fileSystem.stat(target);
+  const stat = context.fileSystem.stat(target);
   if (stat.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", target);
   context.session.cwd = target;
   context.session.env.set("PWD", target);
@@ -533,7 +533,7 @@ async function evaluateTest(context: ShellCommandContext, values: readonly strin
     if (unary === "-e" || unary === "-f" || unary === "-d" || unary === "-s") {
       if (operand.length === 0) return false;
       try {
-        const stat = await context.fileSystem.stat(
+        const stat = context.fileSystem.stat(
           normalizePathPreservingTrailingSlash(operand, context.session.cwd),
         );
         if (unary === "-e") return true;

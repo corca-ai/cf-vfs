@@ -39,15 +39,8 @@ function validateRange(key: string, range: unknown): asserts range is ByteRange 
   }
 }
 
-function checksumHex(value: ArrayBuffer | undefined): string | undefined {
-  if (value === undefined) return undefined;
-  return [...new Uint8Array(value)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 function opaqueMetadata(object: R2Object): OpaqueObjectMetadata {
-  const verifiedSha256 = checksumHex(object.checksums.sha256);
+  const verifiedSha256 = object.checksums.toJSON().sha256;
   return {
     key: object.key,
     sizeBytes: object.size,

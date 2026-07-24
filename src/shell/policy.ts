@@ -54,7 +54,7 @@ export class ScopedFileSystem implements ShellFileSystem {
     }
   }
 
-  private async missingDirectoryCount(path: string, recursive: boolean): Promise<number> {
+  private missingDirectoryCount(path: string, recursive: boolean): number {
     const normalized = normalizePath(path);
     const segments = normalized.split("/").filter((segment) => segment.length > 0);
     const candidates = recursive
@@ -64,7 +64,7 @@ export class ScopedFileSystem implements ShellFileSystem {
     for (const candidate of candidates) {
       this.write(candidate);
       try {
-        await this.#inner.stat(candidate);
+        this.#inner.stat(candidate);
       } catch (error) {
         if (error instanceof VfsError && error.code === "ENOENT") missing += 1;
         else throw error;
@@ -80,13 +80,13 @@ export class ScopedFileSystem implements ShellFileSystem {
     return this.#inner.getMutationToken(path);
   }
 
-  async inspectWriteTarget(path: string): Promise<VfsStat | null> {
+  inspectWriteTarget(path: string): VfsStat | null {
     const normalized = normalizePath(path);
     this.write(normalized);
-    const parent = await this.#inner.stat(dirname(normalized));
+    const parent = this.#inner.stat(dirname(normalized));
     if (parent.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", parent.path);
     try {
-      return await this.#inner.stat(normalized);
+      return this.#inner.stat(normalized);
     } catch (error) {
       if (error instanceof VfsError && error.code === "ENOENT") return null;
       throw error;
@@ -103,7 +103,7 @@ export class ScopedFileSystem implements ShellFileSystem {
     return this.#inner.list(path);
   }
 
-  listPage(path: string, options?: PageOptions): EntryPage | Promise<EntryPage> {
+  listPage(path: string, options?: PageOptions): EntryPage {
     this.read(path);
     return this.#inner.listPage(path, options);
   }
@@ -113,12 +113,12 @@ export class ScopedFileSystem implements ShellFileSystem {
     return this.#inner.find(options);
   }
 
-  findPage(options: FindOptions): EntryPage | Promise<EntryPage> {
+  findPage(options: FindOptions): EntryPage {
     this.read(options.path);
     return this.#inner.findPage(options);
   }
 
-  readFile(path: string): InlineReadResult | Promise<InlineReadResult> {
+  readFile(path: string): InlineReadResult {
     this.read(path);
     return this.#inner.readFile(path);
   }
@@ -143,48 +143,48 @@ export class ScopedFileSystem implements ShellFileSystem {
     return this.#inner.appendFile(path, body, options);
   }
 
-  touch(path: string, options?: TouchOptions): VfsStat | Promise<VfsStat> {
+  touch(path: string, options?: TouchOptions): VfsStat {
     this.write(path);
     this.#budget.mutation();
     return this.#inner.touch(path, options);
   }
 
-  setMetadata(path: string, options: MetadataUpdateOptions): VfsStat | Promise<VfsStat> {
+  setMetadata(path: string, options: MetadataUpdateOptions): VfsStat {
     this.write(path);
     this.#budget.mutation();
     return this.#inner.setMetadata(path, options);
   }
 
-  async mkdir(path: string, recursive?: boolean, mode?: number): Promise<VfsStat> {
+  mkdir(path: string, recursive?: boolean, mode?: number): VfsStat {
     this.write(path);
-    const mutations = await this.missingDirectoryCount(path, recursive === true);
+    const mutations = this.missingDirectoryCount(path, recursive === true);
     if (mutations > 0) this.#budget.mutation(mutations);
-    return await this.#inner.mkdir(path, recursive, mode);
+    return this.#inner.mkdir(path, recursive, mode);
   }
 
-  async remove(path: string, options?: RemoveOptions): Promise<RemoveResult> {
+  remove(path: string, options?: RemoveOptions): Promise<RemoveResult> {
     this.write(path);
     const count = options?.recursive === true
-      ? (await this.#inner.find({ path, includeRoot: true })).length
+      ? this.#inner.find({ path, includeRoot: true }).length
       : 1;
     this.#budget.mutation(Math.max(1, count));
-    return await this.#inner.remove(path, options);
+    return this.#inner.remove(path, options);
   }
 
-  async move(from: string, to: string, options?: MoveOptions): Promise<MoveResult> {
+  move(from: string, to: string, options?: MoveOptions): Promise<MoveResult> {
     this.write(from);
     this.write(to);
-    const count = (await this.#inner.find({ path: from, includeRoot: true })).length;
+    const count = this.#inner.find({ path: from, includeRoot: true }).length;
     this.#budget.mutation(Math.max(1, count));
-    return await this.#inner.move(from, to, options);
+    return this.#inner.move(from, to, options);
   }
 
-  async copy(from: string, to: string, options?: CopyOptions): Promise<CopyResult> {
+  copy(from: string, to: string, options?: CopyOptions): Promise<CopyResult> {
     this.read(from);
     this.write(to);
-    const count = (await this.#inner.find({ path: from, includeRoot: true })).length;
+    const count = this.#inner.find({ path: from, includeRoot: true }).length;
     this.#budget.mutation(Math.max(1, count));
-    return await this.#inner.copy(from, to, options);
+    return this.#inner.copy(from, to, options);
   }
 
 }

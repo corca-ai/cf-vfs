@@ -164,13 +164,13 @@ describe("byte-oriented MemoryFileSystem", () => {
     const lease = fileSystem.resolveOpaqueRead("/asset", 1);
 
     expect(stat).toMatchObject({ contentClass: "opaque", sizeBytes: 3 });
-    expect(fileSystem.copy("/asset", "/copy")).toMatchObject({
+    expect(await fileSystem.copy("/asset", "/copy")).toMatchObject({
       copied: 1,
       opaqueBodiesCopied: 0,
     });
-    expect(fileSystem.remove("/asset").opaqueObjectsQueuedForDeletion).toBe(0);
+    expect((await fileSystem.remove("/asset")).opaqueObjectsQueuedForDeletion).toBe(0);
     expect(store.has(lease.object.key)).toBe(true);
-    expect(fileSystem.remove("/copy").opaqueObjectsQueuedForDeletion).toBe(1);
+    expect((await fileSystem.remove("/copy")).opaqueObjectsQueuedForDeletion).toBe(1);
     await fileSystem.drainGarbage();
     expect(store.has(lease.object.key)).toBe(false);
   });
@@ -187,7 +187,7 @@ describe("byte-oriented MemoryFileSystem", () => {
     const read = await readOpaque(fileSystem, store, "/asset", undefined, 50);
     expect(new TextDecoder().decode(Uint8Array.from(await bytes(read.stream)))).toBe("payload");
     const key = fileSystem.resolveOpaqueRead("/asset", 50).object.key;
-    fileSystem.remove("/asset");
+    await fileSystem.remove("/asset");
 
     now = 149;
     expect(await fileSystem.drainGarbage()).toEqual({ deleted: 0, remaining: 1 });
@@ -205,11 +205,11 @@ describe("byte-oriented MemoryFileSystem", () => {
       now: () => now,
       uploadSettlementGraceMs: 1,
     });
-    const upload = fileSystem.beginOpaqueUpload("/future", { expiresInMs: 100 });
+    const upload = await fileSystem.beginOpaqueUpload("/future", { expiresInMs: 100 });
     await store.putIfAbsent(upload.objectKey, "opaque");
 
     await fileSystem.writeFile("/future", "temporary");
-    fileSystem.remove("/future");
+    await fileSystem.remove("/future");
 
     await expect(fileSystem.commitOpaqueUpload(upload.uploadId)).rejects.toMatchObject({
       code: "EREVISION",
@@ -222,7 +222,7 @@ describe("byte-oriented MemoryFileSystem", () => {
   it("makes successful opaque commit retries idempotent", async () => {
     const store = new MemoryOpaqueStore();
     const fileSystem = new MemoryFileSystem({ opaqueStore: store });
-    const upload = fileSystem.beginOpaqueUpload("/asset");
+    const upload = await fileSystem.beginOpaqueUpload("/asset");
     await store.putIfAbsent(upload.objectKey, "body");
 
     const first = await fileSystem.commitOpaqueUpload(upload.uploadId);
@@ -238,7 +238,7 @@ describe("byte-oriented MemoryFileSystem", () => {
       now: () => now,
       receiptRetentionMs: 1,
     });
-    const upload = fileSystem.beginOpaqueUpload("/asset", { expiresInMs: 100 });
+    const upload = await fileSystem.beginOpaqueUpload("/asset", { expiresInMs: 100 });
     await store.putIfAbsent(upload.objectKey, "body");
     await fileSystem.commitOpaqueUpload(upload.uploadId);
     now = 2;
@@ -251,7 +251,7 @@ describe("byte-oriented MemoryFileSystem", () => {
   it("does not accept a client-asserted digest that the store did not verify", async () => {
     const store = new MemoryOpaqueStore();
     const fileSystem = new MemoryFileSystem({ opaqueStore: store });
-    const upload = fileSystem.beginOpaqueUpload("/asset");
+    const upload = await fileSystem.beginOpaqueUpload("/asset");
     await store.putIfAbsent(upload.objectKey, "body");
 
     await expect(fileSystem.commitOpaqueUpload(upload.uploadId, {
@@ -281,7 +281,7 @@ describe("byte-oriented MemoryFileSystem", () => {
       now: () => now,
       uploadSettlementGraceMs: 1,
     });
-    const upload = fileSystem.beginOpaqueUpload("/asset", { expiresInMs: 100 });
+    const upload = await fileSystem.beginOpaqueUpload("/asset", { expiresInMs: 100 });
     await store.putIfAbsent(upload.objectKey, "body");
 
     const firstCommit = fileSystem.commitOpaqueUpload(upload.uploadId);
@@ -289,7 +289,7 @@ describe("byte-oriented MemoryFileSystem", () => {
     await expect(fileSystem.commitOpaqueUpload(upload.uploadId)).rejects.toMatchObject({
       code: "EAGAIN",
     });
-    fileSystem.abortOpaqueUpload(upload.uploadId);
+    await fileSystem.abortOpaqueUpload(upload.uploadId);
     releaseHead?.();
     await expect(firstCommit).rejects.toMatchObject({ code: "EREVISION" });
     now = 101;
@@ -325,7 +325,7 @@ describe("byte-oriented MemoryFileSystem", () => {
       now: () => now,
       uploadSettlementGraceMs: 1,
     });
-    const upload = fileSystem.beginOpaqueUpload("/asset", { expiresInMs: 60_000 });
+    const upload = await fileSystem.beginOpaqueUpload("/asset", { expiresInMs: 60_000 });
     await store.putIfAbsent(upload.objectKey, "body");
     const committing = fileSystem.commitOpaqueUpload(upload.uploadId);
     await headStarted;
@@ -346,7 +346,7 @@ describe("byte-oriented MemoryFileSystem", () => {
     await putOpaque(fileSystem, store, "/destination", "destination");
     expect(store.operations.puts).toBe(2);
 
-    expect(fileSystem.move("/source", "/destination", { replace: true })).toMatchObject({
+    expect(await fileSystem.move("/source", "/destination", { replace: true })).toMatchObject({
       moved: 1,
       replaced: true,
     });
@@ -361,7 +361,7 @@ describe("byte-oriented MemoryFileSystem", () => {
     await putOpaque(fileSystem, store, "/tree/a", "a", { createParents: true });
     await putOpaque(fileSystem, store, "/tree/sub/b", "b", { createParents: true });
 
-    expect(fileSystem.remove("/tree", { recursive: true })).toMatchObject({
+    expect(await fileSystem.remove("/tree", { recursive: true })).toMatchObject({
       removed: 4,
       opaqueObjectsQueuedForDeletion: 2,
     });

@@ -1,5 +1,3 @@
-export type Awaitable<T> = T | Promise<T>;
-
 export const MAX_INLINE_FILE_BYTES = 8 * 1024 * 1024;
 
 export type ContentClass = "inline" | "opaque";
@@ -191,30 +189,30 @@ export interface GarbageDrainResult {
 }
 
 export interface VirtualFileSystem {
-  getMutationToken(path: string): Awaitable<string>;
-  stat(path: string): Awaitable<VfsStat>;
-  list(path: string): Awaitable<VfsStat[]>;
-  listPage(path: string, options?: PageOptions): Awaitable<EntryPage>;
-  find(options: FindOptions): Awaitable<VfsStat[]>;
-  findPage(options: FindOptions): Awaitable<EntryPage>;
-  readFile(path: string): Awaitable<InlineReadResult>;
+  getMutationToken(path: string): string;
+  stat(path: string): VfsStat;
+  list(path: string): VfsStat[];
+  listPage(path: string, options?: PageOptions): EntryPage;
+  find(options: FindOptions): VfsStat[];
+  findPage(options: FindOptions): EntryPage;
+  readFile(path: string): InlineReadResult;
   writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult>;
   appendFile(path: string, body: ByteBody, options?: AppendFileOptions): Promise<WriteResult>;
-  touch(path: string, options?: TouchOptions): Awaitable<VfsStat>;
-  setMetadata(path: string, options: MetadataUpdateOptions): Awaitable<VfsStat>;
-  mkdir(path: string, recursive?: boolean, mode?: number): Awaitable<VfsStat>;
-  remove(path: string, options?: RemoveOptions): Awaitable<RemoveResult>;
-  move(from: string, to: string, options?: MoveOptions): Awaitable<MoveResult>;
-  copy(from: string, to: string, options?: CopyOptions): Awaitable<CopyResult>;
+  touch(path: string, options?: TouchOptions): VfsStat;
+  setMetadata(path: string, options: MetadataUpdateOptions): VfsStat;
+  mkdir(path: string, recursive?: boolean, mode?: number): VfsStat;
+  remove(path: string, options?: RemoveOptions): Promise<RemoveResult>;
+  move(from: string, to: string, options?: MoveOptions): Promise<MoveResult>;
+  copy(from: string, to: string, options?: CopyOptions): Promise<CopyResult>;
   beginOpaqueUpload(
     path: string,
     options?: BeginOpaqueUploadOptions,
-  ): Awaitable<OpaqueUploadReservation>;
+  ): Promise<OpaqueUploadReservation>;
   commitOpaqueUpload(
     uploadId: string,
     options?: CommitOpaqueUploadOptions,
   ): Promise<OpaqueFileStat>;
-  abortOpaqueUpload(uploadId: string): Awaitable<void>;
-  resolveOpaqueRead(path: string, leaseMs?: number): Awaitable<OpaqueReadLease>;
+  abortOpaqueUpload(uploadId: string): Promise<void>;
+  resolveOpaqueRead(path: string, leaseMs?: number): OpaqueReadLease;
   drainGarbage(limit?: number): Promise<GarbageDrainResult>;
 }

@@ -21,9 +21,9 @@ export const lsCommand = /* @__PURE__ */ defineCommand("ls", async (context, arg
   try {
     for (const [index, path] of paths.entries()) {
       const normalized = commandPath(context, path);
-      const stat = await context.fileSystem.stat(normalized);
+      const stat = context.fileSystem.stat(normalized);
       const entries = stat.kind === "directory" && !directory
-        ? await context.fileSystem.list(normalized)
+        ? context.fileSystem.list(normalized)
         : [stat];
       if (multiple) await output.write(`${index === 0 ? "" : "\n"}${path}:\n`);
       for (const entry of entries) {

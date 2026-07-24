@@ -2,9 +2,21 @@ import { expect, it } from "vitest";
 import type { VirtualFileSystem } from "../../src/vfs/types.js";
 import { readAllBytes } from "../../src/vfs/streams.js";
 
-export type VfsFactory = () => VirtualFileSystem | Promise<VirtualFileSystem>;
+// Durable Object RPC turns synchronous server results into promises at the caller boundary.
+type RpcCompatibleVirtualFileSystem = {
+  [Method in keyof VirtualFileSystem]:
+    VirtualFileSystem[Method] extends (...args: infer Args) => infer Result
+      ? (...args: Args) => Result | Promise<Awaited<Result>>
+      : never;
+};
 
-async function readText(fileSystem: VirtualFileSystem, path: string): Promise<string> {
+export type VfsFactory =
+  () => RpcCompatibleVirtualFileSystem | Promise<RpcCompatibleVirtualFileSystem>;
+
+async function readText(
+  fileSystem: RpcCompatibleVirtualFileSystem,
+  path: string,
+): Promise<string> {
   return new TextDecoder().decode(
     await readAllBytes((await fileSystem.readFile(path)).stream, 1024),
   );
@@ -170,6 +182,28 @@ export function runVfsConformance(
     finish?.();
 
     expect(await observed).toMatchObject({ code: "EREVISION", path: "/append-race" });
+  });
+
+  it("conforms: publishes subtree tokens for copy, move, and remove", async () => {
+    const fileSystem = await factory();
+    await fileSystem.mkdir("/source");
+    await fileSystem.writeFile("/source/file", "body");
+    const sourceToken = await fileSystem.getMutationToken("/source/file");
+    const absentCopyToken = await fileSystem.getMutationToken("/copy/file");
+
+    await fileSystem.copy("/source", "/copy", { recursive: true });
+    const copiedToken = await fileSystem.getMutationToken("/copy/file");
+    expect(copiedToken).not.toBe(absentCopyToken);
+    expect(await fileSystem.getMutationToken("/source/file")).toBe(sourceToken);
+
+    const absentMovedToken = await fileSystem.getMutationToken("/moved/file");
+    await fileSystem.move("/copy", "/moved");
+    const movedToken = await fileSystem.getMutationToken("/moved/file");
+    expect(movedToken).not.toBe(absentMovedToken);
+    expect(await fileSystem.getMutationToken("/copy/file")).not.toBe(copiedToken);
+
+    await fileSystem.remove("/moved", { recursive: true });
+    expect(await fileSystem.getMutationToken("/moved/file")).not.toBe(movedToken);
   });
 
   it("conforms: applies namespace operations and paginated traversal consistently", async () => {
