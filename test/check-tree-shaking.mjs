@@ -70,6 +70,15 @@ assert(
   interactiveShellBundle.includes("interactive shell is closed"),
   "interactive shell bundle is missing interactive session behavior",
 );
+for (const [name, source] of [
+  ["ls", lsBundle],
+  ["commands", commandsBundle],
+  ["VFS", vfsBundle],
+  ["shell", nonInteractiveShellBundle],
+  ["interactive", interactiveShellBundle],
+]) {
+  assert(!source.includes("node:sqlite"), `${name} Worker bundle contains the Node SQLite adapter`);
+}
 
 console.log(
   `tree-shaking verified (ls ${Buffer.byteLength(lsBundle)} bytes, commands ${Buffer.byteLength(commandsBundle)} bytes, VFS ${Buffer.byteLength(vfsBundle)} bytes, shell ${Buffer.byteLength(nonInteractiveShellBundle)} bytes, interactive ${Buffer.byteLength(interactiveShellBundle)} bytes)`,

@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { VfsError } from "../src/core/errors.js";
-import { MemoryFileSystem } from "../src/vfs/memory.js";
 import { putOpaque, readOpaque } from "../src/vfs/opaque.js";
 import { readAllBytes, streamFromChunks } from "../src/vfs/streams.js";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import type { OpaqueObjectMetadata, OpaqueStore } from "../src/vfs/types.js";
+import { createTestFileSystem } from "./helpers/node-sql.js";
 import { runVfsConformance } from "./helpers/vfs-conformance.js";
 
 async function bytes(stream: ReadableStream<Uint8Array>): Promise<number[]> {
   return [...await readAllBytes(stream, 16 * 1024 * 1024)];
 }
 
-describe("byte-oriented MemoryFileSystem", () => {
+describe("byte-oriented in-memory SQLite filesystem", () => {
   it("creates byte streams that support BYOB readers", async () => {
     const reader = streamFromChunks([Uint8Array.of(1, 2, 3)]).getReader({ mode: "byob" });
     const first = await reader.read(new Uint8Array(3));
@@ -21,11 +21,11 @@ describe("byte-oriented MemoryFileSystem", () => {
   });
 
   describe("shared VFS conformance", () => {
-    runVfsConformance(() => new MemoryFileSystem());
+    runVfsConformance(() => createTestFileSystem());
   });
 
   it("stores arbitrary bytes and gives active readers a bounded snapshot", async () => {
-    const fileSystem = new MemoryFileSystem({ chunkBytes: 2 });
+    const fileSystem = createTestFileSystem({ chunkBytes: 2 });
     await fileSystem.writeFile("/data", new Uint8Array([0xff, 0, 1, 2, 3]));
 
     const snapshot = fileSystem.readFile("/data");
@@ -36,7 +36,7 @@ describe("byte-oriented MemoryFileSystem", () => {
   });
 
   it("does not publish a streaming write until close and rejects a concurrent path change", async () => {
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/file", "old");
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => {
@@ -63,7 +63,7 @@ describe("byte-oriented MemoryFileSystem", () => {
   });
 
   it("keeps materialized read snapshots in the shared in-flight byte budget", async () => {
-    const fileSystem = new MemoryFileSystem({
+    const fileSystem = createTestFileSystem({
       maxInlineFileBytes: 4,
       maxInFlightBufferedBytes: 4,
     });
@@ -77,7 +77,7 @@ describe("byte-oriented MemoryFileSystem", () => {
   });
 
   it("shares the in-flight budget across concurrent streaming writes", async () => {
-    const fileSystem = new MemoryFileSystem({
+    const fileSystem = createTestFileSystem({
       maxInlineFileBytes: 8,
       maxInFlightBufferedBytes: 4,
     });
@@ -99,7 +99,7 @@ describe("byte-oriented MemoryFileSystem", () => {
   });
 
   it("discards a failed input stream without publishing partial bytes", async () => {
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/file", "old");
     const failed = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -113,7 +113,7 @@ describe("byte-oriented MemoryFileSystem", () => {
   });
 
   it("enforces file, workspace, entry, and in-flight limits without partial mutation", async () => {
-    const fileSystem = new MemoryFileSystem({
+    const fileSystem = createTestFileSystem({
       maxInlineFileBytes: 4,
       maxInlineLogicalBytes: 6,
       maxEntries: 3,
@@ -130,7 +130,7 @@ describe("byte-oriented MemoryFileSystem", () => {
   });
 
   it("preflights recursive parent creation with the final entry quota", async () => {
-    const fileSystem = new MemoryFileSystem({ maxEntries: 2 });
+    const fileSystem = createTestFileSystem({ maxEntries: 2 });
 
     await expect(fileSystem.writeFile("/parent/file", "x", { createParents: true }))
       .rejects.toMatchObject({ code: "ENOSPC" });
@@ -159,7 +159,7 @@ describe("byte-oriented MemoryFileSystem", () => {
 
   it("shares opaque objects without copying bodies and deletes only the last reference", async () => {
     const store = new MemoryOpaqueStore();
-    const fileSystem = new MemoryFileSystem({ opaqueStore: store });
+    const fileSystem = createTestFileSystem({ opaqueStore: store });
     const stat = await putOpaque(fileSystem, store, "/asset", new Uint8Array([1, 2, 3]));
     const lease = fileSystem.resolveOpaqueRead("/asset", 1);
 
@@ -178,7 +178,7 @@ describe("byte-oriented MemoryFileSystem", () => {
   it("rejects shell-style reads of opaque bodies but supports leased programmatic reads", async () => {
     let now = 100;
     const store = new MemoryOpaqueStore();
-    const fileSystem = new MemoryFileSystem({ opaqueStore: store, now: () => now });
+    const fileSystem = createTestFileSystem({ opaqueStore: store, now: () => now });
     await putOpaque(fileSystem, store, "/asset", "payload");
 
     expect(() => fileSystem.readFile("/asset")).toThrowError(
@@ -200,7 +200,7 @@ describe("byte-oriented MemoryFileSystem", () => {
   it("prevents an upload reserved for an absent path from surviving create/delete ABA", async () => {
     let now = 0;
     const store = new MemoryOpaqueStore();
-    const fileSystem = new MemoryFileSystem({
+    const fileSystem = createTestFileSystem({
       opaqueStore: store,
       now: () => now,
       uploadSettlementGraceMs: 1,
@@ -221,7 +221,7 @@ describe("byte-oriented MemoryFileSystem", () => {
 
   it("makes successful opaque commit retries idempotent", async () => {
     const store = new MemoryOpaqueStore();
-    const fileSystem = new MemoryFileSystem({ opaqueStore: store });
+    const fileSystem = createTestFileSystem({ opaqueStore: store });
     const upload = await fileSystem.beginOpaqueUpload("/asset");
     await store.putIfAbsent(upload.objectKey, "body");
 
@@ -233,7 +233,7 @@ describe("byte-oriented MemoryFileSystem", () => {
   it("expires committed upload receipts without removing the committed file", async () => {
     let now = 0;
     const store = new MemoryOpaqueStore();
-    const fileSystem = new MemoryFileSystem({
+    const fileSystem = createTestFileSystem({
       opaqueStore: store,
       now: () => now,
       receiptRetentionMs: 1,
@@ -250,7 +250,7 @@ describe("byte-oriented MemoryFileSystem", () => {
 
   it("does not accept a client-asserted digest that the store did not verify", async () => {
     const store = new MemoryOpaqueStore();
-    const fileSystem = new MemoryFileSystem({ opaqueStore: store });
+    const fileSystem = createTestFileSystem({ opaqueStore: store });
     const upload = await fileSystem.beginOpaqueUpload("/asset");
     await store.putIfAbsent(upload.objectKey, "body");
 
@@ -276,7 +276,7 @@ describe("byte-oriented MemoryFileSystem", () => {
       getStream: (...args) => backing.getStream(...args),
       delete: (...args) => backing.delete(...args),
     };
-    const fileSystem = new MemoryFileSystem({
+    const fileSystem = createTestFileSystem({
       opaqueStore: store,
       now: () => now,
       uploadSettlementGraceMs: 1,
@@ -320,7 +320,7 @@ describe("byte-oriented MemoryFileSystem", () => {
         await backing.delete(...args);
       },
     };
-    const fileSystem = new MemoryFileSystem({
+    const fileSystem = createTestFileSystem({
       opaqueStore: store,
       now: () => now,
       uploadSettlementGraceMs: 1,
@@ -341,7 +341,7 @@ describe("byte-oriented MemoryFileSystem", () => {
 
   it("moves and replaces opaque names without copying object bodies", async () => {
     const store = new MemoryOpaqueStore();
-    const fileSystem = new MemoryFileSystem({ opaqueStore: store });
+    const fileSystem = createTestFileSystem({ opaqueStore: store });
     await putOpaque(fileSystem, store, "/source", "source");
     await putOpaque(fileSystem, store, "/destination", "destination");
     expect(store.operations.puts).toBe(2);
@@ -357,7 +357,7 @@ describe("byte-oriented MemoryFileSystem", () => {
 
   it("queues every newly unreachable generation in one recursive removal", async () => {
     const store = new MemoryOpaqueStore();
-    const fileSystem = new MemoryFileSystem({ opaqueStore: store });
+    const fileSystem = createTestFileSystem({ opaqueStore: store });
     await putOpaque(fileSystem, store, "/tree/a", "a", { createParents: true });
     await putOpaque(fileSystem, store, "/tree/sub/b", "b", { createParents: true });
 

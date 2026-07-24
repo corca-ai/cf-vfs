@@ -5,13 +5,14 @@ import {
   InteractiveShell,
 } from "../src/shell/interactive.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
-import { MemoryFileSystem } from "../src/vfs/memory.js";
+import type { NodeSqlFileSystem } from "../src/testing/node.js";
+import { createTestFileSystem } from "./helpers/node-sql.js";
 
 function createInteractiveShell(): {
-  fileSystem: MemoryFileSystem;
+  fileSystem: NodeSqlFileSystem;
   shell: InteractiveShell;
 } {
-  const fileSystem = new MemoryFileSystem();
+  const fileSystem = createTestFileSystem();
   return {
     fileSystem,
     shell: new InteractiveShell({

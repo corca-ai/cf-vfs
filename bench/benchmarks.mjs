@@ -2,7 +2,7 @@ import { performance } from "node:perf_hooks";
 import { defaultShellCommands } from "../dist/shell/commands/default.js";
 import { Shell } from "../dist/shell/shell.js";
 import { MemoryOpaqueStore } from "../dist/testing/opaque-store.js";
-import { MemoryFileSystem } from "../dist/vfs/memory.js";
+import { NodeSqlFileSystem } from "../dist/testing/node.js";
 import { putOpaque } from "../dist/vfs/opaque.js";
 import { readAllBytes } from "../dist/vfs/streams.js";
 
@@ -12,6 +12,22 @@ const rows = [];
 const R2_CLASS_A_USD_PER_MILLION = 4.50;
 const R2_CLASS_B_USD_PER_MILLION = 0.36;
 const REPEATS = 3;
+const openFileSystems = new Set();
+
+function createFileSystem(options) {
+  const fileSystem = new NodeSqlFileSystem(options);
+  openFileSystems.add(fileSystem);
+  return fileSystem;
+}
+
+async function runOperation(operation) {
+  try {
+    return await operation();
+  } finally {
+    for (const fileSystem of openFileSystems) fileSystem.close();
+    openFileSystems.clear();
+  }
+}
 
 function estimatedR2OperationUsd(classA, classB) {
   return (
@@ -21,7 +37,7 @@ function estimatedR2OperationUsd(classA, classB) {
 }
 
 async function measure(name, details, operation) {
-  await operation();
+  await runOperation(operation);
   const durations = [];
   let peakHeapDeltaBytes = 0;
   let peakArrayBufferDeltaBytes = 0;
@@ -46,6 +62,8 @@ async function measure(name, details, operation) {
       durations.push(performance.now() - started);
       sample();
       clearInterval(sampler);
+      for (const fileSystem of openFileSystems) fileSystem.close();
+      openFileSystems.clear();
     }
     finalMemory = process.memoryUsage();
     peakHeapDeltaBytes = Math.max(peakHeapDeltaBytes, peaks.heapUsed - before.heapUsed);
@@ -70,7 +88,7 @@ async function measure(name, details, operation) {
     peakArrayBufferDeltaBytes,
     peakExternalDeltaBytes,
     peakRssDeltaBytes,
-    backend: "memory",
+    backend: "node-sqlite-memory",
     sqlRowsRead: null,
     sqlRowsWritten: null,
     databaseBytes: null,
@@ -83,7 +101,7 @@ async function measure(name, details, operation) {
 
 for (const sizeBytes of [1024, 64 * 1024, 1024 * 1024, 8 * 1024 * 1024]) {
   await measure(`inline-${sizeBytes}`, { sizeBytes }, async () => {
-    const fileSystem = new MemoryFileSystem();
+    const fileSystem = createFileSystem();
     const body = new Uint8Array(sizeBytes);
     body[0] = 1;
     body[body.length - 1] = 2;
@@ -97,7 +115,7 @@ for (const sizeBytes of [1024, 64 * 1024, 1024 * 1024, 8 * 1024 * 1024]) {
 }
 
 await measure("inline-overwrite-1048576", { sizeBytes: 1024 * 1024 }, async () => {
-  const fileSystem = new MemoryFileSystem();
+  const fileSystem = createFileSystem();
   await fileSystem.writeFile("/body", new Uint8Array(1024 * 1024));
   const replacement = new Uint8Array(1024 * 1024);
   replacement[0] = 7;
@@ -115,7 +133,7 @@ for (const [name, script] of [
   ["pipeline-6-stage", "cat | cat | cat | cat | cat | wc -c"],
 ]) {
   await measure(name, { sizeBytes: 1024 * 1024 }, async () => {
-    const shell = new Shell({ fileSystem: new MemoryFileSystem(), commands: defaultShellCommands });
+    const shell = new Shell({ fileSystem: createFileSystem(), commands: defaultShellCommands });
     const result = await shell.executeText({ script, stdin: new Uint8Array(1024 * 1024) });
     if (result.exitCode !== 0 || !result.stdout.includes("1048576")) {
       throw new Error(`${name} verification failed`);
@@ -125,7 +143,7 @@ for (const [name, script] of [
 }
 
 await measure("tiny-chunk-explosion", { sizeBytes: 16 * 1024, chunks: 16 * 1024 }, async () => {
-  const shell = new Shell({ fileSystem: new MemoryFileSystem(), commands: defaultShellCommands });
+  const shell = new Shell({ fileSystem: createFileSystem(), commands: defaultShellCommands });
   const stdin = new ReadableStream({
     start(controller) {
       for (let index = 0; index < 16 * 1024; index += 1) controller.enqueue(Uint8Array.of(0x61));
@@ -139,7 +157,7 @@ await measure("tiny-chunk-explosion", { sizeBytes: 16 * 1024, chunks: 16 * 1024 
 
 await measure("buffering-sort-long-line", { sizeBytes: 1024 * 1024 }, async () => {
   const shell = new Shell({
-    fileSystem: new MemoryFileSystem(),
+    fileSystem: createFileSystem(),
     commands: defaultShellCommands,
     limits: { maxLineBytes: 1024 * 1024 + 1 },
   });
@@ -149,7 +167,7 @@ await measure("buffering-sort-long-line", { sizeBytes: 1024 * 1024 }, async () =
 });
 
 await measure("early-cancellation", { sizeBytes: 1024 * 1024 }, async () => {
-  const shell = new Shell({ fileSystem: new MemoryFileSystem(), commands: defaultShellCommands });
+  const shell = new Shell({ fileSystem: createFileSystem(), commands: defaultShellCommands });
   let pulledBytes = 0;
   const stdin = new ReadableStream({
     pull(controller) {
@@ -173,7 +191,7 @@ await measure("slow-consumer", {
   inputChunks: 64,
   consumerDelayMs: 1,
 }, async () => {
-  const shell = new Shell({ fileSystem: new MemoryFileSystem(), commands: defaultShellCommands });
+  const shell = new Shell({ fileSystem: createFileSystem(), commands: defaultShellCommands });
   const stdin = new ReadableStream({
     start(controller) {
       for (let index = 0; index < 64; index += 1) {
@@ -208,7 +226,7 @@ await measure("slow-consumer", {
 });
 
 await measure("concurrent-shells", { concurrency: 4, sizeBytes: 256 * 1024 }, async () => {
-  const fileSystem = new MemoryFileSystem();
+  const fileSystem = createFileSystem();
   const shell = new Shell({ fileSystem, commands: defaultShellCommands });
   const executions = Array.from({ length: 4 }, () => {
     return shell.executeText({ script: "cat | wc -c", stdin: new Uint8Array(256 * 1024) });
@@ -222,9 +240,9 @@ await measure("concurrent-shells", { concurrency: 4, sizeBytes: 256 * 1024 }, as
 
 await measure("opaque-lifecycle-gc", { sizeBytes: 1024 * 1024 }, async () => {
   const store = new MemoryOpaqueStore();
-  const fileSystem = new MemoryFileSystem({ opaqueStore: store });
+  const fileSystem = createFileSystem({ opaqueStore: store });
   await putOpaque(fileSystem, store, "/opaque", new Uint8Array(1024 * 1024));
-  fileSystem.remove("/opaque");
+  await fileSystem.remove("/opaque");
   await fileSystem.drainGarbage(100);
   return {
     ...store.operations,
@@ -241,10 +259,10 @@ await measure("opaque-lifecycle-gc", { sizeBytes: 1024 * 1024 }, async () => {
 
 await measure("opaque-gc-batch", { objects: 64, sizeBytes: 64 * 1024 }, async () => {
   const store = new MemoryOpaqueStore();
-  const fileSystem = new MemoryFileSystem({ opaqueStore: store });
+  const fileSystem = createFileSystem({ opaqueStore: store });
   for (let index = 0; index < 64; index += 1) {
     await putOpaque(fileSystem, store, `/opaque-${index}`, new Uint8Array(64 * 1024));
-    fileSystem.remove(`/opaque-${index}`);
+    await fileSystem.remove(`/opaque-${index}`);
   }
   const result = await fileSystem.drainGarbage(100);
   if (result.deleted !== 64 || result.remaining !== 0) throw new Error("opaque GC batch");

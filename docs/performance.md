@@ -2,12 +2,13 @@
 
 The runtime optimizes for bounded memory, predictable failure, and cloud
 backpressure before microbenchmark latency. Run `npm run bench` for the Node
-memory-backend scenarios, `npm run bench:do` for workerd/SQLite operation
+in-memory SQLite scenarios, `npm run bench:do` for workerd/SQLite operation
 metrics, or `npm run bench:all` for both. `npm run bench:check` applies the
 regression guards used by the separately scheduled Performance workflow.
 These commands are deliberately excluded from ordinary unit tests and
-`npm run check`. The checked-in [memory baseline](../bench/baseline-2026-07-20.md)
-and [Durable Object baseline](../bench/do-baseline-2026-07-24.md) record their
+`npm run check`. The checked-in
+[Node SQLite baseline](../bench/node-sql-baseline-2026-07-25.md) and
+[Durable Object baseline](../bench/do-baseline-2026-07-24.md) record their
 environments and interpretation.
 
 ## Stream and storage cost model
@@ -59,7 +60,9 @@ Each Node row records median elapsed time after a warm-up, three measured
 repeats, heap/ArrayBuffer/external/RSS high-water deltas, output bytes, backend,
 SQL fields, logical R2 Class A/B/free-delete operations, and a
 marginal Standard-storage operation-cost estimate. SQL fields are explicitly
-`null` for the memory backend rather than presented as zero.
+`null` because Node's SQLite API does not expose Cloudflare cursor billing
+metrics; the separate workerd benchmark measures those fields. Unlike the
+removed Map backend, these scenarios execute the production schema and VFS SQL.
 
 The separate workerd storage benchmark meters statements,
 `SqlStorageCursor.rowsRead` and `rowsWritten`, cursor consumption methods,

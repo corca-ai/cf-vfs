@@ -8,6 +8,6 @@ export default defineConfig({
     }),
   ],
   test: {
-    include: ["test/**/*.test.ts"],
+    include: ["test/byte-vfs-durable-object.test.ts"],
   },
 });

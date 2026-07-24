@@ -23,6 +23,7 @@ try {
     "dist/index.js",
     "dist/vfs/index.js",
     "dist/vfs/do-sql.js",
+    "dist/vfs/sql.js",
     "dist/shell/index.js",
     "dist/shell/interactive.js",
     "dist/shell/commands/index.js",
@@ -31,6 +32,7 @@ try {
     "dist/storage/r2.js",
     "dist/durable-object.js",
     "dist/testing/index.js",
+    "dist/testing/node.js",
     "docs/index.md",
   ]) assert(files.some((file) => file.path === path), `package is missing ${path}`);
   for (const removed of [
@@ -38,6 +40,8 @@ try {
     "dist/core/executor.js",
     "dist/core/validation.js",
     "dist/commands/index.js",
+    "dist/testing/memory.js",
+    "dist/vfs/memory.js",
   ]) assert(!files.some((file) => file.path === removed), `package contains removed ${removed}`);
   assert(!files.some(({ path }) => path.startsWith("src/")));
 
@@ -54,6 +58,7 @@ try {
       "--no-package-lock",
       join(packageDirectory, filename),
       "typescript@7.0.2",
+      "@types/node@24.13.3",
       "@cloudflare/workers-types@5.20260719.1",
     ],
     { cwd: consumerDirectory },
@@ -64,7 +69,8 @@ try {
     import { InteractiveShell } from "@corca-ai/cf-vfs/shell/interactive";
     import { lsCommand } from "@corca-ai/cf-vfs/shell/commands/ls";
     import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
-    import { MemoryFileSystem } from "@corca-ai/cf-vfs/testing";
+    import { MemoryOpaqueStore } from "@corca-ai/cf-vfs/testing";
+    import { NodeSqlFileSystem } from "@corca-ai/cf-vfs/testing/node";
     if (MAX_INLINE_FILE_BYTES !== 8 * 1024 * 1024) throw new Error("inline limit");
     if (BASH_COMPATIBILITY_VERSION !== 4) throw new Error("language version");
     if (lsCommand.name !== "ls") throw new Error("ls export");
@@ -79,16 +85,19 @@ try {
       || conditional.expression.type !== "conditional-binary") {
       throw new Error("Version 3 double-bracket AST export");
     }
-    const shell = new Shell({ fileSystem: new MemoryFileSystem(), commands: defaultShellCommands });
+    if (typeof MemoryOpaqueStore !== "function") throw new Error("testing export");
+    const fileSystem = new NodeSqlFileSystem();
+    const shell = new Shell({ fileSystem, commands: defaultShellCommands });
     const result = await shell.executeText({ script: 'X=$(printf ok); printf "package-%s" "$X"' });
     if (result.stdout !== "package-ok") throw new Error("shell execution");
     const interactive = new InteractiveShell({
-      fileSystem: new MemoryFileSystem(),
+      fileSystem,
       commands: defaultShellCommands,
     });
     await interactive.runText({ script: "VALUE=kept" });
     const interactiveResult = await interactive.runText({ script: "printf '%s' \\"$VALUE\\"" });
     if (interactiveResult.stdout !== "kept") throw new Error("interactive shell execution");
+    fileSystem.close();
   `);
   await execFileAsync("node", ["probe.mjs"], { cwd: consumerDirectory });
   await writeFile(join(consumerDirectory, "probe.ts"), `
@@ -105,8 +114,9 @@ try {
       type InteractiveShellSnapshot,
     } from "@corca-ai/cf-vfs/shell/interactive";
     import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
-    import { MemoryFileSystem } from "@corca-ai/cf-vfs/testing";
-    const shell = new Shell({ fileSystem: new MemoryFileSystem(), commands: defaultShellCommands });
+    import { NodeSqlFileSystem } from "@corca-ai/cf-vfs/testing/node";
+    const fileSystem = new NodeSqlFileSystem();
+    const shell = new Shell({ fileSystem, commands: defaultShellCommands });
     const text: Promise<ExecuteTextResult> = shell.executeText({ script: "printf text" });
     const bytes: Promise<ExecuteBytesResult> = shell.executeBytes({ script: "printf bytes" });
     const legacyExpansion: ParameterExpansion = { name: "VALUE", length: false };
@@ -114,13 +124,14 @@ try {
     const legacyOperator: ParameterOperator | undefined = legacyExpansion.operator;
     const legacyWord: ShellWord | undefined = legacyExpansion.word;
     const interactive: InteractiveShellClass = new InteractiveShellClass({
-      fileSystem: new MemoryFileSystem(),
+      fileSystem,
       commands: defaultShellCommands,
     });
     const snapshot: InteractiveShellSnapshot = interactive.snapshot();
     void [legacyLength, legacyOperator, legacyWord];
     void snapshot;
-    void Promise.all([text, bytes, interactive.runText({ script: "true" })]);
+    void Promise.all([text, bytes, interactive.runText({ script: "true" })])
+      .finally(() => fileSystem.close());
   `);
   await writeFile(join(consumerDirectory, "tsconfig.json"), JSON.stringify({
     compilerOptions: {
@@ -128,7 +139,7 @@ try {
       module: "nodenext",
       moduleResolution: "nodenext",
       strict: true,
-      types: ["@cloudflare/workers-types"],
+      types: ["@cloudflare/workers-types", "node"],
       skipLibCheck: true,
       noEmit: true,
     },
