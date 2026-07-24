@@ -1,4 +1,5 @@
 import { VfsError } from "../../core/errors.js";
+import { splitLinesPreservingEndings } from "../../core/lines.js";
 import { normalizePath } from "../../core/path.js";
 import type { InlineReadResult } from "../../vfs/types.js";
 import type {
@@ -322,10 +323,7 @@ export function parseInteger(value: string, name: string, minimum = 0): number {
 }
 
 export function splitLines(value: string): string[] {
-  if (value.length === 0) return [];
-  const lines = value.match(/[^\n]*(?:\n|$)/gu) ?? [];
-  if (lines.at(-1) === "") lines.pop();
-  return lines;
+  return splitLinesPreservingEndings(value);
 }
 
 export async function inputTexts(

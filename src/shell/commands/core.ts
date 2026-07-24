@@ -1,3 +1,8 @@
+import {
+  compareDecimalIntegers,
+  normalizeDecimalInteger,
+  type NormalizedDecimalInteger,
+} from "../../core/decimal-integer.js";
 import { VfsError } from "../../core/errors.js";
 import { normalizePath, normalizePathPreservingTrailingSlash } from "../../core/path.js";
 import { optindGeneration, setOptindFromGetopts } from "../environment.js";
@@ -504,28 +509,16 @@ export const setCommand = /* @__PURE__ */ defineCommand("set", (context, argv) =
   );
 });
 
-interface NormalizedTestInteger {
-  negative: boolean;
-  digits: string;
-}
-
-function normalizeTestInteger(value: string): NormalizedTestInteger {
-  if (!/^-?[0-9]+$/u.test(value)) {
+function normalizeTestInteger(value: string): NormalizedDecimalInteger {
+  const normalized = normalizeDecimalInteger(value);
+  if (normalized === undefined) {
     throw new VfsError("EINVAL", "test: integer expression expected");
   }
-  const negative = value.startsWith("-");
-  const unsigned = negative ? value.slice(1) : value;
-  const digits = unsigned.replace(/^0+/u, "") || "0";
-  return { negative: negative && digits !== "0", digits };
+  return normalized;
 }
 
 function compareTestIntegers(left: string, right: string): number {
-  const first = normalizeTestInteger(left);
-  const second = normalizeTestInteger(right);
-  if (first.negative !== second.negative) return first.negative ? -1 : 1;
-  let order = first.digits.length - second.digits.length;
-  if (order === 0 && first.digits !== second.digits) order = first.digits < second.digits ? -1 : 1;
-  return first.negative ? -order : order;
+  return compareDecimalIntegers(normalizeTestInteger(left), normalizeTestInteger(right));
 }
 
 async function evaluateTest(context: ShellCommandContext, values: readonly string[]): Promise<boolean> {

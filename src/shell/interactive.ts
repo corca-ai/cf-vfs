@@ -33,6 +33,19 @@ export type InteractiveExecuteTextOptions = Omit<
   "cwd" | "env" | "args"
 >;
 
+function interactiveUnitOptions<
+  Options extends ExecuteStreamOptions | ExecuteTextOptions,
+>(options: Options): Omit<Options, "cwd" | "env" | "args"> {
+  const { cwd, env, args, ...unitOptions } = options;
+  if (cwd !== undefined || env !== undefined || args !== undefined) {
+    throw new VfsError(
+      "EINVAL",
+      "interactive execution context belongs in the InteractiveShell constructor",
+    );
+  }
+  return unitOptions;
+}
+
 export interface InteractiveShellSnapshot {
   readonly cwd: string;
   readonly env: Readonly<Record<string, string>>;
@@ -83,15 +96,15 @@ export class InteractiveShell extends Shell {
   }
 
   override executeStream(options: ExecuteStreamOptions): ShellExecution {
-    return this.runStream(this.unitStreamOptions(options));
+    return this.runStream(interactiveUnitOptions(options));
   }
 
   override async executeText(options: ExecuteTextOptions): Promise<ExecuteTextResult> {
-    return this.runText(this.unitTextOptions(options));
+    return this.runText(interactiveUnitOptions(options));
   }
 
   override async executeBytes(options: ExecuteTextOptions): Promise<ExecuteBytesResult> {
-    return this.runBytes(this.unitTextOptions(options));
+    return this.runBytes(interactiveUnitOptions(options));
   }
 
   runStream(options: InteractiveExecuteStreamOptions): ShellExecution {
@@ -141,27 +154,6 @@ export class InteractiveShell extends Shell {
     this.active = false;
   }
 
-  private unitStreamOptions(options: ExecuteStreamOptions): InteractiveExecuteStreamOptions {
-    const { cwd, env, args, ...unitOptions } = options;
-    if (cwd !== undefined || env !== undefined || args !== undefined) {
-      throw new VfsError(
-        "EINVAL",
-        "interactive execution context belongs in the InteractiveShell constructor",
-      );
-    }
-    return unitOptions;
-  }
-
-  private unitTextOptions(options: ExecuteTextOptions): InteractiveExecuteTextOptions {
-    const { cwd, env, args, ...unitOptions } = options;
-    if (cwd !== undefined || env !== undefined || args !== undefined) {
-      throw new VfsError(
-        "EINVAL",
-        "interactive execution context belongs in the InteractiveShell constructor",
-      );
-    }
-    return unitOptions;
-  }
 }
 
 export interface InteractiveInputBufferOptions {

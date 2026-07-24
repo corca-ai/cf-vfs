@@ -1,3 +1,5 @@
+import { firstCodePoint } from "./unicode.js";
+
 export type BracketRange = readonly [start: number, end: number];
 
 export interface BracketExpression {
@@ -9,10 +11,6 @@ export interface BracketExpression {
 interface BracketElement {
   value: string;
   escaped: boolean;
-}
-
-function codePoint(value: string): number {
-  return value.codePointAt(0) ?? 0;
 }
 
 export function parseBracketExpression(
@@ -56,14 +54,14 @@ export function parseBracketExpression(
     const separator = elements[offset + 1];
     const end = elements[offset + 2];
     if (start !== undefined && separator?.value === "-" && !separator.escaped && end !== undefined) {
-      const left = codePoint(start.value);
-      const right = codePoint(end.value);
+      const left = firstCodePoint(start.value);
+      const right = firstCodePoint(end.value);
       if (left <= right) ranges.push([left, right]);
       offset += 2;
       continue;
     }
     if (start !== undefined) {
-      const point = codePoint(start.value);
+      const point = firstCodePoint(start.value);
       ranges.push([point, point]);
     }
   }

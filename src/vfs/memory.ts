@@ -9,9 +9,21 @@ import {
   normalizePath,
   pathRequiresDirectory,
 } from "../core/path.js";
-import { collectRechunkedBytes, rechunk, streamFromChunks } from "./streams.js";
+import { collectInlineBytes, InFlightByteBudget } from "./buffering.js";
 import {
-  MAX_INLINE_FILE_BYTES,
+  DEFAULT_READ_LEASE_MS,
+  DEFAULT_UPLOAD_TTL_MS,
+  DEFAULT_VERIFY_LEASE_MS,
+  DIRECTORY_MODE,
+  FILE_MODE,
+  MAX_READ_LEASE_MS,
+  NEVER_MUTATED_TOKEN,
+  resolveFileSystemLimits,
+  type CommonFileSystemOptions,
+  validatePositiveInteger,
+} from "./config.js";
+import { rechunk, streamFromChunks } from "./streams.js";
+import {
   type AppendFileOptions,
   type BeginOpaqueUploadOptions,
   type ByteBody,
@@ -41,20 +53,6 @@ import {
   type WriteFileOptions,
   type WriteResult,
 } from "./types.js";
-
-const DIRECTORY_MODE = 0o040755;
-const FILE_MODE = 0o100644;
-const DEFAULT_CHUNK_BYTES = 256 * 1024;
-const DEFAULT_MAX_INLINE_LOGICAL_BYTES = 512 * 1024 * 1024;
-const DEFAULT_MAX_ENTRIES = 100_000;
-const DEFAULT_MAX_IN_FLIGHT_BYTES = 32 * 1024 * 1024;
-const DEFAULT_UPLOAD_TTL_MS = 15 * 60 * 1000;
-const DEFAULT_VERIFY_LEASE_MS = 60_000;
-const DEFAULT_UPLOAD_SETTLEMENT_GRACE_MS = 60_000;
-const DEFAULT_RECEIPT_RETENTION_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_READ_LEASE_MS = 5 * 60 * 1000;
-const MAX_READ_LEASE_MS = 60 * 60 * 1000;
-const NEVER_MUTATED_TOKEN = "vfs:never-mutated";
 
 interface BaseEntry {
   id: string;
@@ -109,19 +107,7 @@ interface GarbageItem {
   lastError?: string;
 }
 
-export interface MemoryFileSystemOptions {
-  chunkBytes?: number;
-  maxInlineFileBytes?: number;
-  maxInlineLogicalBytes?: number;
-  maxEntries?: number;
-  maxInFlightBufferedBytes?: number;
-  uploadSettlementGraceMs?: number;
-  receiptRetentionMs?: number;
-  opaqueStore?: OpaqueStore;
-  now?: () => number;
-  createId?: () => string;
-  workspaceId?: string;
-}
+export type MemoryFileSystemOptions = CommonFileSystemOptions;
 
 function cloneStat<T extends VfsStat>(stat: T): T {
   return { ...stat };
@@ -139,12 +125,6 @@ function isOpaque(entry: MemoryEntry): entry is OpaqueEntry {
   return entry.stat.kind === "file" && entry.stat.contentClass === "opaque";
 }
 
-function validatePositiveInteger(value: number, name: string): void {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new VfsError("EINVAL", `${name} must be a positive safe integer`);
-  }
-}
-
 export class MemoryFileSystem implements VirtualFileSystem {
   private readonly entries = new Map<string, MemoryEntry>();
   private readonly pathVersions = new Map<string, string>();
@@ -155,7 +135,7 @@ export class MemoryFileSystem implements VirtualFileSystem {
   private readonly maxInlineFileBytes: number;
   private readonly maxInlineLogicalBytes: number;
   private readonly maxEntries: number;
-  private readonly maxInFlightBufferedBytes: number;
+  private readonly inFlightBytes: InFlightByteBudget;
   private readonly uploadSettlementGraceMs: number;
   private readonly receiptRetentionMs: number;
   private readonly opaqueStore: OpaqueStore | undefined;
@@ -163,36 +143,22 @@ export class MemoryFileSystem implements VirtualFileSystem {
   private readonly createId: () => string;
   private readonly workspaceId: string;
   private logicalInlineBytes = 0;
-  private inFlightBufferedBytes = 0;
   private fallbackClock = 1;
   private fallbackId = 1;
 
   constructor(options: MemoryFileSystemOptions = {}) {
-    this.chunkBytes = options.chunkBytes ?? DEFAULT_CHUNK_BYTES;
-    this.maxInlineFileBytes = options.maxInlineFileBytes ?? MAX_INLINE_FILE_BYTES;
-    this.maxInlineLogicalBytes = options.maxInlineLogicalBytes
-      ?? DEFAULT_MAX_INLINE_LOGICAL_BYTES;
-    this.maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
-    this.maxInFlightBufferedBytes = options.maxInFlightBufferedBytes
-      ?? DEFAULT_MAX_IN_FLIGHT_BYTES;
-    this.uploadSettlementGraceMs = options.uploadSettlementGraceMs
-      ?? DEFAULT_UPLOAD_SETTLEMENT_GRACE_MS;
-    this.receiptRetentionMs = options.receiptRetentionMs ?? DEFAULT_RECEIPT_RETENTION_MS;
+    const limits = resolveFileSystemLimits(options);
+    this.chunkBytes = limits.chunkBytes;
+    this.maxInlineFileBytes = limits.maxInlineFileBytes;
+    this.maxInlineLogicalBytes = limits.maxInlineLogicalBytes;
+    this.maxEntries = limits.maxEntries;
+    this.inFlightBytes = new InFlightByteBudget(limits.maxInFlightBufferedBytes);
+    this.uploadSettlementGraceMs = limits.uploadSettlementGraceMs;
+    this.receiptRetentionMs = limits.receiptRetentionMs;
     this.opaqueStore = options.opaqueStore;
     this.clock = options.now ?? (() => this.fallbackClock++);
     this.createId = options.createId ?? (() => `memory-${this.fallbackId++}`);
     this.workspaceId = options.workspaceId ?? "memory";
-
-    validatePositiveInteger(this.chunkBytes, "chunkBytes");
-    validatePositiveInteger(this.maxInlineFileBytes, "maxInlineFileBytes");
-    if (this.maxInlineFileBytes > MAX_INLINE_FILE_BYTES) {
-      throw new VfsError("EINVAL", `maxInlineFileBytes cannot exceed ${MAX_INLINE_FILE_BYTES}`);
-    }
-    validatePositiveInteger(this.maxInlineLogicalBytes, "maxInlineLogicalBytes");
-    validatePositiveInteger(this.maxEntries, "maxEntries");
-    validatePositiveInteger(this.maxInFlightBufferedBytes, "maxInFlightBufferedBytes");
-    validatePositiveInteger(this.uploadSettlementGraceMs, "uploadSettlementGraceMs");
-    validatePositiveInteger(this.receiptRetentionMs, "receiptRetentionMs");
 
     const token = this.newToken();
     this.pathVersions.set("/", token);
@@ -350,41 +316,13 @@ export class MemoryFileSystem implements VirtualFileSystem {
     return entry;
   }
 
-  private accountInFlight(delta: number): void {
-    if (this.inFlightBufferedBytes + delta > this.maxInFlightBufferedBytes) {
-      throw new VfsError("ENOSPC", "runtime in-flight byte budget exceeded");
-    }
-    this.inFlightBufferedBytes += delta;
-  }
-
-  private async collectInline(body: ByteBody): Promise<{
-    chunks: Uint8Array[];
-    release(): void;
-  }> {
-    let accounted = 0;
-    try {
-      const collected = await collectRechunkedBytes(
-        body,
-        this.maxInlineFileBytes,
-        this.chunkBytes,
-        (delta) => {
-          this.accountInFlight(delta);
-          accounted += delta;
-        },
-      );
-      let released = false;
-      return {
-        chunks: collected.chunks,
-        release: () => {
-          if (released) return;
-          released = true;
-          this.inFlightBufferedBytes -= accounted;
-        },
-      };
-    } catch (error) {
-      this.inFlightBufferedBytes -= accounted;
-      throw error;
-    }
+  private collectInline(body: ByteBody) {
+    return collectInlineBytes(
+      body,
+      this.maxInlineFileBytes,
+      this.chunkBytes,
+      this.inFlightBytes,
+    );
   }
 
   private queueObjectIfUnreferenced(objectId: string, now: number): boolean {
@@ -508,11 +446,11 @@ export class MemoryFileSystem implements VirtualFileSystem {
     const entry = this.inline(this.normalizeAccessPath(path));
     const chunks = entry.chunks.map((chunk) => chunk.slice());
     const sizeBytes = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
-    this.accountInFlight(sizeBytes);
+    this.inFlightBytes.acquire(sizeBytes);
     return {
       stat: cloneStat(entry.stat),
       stream: streamFromChunks(chunks, () => {
-        this.inFlightBufferedBytes -= sizeBytes;
+        this.inFlightBytes.release(sizeBytes);
       }),
     };
   }

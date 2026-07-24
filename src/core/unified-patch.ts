@@ -1,4 +1,5 @@
 import { VfsError } from "./errors.js";
+import { splitLinesPreservingEndings } from "./lines.js";
 
 type PatchLineKind = "context" | "delete" | "insert";
 
@@ -22,23 +23,9 @@ export interface ApplyUnifiedPatchResult {
   deletions: number;
 }
 
-function sourceLines(text: string): string[] {
-  if (text.length === 0) return [];
-  const lines: string[] = [];
-  let start = 0;
-  for (;;) {
-    const newline = text.indexOf("\n", start);
-    if (newline < 0) break;
-    lines.push(text.slice(start, newline + 1));
-    start = newline + 1;
-  }
-  if (start < text.length) lines.push(text.slice(start));
-  return lines;
-}
-
 function patchLines(patch: string): string[] {
   if (patch.length === 0) return [];
-  const lines = sourceLines(patch);
+  const lines = splitLinesPreservingEndings(patch);
   if (!patch.endsWith("\n")) {
     throw new VfsError("EINVAL", "patch must end with a newline");
   }
@@ -117,7 +104,7 @@ function hunkIndex(start: number, count: number): number {
 }
 
 export function applyUnifiedPatch(source: string, patch: string): ApplyUnifiedPatchResult {
-  const sourceContent = sourceLines(source);
+  const sourceContent = splitLinesPreservingEndings(source);
   const output: string[] = [];
   const hunks = parseHunks(patch);
   let sourceIndex = 0;

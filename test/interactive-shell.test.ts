@@ -177,6 +177,25 @@ describe("InteractiveInputBuffer", () => {
     });
   });
 
+  it("distinguishes malformed arithmetic from an incomplete command", () => {
+    const input = new InteractiveInputBuffer();
+
+    expect(input.push("((1) + 2))")).toEqual({
+      status: "ready",
+      source: "((1) + 2))\n",
+    });
+    expect(input.push("$((1) + 2))")).toEqual({
+      status: "ready",
+      source: "$((1) + 2))\n",
+    });
+    expect(input.push("((1 + 2")).toEqual({ status: "incomplete" });
+    input.clear();
+    expect(input.push("((1 + 2))")).toEqual({
+      status: "ready",
+      source: "((1 + 2))\n",
+    });
+  });
+
   it("can discard pending source", () => {
     const input = new InteractiveInputBuffer();
     expect(input.push("while true; do")).toEqual({ status: "incomplete" });

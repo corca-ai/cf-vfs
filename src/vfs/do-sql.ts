@@ -9,9 +9,21 @@ import {
   normalizePath,
   pathRequiresDirectory,
 } from "../core/path.js";
-import { collectRechunkedBytes, rechunk, streamFromChunks } from "./streams.js";
+import { collectInlineBytes, InFlightByteBudget } from "./buffering.js";
 import {
-  MAX_INLINE_FILE_BYTES,
+  DEFAULT_READ_LEASE_MS,
+  DEFAULT_UPLOAD_TTL_MS,
+  DEFAULT_VERIFY_LEASE_MS,
+  DIRECTORY_MODE,
+  FILE_MODE,
+  MAX_READ_LEASE_MS,
+  NEVER_MUTATED_TOKEN,
+  resolveFileSystemLimits,
+  type CommonFileSystemOptions,
+  validatePositiveInteger,
+} from "./config.js";
+import { rechunk, streamFromChunks } from "./streams.js";
+import {
   type AppendFileOptions,
   type BeginOpaqueUploadOptions,
   type ByteBody,
@@ -41,22 +53,9 @@ import {
   type WriteResult,
 } from "./types.js";
 
-const DIRECTORY_MODE = 0o040755;
-const FILE_MODE = 0o100644;
-const DEFAULT_CHUNK_BYTES = 256 * 1024;
-const DEFAULT_MAX_INLINE_LOGICAL_BYTES = 512 * 1024 * 1024;
-const DEFAULT_MAX_ENTRIES = 100_000;
-const DEFAULT_MAX_IN_FLIGHT_BYTES = 32 * 1024 * 1024;
 const DEFAULT_MAX_DATABASE_BYTES = 10_000_000_000;
 const DEFAULT_DATABASE_HEADROOM_BYTES = 64 * 1024 * 1024;
-const DEFAULT_UPLOAD_TTL_MS = 15 * 60 * 1000;
-const DEFAULT_VERIFY_LEASE_MS = 60_000;
-const DEFAULT_UPLOAD_SETTLEMENT_GRACE_MS = 60_000;
-const DEFAULT_RECEIPT_RETENTION_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_READ_LEASE_MS = 5 * 60 * 1000;
-const MAX_READ_LEASE_MS = 60 * 60 * 1000;
 const MAX_GC_BATCH = 100;
-const NEVER_MUTATED_TOKEN = "vfs:never-mutated";
 
 const ENTRY_COLUMNS = `
   e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,
@@ -109,20 +108,9 @@ interface UploadRow {
   receiptJson: string | null;
 }
 
-export interface DurableObjectFileSystemOptions {
-  chunkBytes?: number;
-  maxInlineFileBytes?: number;
-  maxInlineLogicalBytes?: number;
-  maxEntries?: number;
-  maxInFlightBufferedBytes?: number;
+export interface DurableObjectFileSystemOptions extends CommonFileSystemOptions {
   maxDatabaseBytes?: number;
   minDatabaseHeadroomBytes?: number;
-  uploadSettlementGraceMs?: number;
-  receiptRetentionMs?: number;
-  opaqueStore?: OpaqueStore;
-  now?: () => number;
-  createId?: () => string;
-  workspaceId?: string;
 }
 
 function invalidColumn(column: string, expected: string): never {
@@ -246,12 +234,6 @@ function parseUpload(row: SqlRow): UploadRow {
   };
 }
 
-function validatePositiveInteger(value: number, name: string): void {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new VfsError("EINVAL", `${name} must be a positive safe integer`);
-  }
-}
-
 function metadataFromObject(row: OpaqueObjectRow): OpaqueObjectMetadata {
   return {
     key: row.key,
@@ -270,7 +252,7 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
   private readonly maxInlineFileBytes: number;
   private readonly maxInlineLogicalBytes: number;
   private readonly maxEntries: number;
-  private readonly maxInFlightBufferedBytes: number;
+  private readonly inFlightBytes: InFlightByteBudget;
   private readonly maxDatabaseBytes: number;
   private readonly minDatabaseHeadroomBytes: number;
   private readonly uploadSettlementGraceMs: number;
@@ -279,43 +261,30 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
   private readonly clock: () => number;
   private readonly createId: () => string;
   private readonly workspaceId: string;
-  private inFlightBufferedBytes = 0;
 
   constructor(storage: DurableObjectStorage, options: DurableObjectFileSystemOptions = {}) {
+    const limits = resolveFileSystemLimits(options);
     this.storage = storage;
     this.sql = storage.sql;
-    this.chunkBytes = options.chunkBytes ?? DEFAULT_CHUNK_BYTES;
-    this.maxInlineFileBytes = options.maxInlineFileBytes ?? MAX_INLINE_FILE_BYTES;
-    this.maxInlineLogicalBytes = options.maxInlineLogicalBytes
-      ?? DEFAULT_MAX_INLINE_LOGICAL_BYTES;
-    this.maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
-    this.maxInFlightBufferedBytes = options.maxInFlightBufferedBytes
-      ?? DEFAULT_MAX_IN_FLIGHT_BYTES;
+    this.chunkBytes = limits.chunkBytes;
+    this.maxInlineFileBytes = limits.maxInlineFileBytes;
+    this.maxInlineLogicalBytes = limits.maxInlineLogicalBytes;
+    this.maxEntries = limits.maxEntries;
+    this.inFlightBytes = new InFlightByteBudget(limits.maxInFlightBufferedBytes);
     this.maxDatabaseBytes = options.maxDatabaseBytes ?? DEFAULT_MAX_DATABASE_BYTES;
     this.minDatabaseHeadroomBytes = options.minDatabaseHeadroomBytes
       ?? DEFAULT_DATABASE_HEADROOM_BYTES;
-    this.uploadSettlementGraceMs = options.uploadSettlementGraceMs
-      ?? DEFAULT_UPLOAD_SETTLEMENT_GRACE_MS;
-    this.receiptRetentionMs = options.receiptRetentionMs ?? DEFAULT_RECEIPT_RETENTION_MS;
+    this.uploadSettlementGraceMs = limits.uploadSettlementGraceMs;
+    this.receiptRetentionMs = limits.receiptRetentionMs;
     this.opaqueStore = options.opaqueStore;
     this.clock = options.now ?? Date.now;
     this.createId = options.createId ?? (() => crypto.randomUUID());
     this.workspaceId = options.workspaceId ?? "workspace";
 
     for (const [name, value] of [
-      ["chunkBytes", this.chunkBytes],
-      ["maxInlineFileBytes", this.maxInlineFileBytes],
-      ["maxInlineLogicalBytes", this.maxInlineLogicalBytes],
-      ["maxEntries", this.maxEntries],
-      ["maxInFlightBufferedBytes", this.maxInFlightBufferedBytes],
       ["maxDatabaseBytes", this.maxDatabaseBytes],
       ["minDatabaseHeadroomBytes", this.minDatabaseHeadroomBytes],
-      ["uploadSettlementGraceMs", this.uploadSettlementGraceMs],
-      ["receiptRetentionMs", this.receiptRetentionMs],
     ] as const) validatePositiveInteger(value, name);
-    if (this.maxInlineFileBytes > MAX_INLINE_FILE_BYTES) {
-      throw new VfsError("EINVAL", `maxInlineFileBytes cannot exceed ${MAX_INLINE_FILE_BYTES}`);
-    }
     this.migrate();
   }
 
@@ -657,41 +626,13 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
     for (const parent of missing) this.createDirectory(parent, now);
   }
 
-  private accountInFlight(delta: number): void {
-    if (this.inFlightBufferedBytes + delta > this.maxInFlightBufferedBytes) {
-      throw new VfsError("ENOSPC", "runtime in-flight byte budget exceeded");
-    }
-    this.inFlightBufferedBytes += delta;
-  }
-
-  private async collectInline(body: ByteBody): Promise<{
-    chunks: Uint8Array[];
-    release(): void;
-  }> {
-    let accounted = 0;
-    try {
-      const collected = await collectRechunkedBytes(
-        body,
-        this.maxInlineFileBytes,
-        this.chunkBytes,
-        (delta) => {
-          this.accountInFlight(delta);
-          accounted += delta;
-        },
-      );
-      let released = false;
-      return {
-        chunks: collected.chunks,
-        release: () => {
-          if (released) return;
-          released = true;
-          this.inFlightBufferedBytes -= accounted;
-        },
-      };
-    } catch (error) {
-      this.inFlightBufferedBytes -= accounted;
-      throw error;
-    }
+  private collectInline(body: ByteBody) {
+    return collectInlineBytes(
+      body,
+      this.maxInlineFileBytes,
+      this.chunkBytes,
+      this.inFlightBytes,
+    );
   }
 
   private useBuffered<T>(
@@ -822,11 +763,11 @@ export class DurableObjectFileSystem implements VirtualFileSystem {
       entry.id,
     ).toArray().map((row) => new Uint8Array(blobColumn(row, "body")).slice());
     const sizeBytes = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
-    this.accountInFlight(sizeBytes);
+    this.inFlightBytes.acquire(sizeBytes);
     return {
       stat: rowToStat(entry) as InlineFileStat,
       stream: streamFromChunks(chunks, () => {
-        this.inFlightBufferedBytes -= sizeBytes;
+        this.inFlightBytes.release(sizeBytes);
       }),
     };
   }

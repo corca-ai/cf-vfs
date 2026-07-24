@@ -1,3 +1,8 @@
+import {
+  compareDecimalIntegers,
+  normalizeDecimalInteger,
+  type NormalizedDecimalInteger,
+} from "../core/decimal-integer.js";
 import { isVfsError, VfsError } from "../core/errors.js";
 import { compareUtf8, normalizePath, normalizePathPreservingTrailingSlash } from "../core/path.js";
 import { bodyToStream, readAllBytes } from "../vfs/streams.js";
@@ -500,23 +505,16 @@ function flowActive(session: ShellSession): boolean {
   return session.flow.type !== "none";
 }
 
-interface NormalizedConditionalInteger {
-  negative: boolean;
-  digits: string;
-}
-
 function normalizeConditionalInteger(
   value: string,
   budget: ShellBudget,
-): NormalizedConditionalInteger {
+): NormalizedDecimalInteger {
   budget.expansionWork(value.length);
-  if (!/^-?[0-9]+$/u.test(value)) {
+  const normalized = normalizeDecimalInteger(value);
+  if (normalized === undefined) {
     throw new VfsError("EINVAL", "[[: integer expression expected");
   }
-  const negative = value.startsWith("-");
-  const unsigned = negative ? value.slice(1) : value;
-  const digits = unsigned.replace(/^0+/u, "") || "0";
-  return { negative: negative && digits !== "0", digits };
+  return normalized;
 }
 
 function compareConditionalIntegers(
@@ -524,12 +522,10 @@ function compareConditionalIntegers(
   right: string,
   budget: ShellBudget,
 ): number {
-  const first = normalizeConditionalInteger(left, budget);
-  const second = normalizeConditionalInteger(right, budget);
-  if (first.negative !== second.negative) return first.negative ? -1 : 1;
-  let order = first.digits.length - second.digits.length;
-  if (order === 0 && first.digits !== second.digits) order = first.digits < second.digits ? -1 : 1;
-  return first.negative ? -order : order;
+  return compareDecimalIntegers(
+    normalizeConditionalInteger(left, budget),
+    normalizeConditionalInteger(right, budget),
+  );
 }
 
 async function evaluateConditional(

@@ -1,5 +1,6 @@
 import { VfsError } from "../core/errors.js";
 import { parseBracketExpression } from "../core/bracket.js";
+import { codePointLength, firstCodePoint } from "../core/unicode.js";
 import type { ShellBudget } from "./types.js";
 
 type PatternToken =
@@ -19,16 +20,6 @@ type PatternBudget = Pick<ShellBudget, "expansionWork"> & {
 };
 
 const unboundedBudget: PatternBudget = { expansionWork() {} };
-
-function codePoint(value: string): number {
-  return value.codePointAt(0) ?? 0;
-}
-
-function codePointLength(value: string): number {
-  let characters = 0;
-  for (const _character of value) characters += 1;
-  return characters;
-}
 
 function boundedCharacters(value: string, budget: PatternBudget): string[] {
   budget.expansionWork(value.length);
@@ -85,7 +76,7 @@ function tokenMatches(
 ): boolean {
   if (token.kind === "literal") return token.value === value;
   if (token.kind === "any") return true;
-  const point = codePoint(value);
+  const point = firstCodePoint(value);
   let included = false;
   for (const [start, end] of token.ranges) {
     budget.expansionWork();

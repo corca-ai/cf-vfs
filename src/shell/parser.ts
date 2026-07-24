@@ -939,9 +939,11 @@ class Lexer {
     throw this.incompleteError("unterminated command substitution", start);
   }
 
-  private readArithmeticExpansion(): ArithmeticNode {
+  private readArithmeticBody(
+    kind: "expansion" | "command",
+    contentStart: number,
+  ): ArithmeticNode {
     const start = this.offset;
-    const contentStart = this.offset + 3;
     let parentheses = 0;
     let index = contentStart;
     for (; index < this.source.length; index += 1) {
@@ -951,11 +953,11 @@ class Lexer {
       else if (character === ")") {
         if (parentheses === 0 && this.source[index + 1] === ")") break;
         parentheses -= 1;
-        if (parentheses < 0) throw this.error("invalid arithmetic expansion", start);
+        if (parentheses < 0) throw this.error(`invalid arithmetic ${kind}`, start);
       }
     }
     if (index >= this.source.length) {
-      throw this.incompleteError("unterminated arithmetic expansion", start);
+      throw this.incompleteError(`unterminated arithmetic ${kind}`, start);
     }
     const parsed = this.parseArithmetic(this.source.slice(contentStart, index), contentStart);
     this.context.add(parsed.nodeCount);
@@ -963,27 +965,17 @@ class Lexer {
     return parsed.node;
   }
 
+  private readArithmeticExpansion(): ArithmeticNode {
+    return this.readArithmeticBody("expansion", this.offset + 3);
+  }
+
   private readArithmeticCommand(): Token {
     const start = this.offset;
-    const contentStart = this.offset + 2;
-    let parentheses = 0;
-    let index = contentStart;
-    for (; index < this.source.length; index += 1) {
-      this.checkOffset(index);
-      const character = this.source[index];
-      if (character === "(") parentheses += 1;
-      else if (character === ")") {
-        if (parentheses === 0 && this.source[index + 1] === ")") break;
-        parentheses -= 1;
-      }
-    }
-    if (index >= this.source.length) {
-      throw this.incompleteError("unterminated arithmetic command", start);
-    }
-    const parsed = this.parseArithmetic(this.source.slice(contentStart, index), contentStart);
-    this.context.add(parsed.nodeCount);
-    this.offset = index + 2;
-    return { type: "arithmetic-command", expression: parsed.node, offset: this.absoluteOffset(start) };
+    return {
+      type: "arithmetic-command",
+      expression: this.readArithmeticBody("command", this.offset + 2),
+      offset: this.absoluteOffset(start),
+    };
   }
 
   private readPendingHereDocuments(): void {

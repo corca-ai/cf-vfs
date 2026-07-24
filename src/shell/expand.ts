@@ -1,5 +1,6 @@
 import { VfsError } from "../core/errors.js";
 import { compareUtf8, dirname, normalizePath } from "../core/path.js";
+import { codePointLength } from "../core/unicode.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 import { ShellNounsetError } from "./errors.js";
 import {
@@ -156,12 +157,6 @@ async function glob(
     const base = normalizePath(lexicalDirectory, session.cwd);
     return `${lexicalDirectory}${relativePath(base, path)}`;
   });
-}
-
-function codePointLength(value: string): number {
-  let characters = 0;
-  for (const _character of value) characters += 1;
-  return characters;
 }
 
 function append(fields: Field[], value: string, activeGlob: boolean): void {

@@ -1,4 +1,5 @@
 import { VfsError } from "./errors.js";
+import { splitLinesPreservingEndings } from "./lines.js";
 
 const MAX_LCS_CELLS = 1_000_000;
 
@@ -12,19 +13,6 @@ interface LineDiffOperation {
 export interface LineDiff {
   readonly changes: number;
   readonly operations: readonly LineDiffOperation[];
-}
-
-function textLines(text: string): string[] {
-  const lines: string[] = [];
-  let start = 0;
-  for (;;) {
-    const newline = text.indexOf("\n", start);
-    if (newline < 0) break;
-    lines.push(text.slice(start, newline + 1));
-    start = newline + 1;
-  }
-  if (start < text.length) lines.push(text.slice(start));
-  return lines;
 }
 
 function lineAt(lines: readonly string[], index: number): string {
@@ -105,7 +93,10 @@ function prefixedLine(prefix: "-" | "+", text: string): string {
 
 export function createLineDiff(before: string, after: string): LineDiff {
   if (before === after) return { changes: 0, operations: [] };
-  const operations = lineOperations(textLines(before), textLines(after));
+  const operations = lineOperations(
+    splitLinesPreservingEndings(before),
+    splitLinesPreservingEndings(after),
+  );
   return {
     changes: operations.filter((operation) => operation.kind !== "equal").length,
     operations,
