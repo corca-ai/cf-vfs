@@ -25,11 +25,26 @@ commit `0558e31594df`.
 | 8-byte overwrite | populated 1,000-file database | 0.145 | 0.105 | 1.4× |
 | filtered `findPage()` | 1,000 files | 4.70 | 3.56 | 1.3× |
 
+The 8–12 KiB workload, added on 2026-07-25, uses 512 inline files in a
+deterministic random-read order. It is shaped after SQLite's small-BLOB study
+but measures this VFS and workerd rather than extrapolating a local-filesystem
+comparison to R2.
+
+| Small-BLOB operation | total logical bytes | current ms |
+| --- | ---: | ---: |
+| create 512 files | 5,242,790 | 89 |
+| random-read 512 files | 5,242,790 | 36 |
+
+The database occupied 6,234,112 bytes, or 1.189× the logical body bytes,
+including the namespace, mutation-token, usage, and schema structures.
+
 The current structural ceilings are more reliable regression guards than
 wall-clock values:
 
 | Operation | Current measured work |
 | --- | --- |
+| create 512 small BLOBs | 512 chunks, 6,144 statements, 5,632 rows read, 3,072 rows written |
+| random-read 512 small BLOBs | 1,024 statements, 2,047 rows read, 0 rows written |
 | 1 MiB overwrite plus snapshot | 31 rows read, 11 rows written |
 | `stat()` in a populated namespace | 1 statement, 2 rows read, fully consumed cursor |
 | 8-byte overwrite | 13 statements, 19 rows read, 5 rows written |

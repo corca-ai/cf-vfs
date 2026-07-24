@@ -22,6 +22,90 @@ async function averageDuration(
 }
 
 describe("Durable Object storage benchmark metrics", () => {
+  it("records density and random-read costs for 8–12 KiB inline blobs", async () => {
+    const stub: DurableObjectStub<TestWorkspaceVfs> = env.VFS_TEST.getByName(
+      "storage-benchmark-small-blobs",
+    );
+    const metrics = await runInDurableObject(stub, async (_instance, state) => {
+      const meter = meterSqlStorage(state.storage);
+      const fileSystem = new DurableObjectFileSystem(meter.storage);
+      const fileCount = 512;
+      const sizes = Array.from(
+        { length: fileCount },
+        (_unused, index) => 8 * 1024 + (index * 997) % (4 * 1024 + 1),
+      );
+      const logicalBytes = sizes.reduce((total, size) => total + size, 0);
+
+      meter.reset();
+      let started = performance.now();
+      for (const [index, size] of sizes.entries()) {
+        const body = new Uint8Array(size);
+        body.fill(index % 251);
+        await fileSystem.writeFile(`/blob-${index}`, body);
+      }
+      const writeMs = performance.now() - started;
+      const writeCost = {
+        statements: meter.statements,
+        rowsRead: meter.rowsRead,
+        rowsWritten: meter.rowsWritten,
+      };
+
+      meter.reset();
+      started = performance.now();
+      let checksum = 0;
+      for (let order = 0; order < fileCount; order += 1) {
+        const index = order * 257 % fileCount;
+        const body = await readAllBytes(
+          fileSystem.readFile(`/blob-${index}`).stream,
+          12 * 1024,
+        );
+        checksum += (body[0] ?? 0) + (body.at(-1) ?? 0);
+      }
+      const readMs = performance.now() - started;
+      const readCost = {
+        statements: meter.statements,
+        rowsRead: meter.rowsRead,
+        rowsWritten: meter.rowsWritten,
+      };
+      const databaseBytes = state.storage.sql.databaseSize;
+      const chunks = state.storage.sql.exec<{ count: number }>(
+        "SELECT COUNT(*) AS count FROM vfs_inline_chunks",
+      ).one().count;
+      return {
+        fileCount,
+        logicalBytes,
+        databaseBytes,
+        storageAmplification: databaseBytes / logicalBytes,
+        chunks,
+        checksum,
+        writeMs,
+        readMs,
+        writeCost,
+        readCost,
+      };
+    });
+
+    console.info(`DO small-BLOB benchmark: ${JSON.stringify(metrics)}`);
+    expect(metrics).toMatchObject({
+      fileCount: 512,
+      chunks: 512,
+    });
+    expect(metrics.logicalBytes).toBeGreaterThan(4 * 1024 * 1024);
+    expect(metrics.databaseBytes).toBeGreaterThan(metrics.logicalBytes);
+    expect(metrics.storageAmplification).toBeLessThan(2);
+    expect(metrics.checksum).toBeGreaterThan(0);
+    expect(metrics.writeCost).toEqual({
+      statements: 6_144,
+      rowsRead: 5_632,
+      rowsWritten: 3_072,
+    });
+    expect(metrics.readCost).toEqual({
+      statements: 1_024,
+      rowsRead: 2_047,
+      rowsWritten: 0,
+    });
+  });
+
   it("records SQL billing rows and database size for a 1 MiB overwrite", async () => {
     const stub: DurableObjectStub<TestWorkspaceVfs> = env.VFS_TEST.getByName(
       "storage-benchmark-inline-overwrite",
