@@ -46,6 +46,59 @@ unexpected command/runtime invariant rejects `completed`.
 | command unavailable by policy | 126 |
 | command not found | 127 |
 
+## Interactive sessions
+
+`InteractiveShell` is published only from
+`@corca-ai/cf-vfs/shell/interactive`. It uses the same parser, evaluator,
+commands, policies, budgets, descriptors, and VFS contract as `Shell`, while
+preserving cwd, variables, functions, arguments, options, `getopts` state, and
+the last status between complete submitted units:
+
+```ts
+import {
+  InteractiveInputBuffer,
+  InteractiveShell,
+} from "@corca-ai/cf-vfs/shell/interactive";
+
+const shell = new InteractiveShell({
+  fileSystem,
+  commands,
+  env: { HOME: "/" },
+});
+
+await shell.runText({ script: "cd /repo; NAME=world" });
+const result = await shell.runText({
+  script: `printf '%s:%s' "$PWD" "$NAME"`,
+});
+// result.stdout === "/repo:world"
+```
+
+Use `runStream()`, `runText()`, or `runBytes()` for one complete source unit.
+Only one unit may run per interactive session; an overlapping call fails with
+`EAGAIN`. `exit` closes the session, after which submissions fail with
+`EINVAL`. Each unit receives fresh virtual descriptors and a fresh execution
+budget. Files persist because all units share the same VFS.
+
+`InteractiveInputBuffer` classifies incomplete quotes, substitutions,
+here-documents, conditionals, loops, functions, groups, and trailing
+line-continuation backslashes so a terminal can display a continuation prompt.
+Complete invalid syntax is submitted immediately and returns status 2.
+
+The `/shell` entry point does not re-export either interactive class.
+Non-interactive consumers therefore do not bundle the persistent-session or
+input-buffer layer. Both entry points share the single execution path in
+`Shell`; interactive behavior is an adapter around a reusable `ShellSession`.
+
+For repository development, `npm run repl` opens a session over
+`MemoryFileSystem`. `npm run repl:sqlite` starts local workerd with a
+SQLite-backed Durable Object, stores its state in a temporary directory, and
+removes that directory on exit. Both commands use the same terminal UI. These
+are line-oriented language sessions, not OS TTYs: process launching, job
+control, terminal modes, and curses applications remain unavailable. The
+SQLite mode persists VFS data in the disposable database; cwd, variables,
+functions, and options remain runtime session state and reset if the local
+Durable Object or dev server restarts.
+
 ## Bash Version 4
 
 Supported syntax:
@@ -297,9 +350,25 @@ command implementations are absent; the default preset is covered separately.
 | Registry group | Available commands and principal options |
 | --- | --- |
 | shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (`-e/+e`, `-o/+o errexit`, `-u/+u`, `-o/+o nounset`, `-o/+o pipefail`), `test`, `[` |
-| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f`, `ls -l -d`, `find -name -type -maxdepth`, `stat`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
+| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f`, `ls -l -d -a -A`, `find -name -type -maxdepth`, `stat`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | streaming text/bytes | `cat`, `grep -i -v -n -F -c`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed s/old/new/[g]` |
 | bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch` |
+
+General utilities share a deterministic option syntax. Supported short flags
+may be clustered (`rm -rf`, `grep -inF`, `wc -lwc`, `comm -123`), and a short
+option argument may be attached or separate (`head -n10` or `head -n 10`,
+`cut -d:` or `cut -d :`). Required long-option arguments may likewise use
+`=` or a separate word. `--` ends option parsing so a later word beginning
+with `-` is an operand. An option requiring an argument consumes the remainder
+of its cluster before considering the next word. `head` and `tail` also retain
+the historical `-10` line-count form.
+
+This syntax does not add options beyond the table. An unsupported member of a
+cluster is a usage error naming that member; for example, `ls -als` reports
+unsupported `-s`. `ls -a` and `ls -A` are accepted compatibility no-ops because
+directory listings already include stored dot-prefixed names and never
+synthesize `.` or `..`. `find` expressions and the `set` and `getopts` built-ins
+keep their separately documented grammars.
 
 Text utilities use fatal incremental UTF-8 decoding unless the operation is
 explicitly byte-based. Invalid UTF-8 is `EIO`. `cat`, byte `head`/`tail`, byte

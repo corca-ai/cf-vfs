@@ -3,6 +3,21 @@ import { ArithmeticSyntaxError, parseArithmetic, type ArithmeticNode } from "./a
 
 export const BASH_COMPATIBILITY_VERSION = 4 as const;
 
+class IncompleteShellSyntaxError extends VfsError {
+  constructor(message: string) {
+    super("EINVAL", message);
+    this.name = "IncompleteShellSyntaxError";
+  }
+}
+
+function incompleteShellSyntaxError(message: string): VfsError {
+  return new IncompleteShellSyntaxError(message);
+}
+
+export function isIncompleteShellSyntaxError(error: unknown): boolean {
+  return error instanceof IncompleteShellSyntaxError;
+}
+
 export interface LiteralWordPart {
   kind: "literal";
   value: string;
@@ -510,6 +525,10 @@ class Lexer {
     return new VfsError("EINVAL", `${message} at byte ${this.absoluteOffset(offset)}`);
   }
 
+  private incompleteError(message: string, offset: number): VfsError {
+    return incompleteShellSyntaxError(`${message} at byte ${this.absoluteOffset(offset)}`);
+  }
+
   private parseArithmetic(source: string, sourceOffset: number): ReturnType<typeof parseArithmetic> {
     try {
       return parseArithmetic(source, this.context.remainingNodes(), this.context.maximumDepth);
@@ -555,7 +574,9 @@ class Lexer {
           this.checkOffset(this.offset);
           value += this.source[this.offset++] ?? "";
         }
-        if (this.source[this.offset] !== "'") throw this.error("unterminated single quote", quote);
+        if (this.source[this.offset] !== "'") {
+          throw this.incompleteError("unterminated single quote", quote);
+        }
         this.offset += 1;
         this.append(parts, { kind: "literal", value, quoted: true });
         continue;
@@ -566,7 +587,7 @@ class Lexer {
       }
       if (character === "\\") {
         const next = this.source[this.offset + 1];
-        if (next === undefined) throw this.error("unterminated escape", this.offset);
+        if (next === undefined) throw this.incompleteError("unterminated escape", this.offset);
         this.offset += 2;
         if (next !== "\n") {
           const value = literalQuotes && next !== "$" && next !== "\\" && next !== "`"
@@ -617,7 +638,7 @@ class Lexer {
       const character = this.source[this.offset];
       if (character === "\\") {
         const next = this.source[this.offset + 1];
-        if (next === undefined) throw this.error("unterminated escape", this.offset);
+        if (next === undefined) throw this.incompleteError("unterminated escape", this.offset);
         this.offset += 2;
         if (next === "$" || next === "\"" || next === "\\" || next === "\n") {
           if (next !== "\n") this.append(parts, { kind: "literal", value: next, quoted: true });
@@ -637,7 +658,9 @@ class Lexer {
       this.append(parts, { kind: "literal", value: character ?? "", quoted: true });
       this.offset += 1;
     }
-    if (this.source[this.offset] !== "\"") throw this.error("unterminated double quote", start);
+    if (this.source[this.offset] !== "\"") {
+      throw this.incompleteError("unterminated double quote", start);
+    }
     this.offset += 1;
     if (parts.length === before) this.append(parts, { kind: "literal", value: "", quoted: true });
   }
@@ -831,7 +854,7 @@ class Lexer {
         else if (parentheses === 0) return index;
       }
     }
-    throw this.error("unterminated parameter expansion", this.offset);
+    throw this.incompleteError("unterminated parameter expansion", this.offset);
   }
 
   private readCommandSubstitution(): ScriptNode {
@@ -858,7 +881,9 @@ class Lexer {
         return { script, nodes: probe.nodes };
       } catch (error) {
         if (!(error instanceof VfsError) || error.code !== "EINVAL") throw error;
-        lastSyntaxError = error;
+        lastSyntaxError = isIncompleteShellSyntaxError(error)
+          ? new VfsError(error.code, error.message, error.path)
+          : error;
         return undefined;
       }
     };
@@ -911,7 +936,7 @@ class Lexer {
     }
 
     if (lastSyntaxError !== undefined) throw lastSyntaxError;
-    throw this.error("unterminated command substitution", start);
+    throw this.incompleteError("unterminated command substitution", start);
   }
 
   private readArithmeticExpansion(): ArithmeticNode {
@@ -929,7 +954,9 @@ class Lexer {
         if (parentheses < 0) throw this.error("invalid arithmetic expansion", start);
       }
     }
-    if (index >= this.source.length) throw this.error("unterminated arithmetic expansion", start);
+    if (index >= this.source.length) {
+      throw this.incompleteError("unterminated arithmetic expansion", start);
+    }
     const parsed = this.parseArithmetic(this.source.slice(contentStart, index), contentStart);
     this.context.add(parsed.nodeCount);
     this.offset = index + 2;
@@ -950,7 +977,9 @@ class Lexer {
         parentheses -= 1;
       }
     }
-    if (index >= this.source.length) throw this.error("unterminated arithmetic command", start);
+    if (index >= this.source.length) {
+      throw this.incompleteError("unterminated arithmetic command", start);
+    }
     const parsed = this.parseArithmetic(this.source.slice(contentStart, index), contentStart);
     this.context.add(parsed.nodeCount);
     this.offset = index + 2;
@@ -979,7 +1008,12 @@ class Lexer {
         lines.push(`${bodyLine}${newline < 0 ? "" : "\n"}`);
         if (newline < 0) break;
       }
-      if (!closed) throw this.error(`unterminated here-document (wanted ${item.delimiter})`, this.offset);
+      if (!closed) {
+        throw this.incompleteError(
+          `unterminated here-document (wanted ${item.delimiter})`,
+          this.offset,
+        );
+      }
       const body = lines.join("");
       item.token.document = item.quoted
         ? { parts: [{ kind: "literal", value: body, quoted: true }], sourceOffset: item.token.offset }
@@ -1058,7 +1092,7 @@ class Parser {
 
   private take(): Token {
     const token = this.tokens[this.index++];
-    if (token === undefined) throw new VfsError("EINVAL", "unexpected end of script");
+    if (token === undefined) throw incompleteShellSyntaxError("unexpected end of script");
     return token;
   }
 
@@ -1089,7 +1123,9 @@ class Parser {
     const token = this.peek();
     if (body.lists.length === 0) {
       if (token === undefined) {
-        throw new VfsError("EINVAL", `${description} requires a non-empty command list at end of script`);
+        throw incompleteShellSyntaxError(
+          `${description} requires a non-empty command list at end of script`,
+        );
       }
       throw this.tokenError(`${description} requires a non-empty command list`, token);
     }
@@ -1107,7 +1143,9 @@ class Parser {
   private expectWord(value: string): void {
     const token = this.peek();
     if (token?.type !== "word" || staticWord(token.word) !== value) {
-      if (token === undefined) throw new VfsError("EINVAL", `expected ${value} at end of script`);
+      if (token === undefined) {
+        throw incompleteShellSyntaxError(`expected ${value} at end of script`);
+      }
       throw this.tokenError(`expected ${value}`, token);
     }
     this.index += 1;
@@ -1116,7 +1154,9 @@ class Parser {
   private expectOperator(value: Operator): void {
     const token = this.peek();
     if (token?.type !== "operator" || token.value !== value) {
-      if (token === undefined) throw new VfsError("EINVAL", `expected ${value} at end of script`);
+      if (token === undefined) {
+        throw incompleteShellSyntaxError(`expected ${value} at end of script`);
+      }
       throw this.tokenError(`expected ${value}`, token);
     }
     this.index += 1;
@@ -1164,7 +1204,9 @@ class Parser {
 
   private command(): CommandNode {
     const token = this.peek();
-    if (token === undefined) throw new VfsError("EINVAL", "expected command at end of script");
+    if (token === undefined) {
+      throw incompleteShellSyntaxError("expected command at end of script");
+    }
     if (token.type === "operator") {
       if (token.value === "{") return this.group(false);
       if (token.value === "(") return this.group(true);
@@ -1203,7 +1245,7 @@ class Parser {
         !subshell,
       );
       if (this.peek() === undefined) {
-        throw new VfsError("EINVAL", `expected ${close} at byte ${sourceOffset}`);
+        throw incompleteShellSyntaxError(`expected ${close} at byte ${sourceOffset}`);
       }
       this.expectOperator(close);
       const redirections = this.redirections();
@@ -1231,7 +1273,7 @@ class Parser {
         branches.push({ condition, body });
         const next = this.peek();
         if (next?.type !== "word") throw next === undefined
-          ? new VfsError("EINVAL", "expected fi at end of script")
+          ? incompleteShellSyntaxError("expected fi at end of script")
           : this.tokenError("expected elif, else, or fi", next);
         const keyword = staticWord(next.word);
         if (keyword === "elif") {
@@ -1304,7 +1346,9 @@ class Parser {
       }
       if (!this.isSeparator(this.peek())) {
         const token = this.peek();
-        if (token === undefined) throw new VfsError("EINVAL", "for requires do at end of script");
+        if (token === undefined) {
+          throw incompleteShellSyntaxError("for requires do at end of script");
+        }
         throw this.tokenError("for word list requires a separator", token);
       }
       this.skipSeparators();
@@ -1351,7 +1395,9 @@ class Parser {
           this.skipSeparators();
         } else if (this.peek()?.type !== "word" || staticWord(this.peekWord()) !== "esac") {
           const token = this.peek();
-          if (token === undefined) throw new VfsError("EINVAL", "expected esac at end of script");
+          if (token === undefined) {
+            throw incompleteShellSyntaxError("expected esac at end of script");
+          }
           throw this.tokenError("case clause requires ;; or esac", token);
         }
       }
@@ -1390,7 +1436,7 @@ class Parser {
     const token = this.peek();
     if (token?.type !== "word" || this.conditionalEnd()) {
       if (token === undefined) {
-        throw new VfsError("EINVAL", `[[ ${description} is missing at end of script`);
+        throw incompleteShellSyntaxError(`[[ ${description} is missing at end of script`);
       }
       throw this.tokenError(`[[ ${description} is missing`, token);
     }
@@ -1445,7 +1491,9 @@ class Parser {
     const expression = this.conditionalOr(depth + 1);
     const close = this.peek();
     if (close?.type !== "operator" || close.value !== ")") {
-      if (close === undefined) throw new VfsError("EINVAL", "[[ expected ) at end of script");
+      if (close === undefined) {
+        throw incompleteShellSyntaxError("[[ expected ) at end of script");
+      }
       throw this.tokenError("[[ expected )", close);
     }
     this.take();
@@ -1457,7 +1505,9 @@ class Parser {
     const first = this.peek();
     if (first === undefined || this.conditionalEnd()
       || (first.type === "operator" && first.value === ")")) {
-      if (first === undefined) throw new VfsError("EINVAL", "[[ expression is missing at end of script");
+      if (first === undefined) {
+        throw incompleteShellSyntaxError("[[ expression is missing at end of script");
+      }
       throw this.tokenError("[[ expression is missing", first);
     }
     if (first.type !== "word") throw this.tokenError("[[ expected an operand", first);
@@ -1501,7 +1551,9 @@ class Parser {
       const expression = this.conditionalExpression(1);
       const close = this.peek();
       if (close?.type !== "word" || staticWord(close.word) !== "]]") {
-        if (close === undefined) throw new VfsError("EINVAL", `unterminated [[ at byte ${sourceOffset}`);
+        if (close === undefined) {
+          throw incompleteShellSyntaxError(`unterminated [[ at byte ${sourceOffset}`);
+        }
         throw this.tokenError(
           `unexpected token ${this.conditionalTokenValue(close)} in [[ expression`,
           close,
@@ -1548,7 +1600,9 @@ class Parser {
       break;
     }
     if (words.length === 0 && redirections.length === 0) {
-      if (first === undefined) throw new VfsError("EINVAL", "expected command at end of script");
+      if (first === undefined) {
+        throw incompleteShellSyntaxError("expected command at end of script");
+      }
       throw this.tokenError("expected command", first);
     }
     const commandWord = words.find((word) => word.assignmentName === undefined);

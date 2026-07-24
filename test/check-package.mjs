@@ -24,6 +24,7 @@ try {
     "dist/vfs/index.js",
     "dist/vfs/do-sql.js",
     "dist/shell/index.js",
+    "dist/shell/interactive.js",
     "dist/shell/commands/index.js",
     "dist/shell/commands/default.js",
     "dist/shell/commands/ls.js",
@@ -60,6 +61,7 @@ try {
   await writeFile(join(consumerDirectory, "probe.mjs"), `
     import { MAX_INLINE_FILE_BYTES } from "@corca-ai/cf-vfs";
     import { Shell, BASH_COMPATIBILITY_VERSION, parseShellScript } from "@corca-ai/cf-vfs/shell";
+    import { InteractiveShell } from "@corca-ai/cf-vfs/shell/interactive";
     import { lsCommand } from "@corca-ai/cf-vfs/shell/commands/ls";
     import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
     import { MemoryFileSystem } from "@corca-ai/cf-vfs/testing";
@@ -80,6 +82,13 @@ try {
     const shell = new Shell({ fileSystem: new MemoryFileSystem(), commands: defaultShellCommands });
     const result = await shell.executeText({ script: 'X=$(printf ok); printf "package-%s" "$X"' });
     if (result.stdout !== "package-ok") throw new Error("shell execution");
+    const interactive = new InteractiveShell({
+      fileSystem: new MemoryFileSystem(),
+      commands: defaultShellCommands,
+    });
+    await interactive.runText({ script: "VALUE=kept" });
+    const interactiveResult = await interactive.runText({ script: "printf '%s' \\"$VALUE\\"" });
+    if (interactiveResult.stdout !== "kept") throw new Error("interactive shell execution");
   `);
   await execFileAsync("node", ["probe.mjs"], { cwd: consumerDirectory });
   await writeFile(join(consumerDirectory, "probe.ts"), `
@@ -91,6 +100,10 @@ try {
       type ParameterOperator,
       type ShellWord,
     } from "@corca-ai/cf-vfs/shell";
+    import {
+      InteractiveShell as InteractiveShellClass,
+      type InteractiveShellSnapshot,
+    } from "@corca-ai/cf-vfs/shell/interactive";
     import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
     import { MemoryFileSystem } from "@corca-ai/cf-vfs/testing";
     const shell = new Shell({ fileSystem: new MemoryFileSystem(), commands: defaultShellCommands });
@@ -100,8 +113,14 @@ try {
     const legacyLength: boolean = legacyExpansion.length;
     const legacyOperator: ParameterOperator | undefined = legacyExpansion.operator;
     const legacyWord: ShellWord | undefined = legacyExpansion.word;
+    const interactive: InteractiveShellClass = new InteractiveShellClass({
+      fileSystem: new MemoryFileSystem(),
+      commands: defaultShellCommands,
+    });
+    const snapshot: InteractiveShellSnapshot = interactive.snapshot();
     void [legacyLength, legacyOperator, legacyWord];
-    void Promise.all([text, bytes]);
+    void snapshot;
+    void Promise.all([text, bytes, interactive.runText({ script: "true" })]);
   `);
   await writeFile(join(consumerDirectory, "tsconfig.json"), JSON.stringify({
     compilerOptions: {
@@ -119,6 +138,7 @@ try {
 
   for (const hidden of [
     "@corca-ai/cf-vfs/shell/commands/helpers",
+    "@corca-ai/cf-vfs/shell/session",
     "@corca-ai/cf-vfs/vfs/memory",
   ]) {
     await assert.rejects(import(hidden), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });

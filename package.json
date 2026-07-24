@@ -46,6 +46,10 @@
       "types": "./dist/shell/index.d.ts",
       "import": "./dist/shell/index.js"
     },
+    "./shell/interactive": {
+      "types": "./dist/shell/interactive.d.ts",
+      "import": "./dist/shell/interactive.js"
+    },
     "./shell/commands": {
       "types": "./dist/shell/commands/index.d.ts",
       "import": "./dist/shell/commands/index.js"
@@ -103,6 +107,8 @@
     "test:package": "node test/check-package.mjs",
     "test:tree-shaking": "node test/check-tree-shaking.mjs",
     "bench": "npm run build && node bench/benchmarks.mjs",
+    "repl": "npm run build && node scripts/repl.mjs",
+    "repl:sqlite": "npm run build && node scripts/repl-sqlite.mjs",
     "test:benchmarks": "node test/check-benchmarks.mjs",
     "test:bash-fixtures:regenerate": "node scripts/regenerate-bash-fixtures.mjs",
     "check": "npm run typegen && npm run build && npm run typecheck && npm test && npm run test:docs && npm run test:package && npm run test:tree-shaking && npm run test:benchmarks"

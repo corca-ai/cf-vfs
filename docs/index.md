@@ -1,8 +1,10 @@
 # cf-vfs documentation
 
 `cf-vfs` combines a byte-oriented virtual filesystem with a bounded,
-non-interactive Bash-compatible runtime. The [README](../README.md) is the
-short overview; this page is the documentation entry point.
+Bash-compatible runtime. Independent source execution is the default; a
+separate tree-shakable entry point adds persistent interactive sessions. The
+[README](../README.md) is the short overview; this page is the documentation
+entry point.
 
 ## Start here
 
@@ -27,11 +29,12 @@ short overview; this page is the documentation entry point.
 
 1. `VirtualFileSystem` provides typed byte, namespace, metadata, and opaque
    lifecycle primitives.
-2. `Shell` parses complete source and connects virtual file descriptors with
-   `ReadableStream<Uint8Array>`.
-3. `ShellCommand` utilities receive argv, byte streams, a shared budget, and a
+2. `Shell` parses and executes one independent complete source unit.
+3. `InteractiveShell`, from `/shell/interactive`, reuses that executor while
+   preserving cwd, variables, functions, options, arguments, and status.
+4. `ShellCommand` utilities receive argv, byte streams, a shared budget, and a
    capability-wrapped filesystem that cannot access opaque bodies.
-4. `VfsDurableObject` and `ShellDurableObject` expose the metadata and remote
+5. `VfsDurableObject` and `ShellDurableObject` expose the metadata and remote
    execution boundaries. R2 body transfer uses a separate gateway or direct
    binding path.
 

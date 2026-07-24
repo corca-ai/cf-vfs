@@ -19,9 +19,10 @@ host filesystem access.
 | Locks and open handles | There is no persistent descriptor lifecycle or advisory/mandatory locking. Returned inline streams are bounded snapshots; guards provide optimistic concurrency. |
 | Errors | Familiar codes include `ENOENT`, `EEXIST`, `ENOTDIR`, `EISDIR`, `ENOTEMPTY`, `EFBIG`, `ENOSPC`, `EPIPE`, and `ENOTSUP`. `EREVISION` denotes a stale guard. This is not the complete POSIX errno set. |
 
-Virtual descriptors `0`, `1`, and `2` exist only for one shell execution.
-Pipelines connect them with byte streams and left-to-right `2>&1` duplication;
-they are not Durable Object state and have no shared seek offset.
+Virtual descriptors `0`, `1`, and `2` exist only for one submitted source
+unit, including in an interactive session. Pipelines connect them with byte
+streams and left-to-right `2>&1` duplication; they are not Durable Object state
+and have no shared seek offset.
 
 ## Shell language
 
@@ -67,6 +68,9 @@ Deliberate deterministic choices include:
 
 - fixed `LC_ALL=C`, `TZ=UTC`, and whitespace `IFS` defaults;
 - UTF-8 byte ordering rather than host locale collation;
+- documented utility short options may be clustered, required option arguments
+  may be attached or separate, and `--` ends utility option parsing; unsupported
+  options are never silently ignored;
 - no-match globs remain literal, leading dots must be matched explicitly, and
   `**` has no special cross-directory meaning;
 - pipeline stages receive cloned state, while a non-pipeline built-in can

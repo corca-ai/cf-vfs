@@ -645,6 +645,23 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(result).toMatchObject({ exitCode: 0, stdout: "hello world", stderr: "" });
   });
 
+  it("preserves an interactive session over the SQLite-backed VFS", async () => {
+    const stub = workspace("interactive-shell-rpc");
+    await expect(stub.executeInteractiveText(
+      "mkdir -p /repo; cd /repo; NAME=sqlite; printf body > file",
+    )).resolves.toMatchObject({ exitCode: 0, stderr: "" });
+    await expect(stub.executeInteractiveText(
+      "printf '%s:%s:' \"$PWD\" \"$NAME\"; cat file",
+    )).resolves.toEqual({
+      exitCode: 0,
+      stdout: "/repo:sqlite:body",
+      stderr: "",
+    });
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(state.storage.sql.databaseSize).toBeGreaterThan(0);
+    });
+  });
+
   it("does not create or reject a missing touch -c target through RPC", async () => {
     const stub = workspace("shell-touch-no-create-rpc");
     const result = await stub.executeText({

@@ -2,6 +2,7 @@ import { VfsError } from "../../core/errors.js";
 import { basename, dirname, normalizePath } from "../../core/path.js";
 import type { VfsStat } from "../../vfs/types.js";
 import { BufferedTextWriter, defineCommand, commandPath, pipeToSink, writeText } from "./helpers.js";
+import { parseUtilityOptions } from "./options.js";
 
 function modeString(mode: number): string {
   const kind = (mode & 0o040000) !== 0 ? "d" : "-";
@@ -9,6 +10,51 @@ function modeString(mode: number): string {
   const labels = ["r", "w", "x", "r", "w", "x", "r", "w", "x"];
   return kind + bits.map((bit, index) => (mode & bit) !== 0 ? labels[index] : "-").join("");
 }
+
+const MKDIR_OPTIONS = {
+  short: {
+    p: { name: "parents" },
+    m: { name: "mode", argument: true },
+  },
+  long: {
+    parents: { name: "parents" },
+    mode: { name: "mode", argument: true },
+  },
+} as const;
+
+const TOUCH_OPTIONS = {
+  short: { c: { name: "no-create" } },
+  long: { "no-create": { name: "no-create" } },
+} as const;
+
+const RM_OPTIONS = {
+  short: {
+    r: { name: "recursive" },
+    R: { name: "recursive" },
+    f: { name: "force" },
+  },
+  long: {
+    recursive: { name: "recursive" },
+    force: { name: "force" },
+  },
+} as const;
+
+const MV_OPTIONS = {
+  short: { f: { name: "force" } },
+  long: { force: { name: "force" } },
+} as const;
+
+const CP_OPTIONS = {
+  short: {
+    f: { name: "force" },
+    r: { name: "recursive" },
+    R: { name: "recursive" },
+  },
+  long: {
+    force: { name: "force" },
+    recursive: { name: "recursive" },
+  },
+} as const;
 
 export const catCommand = /* @__PURE__ */ defineCommand("cat", async (context, argv, fds) => {
   if (argv.length === 0) {
@@ -23,36 +69,29 @@ export const catCommand = /* @__PURE__ */ defineCommand("cat", async (context, a
 });
 
 export const mkdirCommand = /* @__PURE__ */ defineCommand("mkdir", async (context, argv) => {
-  let recursive = false;
+  const parsed = parseUtilityOptions("mkdir", argv, MKDIR_OPTIONS);
+  const recursive = parsed.options.some((option) => option.name === "parents");
   let mode: number | undefined;
-  const paths: string[] = [];
-  for (let index = 0; index < argv.length; index += 1) {
-    const value = argv[index] ?? "";
-    if (value === "-p" || value === "--parents") recursive = true;
-    else if (value === "-m" || value === "--mode") {
-      const next = argv[++index];
-      if (next === undefined || !/^[0-7]{3,4}$/u.test(next)) {
+  for (const option of parsed.options) {
+    if (option.name === "mode" && "argument" in option) {
+      if (!/^[0-7]{3,4}$/u.test(option.argument)) {
         throw new VfsError("EINVAL", "mkdir: mode must be octal");
       }
-      mode = 0o040000 | Number.parseInt(next, 8);
-    } else if (value.startsWith("-")) throw new VfsError("EINVAL", `mkdir: unsupported option ${value}`);
-    else paths.push(value);
+      mode = 0o040000 | Number.parseInt(option.argument, 8);
+    }
   }
-  if (paths.length === 0) throw new VfsError("EINVAL", "mkdir: missing operand");
-  for (const path of paths) await context.fileSystem.mkdir(commandPath(context, path), recursive, mode);
+  if (parsed.operands.length === 0) throw new VfsError("EINVAL", "mkdir: missing operand");
+  for (const path of parsed.operands) {
+    await context.fileSystem.mkdir(commandPath(context, path), recursive, mode);
+  }
   return 0;
 });
 
 export const touchCommand = /* @__PURE__ */ defineCommand("touch", async (context, argv) => {
-  let create = true;
-  const paths: string[] = [];
-  for (const value of argv) {
-    if (value === "-c" || value === "--no-create") create = false;
-    else if (value.startsWith("-")) throw new VfsError("EINVAL", `touch: unsupported option ${value}`);
-    else paths.push(value);
-  }
-  if (paths.length === 0) throw new VfsError("EINVAL", "touch: missing operand");
-  for (const path of paths) {
+  const parsed = parseUtilityOptions("touch", argv, TOUCH_OPTIONS);
+  const create = !parsed.options.some((option) => option.name === "no-create");
+  if (parsed.operands.length === 0) throw new VfsError("EINVAL", "touch: missing operand");
+  for (const path of parsed.operands) {
     try {
       await context.fileSystem.touch(commandPath(context, path), { create });
     } catch (error) {
@@ -63,17 +102,11 @@ export const touchCommand = /* @__PURE__ */ defineCommand("touch", async (contex
 });
 
 export const rmCommand = /* @__PURE__ */ defineCommand("rm", async (context, argv) => {
-  let recursive = false;
-  let force = false;
-  const paths: string[] = [];
-  for (const value of argv) {
-    if (value === "-r" || value === "-R" || value === "--recursive") recursive = true;
-    else if (value === "-f" || value === "--force") force = true;
-    else if (value.startsWith("-") && value !== "-") throw new VfsError("EINVAL", `rm: unsupported option ${value}`);
-    else paths.push(value);
-  }
-  if (paths.length === 0 && !force) throw new VfsError("EINVAL", "rm: missing operand");
-  for (const path of paths) {
+  const parsed = parseUtilityOptions("rm", argv, RM_OPTIONS);
+  const recursive = parsed.options.some((option) => option.name === "recursive");
+  const force = parsed.options.some((option) => option.name === "force");
+  if (parsed.operands.length === 0 && !force) throw new VfsError("EINVAL", "rm: missing operand");
+  for (const path of parsed.operands) {
     try {
       await context.fileSystem.remove(commandPath(context, path), { recursive });
     } catch (error) {
@@ -106,13 +139,9 @@ async function destinationPath(
 }
 
 export const mvCommand = /* @__PURE__ */ defineCommand("mv", async (context, argv) => {
-  let replace = false;
-  const values: string[] = [];
-  for (const value of argv) {
-    if (value === "-f" || value === "--force") replace = true;
-    else if (value.startsWith("-")) throw new VfsError("EINVAL", `mv: unsupported option ${value}`);
-    else values.push(value);
-  }
+  const parsed = parseUtilityOptions("mv", argv, MV_OPTIONS);
+  const replace = parsed.options.some((option) => option.name === "force");
+  const values = parsed.operands;
   if (values.length !== 2) throw new VfsError("EINVAL", "mv: requires source and destination");
   const source = commandPath(context, values[0]);
   const target = await destinationPath(context, source, values[1] ?? "");
@@ -121,15 +150,10 @@ export const mvCommand = /* @__PURE__ */ defineCommand("mv", async (context, arg
 });
 
 export const cpCommand = /* @__PURE__ */ defineCommand("cp", async (context, argv) => {
-  let replace = false;
-  let recursive = false;
-  const values: string[] = [];
-  for (const value of argv) {
-    if (value === "-f" || value === "--force") replace = true;
-    else if (value === "-r" || value === "-R" || value === "--recursive") recursive = true;
-    else if (value.startsWith("-")) throw new VfsError("EINVAL", `cp: unsupported option ${value}`);
-    else values.push(value);
-  }
+  const parsed = parseUtilityOptions("cp", argv, CP_OPTIONS);
+  const replace = parsed.options.some((option) => option.name === "force");
+  const recursive = parsed.options.some((option) => option.name === "recursive");
+  const values = parsed.operands;
   if (values.length !== 2) throw new VfsError("EINVAL", "cp: requires source and destination");
   const source = commandPath(context, values[0]);
   const target = await destinationPath(context, source, values[1] ?? "");

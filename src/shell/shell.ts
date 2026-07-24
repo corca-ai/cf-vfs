@@ -3,7 +3,7 @@ import { compareUtf8, normalizePath, normalizePathPreservingTrailingSlash } from
 import { bodyToStream, readAllBytes } from "../vfs/streams.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 import { ExecutionBudget, resolveShellLimits } from "./budget.js";
-import { optindGeneration, ShellEnvironment } from "./environment.js";
+import { optindGeneration } from "./environment.js";
 import { ShellNounsetError } from "./errors.js";
 import {
   expandAssignmentValue,
@@ -28,6 +28,7 @@ import {
 } from "./parser.js";
 import { ScopedFileSystem } from "./policy.js";
 import { applyRedirections } from "./redirection.js";
+import { cloneShellSession, createShellSession } from "./session.js";
 import type {
   ExecuteBytesResult,
   ExecuteStreamOptions,
@@ -47,33 +48,6 @@ import type {
 
 function emptyInput(): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({ start(controller) { controller.close(); } });
-}
-
-function cloneSession(session: ShellSession): ShellSession {
-  return {
-    cwd: session.cwd,
-    env: session.env instanceof ShellEnvironment
-      ? session.env.clone()
-      : new ShellEnvironment(session.env),
-    args: [...session.args],
-    lastExitCode: session.lastExitCode,
-    exitRequested: false,
-    requestedExitCode: 0,
-    pipefail: session.pipefail,
-    errexit: session.errexit === true,
-    nounset: session.nounset === true,
-    functions: new Map(session.functions),
-    functionDepth: session.functionDepth,
-    sourceDepth: session.sourceDepth,
-    loopDepth: session.loopDepth,
-    localFrames: session.localFrames.map((frame) => new Map(frame)),
-    localGetoptsFrames: session.localGetoptsFrames.map((frame) => ({
-      captured: frame.captured,
-      state: frame.state === undefined ? undefined : { ...frame.state },
-    })),
-    getopts: session.getopts === undefined ? undefined : { ...session.getopts },
-    flow: { type: "none" },
-  };
 }
 
 function statusFor(error: VfsError): number {
@@ -264,7 +238,7 @@ function expansionRuntime(fds: ShellFileDescriptors, runtime: Runtime): Expansio
         name: "command substitution",
         account: (bytes) => runtime.budget.io(bytes),
       });
-      const child = cloneSession(session);
+      const child = cloneShellSession(session);
       child.errexit = false;
       const childFds: ShellFileDescriptors = {
         0: fds[0],
@@ -328,7 +302,7 @@ async function prepareSimpleCommand(
   expansion: ExpansionRuntime,
 ): Promise<PreparedSimpleCommand> {
   const assignments: Array<{ name: string; value: string }> = [];
-  const assignmentSession = cloneSession(session);
+  const assignmentSession = cloneShellSession(session);
   let wordIndex = 0;
   while (node.words[wordIndex]?.assignmentName !== undefined) {
     const word = node.words[wordIndex];
@@ -700,7 +674,7 @@ async function executeCompoundCommand(
 ): Promise<EvaluationResult> {
   switch (node.type) {
     case "group": {
-      const target = node.subshell ? cloneSession(session) : session;
+      const target = node.subshell ? cloneShellSession(session) : session;
       const result = await runScript(node.body, target, fds, runtime, context);
       return node.subshell ? evaluationResult(result.status) : result;
     }
@@ -943,7 +917,7 @@ async function runPipeline(
     }
     stages.push({
       node,
-      session: pipeline.commands.length === 1 ? session : cloneSession(session),
+      session: pipeline.commands.length === 1 ? session : cloneShellSession(session),
       fds: { 0: input, 1: output, 2: outerFds[2].clone() },
       context: index === pipeline.commands.length - 1
         ? pipelineContext
@@ -1082,6 +1056,13 @@ export class Shell {
   }
 
   executeStream(options: ExecuteStreamOptions): ShellExecution {
+    return this.executeSessionStream(options, createShellSession(options));
+  }
+
+  protected executeSessionStream(
+    options: ExecuteStreamOptions,
+    session: ShellSession,
+  ): ShellExecution {
     const parserBudget: ParserBudget = { sourceBytes: 0, astNodes: 0 };
     const budget = new ExecutionBudget(this.limits, this.now);
     let parsed: ScriptNode | undefined;
@@ -1127,31 +1108,6 @@ export class Shell {
       )),
       onConsumerCancel: (reason) => controller.abort(cancelled(reason)),
     });
-    const session: ShellSession = {
-      cwd: normalizePath(options.cwd ?? "/"),
-      env: new ShellEnvironment(Object.entries(options.env ?? {})),
-      args: [...(options.args ?? [])],
-      lastExitCode: 0,
-      exitRequested: false,
-      requestedExitCode: 0,
-      pipefail: false,
-      errexit: false,
-      nounset: false,
-      functions: new Map(),
-      functionDepth: 0,
-      sourceDepth: 0,
-      loopDepth: 0,
-      localFrames: [],
-      localGetoptsFrames: [],
-      getopts: undefined,
-      flow: { type: "none" },
-    };
-    session.env.set("PWD", session.cwd);
-    session.env.set("0", session.env.get("0") ?? "cf-vfs");
-    session.env.set("IFS", " \t\n");
-    if (!session.env.has("OPTIND")) session.env.set("OPTIND", "1");
-    session.env.set("LC_ALL", "C");
-    session.env.set("TZ", "UTC");
     const timeout = setTimeout(() => {
       controller.abort(new VfsError("ETIMEDOUT", "shell execution deadline exceeded"));
     }, budget.remainingDeadlineMs());
@@ -1165,7 +1121,9 @@ export class Shell {
         if (parseError !== undefined) {
           await rootFds[2].write(new TextEncoder().encode(`${parseError.message}\n`));
           await closeDescriptors(rootFds);
-          return { exitCode: parseError.code === "EINVAL" ? 2 : 1 };
+          const exitCode = parseError.code === "EINVAL" ? 2 : 1;
+          session.lastExitCode = exitCode;
+          return { exitCode };
         }
         if (parsed === undefined) throw new VfsError("EIO", "parser produced no script");
         const result = await runScript(parsed, session, rootFds, {
@@ -1185,6 +1143,8 @@ export class Shell {
           throw error;
         }
         const message = formatError(error);
+        const exitCode = statusFor(error);
+        session.lastExitCode = exitCode;
         if (!controller.signal.aborted || error.code === "ETIMEDOUT") {
           try {
             await rootFds[2].write(new TextEncoder().encode(`${message}\n`));
@@ -1193,7 +1153,7 @@ export class Shell {
           }
         }
         await Promise.allSettled([rootFds[1].close(), rootFds[2].close()]);
-        return { exitCode: statusFor(error) };
+        return { exitCode };
       } finally {
         const inputReason = controller.signal.reason
           ?? new VfsError("EPIPE", "shell execution stopped reading input");
@@ -1213,7 +1173,14 @@ export class Shell {
   }
 
   async executeText(options: ExecuteTextOptions): Promise<ExecuteTextResult> {
-    const result = await this.executeBytes(options);
+    return this.executeSessionText(options, createShellSession(options));
+  }
+
+  protected async executeSessionText(
+    options: ExecuteTextOptions,
+    session: ShellSession,
+  ): Promise<ExecuteTextResult> {
+    const result = await this.executeSessionBytes(options, session);
     return {
       exitCode: result.exitCode,
       stdout: new TextDecoder().decode(result.stdoutBytes),
@@ -1222,14 +1189,24 @@ export class Shell {
   }
 
   async executeBytes(options: ExecuteTextOptions): Promise<ExecuteBytesResult> {
+    return this.executeSessionBytes(options, createShellSession(options));
+  }
+
+  protected async executeSessionBytes(
+    options: ExecuteTextOptions,
+    session: ShellSession,
+  ): Promise<ExecuteBytesResult> {
     const { stdin: input, ...streamOptions } = options;
     const stdin = typeof input === "string" || input instanceof Uint8Array
       ? bodyToStream(input)
       : input;
-    const execution = this.executeStream({
-      ...streamOptions,
-      ...(stdin === undefined ? {} : { stdin }),
-    });
+    const execution = this.executeSessionStream(
+      {
+        ...streamOptions,
+        ...(stdin === undefined ? {} : { stdin }),
+      },
+      session,
+    );
     const collectOutput = async (
       stream: ReadableStream<Uint8Array>,
       maximumBytes: number,

@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cloudflare-vfs-local-repl",
+  "main": "test/repl-worker.ts",
+  "compatibility_date": "2026-07-19",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "REPL_VFS",
+        "class_name": "ReplWorkspace"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ReplWorkspace"]
+    }
+  ]
+}

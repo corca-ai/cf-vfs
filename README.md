@@ -1,10 +1,12 @@
 # cf-vfs
 
-`cf-vfs` is a tree-shakable byte-oriented virtual filesystem and non-interactive
-Bash-compatible runtime for Cloudflare Workers. One SQLite-backed Durable
-Object owns a strongly consistent pathname namespace. Files up to 8 MiB can be
-stored inline and read by shell utilities; large payloads live as immutable R2
-objects and are intentionally opaque to the shell.
+`cf-vfs` is a tree-shakable byte-oriented virtual filesystem and Bash-compatible
+runtime for Cloudflare Workers. The default shell API executes independent,
+complete source units; an optional `/shell/interactive` entry point preserves
+shell state between units. One SQLite-backed Durable Object owns a strongly
+consistent pathname namespace. Files up to 8 MiB can be stored inline and read
+by shell utilities; large payloads live as immutable R2 objects and are
+intentionally opaque to the shell.
 
 ```ts
 import { DurableObject } from "cloudflare:workers";
@@ -60,10 +62,15 @@ routes each workspace to its Durable Object. See [Getting
 started](docs/getting-started.md) for the Wrangler bindings, migration, and
 direct-to-R2 upload path.
 
+From a repository checkout, run `npm run repl` for a local line-oriented
+session backed by the in-memory VFS. `npm run repl:sqlite` runs the same
+terminal UI against a disposable SQLite-backed Durable Object in local
+workerd.
+
 This is an application runtime, not an operating-system shell or POSIX ABI. It
-does not launch processes, mount a filesystem, or provide an interactive TTY.
-The supported language is an explicit versioned subset, and every parser,
-execution, stream, mutation, and storage boundary is bounded.
+does not launch processes, mount a host filesystem, or provide OS TTY/job
+control. The supported language is an explicit versioned subset, and every
+parser, execution, stream, mutation, and storage boundary is bounded.
 
 The pre-1.0 stream-first redesign is intentionally breaking. The old
 `{ command, input }` structured executor and text/binary storage split have

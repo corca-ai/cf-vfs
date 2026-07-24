@@ -24,14 +24,19 @@ upload/download gateway: R2 body bytes; never relayed through metadata DO
 - `src/shell` contains versioned Bash-compatible parsing, expansion, and arithmetic,
   manual pipe pumps, sessions, sourced-unit execution, redirections, budgets,
   capability policy, and execution APIs.
+- `src/shell/interactive.ts` is a separate public entry point that owns
+  persistent-session lifecycle and complete-source input buffering while
+  reusing the ordinary shell executor.
 - `src/shell/commands` contains argv-based built-ins and utilities. The full
   registry is a separate module.
 - `src/storage/r2.ts` is the immutable `R2OpaqueStore` adapter.
 - `src/testing` contains deterministic in-memory VFS and R2 substitutes.
 
 The root and `/vfs` exports do not import shell code. The `/shell` export does
-not import Durable Object platform code. Worker-only bases are under
-`/durable-object`. Package and Wrangler tests verify those boundaries.
+not import the interactive adapter or Durable Object platform code.
+`/shell/interactive` opts into persistent sessions explicitly. Worker-only
+bases are under `/durable-object`. Package and Wrangler tests verify those
+boundaries.
 
 ## Inline files
 
@@ -146,6 +151,12 @@ In-process execution returns `{ stdout, stderr, completed, cancel }`. Remote
 only an exit status; `executeText()` is the bounded convenience form. This
 avoids assuming that a nested execution object has a transferable RPC
 lifetime.
+
+Non-interactive and interactive calls share the same complete-unit executor.
+`Shell` creates a fresh session for every call. `InteractiveShell` retains one
+session and resets only unit-local flow/depth state before the next call.
+Descriptors, parser budgets, execution budgets, cancellation, and output
+limits are always per unit. Interactive units cannot overlap.
 
 ## Migration policy
 

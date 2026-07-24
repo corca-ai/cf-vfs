@@ -54,6 +54,23 @@ for (const excluded of [
   "opaque R2 content",
 ]) assert(!commandsBundle.includes(excluded), `cat+grep bundle contains ${excluded}`);
 
+const nonInteractiveShellBundle = await bundle("wrangler.shell-tree-shake.jsonc");
+for (const excluded of [
+  "interactive shell is closed",
+  "interactive shell already has an active execution",
+]) {
+  assert(
+    !nonInteractiveShellBundle.includes(excluded),
+    `non-interactive shell bundle contains ${excluded}`,
+  );
+}
+
+const interactiveShellBundle = await bundle("wrangler.interactive-tree-shake.jsonc");
+assert(
+  interactiveShellBundle.includes("interactive shell is closed"),
+  "interactive shell bundle is missing interactive session behavior",
+);
+
 console.log(
-  `tree-shaking verified (ls ${Buffer.byteLength(lsBundle)} bytes, commands ${Buffer.byteLength(commandsBundle)} bytes, VFS ${Buffer.byteLength(vfsBundle)} bytes)`,
+  `tree-shaking verified (ls ${Buffer.byteLength(lsBundle)} bytes, commands ${Buffer.byteLength(commandsBundle)} bytes, VFS ${Buffer.byteLength(vfsBundle)} bytes, shell ${Buffer.byteLength(nonInteractiveShellBundle)} bytes, interactive ${Buffer.byteLength(interactiveShellBundle)} bytes)`,
 );

@@ -28,7 +28,7 @@ npm run check
 The complete check generates binding types, builds ESM and declarations,
 typechecks, runs memory/workerd tests, verifies docs and the `CLAUDE.md`
 symlink, installs and typechecks the packed tarball in a temporary consumer,
-checks three Wrangler tree-shaking fixtures, and runs every benchmark scenario.
+checks the Wrangler tree-shaking fixtures, and runs every benchmark scenario.
 
 Useful focused commands:
 
@@ -182,10 +182,12 @@ remain free of all shell code.
 ## Packaging and release
 
 The package is ESM and declares `sideEffects: false`. Root, `/vfs`, `/shell`,
-command, storage, Durable Object, and testing subpaths are intentional
-boundaries. Relative compiled imports retain `.js` extensions. `npm pack`
-contains `dist`, docs, README, license, and package metadata, not source build
-artifacts.
+`/shell/interactive`, command, storage, Durable Object, and testing subpaths
+are intentional boundaries. Do not re-export the interactive adapter from
+`/shell`: non-interactive bundle tests require its session-lifecycle
+diagnostics to be absent. Relative compiled imports retain `.js` extensions.
+`npm pack` contains `dist`, docs, README, license, and package metadata, not
+source build artifacts.
 
 Before release, verify current Cloudflare APIs and limits, update the version,
 run `npm ci && npm run check`, inspect `npm pack --dry-run`, and publish with

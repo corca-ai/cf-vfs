@@ -3,6 +3,86 @@ import { createLineDiff, renderLineDiff } from "../../core/line-diff.js";
 import { compareUtf8 } from "../../core/path.js";
 import { applyUnifiedPatch } from "../../core/unified-patch.js";
 import { BufferedTextWriter, commandPath, collectStream, collectText, defineCommand, inputStreams, inputTexts, parseInteger, readFileBytes, readFileText, readTextLines, readWithAbort, splitLines, writeBytes, writeText } from "./helpers.js";
+import { parseUtilityOptions } from "./options.js";
+
+const SORT_OPTIONS = {
+  short: {
+    r: { name: "reverse" },
+    u: { name: "unique" },
+    n: { name: "numeric" },
+  },
+} as const;
+
+const GREP_OPTIONS = {
+  short: {
+    i: { name: "ignore-case" },
+    v: { name: "invert" },
+    n: { name: "line-numbers" },
+    F: { name: "fixed" },
+    c: { name: "count" },
+  },
+} as const;
+
+const SLICE_OPTIONS = {
+  short: {
+    n: { name: "lines", argument: true },
+    c: { name: "bytes", argument: true },
+  },
+  long: {
+    lines: { name: "lines", argument: true },
+    bytes: { name: "bytes", argument: true },
+  },
+  oldStyleCount: "lines",
+} as const;
+
+const WC_OPTIONS = {
+  short: {
+    l: { name: "lines" },
+    w: { name: "words" },
+    c: { name: "bytes" },
+  },
+} as const;
+
+const TEE_OPTIONS = {
+  short: { a: { name: "append" } },
+  long: { append: { name: "append" } },
+} as const;
+
+const UNIQ_OPTIONS = {
+  short: { c: { name: "count" } },
+} as const;
+
+const CUT_OPTIONS = {
+  short: {
+    d: { name: "delimiter", argument: true },
+    f: { name: "fields", argument: true },
+    c: { name: "characters", argument: true },
+  },
+} as const;
+
+const FOLD_OPTIONS = {
+  short: { w: { name: "width", argument: true } },
+} as const;
+
+const COMM_OPTIONS = {
+  short: {
+    1: { name: "suppress-left" },
+    2: { name: "suppress-right" },
+    3: { name: "suppress-common" },
+  },
+  long: {
+    "nocheck-order": { name: "no-check-order" },
+  },
+} as const;
+
+const JOIN_OPTIONS = {
+  short: {
+    t: { name: "delimiter", argument: true },
+    1: { name: "left-field", argument: true },
+    2: { name: "right-field", argument: true },
+    a: { name: "include-unpaired", argument: true },
+  },
+} as const;
 
 function checkedLines(
   text: string,
@@ -60,18 +140,11 @@ function compareNumericSortKeys(left: NumericSortKey, right: NumericSortKey): nu
 }
 
 export const sortCommand = /* @__PURE__ */ defineCommand("sort", async (context, argv, fds) => {
-  let reverse = false;
-  let unique = false;
-  let numeric = false;
-  const paths: string[] = [];
-  for (const value of argv) {
-    if (value === "-r") reverse = true;
-    else if (value === "-u") unique = true;
-    else if (value === "-n") numeric = true;
-    else if (value.startsWith("-")) throw new VfsError("EINVAL", `sort: unsupported option ${value}`);
-    else paths.push(value);
-  }
-  const collected = await inputTexts(context, paths, fds[0]);
+  const parsed = parseUtilityOptions("sort", argv, SORT_OPTIONS);
+  const reverse = parsed.options.some((option) => option.name === "reverse");
+  const unique = parsed.options.some((option) => option.name === "unique");
+  const numeric = parsed.options.some((option) => option.name === "numeric");
+  const collected = await inputTexts(context, parsed.operands, fds[0]);
   try {
     const lines = checkedLines(
       collected.value.map((input) => input.text).join(""),
@@ -179,22 +252,13 @@ function asciiCaseInsensitiveRegexSource(source: string): string {
 }
 
 export const grepCommand = /* @__PURE__ */ defineCommand("grep", async (context, argv, fds) => {
-  let ignoreCase = false;
-  let invert = false;
-  let lineNumbers = false;
-  let fixed = false;
-  let count = false;
-  const values: string[] = [];
-  for (const value of argv) {
-    if (value === "-i") ignoreCase = true;
-    else if (value === "-v") invert = true;
-    else if (value === "-n") lineNumbers = true;
-    else if (value === "-F") fixed = true;
-    else if (value === "-c") count = true;
-    else if (value.startsWith("-") && values.length === 0) {
-      throw new VfsError("EINVAL", `grep: unsupported option ${value}`);
-    } else values.push(value);
-  }
+  const parsed = parseUtilityOptions("grep", argv, GREP_OPTIONS);
+  const ignoreCase = parsed.options.some((option) => option.name === "ignore-case");
+  const invert = parsed.options.some((option) => option.name === "invert");
+  const lineNumbers = parsed.options.some((option) => option.name === "line-numbers");
+  const fixed = parsed.options.some((option) => option.name === "fixed");
+  const count = parsed.options.some((option) => option.name === "count");
+  const values = [...parsed.operands];
   const pattern = values.shift();
   if (pattern === undefined) throw new VfsError("EINVAL", "grep: missing pattern");
   if (new TextEncoder().encode(pattern).byteLength > 4096) {
@@ -239,34 +303,28 @@ export const grepCommand = /* @__PURE__ */ defineCommand("grep", async (context,
   return matches > 0 ? 0 : 1;
 });
 
-function sliceCount(argv: readonly string[], defaultCount: number): {
+function sliceCount(command: "head" | "tail", argv: readonly string[], defaultCount: number): {
   count: number;
   bytes: boolean;
-  paths: string[];
+  paths: readonly string[];
 } {
+  const parsed = parseUtilityOptions(command, argv, SLICE_OPTIONS);
   let count = defaultCount;
   let bytes = false;
-  const paths: string[] = [];
-  for (let index = 0; index < argv.length; index += 1) {
-    const value = argv[index] ?? "";
-    if (value === "-n" || value === "--lines") {
+  for (const option of parsed.options) {
+    if (option.name === "lines" && "argument" in option) {
       bytes = false;
-      count = parseInteger(argv[++index] ?? "", "line count");
-    } else if (value === "-c" || value === "--bytes") {
+      count = parseInteger(option.argument, "line count");
+    } else if (option.name === "bytes" && "argument" in option) {
       bytes = true;
-      count = parseInteger(argv[++index] ?? "", "byte count");
-    } else if (/^-[0-9]+$/u.test(value)) {
-      bytes = false;
-      count = Number(value.slice(1));
+      count = parseInteger(option.argument, "byte count");
     }
-    else if (value.startsWith("-")) throw new VfsError("EINVAL", `unsupported option ${value}`);
-    else paths.push(value);
   }
-  return { count, bytes, paths };
+  return { count, bytes, paths: parsed.operands };
 }
 
 export const headCommand = /* @__PURE__ */ defineCommand("head", async (context, argv, fds) => {
-  const options = sliceCount(argv, 10);
+  const options = sliceCount("head", argv, 10);
   const headBytes = async (stream: ReadableStream<Uint8Array>): Promise<void> => {
     const reader = stream.getReader();
     let remaining = options.count;
@@ -388,7 +446,7 @@ export const headCommand = /* @__PURE__ */ defineCommand("head", async (context,
 });
 
 export const tailCommand = /* @__PURE__ */ defineCommand("tail", async (context, argv, fds) => {
-  const options = sliceCount(argv, 10);
+  const options = sliceCount("tail", argv, 10);
   if (options.bytes) {
     for await (const input of inputStreams(context, options.paths, fds[0])) {
       const collected = await collectStream(context, input.stream);
@@ -416,18 +474,11 @@ export const tailCommand = /* @__PURE__ */ defineCommand("tail", async (context,
 });
 
 export const wcCommand = /* @__PURE__ */ defineCommand("wc", async (context, argv, fds) => {
-  let linesOnly = false;
-  let wordsOnly = false;
-  let bytesOnly = false;
-  const paths: string[] = [];
-  for (const value of argv) {
-    if (value === "-l") linesOnly = true;
-    else if (value === "-w") wordsOnly = true;
-    else if (value === "-c") bytesOnly = true;
-    else if (value.startsWith("-")) throw new VfsError("EINVAL", `wc: unsupported option ${value}`);
-    else paths.push(value);
-  }
-  for await (const input of inputStreams(context, paths, fds[0])) {
+  const parsed = parseUtilityOptions("wc", argv, WC_OPTIONS);
+  const linesOnly = parsed.options.some((option) => option.name === "lines");
+  const wordsOnly = parsed.options.some((option) => option.name === "words");
+  const bytesOnly = parsed.options.some((option) => option.name === "bytes");
+  for await (const input of inputStreams(context, parsed.operands, fds[0])) {
     const reader = input.stream.getReader();
     const decoder = new TextDecoder("utf-8", { fatal: true });
     let lineCount = 0;
@@ -485,17 +536,12 @@ export const wcCommand = /* @__PURE__ */ defineCommand("wc", async (context, arg
 });
 
 export const teeCommand = /* @__PURE__ */ defineCommand("tee", async (context, argv, fds) => {
-  let append = false;
-  const paths: string[] = [];
-  for (const value of argv) {
-    if (value === "-a" || value === "--append") append = true;
-    else if (value.startsWith("-")) throw new VfsError("EINVAL", `tee: unsupported option ${value}`);
-    else paths.push(value);
-  }
+  const parsed = parseUtilityOptions("tee", argv, TEE_OPTIONS);
+  const append = parsed.options.some((option) => option.name === "append");
   const input = await collectStream(context, fds[0]);
   try {
     await writeBytes(fds[1], input.value);
-    for (const path of paths) {
+    for (const path of parsed.operands) {
       const normalized = commandPath(context, path);
       if (append) await context.fileSystem.appendFile(normalized, input.value);
       else await context.fileSystem.writeFile(normalized, input.value);
@@ -507,13 +553,8 @@ export const teeCommand = /* @__PURE__ */ defineCommand("tee", async (context, a
 });
 
 export const uniqCommand = /* @__PURE__ */ defineCommand("uniq", async (context, argv, fds) => {
-  let count = false;
-  const paths: string[] = [];
-  for (const value of argv) {
-    if (value === "-c") count = true;
-    else if (value.startsWith("-")) throw new VfsError("EINVAL", `uniq: unsupported option ${value}`);
-    else paths.push(value);
-  }
+  const parsed = parseUtilityOptions("uniq", argv, UNIQ_OPTIONS);
+  const count = parsed.options.some((option) => option.name === "count");
   const output = new BufferedTextWriter(context, fds[1]);
   let previous: string | undefined;
   let repeats = 0;
@@ -522,7 +563,7 @@ export const uniqCommand = /* @__PURE__ */ defineCommand("uniq", async (context,
     await output.write(`${count ? `${String(repeats).padStart(7)} ` : ""}${previous}\n`);
   };
   try {
-    for await (const input of inputStreams(context, paths, fds[0])) {
+    for await (const input of inputStreams(context, parsed.operands, fds[0])) {
       for await (const line of readTextLines(context, input.stream, input.name)) {
         const value = line.endsWith("\n") ? line.slice(0, -1) : line;
         if (previous === undefined || previous === value) {
@@ -544,17 +585,18 @@ export const uniqCommand = /* @__PURE__ */ defineCommand("uniq", async (context,
 });
 
 export const cutCommand = /* @__PURE__ */ defineCommand("cut", async (context, argv, fds) => {
+  const parsed = parseUtilityOptions("cut", argv, CUT_OPTIONS);
   let delimiter = "\t";
   let fields: number[] | undefined;
   let characters: number[] | undefined;
-  const paths: string[] = [];
-  for (let index = 0; index < argv.length; index += 1) {
-    const value = argv[index] ?? "";
-    if (value === "-d") delimiter = argv[++index] ?? "";
-    else if (value === "-f") fields = (argv[++index] ?? "").split(",").map((part) => parseInteger(part, "field", 1));
-    else if (value === "-c") characters = (argv[++index] ?? "").split(",").map((part) => parseInteger(part, "character", 1));
-    else if (value.startsWith("-")) throw new VfsError("EINVAL", `cut: unsupported option ${value}`);
-    else paths.push(value);
+  for (const option of parsed.options) {
+    if (!("argument" in option)) continue;
+    if (option.name === "delimiter") delimiter = option.argument;
+    else if (option.name === "fields") {
+      fields = option.argument.split(",").map((part) => parseInteger(part, "field", 1));
+    } else if (option.name === "characters") {
+      characters = option.argument.split(",").map((part) => parseInteger(part, "character", 1));
+    }
   }
   if ((fields === undefined) === (characters === undefined)) {
     throw new VfsError("EINVAL", "cut: specify exactly one of -f or -c");
@@ -564,7 +606,7 @@ export const cutCommand = /* @__PURE__ */ defineCommand("cut", async (context, a
   }
   const output = new BufferedTextWriter(context, fds[1]);
   try {
-    for await (const input of inputStreams(context, paths, fds[0])) {
+    for await (const input of inputStreams(context, parsed.operands, fds[0])) {
       for await (const line of readTextLines(context, input.stream, input.name)) {
         const newline = line.endsWith("\n") ? "\n" : "";
         const content = newline ? line.slice(0, -1) : line;
@@ -659,17 +701,16 @@ export const nlCommand = /* @__PURE__ */ defineCommand("nl", async (context, arg
 });
 
 export const foldCommand = /* @__PURE__ */ defineCommand("fold", async (context, argv, fds) => {
+  const parsed = parseUtilityOptions("fold", argv, FOLD_OPTIONS);
   let width = 80;
-  const paths: string[] = [];
-  for (let index = 0; index < argv.length; index += 1) {
-    if (argv[index] === "-w") width = parseInteger(argv[++index] ?? "", "width", 1);
-    else if ((argv[index] ?? "").startsWith("-") && argv[index] !== "-") {
-      throw new VfsError("EINVAL", `fold: unsupported option ${argv[index] ?? ""}`);
-    } else paths.push(argv[index] ?? "");
+  for (const option of parsed.options) {
+    if (option.name === "width" && "argument" in option) {
+      width = parseInteger(option.argument, "width", 1);
+    }
   }
   const output = new BufferedTextWriter(context, fds[1]);
   try {
-    for await (const input of inputStreams(context, paths, fds[0])) {
+    for await (const input of inputStreams(context, parsed.operands, fds[0])) {
       for await (const line of readTextLines(context, input.stream, input.name)) {
         const newline = line.endsWith("\n");
         const characters = [...(newline ? line.slice(0, -1) : line)];
@@ -806,20 +847,12 @@ function requireSorted(lines: readonly string[], name: string): void {
 }
 
 export const commCommand = /* @__PURE__ */ defineCommand("comm", async (context, argv, fds) => {
-  let suppressLeft = false;
-  let suppressRight = false;
-  let suppressCommon = false;
-  let checkOrder = true;
-  const paths: string[] = [];
-  for (const value of argv) {
-    if (value === "-1") suppressLeft = true;
-    else if (value === "-2") suppressRight = true;
-    else if (value === "-3") suppressCommon = true;
-    else if (value === "--nocheck-order") checkOrder = false;
-    else if (value.startsWith("-") && value !== "-") {
-      throw new VfsError("EINVAL", `comm: unsupported option ${value}`);
-    } else paths.push(value);
-  }
+  const parsed = parseUtilityOptions("comm", argv, COMM_OPTIONS);
+  const suppressLeft = parsed.options.some((option) => option.name === "suppress-left");
+  const suppressRight = parsed.options.some((option) => option.name === "suppress-right");
+  const suppressCommon = parsed.options.some((option) => option.name === "suppress-common");
+  const checkOrder = !parsed.options.some((option) => option.name === "no-check-order");
+  const paths = parsed.operands;
   if (paths.length !== 2) throw new VfsError("EINVAL", "comm: requires two files");
   const collected = await inputTexts(context, paths, fds[0]);
   try {
@@ -881,24 +914,25 @@ interface JoinLine {
 }
 
 export const joinCommand = /* @__PURE__ */ defineCommand("join", async (context, argv, fds) => {
+  const parsed = parseUtilityOptions("join", argv, JOIN_OPTIONS);
   let delimiter = " ";
   let leftField = 1;
   let rightField = 1;
   const includeUnpaired = new Set<1 | 2>();
-  const paths: string[] = [];
-  for (let index = 0; index < argv.length; index += 1) {
-    const value = argv[index] ?? "";
-    if (value === "-t") delimiter = argv[++index] ?? "";
-    else if (value === "-1") leftField = parseInteger(argv[++index] ?? "", "left join field", 1);
-    else if (value === "-2") rightField = parseInteger(argv[++index] ?? "", "right join field", 1);
-    else if (value === "-a") {
-      const side = parseInteger(argv[++index] ?? "", "unpaired file", 1);
+  for (const option of parsed.options) {
+    if (!("argument" in option)) continue;
+    if (option.name === "delimiter") delimiter = option.argument;
+    else if (option.name === "left-field") {
+      leftField = parseInteger(option.argument, "left join field", 1);
+    } else if (option.name === "right-field") {
+      rightField = parseInteger(option.argument, "right join field", 1);
+    } else if (option.name === "include-unpaired") {
+      const side = parseInteger(option.argument, "unpaired file", 1);
       if (side !== 1 && side !== 2) throw new VfsError("EINVAL", "join: -a must be 1 or 2");
       includeUnpaired.add(side);
-    } else if (value.startsWith("-") && value !== "-") {
-      throw new VfsError("EINVAL", `join: unsupported option ${value}`);
-    } else paths.push(value);
+    }
   }
+  const paths = parsed.operands;
   if (delimiter.length !== 1) throw new VfsError("EINVAL", "join: delimiter must be one character");
   if (paths.length !== 2) throw new VfsError("EINVAL", "join: requires two files");
   const collected = await inputTexts(context, paths, fds[0]);

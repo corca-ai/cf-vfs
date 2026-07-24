@@ -91,6 +91,78 @@ describe("stream-first shell runtime", () => {
     );
   });
 
+  it("combines supported flag options consistently across filesystem and text utilities", async () => {
+    const { fileSystem, shell } = createBashHarness();
+    const result = await shell.executeText({
+      script: [
+        "mkdir -pm700 /src/sub",
+        "printf '10\\n2\\n2\\n' > /src/numbers",
+        "cp -Rf /src /copy",
+        "ls -ald /copy/sub",
+        "printf '10\\n2\\n2\\n' | sort -run",
+        "printf 'Alpha\\nbeta\\n' | grep -inF alpha",
+        "printf 'a b\\n' | wc -lwc",
+        "printf 'a\\nb\\n' > /left",
+        "printf 'b\\nc\\n' > /right",
+        "comm -12 /left /right",
+        "rm -rf /copy",
+      ].join("; "),
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: [
+        "drwx------        0 sub\n",
+        "10\n2\n",
+        "1:Alpha\n",
+        "1 2 4\n",
+        "b\n",
+      ].join(""),
+      stderr: "",
+    });
+    expect(() => fileSystem.stat("/copy"))
+      .toThrowError(expect.objectContaining({ code: "ENOENT" }));
+  });
+
+  it("accepts attached option arguments and -- terminated dash-prefixed operands", async () => {
+    const { shell } = createBashHarness();
+    const result = await shell.executeText({
+      script: [
+        "printf 'a:1\\nb:2\\n' > /left-join",
+        "printf 'a:x\\nb:y\\n' > /right-join",
+        "head -1 /left-join",
+        "tail --bytes=2 /left-join",
+        "cut -d: -f2 /left-join",
+        "printf abcde | fold -w2",
+        "printf '\\n'",
+        "join -t: -11 -21 /left-join /right-join",
+        "printf xy > ./-data",
+        "wc -c -- -data",
+      ].join("; "),
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: [
+        "a:1\n",
+        "2\n",
+        "1\n2\n",
+        "ab\ncd\ne\n",
+        "a:1:x\nb:2:y\n",
+        "2 -data\n",
+      ].join(""),
+      stderr: "",
+    });
+  });
+
+  it("reports the exact unsupported member of a short-option cluster", async () => {
+    const { shell } = createBashHarness();
+    expect(await shell.executeText({ script: "ls -als" })).toMatchObject({
+      exitCode: 2,
+      stderr: expect.stringContaining("ls: unsupported option -s"),
+    });
+  });
+
   it("preserves arbitrary bytes through cat without UTF-8 materialization", async () => {
     const { fileSystem, shell } = createBashHarness();
     await fileSystem.writeFile("/binary", new Uint8Array([0xff, 0, 1, 2]));

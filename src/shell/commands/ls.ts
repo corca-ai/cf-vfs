@@ -1,5 +1,5 @@
-import { VfsError } from "../../core/errors.js";
 import { BufferedTextWriter, commandPath, defineCommand } from "./helpers.js";
+import { parseUtilityOptions } from "./options.js";
 
 function modeString(mode: number): string {
   const kind = (mode & 0o040000) !== 0 ? "d" : "-";
@@ -8,18 +8,20 @@ function modeString(mode: number): string {
   return kind + bits.map((bit, index) => (mode & bit) !== 0 ? labels[index] : "-").join("");
 }
 
+const LS_OPTIONS = {
+  short: {
+    l: { name: "long" },
+    d: { name: "directory" },
+    a: { name: "all" },
+    A: { name: "all" },
+  },
+} as const;
+
 export const lsCommand = /* @__PURE__ */ defineCommand("ls", async (context, argv, fds) => {
-  let long = false;
-  let directory = false;
-  const paths: string[] = [];
-  for (const value of argv) {
-    if (value === "-l") long = true;
-    else if (value === "-d") directory = true;
-    else if (value === "-a" || value === "-A") continue;
-    else if (value.startsWith("-")) throw new VfsError("EINVAL", `ls: unsupported option ${value}`);
-    else paths.push(value);
-  }
-  if (paths.length === 0) paths.push(".");
+  const parsed = parseUtilityOptions("ls", argv, LS_OPTIONS);
+  const long = parsed.options.some((option) => option.name === "long");
+  const directory = parsed.options.some((option) => option.name === "directory");
+  const paths = parsed.operands.length === 0 ? ["."] : parsed.operands;
   const multiple = paths.length > 1;
   const output = new BufferedTextWriter(context, fds[1]);
   try {
