@@ -72,14 +72,87 @@ describe("completion", () => {
     ]);
   });
 
-  it("offers the applet path spellings only when PATH lookup is on", async () => {
-    const plain = await shell();
-    expect(plain.interactive.complete("/bin/ec", 7).candidates).toEqual([]);
+  it("offers an applet path spelling because that spelling resolves", async () => {
+    // An absolute applet path is resolved before any PATH search, so it runs
+    // whether or not PATH lookup is on — completion must say the same.
+    for (const pathLookup of [false, true]) {
+      const { interactive } = await shell({ pathLookup });
+      expect(interactive.complete("/bin/ec", 7).candidates, String(pathLookup)).toEqual([
+        { value: "/bin/echo", kind: "command" },
+      ]);
+    }
+    // A bare separator is a path, not the start of an applet directory, so it
+    // still shows the real root rather than hiding it behind `/bin`.
+    const { interactive } = await shell();
+    expect(interactive.complete("/", 1).candidates.map((c) => c.value)).toContain("/work/");
+  });
 
-    const onPath = await shell({ pathLookup: true });
-    expect(onPath.interactive.complete("/bin/ec", 7).candidates).toEqual([
-      { value: "/bin/echo", kind: "command" },
+  it("completes a redirection target as a path, not a command", async () => {
+    const { interactive } = await shell();
+    expect(interactive.complete("echo hi > re", 12).candidates.map((c) => c.value)).toEqual([
+      "readme.md",
+      "report.txt",
+      "reports/",
     ]);
+    // After a pipe or a separator it is a command again, as in a shell.
+    expect(interactive.complete("ls | ec", 7).candidates).toEqual([
+      { value: "echo", kind: "command" },
+    ]);
+  });
+
+  it("keeps the common prefix true for candidates it did not return", async () => {
+    const fileSystem = createTestFileSystem();
+    for (const name of ["alpha-1.txt", "alpha-2.txt", "beta.txt"]) {
+      await fileSystem.writeFile(`/mixed/${name}`, "x", { createParents: true });
+    }
+    const interactive = new InteractiveShell({ fileSystem, commands: COMMANDS, cwd: "/mixed" });
+    const result = interactive.complete("cat ", 4, { maxCandidates: 2 });
+    expect(result.candidates).toHaveLength(2);
+    expect(result.truncated).toBe(true);
+    // "alpha-" would be wrong: `beta.txt` matched too and was dropped. A client
+    // typing a prefix that excludes a real match has to delete it again.
+    expect(result.commonPrefix).toBe("");
+  });
+
+  it("does not offer a command the policy would refuse to run", async () => {
+    const fileSystem = createTestFileSystem();
+    await fileSystem.mkdir("/work", true);
+    const interactive = new InteractiveShell({
+      fileSystem,
+      commands: COMMANDS,
+      cwd: "/work",
+      policy: { allowedCommands: ["echo"] },
+    });
+    // Discovery must not advertise what execution refuses with 126.
+    expect(interactive.complete("", 0).candidates.map((c) => c.value)).toEqual(["echo"]);
+    expect((await interactive.executeText({ script: "ls /work" })).exitCode).toBe(126);
+  });
+
+  it("stays inside the session's readable roots", async () => {
+    const fileSystem = createTestFileSystem();
+    await fileSystem.writeFile("/work/visible.txt", "v\n", { createParents: true });
+    await fileSystem.writeFile("/secret/passwords.txt", "s\n", { createParents: true });
+    const interactive = new InteractiveShell({
+      fileSystem,
+      commands: COMMANDS,
+      cwd: "/work",
+      policy: { readRoots: ["/work"] },
+    });
+    // Completion reads through the same wrapper an execution does, so it
+    // cannot disclose a name the session is not allowed to list.
+    expect(interactive.complete("cat /secret/", 12).candidates).toEqual([]);
+    expect(interactive.complete("cat vis", 7).candidates).toEqual([
+      { value: "visible.txt", kind: "path" },
+    ]);
+    expect((await interactive.executeText({ script: "ls /secret" })).exitCode).toBe(126);
+  });
+
+  it("offers nothing rather than throwing on a path that cannot exist", async () => {
+    const { interactive } = await shell();
+    // Over the name-length limit, and with a NUL: both are ordinary things to
+    // have half-typed, and neither is an error worth losing the line over.
+    expect(interactive.complete(`cat ${"a".repeat(300)}/x`, 307).candidates).toEqual([]);
+    expect(interactive.complete("cat \u0000/x", 11).candidates).toEqual([]);
   });
 
   it("reports a common prefix computed over everything it found", async () => {

@@ -78,6 +78,14 @@ export interface CompletionContext {
 /** Characters that end a word for completion purposes. */
 const WORD_BREAK = new Set([" ", "\t", "\n", "|", "&", ";", "(", ")", "<", ">"]);
 
+/**
+ * Breaks after which a word is a command name.
+ *
+ * `<` and `>` are absent: what follows a redirection is a file, so `echo hi >
+ * c` completes `cache.txt` rather than `cat`.
+ */
+const COMMAND_BREAK = new Set(["|", "&", ";", "(", ")"]);
+
 /** Where the word under the cursor starts, honouring backslash escapes. */
 function wordStart(line: string, cursor: number): number {
   let at = cursor;
@@ -99,8 +107,7 @@ function wordStart(line: string, cursor: number): number {
 function inCommandPosition(line: string, start: number): boolean {
   const before = line.slice(0, start).trimEnd();
   if (before === "") return true;
-  const last = before.at(-1) ?? "";
-  return WORD_BREAK.has(last) && last !== " " && last !== "\t";
+  return COMMAND_BREAK.has(before.at(-1) ?? "");
 }
 
 function longestCommonPrefix(values: readonly string[]): string {
@@ -155,8 +162,8 @@ export function completeShellLine(
     // A command position completes names, and also the applet directory
     // spellings of them — `/bin/ec` is a command, not a path that happens to
     // live under `/bin`. Any other word with a separator is a path.
-    const spellsApplet = (context.appletDirectories ?? []).some(
-      (directory) => `${directory}/`.startsWith(word) || word.startsWith(`${directory}/`),
+    const spellsApplet = (context.appletDirectories ?? []).some((directory) =>
+      word.startsWith(`${directory}/`),
     );
     if (!word.includes("/") || spellsApplet) {
       return complete(commandCandidates(word, context), start, at, limits, 0);
@@ -181,7 +188,9 @@ function commandCandidates(word: string, context: CompletionContext): Completion
   // that begins one of those offers the same names there.
   for (const directory of context.appletDirectories ?? []) {
     const prefix = `${directory}/`;
-    if (!prefix.startsWith(word) && !word.startsWith(prefix)) continue;
+    // Only once the word reaches the directory: a bare `/` is a path, and
+    // answering it with every applet would hide the real root.
+    if (!word.startsWith(prefix)) continue;
     for (const name of context.commands) {
       const spelled = `${prefix}${name}`;
       if (spelled.startsWith(word)) names.add(spelled);
@@ -203,13 +212,14 @@ function pathCompletion(
   const separator = word.lastIndexOf("/");
   const typedDirectory = separator < 0 ? "" : word.slice(0, separator + 1);
   const prefix = separator < 0 ? word : word.slice(separator + 1);
-  const listed = typedDirectory === "" ? context.cwd : normalizePath(typedDirectory, context.cwd);
-
   const candidates: CompletionCandidate[] = [];
+  let matched = 0;
+  let prefixOfAll: string | undefined;
   let scanned = 0;
   let truncated = false;
   let cursor: string | undefined;
   try {
+    const listed = typedDirectory === "" ? context.cwd : normalizePath(typedDirectory, context.cwd);
     do {
       const page = context.fileSystem.listPage(listed, {
         limit: Math.min(256, limits.maxScanned - scanned),
@@ -218,25 +228,36 @@ function pathCompletion(
       scanned += page.scanned;
       for (const entry of page.entries) {
         if (!entry.name.startsWith(prefix)) continue;
+        const directory = entry.kind === "directory";
+        const value = `${typedDirectory}${entry.name}${directory ? "/" : ""}`;
+        // Counted and folded into the prefix even past the cap, so the prefix
+        // stays true for the matches that are not returned. Offering one that
+        // excluded them would make a client type text it has to delete.
+        matched += 1;
+        prefixOfAll = prefixOfAll === undefined ? value : longestCommonPrefix([prefixOfAll, value]);
         if (candidates.length >= limits.maxCandidates) {
           truncated = true;
-          break;
+          continue;
         }
-        const directory = entry.kind === "directory";
-        candidates.push({
-          value: `${typedDirectory}${entry.name}${directory ? "/" : ""}`,
-          kind: directory ? "directory" : "path",
-        });
+        candidates.push({ value, kind: directory ? "directory" : "path" });
       }
       cursor = page.nextCursor ?? undefined;
       if (scanned >= limits.maxScanned && cursor !== undefined) truncated = true;
     } while (cursor !== undefined && !truncated && scanned < limits.maxScanned);
   } catch {
-    // A directory that does not exist yet is the ordinary case while typing,
-    // not an error to report: there is simply nothing to offer.
+    // A half-typed path is the ordinary case here: it may not exist yet, or
+    // may not even be a legal path. Neither is an error to report — there is
+    // simply nothing to offer.
     return { start, end, candidates: [], commonPrefix: "", truncated: false, scanned };
   }
-  return complete(candidates, start, end, limits, scanned, truncated);
+  return {
+    start,
+    end,
+    candidates,
+    commonPrefix: prefixOfAll ?? "",
+    truncated: truncated || candidates.length < matched,
+    scanned,
+  };
 }
 
 function complete(

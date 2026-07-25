@@ -3,9 +3,16 @@ import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { InteractiveInputBuffer, InteractiveShell } from "../src/shell/interactive.js";
 import type { ShellExecution } from "../src/shell/types.js";
 import { VfsDurableObject } from "../src/vfs/durable-object.js";
+import { MAX_MESSAGE_BYTES, parseClientMessage, type ServerMessage } from "./protocol.js";
+
+interface TerminalSession {
+  readonly shell: InteractiveShell;
+  readonly input: InteractiveInputBuffer;
+  pendingSourceBytes: number;
+  execution: ShellExecution | undefined;
+}
 
 const MAX_PENDING_SOURCE_BYTES = 128 * 1024;
-const MAX_MESSAGE_BYTES = MAX_PENDING_SOURCE_BYTES + 1024;
 /**
  * How many candidates one completion answer carries.
  *
@@ -61,142 +68,6 @@ Try:
 This is the bounded Bash-compatible cf-vfs runtime, not an operating-system
 shell. It cannot launch processes or access the host filesystem.
 `;
-
-type ClientMessage =
-  | { readonly type: "line"; readonly line: string }
-  | { readonly type: "signal"; readonly signal: "SIGINT" }
-  | {
-      readonly type: "complete";
-      readonly line: string;
-      readonly cursor: number;
-      /** Echoed back, so a client can drop an answer to a stale keystroke. */
-      readonly token: number;
-    }
-  | {
-      /** Presentation only: nothing here claims a terminal mode or an ioctl. */
-      readonly type: "resize";
-      readonly columns: number;
-      readonly rows: number;
-    }
-  | { readonly type: "ping" };
-
-/**
- * What the server tells a client about itself on connect.
- *
- * Machine-readable on purpose: an agent or a UI should be able to discover
- * what this session supports without a version-sniffing table, and should be
- * able to see plainly that only files survive a reconnect.
- */
-interface HelloMessage {
-  readonly type: "hello";
-  readonly cwd: string;
-  readonly protocol: 1;
-  readonly features: readonly string[];
-  readonly limits: {
-    readonly maxSourceBytes: number;
-    readonly maxCompletionCandidates: number;
-    readonly maxLineBytes: number;
-  };
-  /**
-   * What survives a reconnect, said outright.
-   *
-   * Files are in the Durable Object and durable. The shell session — working
-   * directory, environment, functions, history — lives in memory for as long
-   * as the socket does. A client that reconnects gets a new session and must
-   * not present it as a resumed one.
-   */
-  readonly durability: {
-    readonly files: "durable";
-    readonly session: "connection";
-  };
-}
-
-type ServerMessage =
-  | HelloMessage
-  | {
-      readonly type: "output";
-      readonly stream: "stdout" | "stderr";
-      readonly data: string;
-    }
-  | {
-      readonly type: "prompt";
-      readonly cwd: string;
-      readonly continuation: boolean;
-      readonly exitCode: number;
-    }
-  | { readonly type: "running" }
-  | { readonly type: "complete"; readonly cwd: string; readonly exitCode: number }
-  | { readonly type: "error"; readonly message: string }
-  | { readonly type: "closed"; readonly exitCode: number }
-  | {
-      readonly type: "candidates";
-      readonly token: number;
-      readonly start: number;
-      readonly end: number;
-      readonly commonPrefix: string;
-      readonly truncated: boolean;
-      readonly values: readonly { readonly value: string; readonly kind: string }[];
-    }
-  | { readonly type: "pong" };
-
-interface TerminalSession {
-  readonly shell: InteractiveShell;
-  readonly input: InteractiveInputBuffer;
-  pendingSourceBytes: number;
-  /** Presentation hints from the client; no terminal mode is implied. */
-  columns: number;
-  rows: number;
-  execution: ShellExecution | undefined;
-}
-
-function parseClientMessage(message: string | ArrayBuffer): ClientMessage {
-  if (typeof message !== "string") {
-    throw new VfsError("EINVAL", "binary WebSocket messages are not supported");
-  }
-  if (new TextEncoder().encode(message).byteLength > MAX_MESSAGE_BYTES) {
-    throw new VfsError("E2BIG", "WebSocket message is too large");
-  }
-
-  let value: unknown;
-  try {
-    value = JSON.parse(message);
-  } catch {
-    throw new VfsError("EINVAL", "WebSocket message must be valid JSON");
-  }
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new VfsError("EINVAL", "WebSocket message must be an object");
-  }
-
-  const input = value as Readonly<Record<string, unknown>>;
-  if (input["type"] === "ping") return { type: "ping" };
-  if (input["type"] === "signal" && input["signal"] === "SIGINT") {
-    return { type: "signal", signal: "SIGINT" };
-  }
-  if (input["type"] === "line" && typeof input["line"] === "string") {
-    return { type: "line", line: input["line"] };
-  }
-  if (
-    input["type"] === "complete" &&
-    typeof input["line"] === "string" &&
-    typeof input["cursor"] === "number" &&
-    typeof input["token"] === "number"
-  ) {
-    return {
-      type: "complete",
-      line: input["line"],
-      cursor: input["cursor"],
-      token: input["token"],
-    };
-  }
-  if (
-    input["type"] === "resize" &&
-    typeof input["columns"] === "number" &&
-    typeof input["rows"] === "number"
-  ) {
-    return { type: "resize", columns: input["columns"], rows: input["rows"] };
-  }
-  throw new VfsError("EINVAL", "unsupported WebSocket message");
-}
 
 function socketIsOpen(socket: WebSocket): boolean {
   return socket.readyState === WebSocket.OPEN;
@@ -323,8 +194,6 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
         },
       }),
       pendingSourceBytes: 0,
-      columns: 80,
-      rows: 24,
       execution: undefined,
     };
     this.sessions.set(server, session);
@@ -356,9 +225,9 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       protocol: 1,
       features: ["completion", "resize-hint", "sigint", "continuation"],
       limits: {
+        maxMessageBytes: MAX_MESSAGE_BYTES,
         maxSourceBytes: MAX_PENDING_SOURCE_BYTES,
         maxCompletionCandidates: MAX_COMPLETION_CANDIDATES,
-        maxLineBytes: SHELL_LIMITS.maxLineBytes ?? 0,
       },
       durability: { files: "durable", session: "connection" },
     });
@@ -392,11 +261,14 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       return;
     }
     if (message.type === "resize") {
-      // A presentation hint and nothing more: the shell has no terminal, no
-      // modes, and no ioctl, so this is remembered for `COLUMNS`-style output
-      // decisions and never reported as a capability the session does not have.
-      session.columns = Math.max(1, Math.min(1000, Math.trunc(message.columns)));
-      session.rows = Math.max(1, Math.min(1000, Math.trunc(message.rows)));
+      // A presentation hint and nothing more. It is published as `COLUMNS` and
+      // `LINES` because that is the only form a shell script can read, and
+      // publishing nothing would leave a message whose comment described an
+      // effect it did not have. No terminal mode or ioctl is implied.
+      const columns = Math.max(1, Math.min(1000, message.columns));
+      const rows = Math.max(1, Math.min(1000, message.rows));
+      session.shell.setEnv("COLUMNS", String(columns));
+      session.shell.setEnv("LINES", String(rows));
       return;
     }
     if (message.type === "complete") {
@@ -413,7 +285,7 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
         end: result.end,
         commonPrefix: result.commonPrefix,
         truncated: result.truncated,
-        values: result.candidates.map((candidate) => ({
+        values: result.candidates.map((candidate: { value: string; kind: string }) => ({
           value: candidate.value,
           kind: candidate.kind,
         })),

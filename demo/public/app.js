@@ -84,9 +84,10 @@
   const history = [];
   let searching = false;
   let searchQuery = "";
-  let completionToken = 0;
-  let completionTimer = 0;
-  let lastCompletion = null;
+  let searchFrom = 0;
+  let searchIndex = 0;
+  let userClosed = false;
+  let edits = 0;
 
   /**
    * Asks the server what could come next, debounced.
@@ -96,17 +97,15 @@
    * edit the wrong text. A stale token is dropped rather than applied.
    */
   function requestCompletion() {
-    if (completionTimer !== 0) clearTimeout(completionTimer);
-    completionTimer = setTimeout(() => {
-      completionTimer = 0;
-      completionToken += 1;
-      send({ type: "complete", line, cursor, token: completionToken });
-    }, 40);
+    // The token is the edit generation, not a request number: any keystroke
+    // between asking and answering invalidates the offsets in the reply, and
+    // dropping it is the only safe thing to do with them.
+    send({ type: "complete", line, cursor, token: edits });
   }
 
   /** Applies an answer, if it is still about the line on screen. */
   function applyCandidates(message) {
-    if (message.token !== completionToken) return;
+    if (message.token !== edits) return;
     if (message.values.length === 0) return;
     const word = line.slice(message.start, message.end);
     if (message.values.length === 1) {
@@ -130,12 +129,12 @@
     const shown = message.values.map((candidate) => candidate.value).join("  ");
     terminal.write(`\r\n${shown}${message.truncated ? "  \x1b[38;5;244m…more\x1b[0m" : ""}\r\n`);
     redrawLine();
-    lastCompletion = message;
   }
 
   function startSearch() {
     searching = true;
     searchQuery = "";
+    searchFrom = history.length - 1;
     drawSearch();
   }
 
@@ -145,9 +144,11 @@
   }
 
   function searchMatch() {
-    if (searchQuery === "") return history[history.length - 1];
-    for (let index = history.length - 1; index >= 0; index -= 1) {
-      if ((history[index] ?? "").includes(searchQuery)) return history[index];
+    for (let index = Math.min(searchFrom, history.length - 1); index >= 0; index -= 1) {
+      if (searchQuery === "" || (history[index] ?? "").includes(searchQuery)) {
+        searchIndex = index;
+        return history[index];
+      }
     }
     return undefined;
   }
@@ -155,6 +156,8 @@
   /** Returns true when the key belonged to the search, not to the line. */
   function handleSearchKey(data) {
     if (data === "\x12") {
+      // Step to the next older match, as a shell does.
+      searchFrom = searchIndex - 1;
       drawSearch();
       return true;
     }
@@ -173,11 +176,13 @@
     }
     if (data === "\x7f") {
       searchQuery = searchQuery.slice(0, -1);
+      searchFrom = history.length - 1;
       drawSearch();
       return true;
     }
     if (data.length === 1 && data >= " ") {
       searchQuery += data;
+      searchFrom = history.length - 1;
       drawSearch();
       return true;
     }
@@ -206,12 +211,16 @@
   }
 
   function redrawLine() {
+    // Every path that changes the line redraws it, so this is the one place
+    // that has to notice — an in-flight completion answer is stale from here.
+    edits += 1;
     terminal.write(`\r\x1b[2K${promptAnsi}${line}`);
     const distance = line.length - cursor;
     if (distance > 0) terminal.write(`\x1b[${distance}D`);
   }
 
   function showPrompt(cwd, continuation) {
+    searching = false;
     promptAnsi = buildPrompt(cwd, continuation);
     line = "";
     cursor = 0;
@@ -285,6 +294,7 @@
       if (!running) queuePaste(data);
       return;
     }
+    if (searching && handleSearchKey(data)) return;
     if (data === "\r") {
       submitLine();
       return;
@@ -299,8 +309,11 @@
       return;
     }
     if (running) return;
+    // Any key the search did not claim leaves it, keeping the line it found —
+    // otherwise the next character typed goes into the query instead.
     if (searching) {
-      if (handleSearchKey(data)) return;
+      searching = false;
+      redrawLine();
     }
     // Ctrl-D on an empty line ends the session, as a shell does; on a line
     // with text it does nothing, rather than deleting forward, because there
@@ -308,7 +321,8 @@
     if (data === "\x04") {
       if (line.length === 0) {
         terminal.write("exit\r\n");
-        socket?.close();
+        userClosed = true;
+        socket?.close(1000, "client exit");
       }
       return;
     }
@@ -317,7 +331,7 @@
     // server: the shell sees a line, not keystrokes.
     if (data === "\x17") {
       const before = line.slice(0, cursor).replace(/\s+$/u, "");
-      const start = Math.max(0, before.lastIndexOf(" ") + 1);
+      const start = Math.max(0, before.search(/\S+$/u));
       line = `${line.slice(0, start)}${line.slice(cursor)}`;
       cursor = start;
       redrawLine();
@@ -394,10 +408,6 @@
       }
       return;
     }
-    if (data === "\t") {
-      terminal.write("\x07");
-      return;
-    }
     if (/^\x1b/.test(data) || /[\x00-\x08\x0b-\x1f]/.test(data)) return;
 
     line = `${line.slice(0, cursor)}${data}${line.slice(cursor)}`;
@@ -434,7 +444,6 @@
     }
     if (message.type === "candidates") {
       applyCandidates(message);
-      sendDimensions();
       return;
     }
     if (message.type === "output") {
@@ -490,6 +499,7 @@
       reconnectDelay = RECONNECT_MIN_MS;
       setConnection("online", "connected");
       keepaliveTimer = window.setInterval(() => send({ type: "ping" }), KEEPALIVE_MS);
+      sendDimensions();
       terminal.focus();
     });
     socket.addEventListener("message", handleServerMessage);
@@ -497,6 +507,13 @@
       connected = false;
       running = true;
       window.clearInterval(keepaliveTimer);
+      if (userClosed) {
+        // A deliberate exit is not a dropped connection: reconnecting here
+        // would hand the user a new session moments after they ended one.
+        setConnection("offline", "session ended");
+        writeNotice("session ended. reload to start a new one.", "244");
+        return;
+      }
       setConnection("offline", "reconnecting");
       if (event.code !== 1000) writeNotice("session disconnected; reconnecting…", "214");
       scheduleReconnect();

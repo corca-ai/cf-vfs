@@ -1,6 +1,5 @@
 import { VfsError } from "../core/errors.js";
 import { DEFAULT_SHELL_LIMITS } from "./budget.js";
-import { APPLET_DIRECTORIES } from "./commands/applet.js";
 import { type CompletionLimits, type CompletionResult, completeShellLine } from "./completion.js";
 import { isIncompleteShellSyntaxError, parseShellScript } from "./parser.js";
 import { createShellSession, prepareShellSessionUnit } from "./session.js";
@@ -88,14 +87,26 @@ export class InteractiveShell extends Shell {
    * says what it scanned and whether a cap stopped it.
    */
   complete(line: string, cursor: number, limits?: Partial<CompletionLimits>): CompletionResult {
+    const source = this.completionSource(this.session);
     return completeShellLine(line, cursor, {
-      commands: this.listCommands().map((command) => command.name),
-      ...(this.pathLookup ? { appletDirectories: APPLET_DIRECTORIES } : {}),
-      fileSystem: this.fileSystem,
+      commands: source.commands,
+      appletDirectories: source.appletDirectories,
+      fileSystem: source.fileSystem,
       cwd: this.session.cwd,
       env: Object.fromEntries(this.session.env),
       ...(limits === undefined ? {} : { limits }),
     });
+  }
+
+  /**
+   * Sets one variable in this session's environment.
+   *
+   * For values a host learns after the session started and a script can only
+   * read as a variable — `COLUMNS` and `LINES` are the reason this exists.
+   * Nothing here implies a terminal: it is one string a script may read.
+   */
+  setEnv(name: string, value: string): void {
+    this.session.env.set(name, value);
   }
 
   snapshot(): InteractiveShellSnapshot {

@@ -10,6 +10,7 @@ import type { VfsStat } from "../vfs/types.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 import { ExecutionBudget, resolveShellLimits } from "./budget.js";
 import {
+  APPLET_DIRECTORIES,
   type AppletRegistry,
   createAppletRegistry,
   type ShellApplet,
@@ -1542,8 +1543,8 @@ async function runScript(
 
 export class Shell {
   private readonly commands: AppletRegistry;
-  protected readonly pathLookup: boolean;
-  protected readonly fileSystem: ShellOptions["fileSystem"];
+  private readonly pathLookup: boolean;
+  private readonly fileSystem: ShellOptions["fileSystem"];
   private readonly policy: ShellPolicy;
   private readonly content: ShellContentReader | undefined;
   private readonly limits: ShellLimits;
@@ -1597,6 +1598,41 @@ export class Shell {
    */
   listCommands(): readonly ShellCommandDescription[] {
     return describeCommands({ commands: this.commands });
+  }
+
+  /**
+   * What a session may be offered, from the same rules that would run it.
+   *
+   * Built here rather than assembled by a subclass out of fields, because both
+   * halves are policy decisions the shell owns. The filesystem is the scoped
+   * one every execution uses, so completion cannot list a directory the
+   * session could not read — discovery through a different door than
+   * execution is how a sandbox leaks. The names are filtered by the command
+   * allowlist and include the applet path spellings that actually resolve, so
+   * completion never advertises a command that would fail with 126 or 127.
+   */
+  protected completionSource(session: ShellSession): {
+    fileSystem: ShellFileSystem;
+    commands: readonly string[];
+    appletDirectories: readonly string[];
+  } {
+    const budget = new ExecutionBudget(this.limits, this.now, this.onEvent);
+    const allowed = this.policy.allowedCommands;
+    const names: string[] = [];
+    for (const command of this.commands.names()) {
+      if (allowed !== undefined && !allowed.includes(command)) continue;
+      names.push(command);
+    }
+    // A shell function is a name this session created, and it resolves before
+    // any applet does.
+    for (const name of session.functions.keys()) if (!names.includes(name)) names.push(name);
+    return {
+      fileSystem: new DeviceFileSystem(new ScopedFileSystem(this.fileSystem, this.policy, budget)),
+      commands: names.sort(),
+      // An absolute applet path resolves before any PATH search, so these
+      // spell a runnable command whether or not PATH lookup is enabled.
+      appletDirectories: APPLET_DIRECTORIES,
+    };
   }
 
   executeStream(options: ExecuteStreamOptions): ShellExecution {

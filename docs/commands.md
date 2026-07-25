@@ -101,14 +101,25 @@ Every search is bounded, and the bounds are visible in the result: candidates
 returned, namespace entries examined across all pages, and the length of a word
 worth working on. The result reports what it `scanned` so a caller can see the
 cost of a keystroke, and sets `truncated` when a cap stopped it rather than
-presenting a partial list as the whole answer. `commonPrefix` is computed over
-everything found, including candidates that were dropped, so a client that
-types it never has to undo it.
+presenting a partial list as the whole answer. `commonPrefix` is computed over every match seen, including ones the caps kept
+out of the returned list, so a client that types it never has to undo it.
 
 The registry is an input, not a discovery: `completeShellLine` takes the
-command names it should offer. Completion never widens the set a shell was
-built with, and nothing in it imports the default registry — which is what
-keeps every applet out of the bundle of a shell that registered three.
+command names it should offer. `InteractiveShell` supplies the ones that would
+actually resolve — the registry filtered by the command allowlist, plus this
+session's shell functions and the `/bin` spellings, which resolve whether or
+not PATH lookup is on. Discovery never advertises a name execution would
+refuse. Nothing in completion imports the default registry, which is what keeps
+every applet out of the bundle of a shell that registered three.
+
+Completion reads through the same scoped filesystem an execution does, so it
+cannot list a directory the session could not `ls`, and `/dev` paths complete
+because that layer is in the stack too.
+
+What it does not do is quoting. A word is matched literally, so a name
+containing a space completes to text that the shell would then split, and
+completing inside quotes or after a backslash escape finds nothing. `~` is not
+expanded. These are worth knowing before building a client on it.
 
 The `/shell` entry point does not re-export either interactive class.
 Non-interactive consumers therefore do not bundle the persistent-session or
