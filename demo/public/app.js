@@ -67,8 +67,45 @@
   const fitAddon = new FitAddon.FitAddon();
   terminal.loadAddon(fitAddon);
   terminal.open(terminalElement);
+
+  /**
+   * Re-measures the grid against the element that holds it.
+   *
+   * Coalesced into a frame because a resize arrives many times per drag and
+   * each fit re-measures a character cell. Guarded because fit() throws if the
+   * element is not laid out yet, which happens if this runs while the card is
+   * hidden.
+   */
+  let fitPending = false;
+  function scheduleFit() {
+    if (fitPending) return;
+    fitPending = true;
+    requestAnimationFrame(() => {
+      fitPending = false;
+      try {
+        fitAddon.fit();
+      } catch {
+        return;
+      }
+      sendDimensions();
+    });
+  }
+
   fitAddon.fit();
   terminal.focus();
+
+  // The first fit measures a character cell in whatever font is resolved at
+  // that instant. `fontFamily` starts with a face most systems do not have, so
+  // the fallback often arrives after this — and a cell one fraction of a pixel
+  // wider than measured is the last column sitting outside the frame.
+  if (document.fonts?.ready) void document.fonts.ready.then(scheduleFit);
+
+  // A window resize is not the only thing that changes the terminal's size: a
+  // scrollbar appearing, the footer wrapping, or the card being laid out after
+  // this runs all change it without one.
+  if (typeof ResizeObserver === "function") {
+    new ResizeObserver(scheduleFit).observe(terminalElement);
+  }
 
   let socket;
   let reconnectTimer;
@@ -524,10 +561,7 @@
   }
 
   terminal.onData(handleTerminalData);
-  window.addEventListener("resize", () => {
-    fitAddon.fit();
-    sendDimensions();
-  });
+  window.addEventListener("resize", scheduleFit);
 
   /**
    * Tells the server how wide the view is, as a hint and nothing more.
