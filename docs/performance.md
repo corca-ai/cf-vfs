@@ -139,8 +139,16 @@ storage input/output-gate latency. The response also reports an empty-RPC
 control and total Worker-to-DO suite time; `bench/remote.mjs` adds the external
 client round-trip. See Cloudflare's
 [timer behavior](https://developers.cloudflare.com/workers/runtime-apis/performance/)
-and the checked-in
-[deployed baseline](../bench/remote-baseline-2026-07-24.md).
+and the checked-in deployed baselines:
+[core operations](../bench/remote-baseline-2026-07-24.md) and
+[opaque body reads](../bench/remote-baseline-2026-07-26.md).
+
+The opaque section needs an R2 bucket bound to the benchmark Worker and is
+omitted when there is none. It measures what the local tests cannot: R2
+operation count, SQL cost against a real lease, the chunk size R2 actually
+delivers, and Durable Object time for a read it is relaying. First-byte latency
+is reported but varies more between runs than between body sizes — it is a
+network measurement, not a regression signal.
 
 Keep the secret outside version control:
 

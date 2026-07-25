@@ -96,10 +96,25 @@ function profileFrom(url: URL): RemoteBenchmarkProfile | null {
 }
 
 export class VfsBenchmark extends DurableObject<VfsBenchmarkEnv> {
-  private readonly benchmark = new RemoteBenchmarkHarness(this.ctx.storage);
+  private readonly benchmark = new RemoteBenchmarkHarness(
+    this.ctx.storage,
+    this.env.BENCHMARK_BUCKET,
+  );
 
   ping(): void {
     this.benchmark.ping();
+  }
+
+  hasBucket(): boolean {
+    return this.benchmark.hasBucket();
+  }
+
+  override async alarm(): Promise<void> {
+    await this.benchmark.drainGarbage();
+  }
+
+  opaqueRead(sizeBytes: number, mode: "full" | "range" | "cancel") {
+    return this.benchmark.opaqueRead(sizeBytes, mode);
   }
 
   preparePoint() {
@@ -232,7 +247,15 @@ export default {
           error: error instanceof Error ? error.message : String(error),
         }),
       );
-      return json({ error: "Benchmark failed" }, { status: 500 });
+      // The caller already holds the benchmark token, so withholding the
+      // reason buys nothing and costs a round trip through the log tail.
+      return json(
+        {
+          error: "Benchmark failed",
+          detail: error instanceof Error ? error.message : String(error),
+        },
+        { status: 500 },
+      );
     }
   },
 } satisfies ExportedHandler<VfsBenchmarkEnv>;

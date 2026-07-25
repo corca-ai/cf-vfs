@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 3,
+  "opaque": {
+    "1MiB": {
+      "firstByteMs": 395,
+      "durationMs": 405,
+      "bytes": 1048576,
+      "chunks": 256,
+      "maxChunkBytes": 4096,
+      "r2Gets": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 7,
+        "rowsWritten": 1
+      }
+    },
+    "8MiB": {
+      "firstByteMs": 455,
+      "durationMs": 643,
+      "bytes": 8388608,
+      "chunks": 2049,
+      "maxChunkBytes": 4096,
+      "r2Gets": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 7,
+        "rowsWritten": 1
+      }
+    },
+    "range16B": {
+      "firstByteMs": 336,
+      "durationMs": 336,
+      "bytes": 16,
+      "chunks": 1,
+      "maxChunkBytes": 16,
+      "r2Gets": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 7,
+        "rowsWritten": 1
+      }
+    },
+    "cancelled": {
+      "firstByteMs": 533,
+      "durationMs": 533,
+      "bytes": 4096,
+      "chunks": 1,
+      "maxChunkBytes": 4096,
+      "r2Gets": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 7,
+        "rowsWritten": 1
+      }
+    }
+  },
+  "profile": "quick",
+  "timing": "caller-observed-rpc",
+  "startedAt": "2026-07-25T18:37:57.347Z",
+  "completedAt": "2026-07-25T18:38:13.494Z",
+  "databaseSizeBytes": 38612992,
+  "rpcOverhead": {
+    "samples": 5,
+    "meanMs": 11.8,
+    "medianMs": 12,
+    "p95Ms": 12,
+    "minMs": 11,
+    "maxMs": 12
+  },
+  "point": {
+    "stat": {
+      "samples": 5,
+      "meanMs": 0.0386,
+      "medianMs": 0.039,
+      "p95Ms": 0.04,
+      "minMs": 0.036,
+      "maxMs": 0.04
+    },
+    "overwrite": {
+      "samples": 5,
+      "meanMs": 2.006667,
+      "medianMs": 1.966667,
+      "p95Ms": 2.2,
+      "minMs": 1.9,
+      "maxMs": 2.2
+    },
+    "findPage": {
+      "samples": 5,
+      "meanMs": 6.28,
+      "medianMs": 6.2,
+      "p95Ms": 6.9,
+      "minMs": 5.9,
+      "maxMs": 6.9
+    },
+    "warmInitialize": {
+      "samples": 5,
+      "meanMs": 0.18,
+      "medianMs": 0.18,
+      "p95Ms": 0.19,
+      "minMs": 0.16,
+      "maxMs": 0.19
+    },
+    "statCost": {
+      "statements": 1,
+      "rowsRead": 2,
+      "rowsWritten": 0,
+      "nextCalls": 0,
+      "toArrayCalls": 1,
+      "oneCalls": 0
+    },
+    "overwriteCost": {
+      "statements": 13,
+      "rowsRead": 21,
+      "rowsWritten": 5
+    },
+    "populatedStatCost": {
+      "statements": 1,
+      "rowsRead": 2,
+      "rowsWritten": 0
+    },
+    "statQueryPlan": [
+      "SEARCH e USING INDEX vfs_entries_path (path=?)",
+      "SEARCH p USING PRIMARY KEY (path=?)"
+    ]
+  },
+  "append": {
+    "1MiB": {
+      "duration": {
+        "samples": 3,
+        "meanMs": 59.666667,
+        "medianMs": 52,
+        "p95Ms": 77,
+        "minMs": 50,
+        "maxMs": 77
+      },
+      "maxRowsWritten": 4
+    },
+    "8MiB": {
+      "duration": {
+        "samples": 3,
+        "meanMs": 50,
+        "medianMs": 50,
+        "p95Ms": 51,
+        "minMs": 49,
+        "maxMs": 51
+      },
+      "maxRowsWritten": 4
+    }
+  },
+  "subtree": {
+    "100": {
+      "copy": {
+        "samples": 5,
+        "meanMs": 53,
+        "medianMs": 53,
+        "p95Ms": 54,
+        "minMs": 52,
+        "maxMs": 54
+      },
+      "move": {
+        "samples": 5,
+        "meanMs": 52.6,
+        "medianMs": 52,
+        "p95Ms": 54,
+        "minMs": 51,
+        "maxMs": 54
+      },
+      "remove": {
+        "samples": 5,
+        "meanMs": 51.4,
+        "medianMs": 51,
+        "p95Ms": 52,
+        "minMs": 51,
+        "maxMs": 52
+      },
+      "statements": {
+        "copy": 11,
+        "move": 8,
+        "remove": 10
+      }
+    },
+    "1000": {
+      "copy": {
+        "samples": 3,
+        "meanMs": 67.333333,
+        "medianMs": 67,
+        "p95Ms": 68,
+        "minMs": 67,
+        "maxMs": 68
+      },
+      "move": {
+        "samples": 3,
+        "meanMs": 66.333333,
+        "medianMs": 66,
+        "p95Ms": 67,
+        "minMs": 66,
+        "maxMs": 67
+      },
+      "remove": {
+        "samples": 3,
+        "meanMs": 53.333333,
+        "medianMs": 53,
+        "p95Ms": 54,
+        "minMs": 53,
+        "maxMs": 54
+      },
+      "statements": {
+        "copy": 11,
+        "move": 8,
+        "remove": 10
+      }
+    }
+  },
+  "edge": {
+    "colo": "LAX",
+    "rpcMs": 16216
+  },
+  "clientRoundTripMs": 16691.559
+}
