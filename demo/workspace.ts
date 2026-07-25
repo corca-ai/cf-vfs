@@ -1,6 +1,11 @@
 import { VfsError } from "../src/core/errors.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { InteractiveInputBuffer, InteractiveShell } from "../src/shell/interactive.js";
+import {
+  LINUX_SHELL_OPTIONS,
+  linuxShellEnvironment,
+  provisionLinuxFilesystem,
+} from "../src/shell/linux.js";
 import type { ShellExecution } from "../src/shell/types.js";
 import { VfsDurableObject } from "../src/vfs/durable-object.js";
 import { MAX_MESSAGE_BYTES, parseClientMessage, type ServerMessage } from "./protocol.js";
@@ -12,6 +17,8 @@ interface TerminalSession {
   execution: ShellExecution | undefined;
 }
 
+const DEMO_USER = "demo";
+const DEMO_HOME = `/home/${DEMO_USER}`;
 const MAX_PENDING_SOURCE_BYTES = 128 * 1024;
 /**
  * How many candidates one completion answer carries.
@@ -64,6 +71,19 @@ Try:
   printf 'persistent\\n' > notes/2026/demo.txt
   tree .
   find . -type f -print
+
+The namespace is laid out the Linux way: /etc, /home, /tmp, /var, /workspace,
+and a virtual /dev. Commands resolve through PATH, so \`which cat\` answers
+/bin/cat and /bin/echo runs.
+
+  ls /
+  echo "$PATH"
+  which grep
+  /bin/echo absolute paths work too
+
+/bin and /usr/bin resolve commands without being directories: nothing is
+stored there, so \`ls /bin\` reports no such file. Everything else under / is
+an ordinary directory you can write to.
 
 This is the bounded Bash-compatible cf-vfs runtime, not an operating-system
 shell. It cannot launch processes or access the host filesystem.
@@ -153,13 +173,16 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       maxInFlightBufferedBytes: 2 * 1024 * 1024,
     });
     ctx.blockConcurrencyWhile(async () => {
-      this.fileSystem.mkdir("/home/demo", true);
-      this.fileSystem.mkdir("/tmp", true);
+      // The Linux profile's directories, created once per workspace. `/bin` and
+      // `/usr/bin` are deliberately not among them: they resolve applets
+      // without a namespace entry, so a row there would be a directory that
+      // could be removed while `/bin/cat` kept working.
+      provisionLinuxFilesystem(this.fileSystem, { user: DEMO_USER });
       try {
-        this.fileSystem.stat("/home/demo/README.txt");
+        this.fileSystem.stat(`${DEMO_HOME}/README.txt`);
       } catch (error) {
         if (!(error instanceof VfsError) || error.code !== "ENOENT") throw error;
-        await this.fileSystem.writeFile("/home/demo/README.txt", WELCOME_FILE);
+        await this.fileSystem.writeFile(`${DEMO_HOME}/README.txt`, WELCOME_FILE);
       }
     });
   }
@@ -178,10 +201,15 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       shell: new InteractiveShell({
         fileSystem: this.fileSystem,
         commands: defaultShellCommands,
-        cwd: "/home/demo",
+        // PATH lookup and the profile's environment are one decision, not two:
+        // without `commandResolution` a `PATH` is an ordinary variable and
+        // every applet answers to its bare name regardless of it.
+        ...LINUX_SHELL_OPTIONS,
+        cwd: DEMO_HOME,
         env: {
-          HOME: "/home/demo",
-          TMPDIR: "/tmp",
+          ...linuxShellEnvironment({ user: DEMO_USER }),
+          // Not part of the profile: it describes the client, not the runtime,
+          // and nothing here claims a terminal.
           TERM: "xterm-256color",
         },
         limits: SHELL_LIMITS,
