@@ -2,37 +2,11 @@ import { VfsError } from "../../core/errors.js";
 import { splitLinesPreservingEndings } from "../../core/lines.js";
 import { normalizePath } from "../../core/path.js";
 import type { InlineReadResult } from "../../vfs/types.js";
-import type {
-  ShellCommand,
-  ShellCommandContext,
-  ShellFileDescriptors,
-  ShellProcess,
-  ShellSink,
-} from "../types.js";
-
-export type CommandRunner = (
-  context: ShellCommandContext,
-  argv: readonly string[],
-  fds: ShellFileDescriptors,
-) => Promise<number> | number;
+import type { ShellCommandContext, ShellSink } from "../types.js";
 
 export interface BufferLease<T> {
   value: T;
   release(): void;
-}
-
-/* @__NO_SIDE_EFFECTS__ */
-export function defineCommand(name: string, runner: CommandRunner): ShellCommand {
-  return {
-    name,
-    run(context, argv, fds): ShellProcess {
-      return {
-        completed: Promise.resolve().then(async () => ({
-          exitCode: await runner(context, argv, fds),
-        })),
-      };
-    },
-  };
 }
 
 export function commandPath(context: ShellCommandContext, path = "."): string {

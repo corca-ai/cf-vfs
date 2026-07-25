@@ -77,6 +77,14 @@ export type ShellFlow =
 export interface ShellPolicy {
   readonly readRoots?: readonly string[];
   readonly writeRoots?: readonly string[];
+  /**
+   * Canonical applet names a script may run.
+   *
+   * A name is matched after the multicall resolver runs, so one entry covers
+   * that applet's aliases and its `/bin` and `/usr/bin` spellings. Entries must
+   * therefore be canonical names: an alias or an applet path in the list
+   * matches nothing and denies everything it was meant to allow.
+   */
   readonly allowedCommands?: readonly string[];
   readonly maxMutations?: number;
 }

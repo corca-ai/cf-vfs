@@ -27,6 +27,7 @@ try {
     "dist/shell/index.js",
     "dist/shell/interactive.js",
     "dist/shell/commands/index.js",
+    "dist/shell/commands/applet.js",
     "dist/shell/commands/default.js",
     "dist/shell/commands/ls.js",
     "dist/storage/r2.js",
@@ -75,12 +76,22 @@ try {
     import { Shell, BASH_COMPATIBILITY_VERSION, parseShellScript } from "@corca-ai/cf-vfs/shell";
     import { InteractiveShell } from "@corca-ai/cf-vfs/shell/interactive";
     import { lsCommand } from "@corca-ai/cf-vfs/shell/commands/ls";
+    import { createAppletRegistry, defineApplet } from "@corca-ai/cf-vfs/shell/commands/applet";
     import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
     import { MemoryOpaqueStore } from "@corca-ai/cf-vfs/testing";
     import { NodeSqlFileSystem } from "@corca-ai/cf-vfs/testing/node";
     if (MAX_INLINE_FILE_BYTES !== 8 * 1024 * 1024) throw new Error("inline limit");
     if (BASH_COMPATIBILITY_VERSION !== 4) throw new Error("language version");
     if (lsCommand.name !== "ls") throw new Error("ls export");
+    const applets = createAppletRegistry([
+      lsCommand,
+      defineApplet({ name: "probe", aliases: ["p"], usage: "", summary: "probe" }, () => 0),
+    ]);
+    for (const spelling of ["ls", "/bin/ls", "/usr/bin/ls"]) {
+      if (applets.lookup(spelling) !== lsCommand) throw new Error(\`applet path \${spelling}\`);
+    }
+    if (applets.lookup("p")?.name !== "probe") throw new Error("applet alias");
+    if (applets.lookup("/sbin/ls") !== undefined) throw new Error("unexpected applet directory");
     const parsed = parseShellScript('printf "%s" "$VALUE"', 100);
     const expansion = parsed.lists[0].first.commands[0].words[2].parts[0].expansion;
     if ("kind" in expansion || expansion.length !== false || expansion.operator !== undefined) {

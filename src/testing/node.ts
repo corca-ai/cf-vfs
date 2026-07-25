@@ -56,7 +56,10 @@ function integerPragma(database: DatabaseSync, name: string): number {
 }
 
 class NodeSqlStorage implements VfsSqlStorage {
-  constructor(private readonly database: DatabaseSync) {}
+  constructor(
+    private readonly database: DatabaseSync,
+    private readonly observe: SqlStatementObserver | undefined,
+  ) {}
 
   get databaseSize(): number {
     return integerPragma(this.database, "page_count") * integerPragma(this.database, "page_size");
@@ -65,30 +68,39 @@ class NodeSqlStorage implements VfsSqlStorage {
   exec<Row extends VfsSqlRow>(query: string, ...bindings: VfsSqlBinding[]): VfsSqlCursor<Row> {
     const statement = this.database.prepare(query);
     const rows = statement.all(...bindings.map(inputValue)).map(outputRow) as Row[];
+    this.observe?.(query, rows.length);
     return new ArrayCursor(rows);
   }
 }
 
 class NodeSqlFileSystemStorage implements SqlFileSystemStorage {
   readonly database = new DatabaseSync(":memory:");
-  readonly sql = new NodeSqlStorage(this.database);
+  readonly sql: NodeSqlStorage;
   private alarm: number | null = null;
   private transactionOpen = false;
 
+  private readonly observe: SqlStatementObserver | undefined;
+
+  constructor(observe: SqlStatementObserver | undefined) {
+    this.observe = observe;
+    this.sql = new NodeSqlStorage(this.database, observe);
+  }
+
   execBatch(query: string): void {
     this.database.exec(query);
+    this.observe?.(query, 0);
   }
 
   transactionSync<Result>(callback: () => Result): Result {
     if (this.transactionOpen) return callback();
     this.transactionOpen = true;
-    this.database.exec("BEGIN");
+    this.execBatch("BEGIN");
     try {
       const result = callback();
-      this.database.exec("COMMIT");
+      this.execBatch("COMMIT");
       return result;
     } catch (error) {
-      this.database.exec("ROLLBACK");
+      this.execBatch("ROLLBACK");
       throw error;
     } finally {
       this.transactionOpen = false;
@@ -114,16 +126,30 @@ class NodeSqlFileSystemStorage implements SqlFileSystemStorage {
   }
 }
 
-export type NodeSqlFileSystemOptions = SqlFileSystemOptions;
+/**
+ * Observes each executed statement and the rows it returned.
+ *
+ * Structural performance guards use this to assert statement and row counts
+ * instead of wall-clock time, so an added query is a reviewable failure rather
+ * than benchmark noise. Batched statements and transaction control are observed
+ * too, so wrapping a read path in a transaction cannot hide from a guard. It
+ * exists for tests; production adapters do not have it.
+ */
+export type SqlStatementObserver = (query: string, rows: number) => void;
+
+export interface NodeSqlFileSystemOptions extends SqlFileSystemOptions {
+  readonly onStatement?: SqlStatementObserver;
+}
 
 export class NodeSqlFileSystem extends SqlFileSystem {
   private readonly nodeStorage: NodeSqlFileSystemStorage;
   private closed = false;
 
   constructor(options: NodeSqlFileSystemOptions = {}) {
-    const storage = new NodeSqlFileSystemStorage();
+    const { onStatement, ...fileSystemOptions } = options;
+    const storage = new NodeSqlFileSystemStorage(onStatement);
     try {
-      super(storage, options);
+      super(storage, fileSystemOptions);
     } catch (error) {
       storage.close();
       throw error;

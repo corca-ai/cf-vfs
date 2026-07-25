@@ -114,6 +114,13 @@ Deliberate deterministic choices include:
   syntax. `seq` operands are strict decimal integers rather than Bash
   arithmetic or floating point, and `env` reports only valid variable names in
   UTF-8 byte order;
+- registered applets, except shell built-ins that change the calling session,
+  also answer to `/bin/NAME` and `/usr/bin/NAME`. Those are virtual spellings of
+  one implementation, not namespace entries: they perform no storage work,
+  cannot be created or removed, and are not shadowed by a VFS file at the same
+  path. The directory match is literal, so `/bin//cat` does not resolve.
+  Diagnostics and `allowedCommands` use the canonical applet name, and a usage
+  diagnostic ends with the applet's declared synopsis;
 - status 2 is syntax/usage, 126 is policy denial, and 127 is command-not-found.
 
 Differential fixtures are pinned against `bash:5.3.3` with the same locale and
@@ -121,6 +128,36 @@ timezone. They cover representative supported quoting, assignment and
 positional expansion, control, pipeline, redirection, glob, and status
 behavior. Explicit rejection tests cover syntax deliberately outside Version
 4. Neither suite implies compatibility outside the declared subset.
+
+## Utility differential fixtures and declared divergences
+
+Utility behavior is pinned separately against two oracle images recorded by
+digest in `test/fixtures/utility-compat.json`: BusyBox and Debian's GNU
+coreutils, grep, sed, and diffutils, both with `LC_ALL=C` and `TZ=UTC`. The exact
+tool versions live beside the cases, so a compatibility claim is always tied to
+a specific tool rather than to "GNU". These images are development and CI
+oracles; no external binary ships or runs at runtime.
+
+Every fixture must succeed with empty output on stderr, and the comparison
+asserts stdout, stderr, and status. Diagnostic text is deliberately outside the
+profile, so a case that produced a diagnostic could not prove anything: the
+generator refuses it. Behavior that intentionally differs is recorded instead in
+the `divergences` registry in the same file, and each entry must have a
+declarative test demonstrating what `cf-vfs` does. A passing fixture set
+therefore never implies an unsupported superset.
+
+Currently declared divergences:
+
+| Command | Divergence |
+| --- | --- |
+| `cut` | `-f` and `-c` accept a comma-separated list of positive integers. A range such as `-c2-4` is a usage error with status 2 rather than an approximation. |
+| `wc` | Multi-field output is single-space separated. GNU right-aligns each count in a width derived from the largest input, which the streaming profile never buffers. Single-field forms such as `wc -l` match exactly. |
+| `diff` | Output is always the unified format `patch` consumes; the normal, context, and `ed` formats are outside the profile. |
+| `grep`, `sed` | Patterns use JavaScript regular-expression syntax under the Unicode flag, not POSIX basic or extended regular expressions. Literals, `.`, `*`, `^`, `$`, and bracket expressions agree with both and are pinned by fixtures; every other metacharacter differs. `a+` repeats here and is a literal plus under POSIX, while `a\|x` alternates under POSIX and is a literal here. |
+| `sed` | The replacement is literal text. GNU expands `&` to the match and `\1` to a capture group; both are written literally here, and JavaScript's `$&`, ``$` ``, `$'`, and `$n` forms are escaped so replacement text taken from data can never splice another part of the record into the output. |
+
+Regenerate with `npm run test:utility-fixtures:regenerate` and review the diff;
+Docker is required only for regeneration.
 
 ## Atomic redirection divergence
 

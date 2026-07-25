@@ -34,19 +34,24 @@ function optionDefinition<Name extends string>(
     : undefined;
 }
 
-function unsupported(command: string, spelling: string): never {
-  throw new VfsError("EINVAL", `${command}: unsupported option ${spelling}`);
-}
-
-function requiredArgument(command: string, spelling: string): never {
-  throw new VfsError("EINVAL", `${command}: option ${spelling} requires an argument`);
+function usageError(command: string, message: string, synopsis: string | undefined): never {
+  throw new VfsError(
+    "EINVAL",
+    synopsis === undefined ? `${command}: ${message}` : `${command}: ${message}\n${synopsis}`,
+  );
 }
 
 export function parseUtilityOptions<Name extends string>(
   command: string,
   argv: readonly string[],
   config: UtilityOptionParserConfig<Name>,
+  /** Synopsis appended to every diagnostic, when the caller declares one. */
+  synopsis?: string,
 ): ParsedUtilityOptions<Name> {
+  const unsupported: (spelling: string) => never = (spelling) =>
+    usageError(command, `unsupported option ${spelling}`, synopsis);
+  const requiredArgument: (spelling: string) => never = (spelling) =>
+    usageError(command, `option ${spelling} requires an argument`, synopsis);
   const options: ParsedUtilityOption<Name>[] = [];
   const operands: string[] = [];
   let optionsEnded = false;
@@ -65,17 +70,14 @@ export function parseUtilityOptions<Name extends string>(
       const separator = value.indexOf("=");
       const spelling = separator < 0 ? value : value.slice(0, separator);
       const definition = optionDefinition(config.long, spelling.slice(2));
-      if (definition === undefined) unsupported(command, spelling);
+      if (definition === undefined) unsupported(spelling);
       if ("argument" in definition) {
         const argument = separator < 0 ? argv[++index] : value.slice(separator + 1);
-        if (argument === undefined) requiredArgument(command, spelling);
+        if (argument === undefined) requiredArgument(spelling);
         options.push({ name: definition.name, argument });
       } else {
         if (separator >= 0) {
-          throw new VfsError(
-            "EINVAL",
-            `${command}: option ${spelling} does not accept an argument`,
-          );
+          usageError(command, `option ${spelling} does not accept an argument`, synopsis);
         }
         options.push({ name: definition.name });
       }
@@ -97,14 +99,14 @@ export function parseUtilityOptions<Name extends string>(
       const name = cluster[optionIndex] ?? "";
       const spelling = `-${name}`;
       const definition = optionDefinition(config.short, name);
-      if (definition === undefined) unsupported(command, spelling);
+      if (definition === undefined) unsupported(spelling);
       if (!("argument" in definition)) {
         options.push({ name: definition.name });
         continue;
       }
       const attached = cluster.slice(optionIndex + 1).join("");
       const argument = attached.length > 0 ? attached : argv[++index];
-      if (argument === undefined) requiredArgument(command, spelling);
+      if (argument === undefined) requiredArgument(spelling);
       options.push({ name: definition.name, argument });
       break;
     }

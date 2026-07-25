@@ -348,6 +348,39 @@ the smallest registry they need. The dedicated `ls` subpath and ordinary
 `cat`/`grep` barrel imports are covered by bundle tests proving unrelated
 command implementations are absent; the default preset is covered separately.
 
+### Applet specifications and the multicall resolver
+
+Every shipped command is an *applet*: one implementation described by a
+declarative `AppletSpec` that carries the canonical name, any extra spellings,
+the operand syntax used in a usage diagnostic, a one-line summary, and the
+option table the applet scans. `@corca-ai/cf-vfs/shell/commands/applet` publishes
+that contract — `defineApplet`, `parseAppletOptions`, `appletUsageError`,
+`formatAppletUsage`, and `createAppletRegistry` — and imports no applet, so a
+consumer can build its own registry without pulling the utility set.
+
+`Shell` resolves a command name through that registry. A BusyBox-style multicall
+lookup accepts the canonical name, any declared alias, and the virtual applet
+directories `/bin` and `/usr/bin`, so `cat`, `/bin/cat`, and `/usr/bin/cat` are
+the same implementation. Resolution is a literal directory-prefix match, never a
+namespace lookup: no SQLite row or R2 object backs those spellings, a VFS file
+written at `/bin/cat` does not shadow the applet, and an applet path performs no
+storage work. Because the match is literal, a duplicated separator such as
+`/bin//cat` does not resolve, and neither does any other absolute path: both
+remain `command not found` with status 127.
+
+An applet that changes the calling session — `cd`, `export`, `unset`, `read`,
+`shift`, `getopts`, `local`, `set`, `source`, `.`, `exit`, `return`, `break`,
+`continue`, and `:` — is a shell built-in and is reachable only by its bare
+name, because Linux has no `/bin/cd` either.
+
+A shell function takes precedence over an applet with the same bare name. As in
+Bash, an applet path such as `/bin/echo` bypasses the function.
+
+Diagnostics always name the canonical applet and end with its declared synopsis.
+`ShellPolicy.allowedCommands` is matched against the canonical name, so one
+allowlist entry covers every spelling of that implementation; entries must be
+canonical applet names, since an alias in the list matches nothing.
+
 | Registry group | Available commands and principal options |
 | --- | --- |
 | shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (`-e/+e`, `-o/+o errexit`, `-u/+u`, `-o/+o nounset`, `-o/+o pipefail`), `test`, `[` |
@@ -367,7 +400,7 @@ the historical `-10` line-count form.
 
 This syntax does not add options beyond the table. An unsupported member of a
 cluster is a usage error naming that member; for example, `ls -als` reports
-unsupported `-s`. `ls -a` and `ls -A` are accepted compatibility no-ops because
+unsupported `-s` and then prints the `ls` synopsis. `ls -a` and `ls -A` are accepted compatibility no-ops because
 directory listings already include stored dot-prefixed names and never
 synthesize `.` or `..`. `find` expressions and the `set` and `getopts` built-ins
 keep their separately documented grammars.
@@ -383,8 +416,11 @@ atomic VFS commits buffer only at their semantic barriers.
 
 `seq` operands are strict decimal integers, so a leading `-` before digits is
 an operand rather than an option cluster. Bash arithmetic expressions, floating
-point, and format strings are outside the profile. `base64` uses the standard
-alphabet; decoding rejects invalid input instead of guessing. `env` prints only
+point, and format strings are outside the profile. `-s` joins values and the
+sequence still ends with exactly one newline, so the default separator yields
+one record per value and an empty range prints nothing. `base64` uses the
+standard alphabet; decoding rejects invalid input instead of guessing. `-w 0`
+disables wrapping entirely, including the trailing newline. `env` prints only
 names matching `[A-Za-z_][A-Za-z0-9_]*` in UTF-8 byte order, so positional
 parameters such as `0` are absent; `-i`, `-u`, `-0`, and the bare `-` form are
 outside the profile.

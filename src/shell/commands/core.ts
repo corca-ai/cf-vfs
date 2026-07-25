@@ -12,20 +12,148 @@ import {
 import { optindGeneration, setOptindFromGetopts } from "../environment.js";
 import { readInputRecord } from "../input.js";
 import type { ShellCommandContext } from "../types.js";
-import {
-  type BufferLease,
-  commandPath,
-  defineCommand,
-  parseInteger,
-  readFileText,
-  writeText,
-} from "./helpers.js";
+import { type AppletSpec, appletUsageError, defineApplet } from "./applet.js";
+import { type BufferLease, commandPath, parseInteger, readFileText, writeText } from "./helpers.js";
 
-export const colonCommand = /* @__PURE__ */ defineCommand(":", () => 0);
-export const trueCommand = /* @__PURE__ */ defineCommand("true", () => 0);
-export const falseCommand = /* @__PURE__ */ defineCommand("false", () => 1);
+const COLON = {
+  name: ":",
+  usage: "",
+  summary: "does nothing and succeeds",
+  builtin: true,
+} as const satisfies AppletSpec;
 
-export const echoCommand = /* @__PURE__ */ defineCommand("echo", async (_context, argv, fds) => {
+const TRUE = { name: "true", usage: "", summary: "succeeds" } as const satisfies AppletSpec;
+const FALSE = {
+  name: "false",
+  usage: "",
+  summary: "fails with status 1",
+} as const satisfies AppletSpec;
+
+const ECHO = {
+  name: "echo",
+  usage: "[-n] [ARGUMENT...]",
+  summary: "writes arguments separated by spaces",
+} as const satisfies AppletSpec;
+
+const PRINTF = {
+  name: "printf",
+  usage: "FORMAT [ARGUMENT...]",
+  summary: "formats arguments with %s, %d, %b, and %%",
+} as const satisfies AppletSpec;
+
+const PWD = {
+  name: "pwd",
+  usage: "",
+  summary: "prints the working directory",
+} as const satisfies AppletSpec;
+
+const CD = {
+  name: "cd",
+  usage: "[DIRECTORY]",
+  summary: "changes the working directory",
+  builtin: true,
+} as const satisfies AppletSpec;
+
+const EXPORT = {
+  name: "export",
+  usage: "[NAME[=VALUE]...]",
+  summary: "marks variables for the session environment",
+  builtin: true,
+} as const satisfies AppletSpec;
+
+const ENV = {
+  name: "env",
+  usage: "[NAME=VALUE...] [COMMAND [ARGUMENT...]]",
+  summary: "prints the environment or runs a command with assignments",
+} as const satisfies AppletSpec;
+
+const UNSET = {
+  name: "unset",
+  usage: "[NAME...]",
+  summary: "removes variables",
+  builtin: true,
+} as const satisfies AppletSpec;
+
+const READ = {
+  name: "read",
+  usage: "-r [NAME...]",
+  summary: "reads one record from standard input",
+  builtin: true,
+} as const satisfies AppletSpec;
+
+const SHIFT = {
+  name: "shift",
+  usage: "[COUNT]",
+  summary: "drops leading positional parameters",
+  builtin: true,
+} as const satisfies AppletSpec;
+
+const GETOPTS = {
+  name: "getopts",
+  usage: "OPTSTRING NAME [ARGUMENT...]",
+  summary: "parses one option from the positional parameters",
+  builtin: true,
+} as const satisfies AppletSpec;
+
+const LOCAL = {
+  name: "local",
+  usage: "NAME[=VALUE]...",
+  summary: "declares function-scoped variables",
+  builtin: true,
+} as const satisfies AppletSpec;
+
+const RETURN = {
+  name: "return",
+  usage: "[STATUS]",
+  summary: "returns from a function or sourced file",
+  builtin: true,
+} as const satisfies AppletSpec;
+
+const BREAK = {
+  name: "break",
+  usage: "[LEVELS]",
+  summary: "exits enclosing loops",
+  builtin: true,
+} as const satisfies AppletSpec;
+
+const CONTINUE = {
+  name: "continue",
+  usage: "[LEVELS]",
+  summary: "resumes the next iteration of an enclosing loop",
+  builtin: true,
+} as const satisfies AppletSpec;
+
+const EXIT = {
+  name: "exit",
+  usage: "[STATUS]",
+  summary: "ends the execution unit",
+  builtin: true,
+} as const satisfies AppletSpec;
+
+const SET = {
+  name: "set",
+  usage: "[-e|+e] [-u|+u] [-o|+o OPTION]",
+  summary: "sets supported shell options",
+  builtin: true,
+} as const satisfies AppletSpec;
+
+const TEST = {
+  name: "test",
+  usage: "EXPRESSION",
+  summary: "evaluates a bounded conditional expression",
+} as const satisfies AppletSpec;
+
+const BRACKET = {
+  name: "[",
+  usage: "EXPRESSION ]",
+  summary: "evaluates a bounded conditional expression, requiring a closing ]",
+} as const satisfies AppletSpec;
+
+export const colonCommand = /* @__PURE__ */ defineApplet(COLON, () => 0);
+export const trueCommand = /* @__PURE__ */ defineApplet(TRUE, () => 0);
+export const falseCommand = /* @__PURE__ */ defineApplet(FALSE, () => 1);
+
+export const echoCommand = /* @__PURE__ */ defineApplet(ECHO, async (_context, argv, fds) => {
   let newline = true;
   let start = 0;
   if (argv[0] === "-n") {
@@ -70,7 +198,7 @@ function formatPrintfOnce(
       output += String(parsed.value);
       if (parsed.diagnostic !== undefined) diagnostics.push(parsed.diagnostic);
     } else if (specifier === "b") output += decodeBackslashEscapes(values[index++] ?? "");
-    else throw new VfsError("EINVAL", `printf: unsupported conversion %${specifier ?? ""}`);
+    else throw appletUsageError(PRINTF, `unsupported conversion %${specifier ?? ""}`);
   }
   return { output, consumed: index, diagnostics };
 }
@@ -163,29 +291,26 @@ function formatPrintf(
   return { output, diagnostics };
 }
 
-export const printfCommand = /* @__PURE__ */ defineCommand(
-  "printf",
-  async (_context, argv, fds) => {
-    if (argv.length === 0) throw new VfsError("EINVAL", "printf: missing format");
-    const formatted = formatPrintf(argv[0] ?? "", argv.slice(1));
-    await Promise.all([
-      writeText(fds[1], formatted.output),
-      formatted.diagnostics.length === 0
-        ? Promise.resolve()
-        : writeText(fds[2], formatted.diagnostics.join("")),
-    ]);
-    return formatted.diagnostics.length === 0 ? 0 : 1;
-  },
-);
+export const printfCommand = /* @__PURE__ */ defineApplet(PRINTF, async (_context, argv, fds) => {
+  if (argv.length === 0) throw appletUsageError(PRINTF, "missing format");
+  const formatted = formatPrintf(argv[0] ?? "", argv.slice(1));
+  await Promise.all([
+    writeText(fds[1], formatted.output),
+    formatted.diagnostics.length === 0
+      ? Promise.resolve()
+      : writeText(fds[2], formatted.diagnostics.join("")),
+  ]);
+  return formatted.diagnostics.length === 0 ? 0 : 1;
+});
 
-export const pwdCommand = /* @__PURE__ */ defineCommand("pwd", async (context, argv, fds) => {
-  if (argv.length > 0) throw new VfsError("EINVAL", `pwd: unsupported option ${argv[0] ?? ""}`);
+export const pwdCommand = /* @__PURE__ */ defineApplet(PWD, async (context, argv, fds) => {
+  if (argv.length > 0) throw appletUsageError(PWD, `unsupported option ${argv[0] ?? ""}`);
   await writeText(fds[1], `${context.session.cwd}\n`);
   return 0;
 });
 
-export const cdCommand = /* @__PURE__ */ defineCommand("cd", async (context, argv) => {
-  if (argv.length > 1) throw new VfsError("EINVAL", "cd: too many arguments");
+export const cdCommand = /* @__PURE__ */ defineApplet(CD, async (context, argv) => {
+  if (argv.length > 1) throw appletUsageError(CD, "too many arguments");
   const target = normalizePath(
     argv[0] ?? context.session.env.get("HOME") ?? "/",
     context.session.cwd,
@@ -206,7 +331,7 @@ function assignment(value: string): { name: string; value: string } {
   return { name, value: separator < 0 ? "" : value.slice(separator + 1) };
 }
 
-export const exportCommand = /* @__PURE__ */ defineCommand("export", (context, argv) => {
+export const exportCommand = /* @__PURE__ */ defineApplet(EXPORT, (context, argv) => {
   for (const value of argv) {
     const parsed = assignment(value);
     context.session.env.set(
@@ -224,7 +349,7 @@ export const exportCommand = /* @__PURE__ */ defineCommand("export", (context, a
  * `-u`, and `-0` options and the bare `-` form are outside this profile;
  * positional-parameter and shell-option state is not environment.
  */
-export const envCommand = /* @__PURE__ */ defineCommand("env", async (context, argv, fds) => {
+export const envCommand = /* @__PURE__ */ defineApplet(ENV, async (context, argv, fds) => {
   let index = 0;
   const assignments: Array<{ name: string; value: string }> = [];
   while (index < argv.length) {
@@ -233,7 +358,7 @@ export const envCommand = /* @__PURE__ */ defineCommand("env", async (context, a
       index += 1;
       break;
     }
-    if (value.startsWith("-")) throw new VfsError("EINVAL", `env: unsupported option ${value}`);
+    if (value.startsWith("-")) throw appletUsageError(ENV, `unsupported option ${value}`);
     if (!/^[A-Za-z_][A-Za-z0-9_]*=/u.test(value)) break;
     const separator = value.indexOf("=");
     assignments.push({ name: value.slice(0, separator), value: value.slice(separator + 1) });
@@ -269,10 +394,10 @@ export const envCommand = /* @__PURE__ */ defineCommand("env", async (context, a
   }
 });
 
-export const unsetCommand = /* @__PURE__ */ defineCommand("unset", (context, argv) => {
+export const unsetCommand = /* @__PURE__ */ defineApplet(UNSET, (context, argv) => {
   for (const name of argv) {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name)) {
-      throw new VfsError("EINVAL", `unset: invalid variable name: ${name}`);
+      throw appletUsageError(UNSET, `invalid variable name: ${name}`);
     }
     context.session.env.delete(name);
   }
@@ -284,13 +409,13 @@ const READ_IFS = /[ \t\n]/u;
 
 function readVariableNames(argv: readonly string[]): { names: string[]; reply: boolean } {
   if (argv[0] !== "-r") {
-    throw new VfsError("EINVAL", "read: only read -r [name ...] is supported");
+    throw appletUsageError(READ, "only read -r [name ...] is supported");
   }
   const operands = argv[1] === "--" ? argv.slice(2) : argv.slice(1);
   const names = operands.length === 0 ? ["REPLY"] : [...operands];
   for (const name of names) {
     if (!VARIABLE_NAME.test(name)) {
-      throw new VfsError("EINVAL", `read: invalid variable name: ${name}`);
+      throw appletUsageError(READ, `invalid variable name: ${name}`);
     }
   }
   return { names, reply: operands.length === 0 };
@@ -321,7 +446,7 @@ function readAssignments(
   return assignments;
 }
 
-export const readCommand = /* @__PURE__ */ defineCommand("read", async (context, argv, fds) => {
+export const readCommand = /* @__PURE__ */ defineApplet(READ, async (context, argv, fds) => {
   const { names, reply } = readVariableNames(argv);
   const record = await readInputRecord(fds[0], context.budget, context.signal);
   for (const value of readAssignments(record.value, names, reply)) {
@@ -330,9 +455,9 @@ export const readCommand = /* @__PURE__ */ defineCommand("read", async (context,
   return record.terminated ? 0 : 1;
 });
 
-export const shiftCommand = /* @__PURE__ */ defineCommand("shift", (context, argv) => {
-  if (argv.length > 1) throw new VfsError("EINVAL", "shift: too many arguments");
-  const count = argv[0] === undefined ? 1 : parseInteger(argv[0], "shift count");
+export const shiftCommand = /* @__PURE__ */ defineApplet(SHIFT, (context, argv) => {
+  if (argv.length > 1) throw appletUsageError(SHIFT, "too many arguments");
+  const count = argv[0] === undefined ? 1 : parseInteger(argv[0], `${SHIFT.name}: count`);
   if (count > context.session.args.length) return 1;
   context.session.args.splice(0, count);
   return 0;
@@ -340,129 +465,139 @@ export const shiftCommand = /* @__PURE__ */ defineCommand("shift", (context, arg
 
 function validateGetoptsSpec(optstring: string, name: string): void {
   if (!VARIABLE_NAME.test(name)) {
-    throw new VfsError("EINVAL", `getopts: invalid variable name: ${name}`);
+    throw appletUsageError(GETOPTS, `invalid variable name: ${name}`);
   }
   const specification = optstring.startsWith(":") ? optstring.slice(1) : optstring;
   for (let index = 0; index < specification.length; index += 1) {
     const option = specification[index] ?? "";
     if (option === ":" || option === "?" || option === "-") {
-      throw new VfsError("EINVAL", `getopts: invalid option specification: ${option}`);
+      throw appletUsageError(GETOPTS, `invalid option specification: ${option}`);
     }
     if (specification[index + 1] === ":") index += 1;
   }
 }
 
-export const getoptsCommand = /* @__PURE__ */ defineCommand(
-  "getopts",
-  async (context, argv, fds) => {
-    if (argv.length < 2) {
-      throw new VfsError("EINVAL", "getopts: expected optstring and variable name");
+export const getoptsCommand = /* @__PURE__ */ defineApplet(GETOPTS, async (context, argv, fds) => {
+  if (argv.length < 2) {
+    throw appletUsageError(GETOPTS, "expected optstring and variable name");
+  }
+  const [optstring = "", name = "", ...explicitArgs] = argv;
+  validateGetoptsSpec(optstring, name);
+  const args = explicitArgs.length === 0 ? context.session.args : explicitArgs;
+  const optind = parseInteger(
+    context.session.env.get("OPTIND") ?? "1",
+    `${GETOPTS.name}: OPTIND`,
+    1,
+  );
+  const previous = context.session.getopts;
+  let argumentIndex = optind - 1;
+  let characterIndex =
+    previous !== undefined &&
+    previous.optind === optind &&
+    previous.optindGeneration === optindGeneration(context.session.env)
+      ? previous.characterIndex
+      : 1;
+  const silent = optstring.startsWith(":");
+  const specification = silent ? optstring.slice(1) : optstring;
+
+  const save = (nextOptind: number, nextCharacterIndex: number): void => {
+    setOptindFromGetopts(context.session.env, String(nextOptind));
+    context.session.getopts = {
+      optind: nextOptind,
+      characterIndex: nextCharacterIndex,
+      optindGeneration: optindGeneration(context.session.env),
+    };
+  };
+  const finish = (nextOptind: number): number => {
+    save(nextOptind, 1);
+    context.session.env.set(name, "?");
+    context.session.env.delete("OPTARG");
+    return 1;
+  };
+
+  while (true) {
+    const argument = args[argumentIndex];
+    if (argument === undefined || argument === "-" || !argument.startsWith("-")) {
+      return finish(argumentIndex + 1);
     }
-    const [optstring = "", name = "", ...explicitArgs] = argv;
-    validateGetoptsSpec(optstring, name);
-    const args = explicitArgs.length === 0 ? context.session.args : explicitArgs;
-    const optind = parseInteger(context.session.env.get("OPTIND") ?? "1", "getopts: OPTIND", 1);
-    const previous = context.session.getopts;
-    let argumentIndex = optind - 1;
-    let characterIndex =
-      previous !== undefined &&
-      previous.optind === optind &&
-      previous.optindGeneration === optindGeneration(context.session.env)
-        ? previous.characterIndex
-        : 1;
-    const silent = optstring.startsWith(":");
-    const specification = silent ? optstring.slice(1) : optstring;
+    if (argument === "--") return finish(argumentIndex + 2);
+    if (characterIndex >= argument.length) {
+      argumentIndex += 1;
+      characterIndex = 1;
+      continue;
+    }
 
-    const save = (nextOptind: number, nextCharacterIndex: number): void => {
-      setOptindFromGetopts(context.session.env, String(nextOptind));
-      context.session.getopts = {
-        optind: nextOptind,
-        characterIndex: nextCharacterIndex,
-        optindGeneration: optindGeneration(context.session.env),
-      };
-    };
-    const finish = (nextOptind: number): number => {
-      save(nextOptind, 1);
+    const option = argument[characterIndex] ?? "";
+    const definition = option === ":" ? -1 : specification.indexOf(option);
+    const requiresArgument = definition >= 0 && specification[definition + 1] === ":";
+    let nextOptind = argumentIndex + 1;
+    let nextCharacterIndex = characterIndex + 1;
+    if (nextCharacterIndex >= argument.length) {
+      nextOptind += 1;
+      nextCharacterIndex = 1;
+    }
+
+    if (definition < 0) {
+      save(nextOptind, nextCharacterIndex);
       context.session.env.set(name, "?");
-      context.session.env.delete("OPTARG");
-      return 1;
-    };
-
-    while (true) {
-      const argument = args[argumentIndex];
-      if (argument === undefined || argument === "-" || !argument.startsWith("-")) {
-        return finish(argumentIndex + 1);
-      }
-      if (argument === "--") return finish(argumentIndex + 2);
-      if (characterIndex >= argument.length) {
-        argumentIndex += 1;
-        characterIndex = 1;
-        continue;
-      }
-
-      const option = argument[characterIndex] ?? "";
-      const definition = option === ":" ? -1 : specification.indexOf(option);
-      const requiresArgument = definition >= 0 && specification[definition + 1] === ":";
-      let nextOptind = argumentIndex + 1;
-      let nextCharacterIndex = characterIndex + 1;
-      if (nextCharacterIndex >= argument.length) {
-        nextOptind += 1;
-        nextCharacterIndex = 1;
-      }
-
-      if (definition < 0) {
-        save(nextOptind, nextCharacterIndex);
-        context.session.env.set(name, "?");
-        if (silent) context.session.env.set("OPTARG", option);
-        else {
-          context.session.env.delete("OPTARG");
-          await writeText(fds[2], `getopts: illegal option -- ${option}\n`);
-        }
-        return 0;
-      }
-
-      if (!requiresArgument) {
-        save(nextOptind, nextCharacterIndex);
-        context.session.env.set(name, option);
+      if (silent) context.session.env.set("OPTARG", option);
+      else {
         context.session.env.delete("OPTARG");
-        return 0;
-      }
-
-      let optionArgument: string | undefined;
-      if (characterIndex + 1 < argument.length) {
-        optionArgument = argument.slice(characterIndex + 1);
-        nextOptind = argumentIndex + 2;
-        nextCharacterIndex = 1;
-      } else if (args[argumentIndex + 1] !== undefined) {
-        optionArgument = args[argumentIndex + 1];
-        nextOptind = argumentIndex + 3;
-        nextCharacterIndex = 1;
-      }
-      if (optionArgument !== undefined) {
-        save(nextOptind, nextCharacterIndex);
-        context.session.env.set(name, option);
-        context.session.env.set("OPTARG", optionArgument);
-        return 0;
-      }
-
-      save(argumentIndex + 2, 1);
-      if (silent) {
-        context.session.env.set(name, ":");
-        context.session.env.set("OPTARG", option);
-      } else {
-        context.session.env.set(name, "?");
-        context.session.env.delete("OPTARG");
-        await writeText(fds[2], `getopts: option requires an argument -- ${option}\n`);
+        await writeText(fds[2], `getopts: illegal option -- ${option}\n`);
       }
       return 0;
     }
-  },
-);
+
+    if (!requiresArgument) {
+      save(nextOptind, nextCharacterIndex);
+      context.session.env.set(name, option);
+      context.session.env.delete("OPTARG");
+      return 0;
+    }
+
+    let optionArgument: string | undefined;
+    if (characterIndex + 1 < argument.length) {
+      optionArgument = argument.slice(characterIndex + 1);
+      nextOptind = argumentIndex + 2;
+      nextCharacterIndex = 1;
+    } else if (args[argumentIndex + 1] !== undefined) {
+      optionArgument = args[argumentIndex + 1];
+      nextOptind = argumentIndex + 3;
+      nextCharacterIndex = 1;
+    }
+    if (optionArgument !== undefined) {
+      save(nextOptind, nextCharacterIndex);
+      context.session.env.set(name, option);
+      context.session.env.set("OPTARG", optionArgument);
+      return 0;
+    }
+
+    save(argumentIndex + 2, 1);
+    if (silent) {
+      context.session.env.set(name, ":");
+      context.session.env.set("OPTARG", option);
+    } else {
+      context.session.env.set(name, "?");
+      context.session.env.delete("OPTARG");
+      await writeText(fds[2], `getopts: option requires an argument -- ${option}\n`);
+    }
+    return 0;
+  }
+});
 
 function defineSourceCommand(name: "source" | ".") {
-  return defineCommand(name, async (context, argv, fds) => {
+  // `source` and `.` share one runner but keep separate specifications so a
+  // diagnostic names the spelling the script actually used, exactly as Bash
+  // does. They are built-ins: the file runs in the calling shell scope.
+  const spec = {
+    name,
+    usage: "FILE [ARGUMENT...]",
+    summary: "runs a bounded VFS file in the current shell scope",
+    builtin: true,
+  } as const satisfies AppletSpec;
+  return defineApplet(spec, async (context, argv, fds) => {
     const [path, ...args] = argv;
-    if (path === undefined) throw new VfsError("EINVAL", `${name}: missing file operand`);
+    if (path === undefined) throw appletUsageError(spec, "missing file operand");
     const normalized = commandPath(context, path);
     let source: BufferLease<string>;
     try {
@@ -491,11 +626,11 @@ function defineSourceCommand(name: "source" | ".") {
 export const sourceCommand = /* @__PURE__ */ defineSourceCommand("source");
 export const dotCommand = /* @__PURE__ */ defineSourceCommand(".");
 
-export const localCommand = /* @__PURE__ */ defineCommand("local", (context, argv) => {
+export const localCommand = /* @__PURE__ */ defineApplet(LOCAL, (context, argv) => {
   const frame = context.session.localFrames.at(-1);
   const getoptsFrame = context.session.localGetoptsFrames.at(-1);
   if (context.session.functionDepth === 0 || frame === undefined || getoptsFrame === undefined) {
-    throw new VfsError("EINVAL", "local: can only be used in a function");
+    throw appletUsageError(LOCAL, "can only be used in a function");
   }
   for (const value of argv) {
     const parsed = assignment(value);
@@ -510,57 +645,57 @@ export const localCommand = /* @__PURE__ */ defineCommand("local", (context, arg
   return 0;
 });
 
-export const returnCommand = /* @__PURE__ */ defineCommand("return", (context, argv) => {
+export const returnCommand = /* @__PURE__ */ defineApplet(RETURN, (context, argv) => {
   if (context.session.functionDepth === 0 && context.session.sourceDepth === 0) {
-    throw new VfsError("EINVAL", "return: can only be used in a function or sourced file");
+    throw appletUsageError(RETURN, "can only be used in a function or sourced file");
   }
-  if (argv.length > 1) throw new VfsError("EINVAL", "return: too many arguments");
+  if (argv.length > 1) throw appletUsageError(RETURN, "too many arguments");
   const status =
     argv[0] === undefined
       ? context.session.lastExitCode
-      : parseInteger(argv[0], "return status", Number.MIN_SAFE_INTEGER) & 0xff;
+      : parseInteger(argv[0], `${RETURN.name}: status`, Number.MIN_SAFE_INTEGER) & 0xff;
   context.session.flow = { type: "return", status };
   return status;
 });
 
 function loopControl(
-  name: "break" | "continue",
+  spec: AppletSpec & { readonly name: "break" | "continue" },
   context: ShellCommandContext,
   argv: readonly string[],
 ): number {
   if (context.session.loopDepth === 0) {
-    throw new VfsError("EINVAL", `${name}: only meaningful in a loop`);
+    throw appletUsageError(spec, "only meaningful in a loop");
   }
-  if (argv.length > 1) throw new VfsError("EINVAL", `${name}: too many arguments`);
-  const requested = argv[0] === undefined ? 1 : parseInteger(argv[0], `${name} level`);
-  if (requested <= 0) throw new VfsError("EINVAL", `${name}: level must be positive`);
+  if (argv.length > 1) throw appletUsageError(spec, "too many arguments");
+  const requested = argv[0] === undefined ? 1 : parseInteger(argv[0], `${spec.name}: level`);
+  if (requested <= 0) throw appletUsageError(spec, "level must be positive");
   context.session.flow = {
-    type: name,
+    type: spec.name,
     levels: Math.min(requested, context.session.loopDepth),
   };
   return 0;
 }
 
-export const breakCommand = /* @__PURE__ */ defineCommand("break", (context, argv) =>
-  loopControl("break", context, argv),
+export const breakCommand = /* @__PURE__ */ defineApplet(BREAK, (context, argv) =>
+  loopControl(BREAK, context, argv),
 );
 
-export const continueCommand = /* @__PURE__ */ defineCommand("continue", (context, argv) =>
-  loopControl("continue", context, argv),
+export const continueCommand = /* @__PURE__ */ defineApplet(CONTINUE, (context, argv) =>
+  loopControl(CONTINUE, context, argv),
 );
 
-export const exitCommand = /* @__PURE__ */ defineCommand("exit", (context, argv) => {
-  if (argv.length > 1) throw new VfsError("EINVAL", "exit: too many arguments");
+export const exitCommand = /* @__PURE__ */ defineApplet(EXIT, (context, argv) => {
+  if (argv.length > 1) throw appletUsageError(EXIT, "too many arguments");
   const code =
     argv[0] === undefined
       ? context.session.lastExitCode
-      : parseInteger(argv[0], "exit status", Number.MIN_SAFE_INTEGER);
+      : parseInteger(argv[0], `${EXIT.name}: status`, Number.MIN_SAFE_INTEGER);
   context.session.exitRequested = true;
   context.session.requestedExitCode = code & 0xff;
   return context.session.requestedExitCode;
 });
 
-export const setCommand = /* @__PURE__ */ defineCommand("set", (context, argv) => {
+export const setCommand = /* @__PURE__ */ defineApplet(SET, (context, argv) => {
   if (argv.length === 0) return 0;
   if (
     argv.length === 1 &&
@@ -574,19 +709,19 @@ export const setCommand = /* @__PURE__ */ defineCommand("set", (context, argv) =
     if (argv[1] === "pipefail") context.session.pipefail = argv[0] === "-o";
     else if (argv[1] === "nounset") context.session.nounset = argv[0] === "-o";
     else if (argv[1] === "errexit") context.session.errexit = argv[0] === "-o";
-    else throw new VfsError("EINVAL", `set: unsupported option name: ${argv[1]}`);
+    else throw appletUsageError(SET, `unsupported option name: ${argv[1]}`);
     return 0;
   }
-  throw new VfsError(
-    "EINVAL",
-    "set: supported forms are -e, +e, -u, +u, -o/+o errexit, -o/+o nounset, or -o/+o pipefail",
+  throw appletUsageError(
+    SET,
+    "supported forms are -e, +e, -u, +u, -o/+o errexit, -o/+o nounset, or -o/+o pipefail",
   );
 });
 
 function normalizeTestInteger(value: string): NormalizedDecimalInteger {
   const normalized = normalizeDecimalInteger(value);
   if (normalized === undefined) {
-    throw new VfsError("EINVAL", "test: integer expression expected");
+    throw appletUsageError(TEST, "integer expression expected");
   }
   return normalized;
 }
@@ -639,14 +774,14 @@ async function evaluateTest(
       return order >= 0;
     }
   }
-  throw new VfsError("EINVAL", "test: unsupported expression");
+  throw appletUsageError(TEST, "unsupported expression");
 }
 
-export const testCommand = /* @__PURE__ */ defineCommand("test", async (context, argv) =>
+export const testCommand = /* @__PURE__ */ defineApplet(TEST, async (context, argv) =>
   (await evaluateTest(context, argv)) ? 0 : 1,
 );
 
-export const bracketCommand = /* @__PURE__ */ defineCommand("[", async (context, argv) => {
-  if (argv.at(-1) !== "]") throw new VfsError("EINVAL", "[: missing ]");
+export const bracketCommand = /* @__PURE__ */ defineApplet(BRACKET, async (context, argv) => {
+  if (argv.at(-1) !== "]") throw appletUsageError(BRACKET, "missing ]");
   return (await evaluateTest(context, argv.slice(0, -1))) ? 0 : 1;
 });

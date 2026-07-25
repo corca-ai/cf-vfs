@@ -3,12 +3,18 @@ import { createLineDiff, renderLineDiff } from "../../core/line-diff.js";
 import { compareUtf8 } from "../../core/path.js";
 import { applyUnifiedPatch } from "../../core/unified-patch.js";
 import {
+  type AppletSpec,
+  type AppletSpecWithOptions,
+  appletUsageError,
+  defineApplet,
+  parseAppletOptions,
+} from "./applet.js";
+import {
   BufferedTextWriter,
   type BufferLease,
   collectStream,
   collectText,
   commandPath,
-  defineCommand,
   inputStreams,
   inputTexts,
   parseInteger,
@@ -20,26 +26,38 @@ import {
   writeBytes,
   writeText,
 } from "./helpers.js";
-import { parseUtilityOptions } from "./options.js";
 
-const SORT_OPTIONS = {
-  short: {
-    r: { name: "reverse" },
-    u: { name: "unique" },
-    n: { name: "numeric" },
+const SORT = {
+  name: "sort",
+  usage: "[-nru] [FILE...]",
+  summary: "sorts records by UTF-8 byte order, or numerically with -n",
+  options: {
+    short: {
+      r: { name: "reverse" },
+      u: { name: "unique" },
+      n: { name: "numeric" },
+    },
   },
-} as const;
+} as const satisfies AppletSpecWithOptions<"reverse" | "unique" | "numeric">;
 
-const GREP_OPTIONS = {
-  short: {
-    i: { name: "ignore-case" },
-    v: { name: "invert" },
-    n: { name: "line-numbers" },
-    F: { name: "fixed" },
-    c: { name: "count" },
+const GREP = {
+  name: "grep",
+  usage: "[-cinvF] PATTERN [FILE...]",
+  summary: "prints records matching a pattern",
+  options: {
+    short: {
+      i: { name: "ignore-case" },
+      v: { name: "invert" },
+      n: { name: "line-numbers" },
+      F: { name: "fixed" },
+      c: { name: "count" },
+    },
   },
-} as const;
+} as const satisfies AppletSpecWithOptions<
+  "ignore-case" | "invert" | "line-numbers" | "fixed" | "count"
+>;
 
+/** Shared by `head` and `tail`, which accept the same option spellings. */
 const SLICE_OPTIONS = {
   short: {
     n: { name: "lines", argument: true },
@@ -52,54 +70,151 @@ const SLICE_OPTIONS = {
   oldStyleCount: "lines",
 } as const;
 
-const WC_OPTIONS = {
-  short: {
-    l: { name: "lines" },
-    w: { name: "words" },
-    c: { name: "bytes" },
+const HEAD = {
+  name: "head",
+  usage: "[-n COUNT] [-c BYTES] [FILE...]",
+  summary: "prints the leading records or bytes of its input",
+  options: SLICE_OPTIONS,
+} as const satisfies AppletSpecWithOptions<"lines" | "bytes">;
+
+const TAIL = {
+  name: "tail",
+  usage: "[-n COUNT] [-c BYTES] [FILE...]",
+  summary: "prints the trailing records or bytes of its input",
+  options: SLICE_OPTIONS,
+} as const satisfies AppletSpecWithOptions<"lines" | "bytes">;
+
+const WC = {
+  name: "wc",
+  usage: "[-lwc] [FILE...]",
+  summary: "counts records, words, and bytes",
+  options: {
+    short: {
+      l: { name: "lines" },
+      w: { name: "words" },
+      c: { name: "bytes" },
+    },
   },
-} as const;
+} as const satisfies AppletSpecWithOptions<"lines" | "words" | "bytes">;
 
-const TEE_OPTIONS = {
-  short: { a: { name: "append" } },
-  long: { append: { name: "append" } },
-} as const;
-
-const UNIQ_OPTIONS = {
-  short: { c: { name: "count" } },
-} as const;
-
-const CUT_OPTIONS = {
-  short: {
-    d: { name: "delimiter", argument: true },
-    f: { name: "fields", argument: true },
-    c: { name: "characters", argument: true },
+const TEE = {
+  name: "tee",
+  usage: "[-a] [FILE...]",
+  summary: "copies standard input to standard output and to files",
+  options: {
+    short: { a: { name: "append" } },
+    long: { append: { name: "append" } },
   },
-} as const;
+} as const satisfies AppletSpecWithOptions<"append">;
 
-const FOLD_OPTIONS = {
-  short: { w: { name: "width", argument: true } },
-} as const;
+const UNIQ = {
+  name: "uniq",
+  usage: "[-c] [FILE...]",
+  summary: "collapses adjacent duplicate records",
+  options: { short: { c: { name: "count" } } },
+} as const satisfies AppletSpecWithOptions<"count">;
 
-const COMM_OPTIONS = {
-  short: {
-    1: { name: "suppress-left" },
-    2: { name: "suppress-right" },
-    3: { name: "suppress-common" },
+const CUT = {
+  name: "cut",
+  usage: "-f LIST [-d DELIM] | -c LIST [FILE...]",
+  summary: "prints selected fields or characters of each record",
+  options: {
+    short: {
+      d: { name: "delimiter", argument: true },
+      f: { name: "fields", argument: true },
+      c: { name: "characters", argument: true },
+    },
   },
-  long: {
-    "nocheck-order": { name: "no-check-order" },
-  },
-} as const;
+} as const satisfies AppletSpecWithOptions<"delimiter" | "fields" | "characters">;
 
-const JOIN_OPTIONS = {
-  short: {
-    t: { name: "delimiter", argument: true },
-    1: { name: "left-field", argument: true },
-    2: { name: "right-field", argument: true },
-    a: { name: "include-unpaired", argument: true },
+const TR = {
+  name: "tr",
+  usage: "SET1 SET2",
+  summary: "translates characters between two equal-length sets",
+} as const satisfies AppletSpec;
+
+const NL = {
+  name: "nl",
+  usage: "[FILE...]",
+  summary: "numbers non-empty records",
+} as const satisfies AppletSpec;
+
+const FOLD = {
+  name: "fold",
+  usage: "[-w WIDTH] [FILE...]",
+  summary: "wraps records to a fixed character width",
+  options: { short: { w: { name: "width", argument: true } } },
+} as const satisfies AppletSpecWithOptions<"width">;
+
+const PASTE = {
+  name: "paste",
+  usage: "[FILE...]",
+  summary: "merges corresponding records of files into tab-separated rows",
+} as const satisfies AppletSpec;
+
+const CMP = {
+  name: "cmp",
+  usage: "FILE1 FILE2",
+  summary: "reports the first differing byte of two files",
+} as const satisfies AppletSpec;
+
+const DIFF = {
+  name: "diff",
+  usage: "FILE1 FILE2",
+  summary: "prints a unified difference between two files",
+} as const satisfies AppletSpec;
+
+const SHA256SUM = {
+  name: "sha256sum",
+  usage: "FILE...",
+  summary: "prints the SHA-256 digest of each file",
+} as const satisfies AppletSpec;
+
+const SED = {
+  name: "sed",
+  usage: "s/PATTERN/REPLACEMENT/[g] [FILE...]",
+  summary: "applies the supported substitution to each record",
+} as const satisfies AppletSpec;
+
+const COMM = {
+  name: "comm",
+  usage: "[-123] [--nocheck-order] FILE1 FILE2",
+  summary: "compares two sorted files record by record",
+  options: {
+    short: {
+      1: { name: "suppress-left" },
+      2: { name: "suppress-right" },
+      3: { name: "suppress-common" },
+    },
+    long: {
+      "nocheck-order": { name: "no-check-order" },
+    },
   },
-} as const;
+} as const satisfies AppletSpecWithOptions<
+  "suppress-left" | "suppress-right" | "suppress-common" | "no-check-order"
+>;
+
+const JOIN = {
+  name: "join",
+  usage: "[-t DELIM] [-1 FIELD] [-2 FIELD] [-a 1|2] FILE1 FILE2",
+  summary: "joins two sorted files on a common field",
+  options: {
+    short: {
+      t: { name: "delimiter", argument: true },
+      1: { name: "left-field", argument: true },
+      2: { name: "right-field", argument: true },
+      a: { name: "include-unpaired", argument: true },
+    },
+  },
+} as const satisfies AppletSpecWithOptions<
+  "delimiter" | "left-field" | "right-field" | "include-unpaired"
+>;
+
+const PATCH = {
+  name: "patch",
+  usage: "FILE [PATCHFILE]",
+  summary: "applies a unified difference to a file",
+} as const satisfies AppletSpec;
 
 function checkedLines(text: string, maximumRecords: number, maximumLineBytes: number): string[] {
   const lines = splitLines(text);
@@ -152,8 +267,8 @@ function compareNumericSortKeys(left: NumericSortKey, right: NumericSortKey): nu
   return left.negative ? -order : order;
 }
 
-export const sortCommand = /* @__PURE__ */ defineCommand("sort", async (context, argv, fds) => {
-  const parsed = parseUtilityOptions("sort", argv, SORT_OPTIONS);
+export const sortCommand = /* @__PURE__ */ defineApplet(SORT, async (context, argv, fds) => {
+  const parsed = parseAppletOptions(SORT, argv);
   const reverse = parsed.options.some((option) => option.name === "reverse");
   const unique = parsed.options.some((option) => option.name === "unique");
   const numeric = parsed.options.some((option) => option.name === "numeric");
@@ -269,8 +384,8 @@ function asciiCaseInsensitiveRegexSource(source: string): string {
   return output;
 }
 
-export const grepCommand = /* @__PURE__ */ defineCommand("grep", async (context, argv, fds) => {
-  const parsed = parseUtilityOptions("grep", argv, GREP_OPTIONS);
+export const grepCommand = /* @__PURE__ */ defineApplet(GREP, async (context, argv, fds) => {
+  const parsed = parseAppletOptions(GREP, argv);
   const ignoreCase = parsed.options.some((option) => option.name === "ignore-case");
   const invert = parsed.options.some((option) => option.name === "invert");
   const lineNumbers = parsed.options.some((option) => option.name === "line-numbers");
@@ -278,7 +393,7 @@ export const grepCommand = /* @__PURE__ */ defineCommand("grep", async (context,
   const count = parsed.options.some((option) => option.name === "count");
   const values = [...parsed.operands];
   const pattern = values.shift();
-  if (pattern === undefined) throw new VfsError("EINVAL", "grep: missing pattern");
+  if (pattern === undefined) throw appletUsageError(GREP, "missing pattern");
   if (new TextEncoder().encode(pattern).byteLength > 4096) {
     throw new VfsError("E2BIG", "grep pattern is too large");
   }
@@ -287,7 +402,7 @@ export const grepCommand = /* @__PURE__ */ defineCommand("grep", async (context,
     try {
       regular = new RegExp(ignoreCase ? asciiCaseInsensitiveRegexSource(pattern) : pattern, "u");
     } catch {
-      throw new VfsError("EINVAL", "grep: invalid regular expression");
+      throw appletUsageError(GREP, "invalid regular expression");
     }
   }
   const multipleInputs = values.length > 1;
@@ -324,7 +439,7 @@ export const grepCommand = /* @__PURE__ */ defineCommand("grep", async (context,
 });
 
 function sliceCount(
-  command: "head" | "tail",
+  spec: AppletSpecWithOptions<"lines" | "bytes">,
   argv: readonly string[],
   defaultCount: number,
 ): {
@@ -332,23 +447,23 @@ function sliceCount(
   bytes: boolean;
   paths: readonly string[];
 } {
-  const parsed = parseUtilityOptions(command, argv, SLICE_OPTIONS);
+  const parsed = parseAppletOptions(spec, argv);
   let count = defaultCount;
   let bytes = false;
   for (const option of parsed.options) {
     if (option.name === "lines" && "argument" in option) {
       bytes = false;
-      count = parseInteger(option.argument, "line count");
+      count = parseInteger(option.argument, `${spec.name}: line count`);
     } else if (option.name === "bytes" && "argument" in option) {
       bytes = true;
-      count = parseInteger(option.argument, "byte count");
+      count = parseInteger(option.argument, `${spec.name}: byte count`);
     }
   }
   return { count, bytes, paths: parsed.operands };
 }
 
-export const headCommand = /* @__PURE__ */ defineCommand("head", async (context, argv, fds) => {
-  const options = sliceCount("head", argv, 10);
+export const headCommand = /* @__PURE__ */ defineApplet(HEAD, async (context, argv, fds) => {
+  const options = sliceCount(HEAD, argv, 10);
   const headBytes = async (stream: ReadableStream<Uint8Array>): Promise<void> => {
     const reader = stream.getReader();
     let remaining = options.count;
@@ -473,8 +588,8 @@ export const headCommand = /* @__PURE__ */ defineCommand("head", async (context,
   return 0;
 });
 
-export const tailCommand = /* @__PURE__ */ defineCommand("tail", async (context, argv, fds) => {
-  const options = sliceCount("tail", argv, 10);
+export const tailCommand = /* @__PURE__ */ defineApplet(TAIL, async (context, argv, fds) => {
+  const options = sliceCount(TAIL, argv, 10);
   if (options.bytes) {
     for await (const input of inputStreams(context, options.paths, fds[0])) {
       const collected = await collectStream(context, input.stream);
@@ -501,8 +616,8 @@ export const tailCommand = /* @__PURE__ */ defineCommand("tail", async (context,
   }
 });
 
-export const wcCommand = /* @__PURE__ */ defineCommand("wc", async (context, argv, fds) => {
-  const parsed = parseUtilityOptions("wc", argv, WC_OPTIONS);
+export const wcCommand = /* @__PURE__ */ defineApplet(WC, async (context, argv, fds) => {
+  const parsed = parseAppletOptions(WC, argv);
   const linesOnly = parsed.options.some((option) => option.name === "lines");
   const wordsOnly = parsed.options.some((option) => option.name === "words");
   const bytesOnly = parsed.options.some((option) => option.name === "bytes");
@@ -567,8 +682,8 @@ export const wcCommand = /* @__PURE__ */ defineCommand("wc", async (context, arg
   return 0;
 });
 
-export const teeCommand = /* @__PURE__ */ defineCommand("tee", async (context, argv, fds) => {
-  const parsed = parseUtilityOptions("tee", argv, TEE_OPTIONS);
+export const teeCommand = /* @__PURE__ */ defineApplet(TEE, async (context, argv, fds) => {
+  const parsed = parseAppletOptions(TEE, argv);
   const append = parsed.options.some((option) => option.name === "append");
   const input = await collectStream(context, fds[0]);
   try {
@@ -584,8 +699,8 @@ export const teeCommand = /* @__PURE__ */ defineCommand("tee", async (context, a
   }
 });
 
-export const uniqCommand = /* @__PURE__ */ defineCommand("uniq", async (context, argv, fds) => {
-  const parsed = parseUtilityOptions("uniq", argv, UNIQ_OPTIONS);
+export const uniqCommand = /* @__PURE__ */ defineApplet(UNIQ, async (context, argv, fds) => {
+  const parsed = parseAppletOptions(UNIQ, argv);
   const count = parsed.options.some((option) => option.name === "count");
   const output = new BufferedTextWriter(context, fds[1]);
   let previous: string | undefined;
@@ -616,8 +731,8 @@ export const uniqCommand = /* @__PURE__ */ defineCommand("uniq", async (context,
   return 0;
 });
 
-export const cutCommand = /* @__PURE__ */ defineCommand("cut", async (context, argv, fds) => {
-  const parsed = parseUtilityOptions("cut", argv, CUT_OPTIONS);
+export const cutCommand = /* @__PURE__ */ defineApplet(CUT, async (context, argv, fds) => {
+  const parsed = parseAppletOptions(CUT, argv);
   let delimiter = "\t";
   let fields: number[] | undefined;
   let characters: number[] | undefined;
@@ -625,16 +740,20 @@ export const cutCommand = /* @__PURE__ */ defineCommand("cut", async (context, a
     if (!("argument" in option)) continue;
     if (option.name === "delimiter") delimiter = option.argument;
     else if (option.name === "fields") {
-      fields = option.argument.split(",").map((part) => parseInteger(part, "field", 1));
+      fields = option.argument
+        .split(",")
+        .map((part) => parseInteger(part, `${CUT.name}: field`, 1));
     } else if (option.name === "characters") {
-      characters = option.argument.split(",").map((part) => parseInteger(part, "character", 1));
+      characters = option.argument
+        .split(",")
+        .map((part) => parseInteger(part, `${CUT.name}: character`, 1));
     }
   }
   if ((fields === undefined) === (characters === undefined)) {
-    throw new VfsError("EINVAL", "cut: specify exactly one of -f or -c");
+    throw appletUsageError(CUT, "specify exactly one of -f or -c");
   }
   if ([...delimiter].length !== 1) {
-    throw new VfsError("EINVAL", "cut: delimiter must be exactly one character");
+    throw appletUsageError(CUT, "delimiter must be exactly one character");
   }
   const output = new BufferedTextWriter(context, fds[1]);
   try {
@@ -674,8 +793,8 @@ function characterSet(value: string): string[] {
   return [...value];
 }
 
-export const trCommand = /* @__PURE__ */ defineCommand("tr", async (context, argv, fds) => {
-  if (argv.length !== 2) throw new VfsError("EINVAL", "tr: requires SET1 and SET2");
+export const trCommand = /* @__PURE__ */ defineApplet(TR, async (context, argv, fds) => {
+  if (argv.length !== 2) throw appletUsageError(TR, "requires SET1 and SET2");
   const from = characterSet(argv[0] ?? "");
   const to = characterSet(argv[1] ?? "");
   const reader = fds[0].getReader();
@@ -717,10 +836,10 @@ export const trCommand = /* @__PURE__ */ defineCommand("tr", async (context, arg
   return 0;
 });
 
-export const nlCommand = /* @__PURE__ */ defineCommand("nl", async (context, argv, fds) => {
+export const nlCommand = /* @__PURE__ */ defineApplet(NL, async (context, argv, fds) => {
   for (const value of argv) {
     if (value.startsWith("-") && value !== "-") {
-      throw new VfsError("EINVAL", `nl: unsupported option ${value}`);
+      throw appletUsageError(NL, `unsupported option ${value}`);
     }
   }
   let lineNumber = 1;
@@ -743,12 +862,12 @@ export const nlCommand = /* @__PURE__ */ defineCommand("nl", async (context, arg
   return 0;
 });
 
-export const foldCommand = /* @__PURE__ */ defineCommand("fold", async (context, argv, fds) => {
-  const parsed = parseUtilityOptions("fold", argv, FOLD_OPTIONS);
+export const foldCommand = /* @__PURE__ */ defineApplet(FOLD, async (context, argv, fds) => {
+  const parsed = parseAppletOptions(FOLD, argv);
   let width = 80;
   for (const option of parsed.options) {
     if (option.name === "width" && "argument" in option) {
-      width = parseInteger(option.argument, "width", 1);
+      width = parseInteger(option.argument, `${FOLD.name}: width`, 1);
     }
   }
   const output = new BufferedTextWriter(context, fds[1]);
@@ -770,7 +889,7 @@ export const foldCommand = /* @__PURE__ */ defineCommand("fold", async (context,
   return 0;
 });
 
-export const pasteCommand = /* @__PURE__ */ defineCommand("paste", async (context, argv, fds) => {
+export const pasteCommand = /* @__PURE__ */ defineApplet(PASTE, async (context, argv, fds) => {
   const inputs = await inputTexts(context, argv, fds[0]);
   try {
     const columns = inputs.value.map((input) =>
@@ -788,8 +907,8 @@ export const pasteCommand = /* @__PURE__ */ defineCommand("paste", async (contex
   }
 });
 
-export const cmpCommand = /* @__PURE__ */ defineCommand("cmp", async (context, argv, fds) => {
-  if (argv.length !== 2) throw new VfsError("EINVAL", "cmp: requires two files");
+export const cmpCommand = /* @__PURE__ */ defineApplet(CMP, async (context, argv, fds) => {
+  if (argv.length !== 2) throw appletUsageError(CMP, "requires two files");
   const left = await readFileBytes(context, argv[0] ?? "");
   let right: BufferLease<Uint8Array>;
   try {
@@ -817,8 +936,8 @@ export const cmpCommand = /* @__PURE__ */ defineCommand("cmp", async (context, a
   }
 });
 
-export const diffCommand = /* @__PURE__ */ defineCommand("diff", async (context, argv, fds) => {
-  if (argv.length !== 2) throw new VfsError("EINVAL", "diff: requires two files");
+export const diffCommand = /* @__PURE__ */ defineApplet(DIFF, async (context, argv, fds) => {
+  if (argv.length !== 2) throw appletUsageError(DIFF, "requires two files");
   const inputs = await inputTexts(context, argv, fds[0]);
   try {
     const diff = createLineDiff(inputs.value[0]?.text ?? "", inputs.value[1]?.text ?? "");
@@ -830,10 +949,10 @@ export const diffCommand = /* @__PURE__ */ defineCommand("diff", async (context,
   }
 });
 
-export const sha256sumCommand = /* @__PURE__ */ defineCommand(
-  "sha256sum",
+export const sha256sumCommand = /* @__PURE__ */ defineApplet(
+  SHA256SUM,
   async (context, argv, fds) => {
-    if (argv.length === 0) throw new VfsError("EINVAL", "sha256sum: missing operand");
+    if (argv.length === 0) throw appletUsageError(SHA256SUM, "missing operand");
     for (const path of argv) {
       const stat = context.fileSystem.stat(commandPath(context, path));
       if (stat.kind !== "file") throw new VfsError("EISDIR", "is a directory", stat.path);
@@ -860,24 +979,28 @@ export const sha256sumCommand = /* @__PURE__ */ defineCommand(
   },
 );
 
-export const sedCommand = /* @__PURE__ */ defineCommand("sed", async (context, argv, fds) => {
+export const sedCommand = /* @__PURE__ */ defineApplet(SED, async (context, argv, fds) => {
   const expression = argv[0];
-  if (expression === undefined) throw new VfsError("EINVAL", "sed: missing expression");
+  if (expression === undefined) throw appletUsageError(SED, "missing expression");
   const match = /^s(.)(.*?)\1(.*?)\1(g?)$/u.exec(expression);
-  if (match === null) throw new VfsError("EINVAL", "sed: only s/old/new/[g] is supported");
+  if (match === null) throw appletUsageError(SED, "only s/old/new/[g] is supported");
   const [, , pattern = "", replacement = "", global = ""] = match;
   let regular: RegExp;
   try {
     regular = new RegExp(pattern, global === "g" ? "gu" : "u");
   } catch {
-    throw new VfsError("EINVAL", "sed: invalid regular expression");
+    throw appletUsageError(SED, "invalid regular expression");
   }
+  // The replacement is literal text in this profile. Escaping `$` keeps
+  // JavaScript's `$&`, `$\``, `$'`, and `$1` substitution syntax from leaking
+  // through and splicing other parts of the record into the output.
+  const literalReplacement = replacement.replaceAll("$", "$$$$");
   const output = new BufferedTextWriter(context, fds[1]);
   try {
     for await (const input of inputStreams(context, argv.slice(1), fds[0])) {
       for await (const line of readTextLines(context, input.stream, input.name)) {
         regular.lastIndex = 0;
-        await output.write(line.replace(regular, replacement));
+        await output.write(line.replace(regular, literalReplacement));
       }
     }
     await output.flush();
@@ -890,19 +1013,19 @@ export const sedCommand = /* @__PURE__ */ defineCommand("sed", async (context, a
 function requireSorted(lines: readonly string[], name: string): void {
   for (let index = 1; index < lines.length; index += 1) {
     if (compareUtf8(lines[index - 1] ?? "", lines[index] ?? "") > 0) {
-      throw new VfsError("EINVAL", `comm: ${name} is not sorted`);
+      throw appletUsageError(COMM, `${name} is not sorted`);
     }
   }
 }
 
-export const commCommand = /* @__PURE__ */ defineCommand("comm", async (context, argv, fds) => {
-  const parsed = parseUtilityOptions("comm", argv, COMM_OPTIONS);
+export const commCommand = /* @__PURE__ */ defineApplet(COMM, async (context, argv, fds) => {
+  const parsed = parseAppletOptions(COMM, argv);
   const suppressLeft = parsed.options.some((option) => option.name === "suppress-left");
   const suppressRight = parsed.options.some((option) => option.name === "suppress-right");
   const suppressCommon = parsed.options.some((option) => option.name === "suppress-common");
   const checkOrder = !parsed.options.some((option) => option.name === "no-check-order");
   const paths = parsed.operands;
-  if (paths.length !== 2) throw new VfsError("EINVAL", "comm: requires two files");
+  if (paths.length !== 2) throw appletUsageError(COMM, "requires two files");
   const collected = await inputTexts(context, paths, fds[0]);
   try {
     const inputs = collected.value;
@@ -968,8 +1091,8 @@ interface JoinLine {
   text: string;
 }
 
-export const joinCommand = /* @__PURE__ */ defineCommand("join", async (context, argv, fds) => {
-  const parsed = parseUtilityOptions("join", argv, JOIN_OPTIONS);
+export const joinCommand = /* @__PURE__ */ defineApplet(JOIN, async (context, argv, fds) => {
+  const parsed = parseAppletOptions(JOIN, argv);
   let delimiter = " ";
   let leftField = 1;
   let rightField = 1;
@@ -978,18 +1101,18 @@ export const joinCommand = /* @__PURE__ */ defineCommand("join", async (context,
     if (!("argument" in option)) continue;
     if (option.name === "delimiter") delimiter = option.argument;
     else if (option.name === "left-field") {
-      leftField = parseInteger(option.argument, "left join field", 1);
+      leftField = parseInteger(option.argument, `${JOIN.name}: -1 field`, 1);
     } else if (option.name === "right-field") {
-      rightField = parseInteger(option.argument, "right join field", 1);
+      rightField = parseInteger(option.argument, `${JOIN.name}: -2 field`, 1);
     } else if (option.name === "include-unpaired") {
-      const side = parseInteger(option.argument, "unpaired file", 1);
-      if (side !== 1 && side !== 2) throw new VfsError("EINVAL", "join: -a must be 1 or 2");
+      const side = parseInteger(option.argument, `${JOIN.name}: -a file`, 1);
+      if (side !== 1 && side !== 2) throw appletUsageError(JOIN, "-a must be 1 or 2");
       includeUnpaired.add(side);
     }
   }
   const paths = parsed.operands;
-  if (delimiter.length !== 1) throw new VfsError("EINVAL", "join: delimiter must be one character");
-  if (paths.length !== 2) throw new VfsError("EINVAL", "join: requires two files");
+  if (delimiter.length !== 1) throw appletUsageError(JOIN, "delimiter must be one character");
+  if (paths.length !== 2) throw appletUsageError(JOIN, "requires two files");
   const collected = await inputTexts(context, paths, fds[0]);
   try {
     const inputs = collected.value;
@@ -1003,13 +1126,13 @@ export const joinCommand = /* @__PURE__ */ defineCommand("join", async (context,
         const fields = delimiter === " " ? value.trim().split(/[ \t]+/u) : value.split(delimiter);
         const key = fields[field - 1];
         if (key === undefined) {
-          throw new VfsError("EINVAL", `join: file ${file} line ${index + 1} lacks field ${field}`);
+          throw appletUsageError(JOIN, `file ${file} line ${index + 1} lacks field ${field}`);
         }
         return { fields, key, text: value };
       });
       for (let index = 1; index < lines.length; index += 1) {
         if (compareUtf8(lines[index - 1]?.key ?? "", lines[index]?.key ?? "") > 0) {
-          throw new VfsError("EINVAL", `join: ${paths[file - 1] ?? `file ${file}`} is not sorted`);
+          throw appletUsageError(JOIN, `${paths[file - 1] ?? `file ${file}`} is not sorted`);
         }
       }
       return lines;
@@ -1080,9 +1203,9 @@ export const joinCommand = /* @__PURE__ */ defineCommand("join", async (context,
   }
 });
 
-export const patchCommand = /* @__PURE__ */ defineCommand("patch", async (context, argv, fds) => {
+export const patchCommand = /* @__PURE__ */ defineApplet(PATCH, async (context, argv, fds) => {
   if (argv.length < 1 || argv.length > 2) {
-    throw new VfsError("EINVAL", "patch: usage: patch FILE [PATCHFILE]");
+    throw appletUsageError(PATCH, "usage: patch FILE [PATCHFILE]");
   }
   const path = commandPath(context, argv[0]);
   const token = context.fileSystem.getMutationToken(path);
@@ -1109,21 +1232,26 @@ export const patchCommand = /* @__PURE__ */ defineCommand("patch", async (contex
   }
 });
 
-const SEQ_OPTIONS = {
-  short: {
-    s: { name: "separator", argument: true },
-    w: { name: "equal-width" },
+const SEQ = {
+  name: "seq",
+  usage: "[-s SEPARATOR] [-w] [FIRST [INCREMENT]] LAST",
+  summary: "prints an integer sequence",
+  options: {
+    short: {
+      s: { name: "separator", argument: true },
+      w: { name: "equal-width" },
+    },
+    negativeNumberOperands: true,
   },
-  negativeNumberOperands: true,
-} as const;
+} as const satisfies AppletSpecWithOptions<"separator" | "equal-width">;
 
 function seqOperand(value: string, name: string): number {
   if (!/^-?[0-9]+$/u.test(value)) {
-    throw new VfsError("EINVAL", `seq: ${name} must be a decimal integer`);
+    throw appletUsageError(SEQ, `${name} must be a decimal integer`);
   }
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed)) {
-    throw new VfsError("EINVAL", `seq: ${name} exceeds the safe integer range`);
+    throw appletUsageError(SEQ, `${name} exceeds the safe integer range`);
   }
   return parsed;
 }
@@ -1133,8 +1261,8 @@ function seqOperand(value: string, name: string): number {
  * Bash arithmetic or floating point, matching the project's deterministic
  * integer profile; the produced count charges the shared expansion budget.
  */
-export const seqCommand = /* @__PURE__ */ defineCommand("seq", async (context, argv, fds) => {
-  const parsed = parseUtilityOptions("seq", argv, SEQ_OPTIONS);
+export const seqCommand = /* @__PURE__ */ defineApplet(SEQ, async (context, argv, fds) => {
+  const parsed = parseAppletOptions(SEQ, argv);
   let separator = "\n";
   let equalWidth = false;
   for (const option of parsed.options) {
@@ -1142,13 +1270,13 @@ export const seqCommand = /* @__PURE__ */ defineCommand("seq", async (context, a
     if (option.name === "equal-width") equalWidth = true;
   }
   if (parsed.operands.length === 0 || parsed.operands.length > 3) {
-    throw new VfsError("EINVAL", "seq: requires one to three integer operands");
+    throw appletUsageError(SEQ, "requires one to three integer operands");
   }
   const [one = "", two, three] = parsed.operands;
   const first = two === undefined ? 1 : seqOperand(one, "FIRST");
   const increment = three === undefined ? 1 : seqOperand(two ?? "", "INCREMENT");
   const last = seqOperand(three ?? two ?? one, "LAST");
-  if (increment === 0) throw new VfsError("EINVAL", "seq: INCREMENT must not be zero");
+  if (increment === 0) throw appletUsageError(SEQ, "INCREMENT must not be zero");
 
   const values: number[] = [];
   for (let value = first; increment > 0 ? value <= last : value >= last; value += increment) {
@@ -1159,9 +1287,12 @@ export const seqCommand = /* @__PURE__ */ defineCommand("seq", async (context, a
   const width = equalWidth ? Math.max(0, ...values.map((value) => String(value).length)) : 0;
   const output = new BufferedTextWriter(context, fds[1]);
   try {
-    for (const value of values) {
-      await output.write(`${String(value).padStart(width, "0")}${separator}`);
+    // The separator joins values; the sequence always ends with one newline,
+    // so the default separator produces one record per value.
+    for (const [index, value] of values.entries()) {
+      await output.write(`${index === 0 ? "" : separator}${String(value).padStart(width, "0")}`);
     }
+    if (values.length > 0) await output.write("\n");
     await output.flush();
   } finally {
     output.abort();
@@ -1169,29 +1300,34 @@ export const seqCommand = /* @__PURE__ */ defineCommand("seq", async (context, a
   return 0;
 });
 
-const BASE64_OPTIONS = {
-  short: {
-    d: { name: "decode" },
-    w: { name: "wrap", argument: true },
+const BASE64 = {
+  name: "base64",
+  usage: "[-d] [-w COLUMNS] [FILE]",
+  summary: "encodes or decodes standard base64",
+  options: {
+    short: {
+      d: { name: "decode" },
+      w: { name: "wrap", argument: true },
+    },
+    long: {
+      decode: { name: "decode" },
+      wrap: { name: "wrap", argument: true },
+    },
   },
-  long: {
-    decode: { name: "decode" },
-    wrap: { name: "wrap", argument: true },
-  },
-} as const;
+} as const satisfies AppletSpecWithOptions<"decode" | "wrap">;
 
 /** Encodes or decodes standard base64. Decoding rejects invalid input. */
-export const base64Command = /* @__PURE__ */ defineCommand("base64", async (context, argv, fds) => {
-  const parsed = parseUtilityOptions("base64", argv, BASE64_OPTIONS);
+export const base64Command = /* @__PURE__ */ defineApplet(BASE64, async (context, argv, fds) => {
+  const parsed = parseAppletOptions(BASE64, argv);
   let decode = false;
   let wrap = 76;
   for (const option of parsed.options) {
     if (option.name === "decode") decode = true;
     if (option.name === "wrap" && "argument" in option) {
-      wrap = parseInteger(option.argument, "base64: -w", 0);
+      wrap = parseInteger(option.argument, `${BASE64.name}: -w`, 0);
     }
   }
-  if (parsed.operands.length > 1) throw new VfsError("EINVAL", "base64: accepts at most one file");
+  if (parsed.operands.length > 1) throw appletUsageError(BASE64, "accepts at most one file");
 
   const [path] = parsed.operands;
   if (decode) {
@@ -1202,7 +1338,7 @@ export const base64Command = /* @__PURE__ */ defineCommand("base64", async (cont
     try {
       const compact = input.value.replace(/[\n\r]/gu, "");
       if (!/^[A-Za-z0-9+/]*={0,2}$/u.test(compact) || compact.length % 4 !== 0) {
-        throw new VfsError("EINVAL", "base64: invalid input");
+        throw appletUsageError(BASE64, "invalid input");
       }
       const binary = atob(compact);
       const bytes = new Uint8Array(binary.length);
@@ -1224,8 +1360,9 @@ export const base64Command = /* @__PURE__ */ defineCommand("base64", async (cont
     let binary = "";
     for (const byte of input.value) binary += String.fromCharCode(byte);
     const encoded = btoa(binary);
+    // `-w 0` disables wrapping entirely, including the trailing newline.
     if (wrap === 0) {
-      await writeText(fds[1], encoded.length === 0 ? "" : `${encoded}\n`);
+      await writeText(fds[1], encoded);
       return 0;
     }
     const output = new BufferedTextWriter(context, fds[1]);

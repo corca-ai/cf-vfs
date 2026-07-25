@@ -8,6 +8,7 @@ import { compareUtf8, normalizePath, normalizePathPreservingTrailingSlash } from
 import { bodyToStream, readAllBytes } from "../vfs/streams.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 import { ExecutionBudget, resolveShellLimits } from "./budget.js";
+import { type AppletRegistry, createAppletRegistry } from "./commands/applet.js";
 import { optindGeneration } from "./environment.js";
 import { ShellNounsetError } from "./errors.js";
 import { emitShellEvent, type ShellEventSink } from "./events.js";
@@ -41,7 +42,6 @@ import type {
   ExecuteTextOptions,
   ExecuteTextResult,
   ShellBudget,
-  ShellCommand,
   ShellExecution,
   ShellFileDescriptors,
   ShellLimits,
@@ -107,7 +107,7 @@ async function abortRedirectedDescriptors(
 }
 
 interface Runtime {
-  commands: ReadonlyMap<string, ShellCommand>;
+  commands: AppletRegistry;
   fileSystem: ScopedFileSystem;
   budget: ShellBudget;
   policy: ShellPolicy;
@@ -465,12 +465,17 @@ async function executeSimpleCommand(
   }
   const [name = "", ...argv] = prepared.argv;
   const definition = session.functions.get(name);
+  // Resolve before the policy check so an allowlist naming an applet also
+  // covers its aliases and virtual `/bin` spelling, and so a denial reports
+  // the canonical name rather than the spelling that reached the shell.
+  const command = definition === undefined ? runtime.commands.lookup(name) : undefined;
+  const canonicalName = command?.name ?? name;
   if (
     definition === undefined &&
     runtime.policy.allowedCommands !== undefined &&
-    !runtime.policy.allowedCommands.includes(name)
+    !runtime.policy.allowedCommands.includes(canonicalName)
   ) {
-    throw new VfsError("EACCES", `command is not allowed: ${name}`);
+    throw new VfsError("EACCES", `command is not allowed: ${canonicalName}`);
   }
   const previous = new Map<string, string | undefined>();
   for (const value of prepared.assignments) {
@@ -482,7 +487,6 @@ async function executeSimpleCommand(
     if (definition !== undefined) {
       exitCode = await runFunction(definition, argv, session, fds, runtime, context);
     } else {
-      const command = runtime.commands.get(name);
       if (command === undefined) {
         await fds[2].write(new TextEncoder().encode(`${name}: command not found\n`));
         emitShellEvent(runtime.onEvent, { type: "shell.command", name, exitCode: 127 });
@@ -516,14 +520,16 @@ async function executeSimpleCommand(
         ).completed
       ).exitCode;
       if (!Number.isInteger(exitCode) || exitCode < 0 || exitCode > 255) {
-        throw new RangeError(`command ${name} returned an invalid exit status: ${exitCode}`);
+        throw new RangeError(
+          `command ${canonicalName} returned an invalid exit status: ${exitCode}`,
+        );
       }
     }
-    emitShellEvent(runtime.onEvent, { type: "shell.command", name, exitCode });
+    emitShellEvent(runtime.onEvent, { type: "shell.command", name: canonicalName, exitCode });
     return exitCode;
   } finally {
     const preserved =
-      name === "export"
+      canonicalName === "export"
         ? new Set(argv.map((value) => value.split("=", 1)[0] ?? ""))
         : new Set<string>();
     restoreVariables(session, previous, preserved);
@@ -1057,7 +1063,7 @@ async function runScript(
 }
 
 export class Shell {
-  private readonly commands: ReadonlyMap<string, ShellCommand>;
+  private readonly commands: AppletRegistry;
   private readonly fileSystem: ShellOptions["fileSystem"];
   private readonly policy: ShellPolicy;
   private readonly limits: ShellLimits;
@@ -1065,13 +1071,7 @@ export class Shell {
   private readonly onEvent: ShellEventSink | undefined;
 
   constructor(options: ShellOptions) {
-    const commands = new Map<string, ShellCommand>();
-    for (const command of options.commands) {
-      if (commands.has(command.name))
-        throw new VfsError("EINVAL", `duplicate command: ${command.name}`);
-      commands.set(command.name, command);
-    }
-    this.commands = commands;
+    this.commands = createAppletRegistry(options.commands);
     this.fileSystem = options.fileSystem;
     this.policy = Object.freeze({
       ...(options.policy?.readRoots === undefined
