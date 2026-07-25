@@ -151,7 +151,10 @@ not add regular expressions or pathname glob scans inside a conditional.
 Keep source byte offsets linear-time: reuse the lexer's sparse UTF-8 byte-offset
 checkpoints and preserve parser deadline checks. Re-encoding
 `source.slice(0, offset)` per token makes a bounded near-limit script
-quadratic.
+quadratic. The linear scan is the real protection here: parsing performs no
+I/O, so on Workers its deadline checks may observe a frozen `Date.now()` and
+never fire. Never let a deadline check stand in for a count-based bound — see
+[the deadline note](operations.md#execution-budgets).
 
 Regenerate the fixture only after reviewing the semantic change:
 

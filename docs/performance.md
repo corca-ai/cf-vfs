@@ -105,7 +105,9 @@ profiles. Every run uses a new Durable Object ID and calls `deleteAll()` before
 returning, so benchmark contents are not retained.
 
 Production Workers intentionally freeze `performance.now()` and `Date.now()`
-between I/O events. The deployed benchmark therefore measures each operation
+between I/O events. This affects the runtime as well as measurement; see
+[the deadline note](operations.md#execution-budgets). The deployed benchmark
+therefore measures each operation
 at the calling Worker across a Durable Object RPC boundary, rather than
 pretending an in-object synchronous timer is meaningful. Fast point operations
 are batched and reported as amortized per-operation values. Append and subtree

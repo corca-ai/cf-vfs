@@ -108,6 +108,28 @@ re-encoding every source prefix at each token, and checks the shared deadline
 while building them. Sourced units use the same execution deadline and
 cumulative parser budgets.
 
+The deadline is the one limit in this table that depends on a wall clock, and
+on Workers a wall clock is not what it appears to be. Production Workers freeze
+`Date.now()` between I/O events, so an execution that performs no I/O — a
+script working only against SQLite-backed inline files, for example — can run
+without ever observing elapsed time. Every synchronous deadline check inside
+such an execution then passes regardless of how long it has actually taken.
+
+Two mechanisms carry the guarantee instead. A `setTimeout` armed for the
+remaining deadline aborts the execution on real elapsed time, independently of
+what `Date.now()` reports; it needs the execution to reach a suspension point,
+which ordinary command, pipeline, and stream work provides. Underneath that,
+the count-based limits — steps, commands, loop iterations, AST nodes, nesting
+depth, expansion work, glob matches, and every byte budget — bound the work a
+single unit can do with no reference to time at all. They, not the deadline,
+are what makes an uninterrupted synchronous stretch finite.
+
+Treat the deadline as a bound on wall-clock latency, not as the primitive that
+makes execution finite. Supply `now` in `ShellOptions` when the application has
+a clock it trusts more, and lower the count-based limits when a workload needs
+a tighter guarantee than a timer can express. Local workerd does not reproduce
+the production freeze, so tests cannot detect a dependence on it.
+
 `read -r` consumes fd 0 with a fatal streaming UTF-8 decoder. It retains at
 most the unread suffix of one upstream chunk plus one decoded line under the
 shared buffered-byte budget, applies the one-line and total-I/O limits, and
