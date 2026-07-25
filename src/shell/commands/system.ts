@@ -127,8 +127,11 @@ export const sleepCommand = /* @__PURE__ */ defineApplet(SLEEP, async (context, 
     throw appletUsageError(SLEEP, "duration must be a whole number of seconds");
   }
   const milliseconds = Number(operand) * 1000;
-  if (milliseconds > context.budget.limits.deadlineMs) {
-    throw appletUsageError(SLEEP, "duration exceeds the execution deadline");
+  // What is left of the deadline, not the whole of it: `sleep 25` twenty
+  // seconds into a thirty-second execution can only end in a timeout, and
+  // saying so beats waiting for the abort to say it.
+  if (milliseconds > context.budget.remainingDeadlineMs()) {
+    throw appletUsageError(SLEEP, "duration exceeds the remaining execution deadline");
   }
   if (milliseconds === 0) return 0;
   context.budget.checkDeadline();

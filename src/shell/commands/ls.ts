@@ -54,7 +54,7 @@ export const lsCommand = /* @__PURE__ */ defineApplet(LS, async (context, argv, 
         .filter((entry) => entry.kind === "directory")
         .map((entry) => ({ path: entry.path, display: `${heading ?? path}/${entry.name}` }));
     };
-    for (const [index, path] of paths.entries()) {
+    for (const path of paths) {
       const normalized = commandPath(context, path);
       const stat = context.fileSystem.stat(normalized);
       if (stat.kind !== "directory" || directory) {
@@ -63,7 +63,6 @@ export const lsCommand = /* @__PURE__ */ defineApplet(LS, async (context, argv, 
         continue;
       }
       const heading = recursive || paths.length > 1 ? path : undefined;
-      void index;
       const pending = await listDirectory(normalized, heading);
       if (!recursive) continue;
       // Breadth-first, so a subtree prints in the order `ls -R` uses.

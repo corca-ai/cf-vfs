@@ -1,4 +1,5 @@
-import { compilePosixRegex } from "../../core/posix-regex.js";
+import { compilePosixRegex, type PosixMatch, type PosixRegex } from "../../core/posix-regex.js";
+import type { ShellCommandContext } from "../types.js";
 import {
   type AppletSpecWithOptions,
   appletUsageError,
@@ -11,6 +12,7 @@ import {
   inputStreams,
   readFileText,
   readTextLines,
+  writeText,
 } from "./helpers.js";
 
 const SED = {
@@ -40,7 +42,7 @@ const SED = {
 type Address =
   | { readonly kind: "line"; readonly line: number }
   | { readonly kind: "last" }
-  | { readonly kind: "regex"; readonly pattern: RegExp };
+  | { readonly kind: "regex"; readonly pattern: PosixRegex };
 
 interface Selector {
   readonly start: Address;
@@ -50,7 +52,7 @@ interface Selector {
 
 interface Substitute {
   readonly kind: "s";
-  readonly pattern: RegExp;
+  readonly pattern: PosixRegex;
   readonly replacement: string;
   readonly global: boolean;
   readonly print: boolean;
@@ -179,7 +181,6 @@ function parseSedScript(script: string): SedCommand[] {
       commands.push({
         kind: "s",
         pattern: compilePosixRegex(pattern, "basic", SED.name, {
-          global: global || occurrence > 0,
           ...(ignoreCase ? { ignoreCase: true } : {}),
         }),
         replacement,
@@ -206,7 +207,6 @@ function parseSedScript(script: string): SedCommand[] {
 function matchesAddress(address: Address, record: string, line: number, last: boolean): boolean {
   if (address.kind === "line") return line === address.line;
   if (address.kind === "last") return last;
-  address.pattern.lastIndex = 0;
   return address.pattern.test(record);
 }
 
@@ -229,7 +229,10 @@ function selects(
     else if (selector.end.kind === "line" && line >= selector.end.line) state.active = false;
   } else if (matchesAddress(selector.start, record, line, last)) {
     value = true;
-    state.active = !matchesAddress(selector.end, record, line, last);
+    // The end address is looked for from the *next* record, so `1,/a/` spans
+    // to the second `a` and `2,1` selects one record. Testing the end here
+    // would close the range on the record that opened it.
+    state.active = selector.end.kind === "line" ? selector.end.line > line : true;
   } else value = false;
   return command.negated ? !value : value;
 }
@@ -242,18 +245,18 @@ function selects(
  * escaped away so replacement text taken from data can never splice another
  * part of the record into the output.
  */
-function expandReplacement(replacement: string, match: RegExpExecArray): string {
+function expandReplacement(replacement: string, match: PosixMatch): string {
   let output = "";
   for (let index = 0; index < replacement.length; index += 1) {
     const character = replacement[index] ?? "";
     if (character === "&") {
-      output += match[0];
+      output += match.groups[0] ?? "";
       continue;
     }
     if (character === "\\") {
       const next = replacement[++index];
       if (next === undefined) break;
-      if (/[1-9]/u.test(next)) output += match[Number(next)] ?? "";
+      if (/[1-9]/u.test(next)) output += match.groups[Number(next)] ?? "";
       else if (next === "n") output += "\n";
       else if (next === "t") output += "\t";
       else output += next;
@@ -266,15 +269,14 @@ function expandReplacement(replacement: string, match: RegExpExecArray): string 
 
 function substitute(command: Substitute, record: string): { value: string; changed: boolean } {
   const pattern = command.pattern;
-  pattern.lastIndex = 0;
   if (!command.global && command.occurrence === 0) {
     const match = pattern.exec(record);
-    if (match === null) return { value: record, changed: false };
+    if (match === undefined) return { value: record, changed: false };
     return {
       value:
         record.slice(0, match.index) +
         expandReplacement(command.replacement, match) +
-        record.slice(match.index + match[0].length),
+        record.slice(match.end),
       changed: true,
     };
   }
@@ -282,17 +284,27 @@ function substitute(command: Substitute, record: string): { value: string; chang
   let last = 0;
   let seen = 0;
   let changed = false;
-  for (let match = pattern.exec(record); match !== null; match = pattern.exec(record)) {
+  let previousEnd = -1;
+  for (let from = 0; from <= record.length; ) {
+    const match = pattern.exec(record, from);
+    if (match === undefined) break;
+    // An empty match touching the end of the previous one is not a separate
+    // occurrence: `s/a*/-/g` on `baaac` gives `-b-c-`, not `-b--c-`.
+    if (match.index === match.end && match.index === previousEnd) {
+      from = match.end + 1;
+      continue;
+    }
     seen += 1;
     const replace = command.occurrence === 0 || seen >= command.occurrence;
     if (replace) {
       output += record.slice(last, match.index) + expandReplacement(command.replacement, match);
-      last = match.index + match[0].length;
+      last = match.end;
       changed = true;
       if (command.occurrence > 0 && !command.global) break;
     }
-    // A zero-width match would otherwise loop forever.
-    if (match[0] === "") pattern.lastIndex += 1;
+    previousEnd = match.end;
+    // A zero-width match would otherwise never advance.
+    from = match.end === match.index ? match.end + 1 : match.end;
   }
   return { value: output + record.slice(last), changed };
 }
@@ -357,43 +369,47 @@ export const sedCommand = /* @__PURE__ */ defineApplet(SED, async (context, argv
   const output = new BufferedTextWriter(context, fds[1]);
   try {
     if (inPlace) {
+      let failed = false;
       for (const path of operands) {
-        const normalized = commandPath(context, path);
-        const token = context.fileSystem.getMutationToken(normalized);
-        const current = context.fileSystem.readFile(normalized);
-        const source = await readFileText(context, path);
-        let edited: string;
         try {
-          edited = applyToText(commands, source.value, quiet);
-        } finally {
-          source.release();
+          await editInPlace(context, commands, path, quiet);
+        } catch (error) {
+          // One bad operand is that operand's failure. The remaining files are
+          // still edited, each under its own mutation token, and the status
+          // says something went wrong.
+          await writeText(
+            fds[2],
+            `sed: ${path}: ${error instanceof Error ? error.message : String(error)}\n`,
+          );
+          failed = true;
         }
-        // One guarded publication: the edit is either the whole new file or
-        // nothing, and a concurrent write to the same path loses.
-        await context.fileSystem.writeFile(normalized, edited, {
-          ifMutationToken: token,
-          disposition: "replace",
-          mode: current.stat.mode,
-        });
       }
-      return 0;
+      return failed ? 2 : 0;
     }
     const states: RangeState[] = commands.map(() => ({ active: false }));
+    // Numbering and `$` span the operands as one stream, the way `sed` reads
+    // them: `$` is the last record of the last file, not of each file.
+    let line = 0;
+    let pending: string | undefined;
+    let pendingEndedWithNewline = true;
     for await (const input of inputStreams(context, operands, fds[0])) {
-      let line = 0;
-      let pending: string | undefined;
       for await (const record of readTextLines(context, input.stream, input.name)) {
-        const value = record.endsWith("\n") ? record.slice(0, -1) : record;
+        const terminated = record.endsWith("\n");
+        const value = terminated ? record.slice(0, -1) : record;
         if (pending !== undefined) {
           line += 1;
           await output.write(applyRecord(commands, states, pending, line, false, quiet).output);
         }
         pending = value;
+        pendingEndedWithNewline = terminated;
       }
-      if (pending !== undefined) {
-        line += 1;
-        await output.write(applyRecord(commands, states, pending, line, true, quiet).output);
-      }
+    }
+    if (pending !== undefined) {
+      line += 1;
+      const result = applyRecord(commands, states, pending, line, true, quiet).output;
+      // An unterminated final record stays unterminated: `sed` does not add a
+      // newline the input did not have.
+      await output.write(pendingEndedWithNewline ? result : result.replace(/\n$/u, ""));
     }
     await output.flush();
   } finally {
@@ -401,6 +417,36 @@ export const sedCommand = /* @__PURE__ */ defineApplet(SED, async (context, argv
   }
   return 0;
 });
+
+/** Rewrites one file in place, as a single guarded publication. */
+async function editInPlace(
+  context: ShellCommandContext,
+  commands: readonly SedCommand[],
+  path: string,
+  quiet: boolean,
+): Promise<void> {
+  const normalized = commandPath(context, path);
+  const token = context.fileSystem.getMutationToken(normalized);
+  // `stat`, not `readFile`: an inline read acquires an in-flight byte lease
+  // that is released only when its stream is consumed, and this needs the
+  // mode, not the bytes. Taking one here would leak the filesystem-wide
+  // budget on every edit.
+  const mode = context.fileSystem.stat(normalized).mode;
+  const source = await readFileText(context, path);
+  let edited: string;
+  try {
+    edited = applyToText(commands, source.value, quiet);
+  } finally {
+    source.release();
+  }
+  // The edit is either the whole new file or nothing, and a concurrent write
+  // to the same path loses.
+  await context.fileSystem.writeFile(normalized, edited, {
+    ifMutationToken: token,
+    disposition: "replace",
+    mode,
+  });
+}
 
 /** Applies the script to a whole buffered text, for `-i`. */
 function applyToText(commands: readonly SedCommand[], text: string, quiet: boolean): string {
@@ -411,14 +457,12 @@ function applyToText(commands: readonly SedCommand[], text: string, quiet: boole
   if (trailing) records.pop();
   let output = "";
   for (const [index, record] of records.entries()) {
-    output += applyRecord(
-      commands,
-      states,
-      record,
-      index + 1,
-      index === records.length - 1,
-      quiet,
-    ).output;
+    const last = index === records.length - 1;
+    const piece = applyRecord(commands, states, record, index + 1, last, quiet).output;
+    // An unterminated final record stays unterminated, and only that record's
+    // own output loses a newline: a `d` on the last line must not strip the
+    // newline that belonged to the line before it.
+    output += last && !trailing ? piece.replace(/\n$/u, "") : piece;
   }
-  return trailing || output === "" ? output : output.replace(/\n$/u, "");
+  return output;
 }

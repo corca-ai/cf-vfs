@@ -310,12 +310,19 @@ export const cpCommand = /* @__PURE__ */ defineApplet(CP, async (context, argv) 
   if (values.length !== 2) throw appletUsageError(CP, "requires source and destination");
   const source = commandPath(context, values[0]);
   const target = destinationPath(context, source, values[1] ?? "");
-  const mode = preserve ? context.fileSystem.stat(source).mode : undefined;
+  const preserved = preserve ? context.fileSystem.stat(source) : undefined;
   await context.fileSystem.copy(source, target, { replace, recursive });
-  // Mode bits are the only attribute this namespace has to preserve: there is
-  // no owner, group, or access time behind them. A recursive copy already
-  // carries each entry's own bits, so only the named target needs restating.
-  if (mode !== undefined) context.fileSystem.setMetadata(target, { mode });
+  // Mode bits and the modification time are what this namespace has to
+  // preserve; there is no owner, group, or access time behind them. A copy
+  // carries each entry's own bits already but stamps every entry with the
+  // current time, so the named target is restated here. Descendants of a
+  // recursive copy keep the copy's time, which is a declared divergence.
+  if (preserved !== undefined) {
+    context.fileSystem.setMetadata(target, {
+      mode: preserved.mode,
+      modifiedAtMs: preserved.modifiedAtMs,
+    });
+  }
   return 0;
 });
 
@@ -414,14 +421,17 @@ export const findCommand = /* @__PURE__ */ defineApplet(FIND, async (context, ar
   const run = async (paths: readonly string[]): Promise<void> => {
     const expanded = exec.batch
       ? [...exec.argv.slice(0, -1), ...paths]
-      : exec.argv.map((word) => (word === "{}" ? (paths[0] ?? "") : word));
+      : // Every occurrence, not only a word that is exactly `{}`: the idiom
+        // `-exec mv {} {}.bak ;` otherwise renames onto a literal `{}.bak`.
+        exec.argv.map((word) => word.split("{}").join(paths[0] ?? ""));
     const status = await context.executeCommand(expanded, fds);
-    if (status !== 0) failed = true;
+    // Only the `+` form propagates a failing invocation. With `;` the status of
+    // each command is `find`'s business and not its result, as POSIX has it.
+    if (status !== 0 && exec.batch) failed = true;
   };
   if (exec.batch) {
     // Batches are bounded so one invocation cannot carry an unbounded argv.
     for (let start = 0; start < matched.length; start += FIND_EXEC_BATCH) {
-      if (matched.length === 0) break;
       await run(matched.slice(start, start + FIND_EXEC_BATCH));
     }
   } else {
@@ -460,14 +470,14 @@ export const statCommand = /* @__PURE__ */ defineApplet(STAT, async (context, ar
     const stat = context.fileSystem.stat(commandPath(context, path));
     await writeText(
       fds[1],
-      format === undefined ? statText(stat) : `${statFormat(format, stat)}\n`,
+      format === undefined ? statText(stat) : `${statFormat(format, stat, path)}\n`,
     );
   }
   return 0;
 });
 
 /** Expands the `-c` conversions this namespace can answer. */
-function statFormat(format: string, stat: VfsStat): string {
+function statFormat(format: string, stat: VfsStat, operand: string): string {
   let output = "";
   for (let index = 0; index < format.length; index += 1) {
     const character = format[index] ?? "";
@@ -481,9 +491,11 @@ function statFormat(format: string, stat: VfsStat): string {
       continue;
     }
     const conversion = format[++index];
-    if (conversion === "n") output += stat.path;
+    if (conversion === "n") output += operand;
     else if (conversion === "s") output += String(stat.sizeBytes);
-    else if (conversion === "f") output += stat.mode.toString(8);
+    // `%f` is the raw mode in hex, which is what GNU prints; `%a` is the
+    // permission bits in octal.
+    else if (conversion === "f") output += stat.mode.toString(16);
     else if (conversion === "a") output += (stat.mode & 0o7777).toString(8);
     else if (conversion === "A") output += modeString(stat.mode);
     else if (conversion === "F") output += stat.kind === "directory" ? "directory" : "regular file";

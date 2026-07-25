@@ -368,13 +368,31 @@ export const grepCommand = /* @__PURE__ */ defineApplet(GREP, async (context, ar
   const sources = recursive
     ? recursiveInputs(context, values)
     : inputStreams(context, values, fds[0]);
-  // With `-r` one directory operand still expands to many files, so the name is
-  // shown whenever more than one source can appear.
-  const showName = !noFilename && (values.length > 1 || recursive);
+  // The name is shown when more than one file can be searched. Under `-r` that
+  // means a directory operand — `grep -r pattern one.txt` prints bare lines,
+  // exactly as the non-recursive form does.
+  const expands = (path: string): boolean => {
+    try {
+      return context.fileSystem.stat(commandPath(context, path)).kind === "directory";
+    } catch {
+      return false;
+    }
+  };
+  const showName =
+    !noFilename &&
+    (values.length > 1 || (recursive && (values.length === 0 || values.some(expands))));
   let matches = 0;
+  let failed = false;
   const output = new BufferedTextWriter(context, fds[1]);
   try {
     for await (const input of sources) {
+      if (input.stream === undefined) {
+        // One unreadable file is that file's failure. Reporting it and going on
+        // keeps the matches already found, which is what `grep -r` does.
+        await writeText(fds[2], `grep: ${input.name}: ${input.error.message}\n`);
+        failed = true;
+        continue;
+      }
       let inputMatches = 0;
       let index = 0;
       for await (const line of readTextLines(context, input.stream, input.name)) {
@@ -383,7 +401,6 @@ export const grepCommand = /* @__PURE__ */ defineApplet(GREP, async (context, ar
         const found = fixed
           ? (ignoreCase ? asciiLower(candidate) : candidate).includes(needle)
           : (regular?.test(candidate) ?? false);
-        if (regular !== undefined) regular.lastIndex = 0;
         if (found === invert) continue;
         matches += 1;
         inputMatches += 1;
@@ -403,6 +420,9 @@ export const grepCommand = /* @__PURE__ */ defineApplet(GREP, async (context, ar
   } finally {
     output.abort();
   }
+  // `grep` reserves 2 for "something went wrong", so a caller can tell an
+  // unreadable file apart from a file with no matches.
+  if (failed && !quiet) return 2;
   return matches > 0 ? 0 : 1;
 });
 

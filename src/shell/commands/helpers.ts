@@ -114,12 +114,30 @@ export async function* inputStreams(
  * page charges the shared glob budget, which is what bounds the walk, and a
  * non-directory operand is yielded as itself so `grep -r file` still works.
  */
+/**
+ * One entry of a recursive walk: an openable stream, or the reason it is not.
+ *
+ * Only the walk produces the failing member. A named operand that cannot be
+ * opened is the caller's own error and still throws; an unreadable file found
+ * partway through a subtree is not, and stopping the walk there would throw
+ * away every match already reported.
+ */
+export type CommandInput =
+  | {
+      readonly name: string;
+      readonly stream: ReadableStream<Uint8Array>;
+      readonly error?: undefined;
+    }
+  | { readonly name: string; readonly stream?: undefined; readonly error: VfsError };
+
 export async function* recursiveInputs(
   context: ShellCommandContext,
   paths: readonly string[],
-): AsyncGenerator<{ name: string; stream: ReadableStream<Uint8Array> }> {
-  for (const path of paths.length === 0 ? ["."] : paths) {
-    const normalized = commandPath(context, path);
+): AsyncGenerator<CommandInput> {
+  // With no operand the walk starts at the working directory but reports bare
+  // relative paths, as `grep -r` does — an explicit `.` is what prints `./`.
+  for (const path of paths.length === 0 ? [""] : paths) {
+    const normalized = commandPath(context, path === "" ? "." : path);
     const stat = context.fileSystem.stat(normalized);
     if (stat.kind !== "directory") {
       yield { name: path, stream: context.fileSystem.readFile(normalized).stream };
@@ -136,7 +154,22 @@ export async function* recursiveInputs(
       });
       context.budget.glob(page.scanned);
       for (const entry of page.entries) {
-        yield { name: display(entry.path), stream: context.fileSystem.readFile(entry.path).stream };
+        const name = display(entry.path);
+        // One unreadable entry in a subtree is that entry's failure, not the
+        // walk's: reporting it and carrying on keeps the matches already found
+        // and matches what `grep -r` does with a file it cannot open.
+        let stream: ReadableStream<Uint8Array>;
+        try {
+          stream = context.fileSystem.readFile(entry.path).stream;
+        } catch (error) {
+          yield {
+            name,
+            error:
+              error instanceof VfsError ? error : new VfsError("EIO", "read failed", entry.path),
+          };
+          continue;
+        }
+        yield { name, stream };
       }
       cursor = page.nextCursor;
     } while (cursor !== null);
@@ -153,6 +186,7 @@ export async function* recursiveInputs(
 export function displayPath(operand: string, resolved: string, entry: string): string {
   if (entry === resolved) return operand;
   const suffix = resolved === "/" ? entry : entry.slice(resolved.length);
+  if (operand === "") return suffix.replace(/^\//u, "");
   return `${operand.replace(/\/$/u, "")}${suffix}`;
 }
 

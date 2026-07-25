@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compilePosixRegex, translatePosixRegex } from "../src/core/posix-regex.js";
+import { compilePosixRegex } from "../src/core/posix-regex.js";
 import { bashCases, createBashHarness } from "./helpers/bash.js";
 
 const TREE = {
@@ -8,86 +8,129 @@ const TREE = {
   "/t/c.log": "nothing\n",
 };
 
-describe("POSIX regular-expression translation", () => {
+describe("POSIX regular-expression matching", () => {
+  const matches = (
+    pattern: string,
+    dialect: "basic" | "extended",
+    subject: string,
+    options: { ignoreCase?: boolean } = {},
+  ): boolean => compilePosixRegex(pattern, dialect, "grep", options).test(subject);
+
   it("gives each dialect its own metacharacters", () => {
-    expect(translatePosixRegex("a+", "basic", "grep")).toBe("a\\+");
-    expect(translatePosixRegex("a+", "extended", "grep")).toBe("a+");
-    expect(translatePosixRegex("a\\+", "basic", "grep")).toBe("a+");
-    expect(translatePosixRegex("a\\|b", "basic", "grep")).toBe("a|b");
-    expect(translatePosixRegex("a|b", "extended", "grep")).toBe("a|b");
-    expect(translatePosixRegex("a|b", "basic", "grep")).toBe("a\\|b");
+    // Bare `+` repeats in an extended expression and is a literal in a basic
+    // one; a backslash swaps which is which.
+    expect(matches("a+", "extended", "aa")).toBe(true);
+    expect(matches("a+", "basic", "a+")).toBe(true);
+    expect(matches("a+", "basic", "aa")).toBe(false);
+    expect(matches("a\\+", "basic", "aa")).toBe(true);
+    expect(matches("a\\|b", "basic", "b")).toBe(true);
+    expect(matches("a|b", "extended", "b")).toBe(true);
+    expect(matches("a|b", "basic", "a|b")).toBe(true);
   });
 
   it("anchors only where POSIX does", () => {
-    expect(translatePosixRegex("^a$", "basic", "grep")).toBe("^a$");
+    expect(matches("^a$", "basic", "a")).toBe(true);
+    expect(matches("^a$", "basic", "ba")).toBe(false);
     // A caret in the middle is a literal in a basic expression.
-    expect(translatePosixRegex("a^b", "basic", "grep")).toBe("a\\^b");
-    expect(translatePosixRegex("a$b", "basic", "grep")).toBe("a\\$b");
+    expect(matches("a^b", "basic", "a^b")).toBe(true);
+    expect(matches("a$b", "basic", "a$b")).toBe(true);
   });
 
   it("expands POSIX character classes in the C locale", () => {
-    expect(compilePosixRegex("[[:digit:]]", "basic", "grep").test("5")).toBe(true);
-    expect(compilePosixRegex("[[:digit:]]", "basic", "grep").test("x")).toBe(false);
-    expect(compilePosixRegex("[[:alpha:][:digit:]]", "basic", "grep").test("7")).toBe(true);
-    expect(compilePosixRegex("[^[:digit:]]", "basic", "grep").test("x")).toBe(true);
-    expect(compilePosixRegex("[a-c]", "basic", "grep").test("b")).toBe(true);
-    expect(compilePosixRegex("[a-c]", "basic", "grep").test("d")).toBe(false);
+    expect(matches("[[:digit:]]", "basic", "5")).toBe(true);
+    expect(matches("[[:digit:]]", "basic", "x")).toBe(false);
+    expect(matches("[[:alpha:][:digit:]]", "basic", "7")).toBe(true);
+    expect(matches("[^[:digit:]]", "basic", "x")).toBe(true);
+    expect(matches("[a-c]", "basic", "b")).toBe(true);
+    expect(matches("[a-c]", "basic", "d")).toBe(false);
     // A leading `]` is a literal, as POSIX has it.
-    expect(compilePosixRegex("[]a]", "basic", "grep").test("]")).toBe(true);
+    expect(matches("[]a]", "basic", "]")).toBe(true);
   });
 
-  it("folds case for ASCII only", () => {
-    const insensitive = compilePosixRegex("k", "basic", "grep", { ignoreCase: true });
-    expect(insensitive.test("K")).toBe(true);
+  it("folds case for ASCII only, everywhere a letter can appear", () => {
+    const fold = { ignoreCase: true };
+    expect(matches("k", "basic", "K", fold)).toBe(true);
     // The Kelvin sign and the long s fold onto k and s in Unicode. The runtime
     // declares the C locale, so they must not match here.
-    expect(insensitive.test("\u212a")).toBe(false);
-    expect(compilePosixRegex("s", "basic", "grep", { ignoreCase: true }).test("\u017f")).toBe(
-      false,
-    );
-    expect(compilePosixRegex("[a-c]", "basic", "grep", { ignoreCase: true }).test("B")).toBe(true);
+    expect(matches("k", "basic", "\u212a", fold)).toBe(false);
+    expect(matches("s", "basic", "\u017f", fold)).toBe(false);
+    // A bracket folds each member, not just a lowercase range.
+    expect(matches("[a-c]", "basic", "B", fold)).toBe(true);
+    expect(matches("[abc]", "basic", "A", fold)).toBe(true);
+    expect(matches("[ABC]", "basic", "c", fold)).toBe(true);
+    expect(matches("[A-F]", "basic", "d", fold)).toBe(true);
+    expect(matches("[abc]", "basic", "D", fold)).toBe(false);
+    // A trailing literal `-` must survive folding rather than become a range.
+    expect(matches("[a-z0-9_-]", "basic", "-", fold)).toBe(true);
+    expect(matches("[a-z0-9_-]", "basic", "Q", fold)).toBe(true);
+    // A negated set folds its members before the negation applies.
+    expect(matches("[^a-c]", "basic", "B", fold)).toBe(false);
   });
 
   it("refuses every construct outside the declared subset", () => {
     for (const pattern of ["\\d", "\\w", "\\s", "\\b", "\\<", "\\1", "\\A"]) {
       expect(() => compilePosixRegex(pattern, "extended", "grep"), pattern).toThrowError(/grep:/u);
     }
-    for (const malformed of ["[abc", "\\", "(a", "a)", "+a", "a{", "[[:nope:]]", "[]"]) {
+    for (const malformed of ["[abc", "\\", "(a", "a)", "a{", "[[:nope:]]", "[]"]) {
       expect(() => compilePosixRegex(malformed, "extended", "grep"), malformed).toThrowError(
         /grep:/u,
       );
     }
+    // An equivalence class or collating symbol has no meaning without a locale
+    // table, and matching its punctuation literally would be a wrong answer
+    // rather than a refusal.
+    for (const bracket of ["[[=a=]]", "[[.a.]]"]) {
+      expect(() => compilePosixRegex(bracket, "basic", "grep"), bracket).toThrowError(/grep:/u);
+    }
   });
 
   it("treats a leading repetition operator as a literal, as POSIX does", () => {
-    expect(compilePosixRegex("*ab", "basic", "grep").test("*ab")).toBe(true);
-    expect(compilePosixRegex("*ab", "extended", "grep").test("*ab")).toBe(true);
+    expect(matches("*ab", "basic", "*ab")).toBe(true);
+    expect(matches("*ab", "extended", "*ab")).toBe(true);
+    // A `*` after an anchor is a literal asterisk, as GNU has it.
+    expect(matches("^*x", "basic", "*x")).toBe(true);
   });
 
-  it("never emits a source JavaScript cannot compile", () => {
-    // A repetition operator consumes what it repeats, so a stacked one has
-    // nothing left and must be refused rather than emitted as `b?*`, which
-    // JavaScript rejects and which would surface as an opaque failure.
-    for (const stacked of ["b?*", "b*+", "a\\{2\\}*", "^*"]) {
-      for (const dialect of ["basic", "extended"] as const) {
-        let source: string | undefined;
-        try {
-          source = translatePosixRegex(stacked, dialect, "grep");
-        } catch (error) {
-          expect((error as { name?: string }).name, `${stacked} ${dialect}`).toBe("VfsError");
-          continue;
-        }
-        expect(() => new RegExp(source, "u"), `${stacked} ${dialect}`).not.toThrow();
-      }
-    }
-    // A `*` after an anchor is a literal asterisk, as GNU has it.
-    expect(compilePosixRegex("^*x", "basic", "grep").test("*x")).toBe(true);
+  it("accepts a stacked repetition rather than inventing a literal", () => {
+    // GNU reads `a**` as `a*`. Treating the second star as a literal would
+    // silently match different text.
+    expect(matches("a**", "extended", "aaa")).toBe(true);
+    expect(matches("a**b", "extended", "b")).toBe(true);
+    expect(matches("a\\{2\\}*", "basic", "aaaa")).toBe(true);
   });
 
   it("keeps a JavaScript group construct from meaning anything", () => {
-    // `(?:` is a non-capturing group in JavaScript and three literals in POSIX.
-    expect(compilePosixRegex("(?:a)", "basic", "grep").test("(?:a)")).toBe(true);
-    expect(() => compilePosixRegex("(?:a)", "extended", "grep")).toThrowError(/nothing to repeat/u);
+    // `(?:a)` is a non-capturing group in JavaScript. Here `?` has nothing to
+    // repeat, so it is one more literal and the group still captures.
+    expect(matches("(?:a)", "basic", "(?:a)")).toBe(true);
+    expect(matches("(?:a)", "extended", "?:a")).toBe(true);
+    expect(matches("(?:a)", "extended", "a")).toBe(false);
+  });
+
+  it("matches in time linear in the record, whatever the pattern", () => {
+    // A backtracking engine takes exponential time on both of these. They are
+    // short enough for any caller to type, and a synchronous match cannot be
+    // interrupted by the deadline or the abort signal, so the bound has to come
+    // from the matcher itself.
+    const runs = [
+      { pattern: "(a+)+$", subject: `${"a".repeat(2000)}!`, expected: false },
+      // `(a|a)*` matches empty, so this one succeeds at the end of the record.
+      { pattern: "(a|a)*$", subject: `${"a".repeat(2000)}!`, expected: true },
+      { pattern: "a*a*a*a*a*a*a*a*b", subject: "a".repeat(2000), expected: false },
+    ];
+    for (const { pattern, subject, expected } of runs) {
+      const compiled = compilePosixRegex(pattern, "extended", "grep");
+      const started = performance.now();
+      expect(compiled.test(subject), pattern).toBe(expected);
+      expect(performance.now() - started, pattern).toBeLessThan(2000);
+    }
+  });
+
+  it("reports the leftmost match with its groups", () => {
+    const compiled = compilePosixRegex("\\(a*\\)b", "basic", "sed");
+    expect(compiled.exec("xxaabyy")).toEqual({ index: 2, end: 5, groups: ["aab", "aa"] });
+    expect(compiled.exec("xxaabyy", 5)).toBeUndefined();
+    expect(compilePosixRegex("b", "basic", "sed").exec("aba", 2)).toBeUndefined();
   });
 });
 
@@ -158,9 +201,20 @@ describe("grep profile", () => {
         createParents: true,
       });
     }
+    // The point of the paged walk is that the number of traversal queries does
+    // not grow with the number of files; counting them is the only way to see
+    // that, since a per-file query would give the same output.
+    const findPage = harness.fileSystem.findPage.bind(harness.fileSystem);
+    let queries = 0;
+    harness.fileSystem.findPage = (options) => {
+      queries += 1;
+      return findPage(options);
+    };
     const result = await harness.run("grep -rl needle /many | wc -l");
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe("120\n");
+    expect(queries).toBeGreaterThan(0);
+    expect(queries).toBeLessThanOrEqual(4);
   });
 });
 
@@ -239,16 +293,34 @@ describe("sed profile", () => {
   it("leaves the file untouched when a concurrent write wins", async () => {
     const harness = createBashHarness();
     await harness.fileSystem.writeFile("/race.txt", "alpha\n");
-    const token = harness.fileSystem.getMutationToken("/race.txt");
-    await harness.fileSystem.writeFile("/race.txt", "changed\n");
-    // A stale token must be refused rather than silently overwriting.
-    await expect(
-      harness.fileSystem.writeFile("/race.txt", "sed-would-write\n", {
-        ifMutationToken: token,
-        disposition: "replace",
-      }),
-    ).rejects.toThrowError(expect.objectContaining({ code: "EREVISION" }));
+    // A competing writer lands in the window between the token `sed -i` takes
+    // and the publication it guards, which is the whole point of the token.
+    const writeFile = harness.fileSystem.writeFile.bind(harness.fileSystem);
+    let raced = false;
+    harness.fileSystem.writeFile = async (path, data, options) => {
+      if (!raced && path === "/race.txt" && options?.ifMutationToken !== undefined) {
+        raced = true;
+        await writeFile(path, "changed\n");
+      }
+      return writeFile(path, data, options);
+    };
+    const result = await harness.run("sed -i 's/alpha/beta/' /race.txt");
+    expect(raced).toBe(true);
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("sed: /race.txt:");
+    // The edit is refused whole rather than overwriting the winner.
     expect(await harness.readText("/race.txt")).toBe("changed\n");
+  });
+
+  it("edits the remaining operands after one fails", async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/k1.txt", "x\n");
+    await harness.fileSystem.writeFile("/k2.txt", "x\n");
+    const result = await harness.run("sed -i 's/x/X/' /k1.txt /missing.txt /k2.txt");
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("sed: /missing.txt:");
+    expect(await harness.readText("/k1.txt")).toBe("X\n");
+    expect(await harness.readText("/k2.txt")).toBe("X\n");
   });
 });
 
@@ -273,10 +345,20 @@ describe("find actions", () => {
       stdout: "alpha\nalpha\nbeta\ngamma\n",
     },
     {
-      name: "reports a failing invocation without stopping the walk",
+      name: "does not fail when a ; invocation does, and does when a + one does",
       files: TREE,
-      script: "find /t -name '*.txt' -exec false {} ';'; printf '%s' \"$?\"",
-      stdout: "1",
+      // POSIX: with `;` the status of each command is `find`'s business and not
+      // its result. Only the `+` form propagates a failure.
+      script:
+        "find /t -name '*.txt' -exec false {} ';'; printf '%s' \"$?\"; " +
+        "find /t -name '*.txt' -exec false {} +; printf '%s' \"$?\"",
+      stdout: "01",
+    },
+    {
+      name: "substitutes {} everywhere in a word, not only on its own",
+      files: TREE,
+      script: "find /t -name 'a.txt' -exec printf '[%s]' 'pre{}post' ';'",
+      stdout: "[pre/t/a.txtpost]",
     },
     {
       name: "requires a terminator",
@@ -395,7 +477,7 @@ describe("small deterministic utilities", () => {
     const harness = createBashHarness({ limits: { deadlineMs: 500 } });
     const result = await harness.run("sleep 5");
     expect(result.exitCode).toBe(2);
-    expect(result.stderr).toContain("sleep: duration exceeds the execution deadline");
+    expect(result.stderr).toContain("sleep: duration exceeds the remaining execution deadline");
   });
 
   it("wakes a sleep when the execution is cancelled", async () => {
@@ -406,6 +488,9 @@ describe("small deterministic utilities", () => {
     setTimeout(() => controller.abort(), 20);
     const result = await running;
     expect(result.stdout).toBe("");
+    // A cancelled execution reports failure rather than succeeding silently,
+    // and the statement after the sleep never runs.
+    expect(result.exitCode).not.toBe(0);
     expect(Date.now() - started).toBeLessThan(5_000);
   });
 });

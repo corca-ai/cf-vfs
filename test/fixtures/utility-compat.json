@@ -122,7 +122,7 @@
       "command": "grep, sed",
       "oracle": "coreutils",
       "summary": "patterns are a declared subset of POSIX basic and extended expressions; anything outside it is a usage error",
-      "reason": "Patterns are translated rather than handed to the JavaScript engine, so no JavaScript-only construct can mean something here that it does not mean in grep. The subset is literals, `.`, `*`, bracket expressions with ranges and POSIX classes, `^`, `$`, grouping, alternation, `+`, `?`, and intervals. Back-references and the GNU extensions `\\\\w`, `\\\\b`, `\\\\<`, and `\\\\>` are refused with status 2 rather than approximated, and `-i` folds the twenty-six ASCII pairs only, because the runtime declares LC_ALL=C. A repetition operator also cannot be stacked: GNU accepts `a**` and `a??`, while this profile refuses them, because a repetition consumes what it repeats and the alternative is emitting a JavaScript lazy quantifier that means something else."
+      "reason": "Patterns are parsed and matched by this project rather than handed to the JavaScript engine, so no JavaScript-only construct can mean something here that it does not mean in grep. The subset is literals, `.`, `*`, bracket expressions with ranges and POSIX classes, `^`, `$`, grouping, alternation, `+`, `?`, and intervals. Back-references, the GNU extensions `\\\\w`, `\\\\b`, `\\\\<`, and `\\\\>`, equivalence classes, and collating symbols are refused with status 2 rather than approximated, and `-i` folds the twenty-six ASCII pairs only, because the runtime declares LC_ALL=C."
     },
     {
       "id": "sed-language-is-a-bounded-subset",
@@ -130,6 +130,20 @@
       "oracle": "coreutils",
       "summary": "sed implements s, p, and d with addresses; the rest of the language is refused",
       "reason": "Hold space, branching, labels, and `a`, `i`, `c`, `y`, `r`, and `w` are a programming language rather than a utility, and several of them need state across records that a streaming profile cannot bound. Every command in the subset reads only the current record, so ordinary operation streams; `-i` is the one barrier and publishes a single guarded whole-file write. An unsupported command is status 2."
+    },
+    {
+      "id": "regexp-alternation-is-leftmost-first",
+      "command": "grep, sed",
+      "oracle": "coreutils",
+      "summary": "alternation picks the first branch that matches rather than the longest, so `sed 's/a\\\\|ab/X/'` on `ab` gives `Xb` where GNU gives `X`",
+      "reason": "Matching is a Thompson simulation, which is linear in the record however the pattern is written. A backtracking engine gives POSIX leftmost-longest more cheaply but has no bound: `grep 'a*a*a*a*a*a*a*a*b'` against thirty-two characters takes seconds, and a synchronous match cannot be interrupted by the abort signal or the execution deadline, so one short pattern from a caller would burn the whole CPU limit. Bounded execution is the stronger requirement, and leftmost-first is the price. Whether a record matches at all is unaffected; only which text a group captures can differ."
+    },
+    {
+      "id": "cp-preserve-does-not-restate-descendants",
+      "command": "cp",
+      "oracle": "coreutils",
+      "summary": "-p restores the mode and modification time of the named target only; entries beneath a recursive copy keep the time of the copy",
+      "reason": "Restating every descendant would mean a second full walk of the subtree with one write per entry, which is unbounded work hidden behind a two-character option. The named target covers the ordinary use, and `find`-driven restatement covers the rest."
     }
   ],
   "cases": [
@@ -1288,6 +1302,170 @@
       "oracle": "coreutils",
       "script": "expr 1 = 2; printf 'status=%s\\n' \"$?\"",
       "stdout": "0\nstatus=1\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-range-regex-end-searched-from-next-record",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "a\nb\na\nc\na\n"
+      },
+      "script": "sed -n '1,/a/p' in.txt",
+      "stdout": "a\nb\na\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-range-numeric-start-regex-end",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "a\nb\na\nc\na\n"
+      },
+      "script": "sed -n '2,/b/p' in.txt",
+      "stdout": "b\na\nc\na\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-range-same-pattern-both-ends",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "a\nb\na\nc\na\n"
+      },
+      "script": "sed -n '/a/,/a/p' in.txt",
+      "stdout": "a\nb\na\na\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-range-numeric-reversed-selects-one",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "1\n2\n3\n4\n"
+      },
+      "script": "sed -n '2,1p' in.txt",
+      "stdout": "2\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-line-numbers-span-operands",
+      "oracle": "coreutils",
+      "files": {
+        "f1.txt": "one\ntwo\n",
+        "f2.txt": "three\nfour\n"
+      },
+      "script": "sed -n '$p' f1.txt f2.txt; sed -n '1p' f1.txt f2.txt; sed -n '3p' f1.txt f2.txt",
+      "stdout": "four\none\nthree\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-keeps-an-unterminated-final-record",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "a"
+      },
+      "script": "sed 's/a/b/' in.txt; printf '|'",
+      "stdout": "b|",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-deleting-the-last-record-keeps-the-previous-newline",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "a\nb"
+      },
+      "script": "sed '$d' in.txt; printf '|'",
+      "stdout": "a\n|",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-global-skips-an-empty-match-after-a-match",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "baaac\n"
+      },
+      "script": "sed 's/a*/-/g' in.txt",
+      "stdout": "-b-c-\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-ignore-case-folds-bracket-members",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "ABC\ndef\nQ\n-\n"
+      },
+      "script": "grep -i '[abc]' in.txt; grep -i '[ABC]' in.txt; grep -ic '[a-z0-9_-]' in.txt",
+      "stdout": "ABC\nABC\n4\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-ignore-case-keeps-a-trailing-literal-dash",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "a-b\nQ\n"
+      },
+      "script": "grep -i '[a-z0-9_-]' in.txt",
+      "stdout": "a-b\nQ\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-recursive-single-file-operand-is-unnamed",
+      "oracle": "coreutils",
+      "files": {
+        "one.txt": "hit\n"
+      },
+      "script": "grep -r hit one.txt",
+      "stdout": "hit\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-recursive-without-an-operand-names-bare-paths",
+      "oracle": "coreutils",
+      "files": {
+        "t/a.txt": "hit\n",
+        "t/sub/b.txt": "hit\n",
+        "one.txt": "hit\n"
+      },
+      "script": "grep -r hit | sort",
+      "stdout": "one.txt:hit\nt/a.txt:hit\nt/sub/b.txt:hit\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-recursive-explicit-dot-keeps-its-prefix",
+      "oracle": "coreutils",
+      "files": {
+        "t/a.txt": "hit\n",
+        "one.txt": "hit\n"
+      },
+      "script": "grep -r hit . | sort",
+      "stdout": "./one.txt:hit\n./t/a.txt:hit\n",
+      "exitCode": 0
+    },
+    {
+      "name": "find-exec-substitutes-a-brace-inside-a-word",
+      "oracle": "coreutils",
+      "files": {
+        "t/a.txt": "x\n"
+      },
+      "script": "find t -name 'a.txt' -exec printf '[%s]' 'pre{}post' ';'",
+      "stdout": "[pret/a.txtpost]",
+      "exitCode": 0
+    },
+    {
+      "name": "find-exec-semicolon-does-not-propagate-a-failure",
+      "oracle": "coreutils",
+      "files": {
+        "t/a.txt": "x\n"
+      },
+      "script": "find t -name 'a.txt' -exec false {} ';' ; printf '%s' \"$?\"; find t -name 'a.txt' -exec false {} + ; printf '%s' \"$?\"",
+      "stdout": "01",
+      "exitCode": 0
+    },
+    {
+      "name": "stat-format-names-the-operand-and-prints-mode-in-hex",
+      "oracle": "coreutils",
+      "files": {
+        "t/a.txt": "x\n"
+      },
+      "script": "chmod 644 t/a.txt; stat -c '%n %f %a' t/a.txt",
+      "stdout": "t/a.txt 81a4 644\n",
       "exitCode": 0
     }
   ]

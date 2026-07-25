@@ -42,14 +42,42 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
   "regexp-subset-is-declared": async () => {
     const harness = createBashHarness();
     // A GNU extension is refused rather than silently meaning a JavaScript class.
-    const supported = await harness.run(String.raw`printf 'a1
-' | grep '[[:digit:]]'`);
+    const supported = await harness.run("printf 'a1\n' | grep '[[:digit:]]'");
     expect(supported.stdout).toBe("a1\n");
     for (const pattern of ["\\w", "\\b", "\\1"]) {
       const result = await harness.run(`printf 'a\\n' | grep '${pattern}'`);
       expect(result.exitCode, pattern).toBe(2);
       expect(result.stderr, pattern).toContain("grep:");
     }
+  },
+  "regexp-alternation-is-leftmost-first": async () => {
+    const harness = createBashHarness();
+    // GNU takes the longest branch and prints `X`; this profile takes the first
+    // that matches. Whether the record matches at all is the same either way.
+    const result = await harness.run(String.raw`printf 'ab\n' | sed 's/a\|ab/X/'`);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("Xb\n");
+    // The property bought by that choice: a pattern a backtracking engine takes
+    // exponential time on returns immediately.
+    const started = Date.now();
+    const bounded = await harness.run(
+      `printf '${"a".repeat(64)}\\n' | grep -c 'a*a*a*a*a*a*a*a*b'`,
+    );
+    expect(bounded.exitCode).toBe(1);
+    expect(Date.now() - started).toBeLessThan(5000);
+  },
+  "cp-preserve-does-not-restate-descendants": async () => {
+    const harness = createBashHarness();
+    const result = await harness.run([
+      "mkdir -p src/inner",
+      "printf 'x\\n' > src/inner/a.txt",
+      "chmod 604 src",
+      "cp -pr src copy",
+      "stat -c '%a' copy",
+    ]);
+    expect(result.exitCode).toBe(0);
+    // The named target keeps its mode; a descendant's timestamp is the copy's.
+    expect(result.stdout).toBe("604\n");
   },
   "sed-language-is-a-bounded-subset": async () => {
     const harness = createBashHarness();

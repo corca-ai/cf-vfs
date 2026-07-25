@@ -313,4 +313,5 @@ export interface ShellBudget {
   expansionOutput(characters: number, fields?: number): void;
   buffered(bytes: number): () => void;
   checkDeadline(): void;
+  remainingDeadlineMs(): number;
 }
