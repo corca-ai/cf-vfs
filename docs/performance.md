@@ -93,16 +93,23 @@ visible for trend comparison because local and hosted-runner timing is noisy.
 
 ## Deployed benchmark
 
-`wrangler.benchmark.jsonc` deploys a dedicated `cf-vfs-benchmark` Worker and
-SQLite-backed Durable Object to `vfs.borca.ai`. It does not publish the npm
-package, reuse an application's Durable Object namespace, or appear in the
-package's `files` allowlist. A deployment therefore affects only this benchmark
-service and its Cloudflare account usage.
+`wrangler.benchmark.jsonc` deploys the independently hosted `cf-vfs-benchmark`
+Worker to `vfs.borca.ai`. The Worker serves the interactive browser demo at
+`/`, upgrades `/ws` to one SQLite-backed `DemoWorkspace` Durable Object per
+browser workspace, and retains the authenticated benchmark at `/benchmark`.
+`DemoWorkspace` and `VfsBenchmark` use separate bindings, classes, object IDs,
+and SQLite databases even though one Worker routes both entry points.
 
-The public `/health` route performs no storage work. `POST /benchmark` requires
-the `BENCHMARK_TOKEN` secret and accepts only the bounded `quick` and `full`
-profiles. Every run uses a new Durable Object ID and calls `deleteAll()` before
-returning, so benchmark contents are not retained.
+The deployed Worker does not publish the npm package or reuse an application's
+Durable Object namespace. Its `bench/` and `demo/` sources are outside both
+`tsconfig.build.json` and the package's `files` allowlist, so a deployment does
+not add the terminal or benchmark code to the library bundle.
+
+The public `/health` route performs no storage work. `POST /benchmark` still
+requires the `BENCHMARK_TOKEN` secret and accepts only the bounded `quick` and
+`full` profiles. Every benchmark run uses a new `VfsBenchmark` Durable Object
+ID and calls `deleteAll()` before returning, so benchmark contents are not
+retained. Demo files remain only in their separately routed `DemoWorkspace`.
 
 Production Workers intentionally freeze `performance.now()` and `Date.now()`
 between I/O events. This affects the runtime as well as measurement; see

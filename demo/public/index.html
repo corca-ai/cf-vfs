@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="A persistent, interactive cf-vfs shell running on Cloudflare Durable Objects."
+    >
+    <meta name="theme-color" content="#07120f">
+    <title>cf-vfs · persistent shell</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css"
+      integrity="sha384-n2n7twoohnW+d3myBKaUgl7DSiwidw6MkQy9oesGzkPpMjejKRR3XlnD+5yCdtBD"
+      crossorigin="anonymous"
+    >
+    <link rel="stylesheet" href="/styles.css">
+    <script
+      src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"
+      integrity="sha384-f/1U6Z9wM4D71a5eRXEZnyOTMOvjqxr2XLwh+Go1OvIl3L3tOcvUrzudnhbECwl4"
+      crossorigin="anonymous"
+      defer
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.11.0/lib/addon-fit.js"
+      integrity="sha384-txoiwu4RR2GD3qySbaj+BbzibkLbSJRcfqGYMu6z1EqHil4A2dyBiBW5dlacG6OR"
+      crossorigin="anonymous"
+      defer
+    ></script>
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+
+    <main class="shell-page">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="cf-vfs home">
+          <span class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </span>
+          <span class="brand-name">cf-vfs</span>
+          <span class="brand-version">Bash v4</span>
+        </a>
+        <div class="topbar-actions">
+          <span class="persistence-pill">
+            <span class="pulse" aria-hidden="true"></span>
+            Durable SQLite
+          </span>
+          <a
+            class="github-link"
+            href="https://github.com/corca-ai/cf-vfs"
+            target="_blank"
+            rel="noreferrer"
+          >View source <span aria-hidden="true">↗</span></a>
+        </div>
+      </header>
+
+      <section class="intro" aria-labelledby="page-title">
+        <p class="eyebrow">Cloudflare Durable Objects × WebSocket</p>
+        <h1 id="page-title">A filesystem you can<br><em>actually touch.</em></h1>
+        <p class="lede">
+          Type Bash-compatible commands below. Every file lives in your own
+          SQLite-backed workspace and survives reconnects.
+        </p>
+      </section>
+
+      <section class="terminal-card" aria-label="Interactive cf-vfs terminal">
+        <div class="terminal-chrome">
+          <div class="window-dots" aria-hidden="true">
+            <span class="dot red"></span>
+            <span class="dot amber"></span>
+            <span class="dot green"></span>
+          </div>
+          <div class="terminal-title">
+            <span class="terminal-glyph" aria-hidden="true">&gt;_</span>
+            interactive session
+          </div>
+          <div class="connection-state" id="connection-state">
+            <span class="state-dot" aria-hidden="true"></span>
+            <span id="connection-label">connecting</span>
+          </div>
+        </div>
+        <div id="terminal" role="application" aria-label="Terminal input"></div>
+        <div class="terminal-footer">
+          <div class="workspace">
+            <span>workspace</span>
+            <button id="copy-workspace" type="button" title="Copy workspace ID">
+              <code id="workspace-id">—</code>
+              <span class="copy-icon" aria-hidden="true">⧉</span>
+            </button>
+          </div>
+          <div class="terminal-tools">
+            <button id="reconnect" type="button">Reconnect session</button>
+            <button id="clear-terminal" type="button">Clear screen</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="proof-grid" aria-label="Demo properties">
+        <article>
+          <span class="proof-number">01</span>
+          <div>
+            <h2>Write something</h2>
+            <code>printf 'hello\n' &gt; hello.txt</code>
+          </div>
+        </article>
+        <article>
+          <span class="proof-number">02</span>
+          <div>
+            <h2>Reload the page</h2>
+            <p>Your WebSocket session reconnects to the same workspace.</p>
+          </div>
+        </article>
+        <article>
+          <span class="proof-number">03</span>
+          <div>
+            <h2>Read it back</h2>
+            <code>cat hello.txt</code>
+          </div>
+        </article>
+      </section>
+
+      <footer class="page-footer">
+        <p>
+          Bounded Bash-compatible runtime — no host processes, no host
+          filesystem, no pretend persistence.
+        </p>
+        <p>Built with cf-vfs · Seoul / Cloudflare edge</p>
+      </footer>
+    </main>
+  </body>
+</html>

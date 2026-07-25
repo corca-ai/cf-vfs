@@ -26,11 +26,20 @@
       "head_sampling_rate": 0.01
     }
   },
+  "assets": {
+    "directory": "./demo/public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
   "durable_objects": {
     "bindings": [
       {
         "name": "BENCHMARK",
         "class_name": "VfsBenchmark"
+      },
+      {
+        "name": "DEMO_WORKSPACES",
+        "class_name": "DemoWorkspace"
       }
     ]
   },
@@ -38,6 +47,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["VfsBenchmark"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["DemoWorkspace"]
     }
   ]
 }
