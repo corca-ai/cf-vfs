@@ -19,6 +19,7 @@ const XARGS = {
       verbose: { name: "verbose" },
       null: { name: "null" },
     },
+    stopAtFirstOperand: true,
   },
 } as const satisfies AppletSpecWithOptions<"max-args" | "no-run-if-empty" | "verbose" | "null">;
 

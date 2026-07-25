@@ -7,9 +7,10 @@ const registry = createAppletRegistry([catCommand, grepCommand]);
 
 export default {
   fetch(request: Request): Response {
-    const command = registry.lookup(new URL(request.url).pathname.slice(1));
-    return command === undefined
+    const name = new URL(request.url).pathname.slice(1);
+    const entry = registry.find(name) ?? registry.findPath(`/bin/${name}`);
+    return entry === undefined
       ? new Response("command not resolved", { status: 404 })
-      : new Response(`${command.name}:${command.run.length}`);
+      : new Response(`${entry.command.name}:${entry.kind}:${entry.command.run.length}`);
   },
 } satisfies ExportedHandler;

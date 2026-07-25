@@ -8,7 +8,7 @@ import { compareUtf8, normalizePath, normalizePathPreservingTrailingSlash } from
 import { bodyToStream, readAllBytes } from "../vfs/streams.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 import { ExecutionBudget, resolveShellLimits } from "./budget.js";
-import { type AppletRegistry, createAppletRegistry } from "./commands/applet.js";
+import { type AppletRegistry, createAppletRegistry, splitSearchPath } from "./commands/applet.js";
 import { optindGeneration } from "./environment.js";
 import { ShellNounsetError } from "./errors.js";
 import { emitShellEvent, type ShellEventSink } from "./events.js";
@@ -42,6 +42,8 @@ import type {
   ExecuteTextOptions,
   ExecuteTextResult,
   ShellBudget,
+  ShellCommand,
+  ShellCommandResolution,
   ShellExecution,
   ShellFileDescriptors,
   ShellLimits,
@@ -108,6 +110,7 @@ async function abortRedirectedDescriptors(
 
 interface Runtime {
   commands: AppletRegistry;
+  pathLookup: boolean;
   fileSystem: ScopedFileSystem;
   budget: ShellBudget;
   policy: ShellPolicy;
@@ -306,6 +309,77 @@ interface PreparedSimpleCommand {
   assignments: Array<{ name: string; value: string }>;
   argv: string[];
   substitutionStatus?: number;
+  /** Set by `command NAME`, which runs an applet in spite of a function. */
+  bypassFunctions?: boolean;
+}
+
+interface ResolvedShellCommand {
+  readonly command: ShellCommand;
+  readonly kind: "builtin" | "program";
+  readonly path: string | undefined;
+}
+
+/**
+ * Resolves a command name to an applet.
+ *
+ * The `PATH` walk lives here rather than in the registry because only the
+ * shell can order a search across components, and only the shell will be able
+ * to consult the namespace for an executable file. The registry answers about
+ * one name or one component at a time.
+ */
+function resolveApplet(
+  name: string,
+  session: ShellSession,
+  runtime: Runtime,
+): ResolvedShellCommand | undefined {
+  const registry = runtime.commands;
+  const viaPath = registry.findPath(name);
+  if (viaPath !== undefined) {
+    // An absolute applet path bypasses PATH, exactly as in Linux.
+    return { command: viaPath.command, kind: "program", path: name };
+  }
+  const entry = registry.find(name);
+  if (entry === undefined) return undefined;
+  const searchPath = runtime.pathLookup ? session.env.get("PATH") : undefined;
+  const hasProgramForm = entry.kind !== "session-builtin";
+  let found: string | undefined;
+  if (searchPath !== undefined && hasProgramForm) {
+    // Left to right, first match wins, so a duplicated component is harmless
+    // and the reported path is the one that would run.
+    for (const directory of splitSearchPath(searchPath)) {
+      if (registry.isAppletDirectory(directory)) {
+        found = `${directory}/${name}`;
+        break;
+      }
+    }
+  }
+  // A built-in resolves whatever PATH says, and still reports the applet path
+  // it has so `which echo` can find one. A program needs the search to hit.
+  if (entry.kind !== "program") {
+    return { command: entry.command, kind: "builtin", path: found };
+  }
+  if (searchPath === undefined) return { command: entry.command, kind: "program", path: undefined };
+  return found === undefined ? undefined : { command: entry.command, kind: "program", path: found };
+}
+
+/**
+ * Reports how a name would resolve, using exactly the order execution uses:
+ * shell function, then the applet resolver, then the command policy.
+ *
+ * A name the policy denies is reported as unresolved, so discovery can never
+ * advertise a command that would immediately fail with 126.
+ */
+function resolveShellCommand(
+  name: string,
+  session: ShellSession,
+  runtime: Runtime,
+): ShellCommandResolution | undefined {
+  if (session.functions.has(name)) return { kind: "function", name };
+  const resolved = resolveApplet(name, session, runtime);
+  if (resolved === undefined) return undefined;
+  const allowed = runtime.policy.allowedCommands;
+  if (allowed !== undefined && !allowed.includes(resolved.command.name)) return undefined;
+  return { kind: resolved.kind, name: resolved.command.name, path: resolved.path };
 }
 
 async function prepareSimpleCommand(
@@ -464,25 +538,30 @@ async function executeSimpleCommand(
     return prepared.substitutionStatus ?? 0;
   }
   const [name = "", ...argv] = prepared.argv;
-  const definition = session.functions.get(name);
-  // Resolve before the policy check so an allowlist naming an applet also
-  // covers its aliases and virtual `/bin` spelling, and so a denial reports
-  // the canonical name rather than the spelling that reached the shell.
-  const command = definition === undefined ? runtime.commands.lookup(name) : undefined;
-  const canonicalName = command?.name ?? name;
-  if (
-    definition === undefined &&
-    runtime.policy.allowedCommands !== undefined &&
-    !runtime.policy.allowedCommands.includes(canonicalName)
-  ) {
-    throw new VfsError("EACCES", `command is not allowed: ${canonicalName}`);
-  }
+  // Prefix assignments apply before the name is resolved, so `PATH=/opt cat`
+  // searches the assigned PATH exactly as Bash does.
   const previous = new Map<string, string | undefined>();
   for (const value of prepared.assignments) {
     previous.set(value.name, session.env.get(value.name));
     session.env.set(value.name, value.value);
   }
+  let canonicalName = name;
+  let ranCommandName: string | undefined;
   try {
+    const definition = prepared.bypassFunctions === true ? undefined : session.functions.get(name);
+    // Resolve before the policy check so an allowlist naming an applet also
+    // covers its aliases and virtual `/bin` spelling, and so a denial reports
+    // the canonical name rather than the spelling that reached the shell.
+    const command =
+      definition === undefined ? resolveApplet(name, session, runtime)?.command : undefined;
+    canonicalName = command?.name ?? name;
+    if (
+      definition === undefined &&
+      runtime.policy.allowedCommands !== undefined &&
+      !runtime.policy.allowedCommands.includes(canonicalName)
+    ) {
+      throw new VfsError("EACCES", `command is not allowed: ${canonicalName}`);
+    }
     let exitCode: number;
     if (definition !== undefined) {
       exitCode = await runFunction(definition, argv, session, fds, runtime, context);
@@ -492,6 +571,10 @@ async function executeSimpleCommand(
         emitShellEvent(runtime.onEvent, { type: "shell.command", name, exitCode: 127 });
         return 127;
       }
+      // Only the applet that actually ran may claim the `export` restoration
+      // rule below; a denied command, an unknown name, and a shell function
+      // named `export` must all leave the prefix assignment undone.
+      ranCommandName = canonicalName;
       exitCode = (
         await command.run(
           {
@@ -502,18 +585,23 @@ async function executeSimpleCommand(
             policy: runtime.policy,
             executeSource: async (source, path, sourceArgs, sourceFds) =>
               await runSourcedUnit(source, path, sourceArgs, session, sourceFds, runtime, context),
-            executeCommand: async (commandArgv, commandFds) => {
+            executeCommand: async (commandArgv, commandFds, commandOptions) => {
               runtime.budget.command();
               // The invoked status belongs to the invoking utility, not to the
               // enclosing shell, so it never requests errexit on its own.
               return await executeSimpleCommand(
-                { assignments: [], argv: [...commandArgv] },
+                {
+                  assignments: [],
+                  argv: [...commandArgv],
+                  ...(commandOptions?.bypassFunctions === true ? { bypassFunctions: true } : {}),
+                },
                 session,
                 commandFds,
                 runtime,
                 SUPPRESSED_EVALUATION_CONTEXT,
               );
             },
+            resolveCommand: (candidate) => resolveShellCommand(candidate, session, runtime),
           },
           argv,
           fds,
@@ -529,7 +617,7 @@ async function executeSimpleCommand(
     return exitCode;
   } finally {
     const preserved =
-      canonicalName === "export"
+      ranCommandName === "export"
         ? new Set(argv.map((value) => value.split("=", 1)[0] ?? ""))
         : new Set<string>();
     restoreVariables(session, previous, preserved);
@@ -1064,6 +1152,7 @@ async function runScript(
 
 export class Shell {
   private readonly commands: AppletRegistry;
+  private readonly pathLookup: boolean;
   private readonly fileSystem: ShellOptions["fileSystem"];
   private readonly policy: ShellPolicy;
   private readonly limits: ShellLimits;
@@ -1072,6 +1161,7 @@ export class Shell {
 
   constructor(options: ShellOptions) {
     this.commands = createAppletRegistry(options.commands);
+    this.pathLookup = options.commandResolution === "path";
     this.fileSystem = options.fileSystem;
     this.policy = Object.freeze({
       ...(options.policy?.readRoots === undefined
@@ -1187,6 +1277,7 @@ export class Shell {
         if (parsed === undefined) throw new VfsError("EIO", "parser produced no script");
         const result = await runScript(parsed, session, rootFds, {
           commands: this.commands,
+          pathLookup: this.pathLookup,
           fileSystem: scoped,
           budget,
           policy: this.policy,

@@ -134,9 +134,35 @@ export interface ShellCommandContext {
    * budget as an ordinary simple command. `argv` is never re-parsed, so a
    * utility that builds an invocation from untrusted data cannot inject shell
    * syntax. The invoked status does not request errexit on its own.
+   *
+   * `options.bypassFunctions` skips shell-function lookup, which is what
+   * `command NAME` means.
    */
-  executeCommand(argv: readonly string[], fds: ShellFileDescriptors): Promise<number>;
+  executeCommand(
+    argv: readonly string[],
+    fds: ShellFileDescriptors,
+    options?: ExecuteCommandOptions,
+  ): Promise<number>;
+  /**
+   * Reports how the shell would resolve `name`, without running it.
+   *
+   * Discovery utilities use this so they can never disagree with execution and
+   * so they do not need to import the registry or the applet table themselves.
+   */
+  resolveCommand(name: string): ShellCommandResolution | undefined;
 }
+
+export interface ExecuteCommandOptions {
+  readonly bypassFunctions?: boolean;
+}
+
+export type ShellCommandResolution =
+  | { readonly kind: "function"; readonly name: string; readonly path?: undefined }
+  | {
+      readonly kind: "builtin" | "program";
+      readonly name: string;
+      readonly path: string | undefined;
+    };
 
 export interface ShellProcess {
   completed: Promise<{ exitCode: number }>;
@@ -188,6 +214,20 @@ export interface ExecuteBytesResult {
 export interface ShellOptions {
   fileSystem: VirtualFileSystem;
   commands: readonly ShellCommand[];
+  /**
+   * How a bare command name reaches an applet.
+   *
+   * `"registry"`, the default, resolves every registered applet by its name
+   * and ignores `PATH` entirely, so a `PATH` an application sets for its own
+   * reasons cannot make commands disappear.
+   *
+   * `"path"` adds the Linux search: a `PATH` component must name a virtual
+   * applet directory for an ordinary applet to resolve, while a built-in
+   * resolves regardless, exactly as in Bash. Use it with the environment from
+   * `@corca-ai/cf-vfs/shell/linux`; an absolute applet path such as `/bin/cat`
+   * works under both settings.
+   */
+  commandResolution?: "registry" | "path";
   policy?: ShellPolicy;
   limits?: Partial<ShellLimits>;
   now?: () => number;

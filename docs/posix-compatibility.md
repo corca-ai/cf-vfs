@@ -117,10 +117,23 @@ Deliberate deterministic choices include:
 - registered applets, except shell built-ins that change the calling session,
   also answer to `/bin/NAME` and `/usr/bin/NAME`. Those are virtual spellings of
   one implementation, not namespace entries: they perform no storage work,
-  cannot be created or removed, and are not shadowed by a VFS file at the same
-  path. The directory match is literal, so `/bin//cat` does not resolve.
-  Diagnostics and `allowedCommands` use the canonical applet name, and a usage
-  diagnostic ends with the applet's declared synopsis;
+  cannot be created or removed, are not listable, and are not shadowed by a VFS
+  file at the same path. The directory match is literal, so `/bin//cat` does not
+  resolve. Diagnostics and `allowedCommands` use the canonical applet name, and
+  a usage diagnostic ends with the applet's declared synopsis;
+- the `PATH` search is opt-in through `commandResolution: "path"`. Without it a
+  `PATH` is an ordinary variable and every registered applet answers to its bare
+  name, so an application that sets `PATH` for its own reasons cannot lose
+  commands. With it, components are searched left to right and only a component
+  spelled exactly `/bin` or `/usr/bin` can satisfy one, because executing a
+  stored file is not supported yet. A built-in resolves without a search, as in
+  Bash, and a prefix assignment applies before the search;
+- the opt-in Linux profile is a cf-vfs environment, not the Filesystem Hierarchy
+  Standard. It provides `/etc`, `/home`, `/tmp`, `/var/tmp`, and `/workspace` as
+  ordinary directories, resolves `/bin` and `/usr/bin` virtually, and adds no
+  user database, package manager, writable `/bin`, or host process. `/bin/sh`
+  names the profile and resolves, but running it is status 126 until executable
+  files are supported;
 - status 2 is syntax/usage, 126 is policy denial, and 127 is command-not-found.
 
 Differential fixtures are pinned against `bash:5.3.3` with the same locale and
@@ -131,9 +144,10 @@ behavior. Explicit rejection tests cover syntax deliberately outside Version
 
 ## Utility differential fixtures and declared divergences
 
-Utility behavior is pinned separately against two oracle images recorded by
-digest in `test/fixtures/utility-compat.json`: BusyBox and Debian's GNU
-coreutils, grep, sed, and diffutils, both with `LC_ALL=C` and `TZ=UTC`. The exact
+Utility behavior is pinned separately against three oracle images recorded by
+digest in `test/fixtures/utility-compat.json`: BusyBox, Debian's GNU coreutils,
+grep, sed, and diffutils, and Bash for the shell built-ins that command
+discovery depends on, all with `LC_ALL=C` and `TZ=UTC`. The exact
 tool versions live beside the cases, so a compatibility claim is always tied to
 a specific tool rather than to "GNU". These images are development and CI
 oracles; no external binary ships or runs at runtime.
@@ -154,6 +168,7 @@ Currently declared divergences:
 | `wc` | Multi-field output is single-space separated. GNU right-aligns each count in a width derived from the largest input, which the streaming profile never buffers. Single-field forms such as `wc -l` match exactly. |
 | `diff` | Output is always the unified format `patch` consumes; the normal, context, and `ed` formats are outside the profile. |
 | `grep`, `sed` | Patterns use JavaScript regular-expression syntax under the Unicode flag, not POSIX basic or extended regular expressions. Literals, `.`, `*`, `^`, `$`, and bracket expressions agree with both and are pinned by fixtures; every other metacharacter differs. `a+` repeats here and is a literal plus under POSIX, while `a\|x` alternates under POSIX and is a literal here. |
+| `type` | Reports that a name is a function without printing its definition. Bash re-renders the parsed body, which would make the output depend on the formatter rather than on the profile. |
 | `sed` | The replacement is literal text. GNU expands `&` to the match and `\1` to a capture group; both are written literally here, and JavaScript's `$&`, ``$` ``, `$'`, and `$n` forms are escaped so replacement text taken from data can never splice another part of the record into the output. |
 
 Regenerate with `npm run test:utility-fixtures:regenerate` and review the diff;

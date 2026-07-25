@@ -27,6 +27,21 @@
       "versions": {
         "busybox": "BusyBox v1.37.0 (2024-09-26 21:31:42 UTC) multi-call binary."
       }
+    },
+    "bash": {
+      "image": "bash:5.3.3",
+      "shell": "/usr/local/bin/bash",
+      "shellArguments": [
+        "--noprofile",
+        "--norc"
+      ],
+      "probe": {
+        "bash": "bash --version"
+      },
+      "digest": "bash@sha256:ae4668c2560999e65e89532cd2ad1b6688bb23298189f0bd229ef80fa4bd0831",
+      "versions": {
+        "bash": "GNU bash, version 5.3.3(1)-release (aarch64-unknown-linux-musl)"
+      }
     }
   },
   "locale": "C",
@@ -66,6 +81,20 @@
       "oracle": "coreutils",
       "summary": "the replacement is literal text with no match reference",
       "reason": "GNU sed expands `&` to the match and `\\1` to a capture group. This profile writes both literally and escapes JavaScript's `$&`, `$\\`` , `$'`, and `$n` forms so replacement text taken from data can never splice another part of the record into the output. Capture groups and match references are follow-up work in #49."
+    },
+    {
+      "id": "type-does-not-print-a-function-body",
+      "command": "type",
+      "oracle": "bash",
+      "summary": "type reports that a name is a function without printing its definition",
+      "reason": "Bash re-renders the parsed function body, which would make `type` output depend on the formatter rather than on the profile. Reporting the classification keeps the output stable and is what a script testing for a function needs."
+    },
+    {
+      "id": "printenv-reads-one-variable-map",
+      "command": "printenv, env",
+      "oracle": "coreutils",
+      "summary": "printenv reports any set variable, not only exported ones",
+      "reason": "A cf-vfs shell has one variable map and no separate process environment to hand a child, so `export` records intent rather than moving a value between scopes. `printenv NAME` therefore prints a variable a POSIX shell would keep to itself. Scripts that test for an inherited variable must not rely on the distinction."
     }
   ],
   "cases": [
@@ -627,6 +656,72 @@
       },
       "script": "sed 's/token/$X/' in.txt",
       "stdout": "secret-$X\n",
+      "exitCode": 0
+    },
+    {
+      "name": "command-v-external",
+      "oracle": "bash",
+      "script": "PATH=/bin:/usr/bin; command -v cat",
+      "stdout": "/bin/cat\n",
+      "exitCode": 0
+    },
+    {
+      "name": "command-v-builtin",
+      "oracle": "bash",
+      "script": "PATH=/bin:/usr/bin; command -v cd",
+      "stdout": "cd\n",
+      "exitCode": 0
+    },
+    {
+      "name": "command-v-missing-status",
+      "oracle": "bash",
+      "script": "PATH=/bin:/usr/bin; command -v nonexistent-applet; printf 'status=%s\\n' \"$?\"",
+      "stdout": "status=1\n",
+      "exitCode": 0
+    },
+    {
+      "name": "command-bypasses-a-function",
+      "oracle": "bash",
+      "script": "PATH=/bin:/usr/bin\ncat() { printf 'wrapped\\n'; }\ncat f.txt\ncommand cat f.txt",
+      "files": {
+        "f.txt": "file-body\n"
+      },
+      "stdout": "wrapped\nfile-body\n",
+      "exitCode": 0
+    },
+    {
+      "name": "type-external-and-builtin",
+      "oracle": "bash",
+      "script": "PATH=/bin:/usr/bin; type cat; type cd; type echo",
+      "stdout": "cat is /bin/cat\ncd is a shell builtin\necho is a shell builtin\n",
+      "exitCode": 0
+    },
+    {
+      "name": "which-external",
+      "oracle": "busybox",
+      "script": "PATH=/bin; which cat",
+      "stdout": "/bin/cat\n",
+      "exitCode": 0
+    },
+    {
+      "name": "which-builtin-status",
+      "oracle": "busybox",
+      "script": "PATH=/bin; which cd; printf 'status=%s\\n' \"$?\"",
+      "stdout": "status=1\n",
+      "exitCode": 0
+    },
+    {
+      "name": "printenv-named-values",
+      "oracle": "coreutils",
+      "script": "FIRST=one; SECOND=two; export FIRST SECOND; printenv FIRST SECOND",
+      "stdout": "one\ntwo\n",
+      "exitCode": 0
+    },
+    {
+      "name": "printenv-unset-status",
+      "oracle": "coreutils",
+      "script": "printenv NOT_SET_ANYWHERE; printf 'status=%s\\n' \"$?\"",
+      "stdout": "status=1\n",
       "exitCode": 0
     }
   ]

@@ -24,6 +24,13 @@ import {
   unsetCommand,
 } from "./core.js";
 import {
+  commandCommand,
+  printenvCommand,
+  shCommand,
+  typeCommand,
+  whichCommand,
+} from "./discovery.js";
+import {
   basenameCommand,
   catCommand,
   chmodCommand,
@@ -84,6 +91,11 @@ export const defaultShellCommands = [
   getoptsCommand,
   sourceCommand,
   dotCommand,
+  commandCommand,
+  typeCommand,
+  whichCommand,
+  printenvCommand,
+  shCommand,
   exitCommand,
   setCommand,
   testCommand,

@@ -9,6 +9,15 @@ export interface UtilityOptionParserConfig<Name extends string> {
   readonly long?: Readonly<Record<string, UtilityOptionDefinition<Name>>>;
   readonly oldStyleCount?: Name;
   /**
+   * Stops scanning at the first operand instead of permuting.
+   *
+   * A utility whose operands are themselves a command line needs this:
+   * `command grep -c PATTERN` and `xargs grep -c PATTERN` must hand `-c` to
+   * `grep`, not claim it. Without it the scanner reaches past the command name
+   * and rejects the invoked utility's own options.
+   */
+  readonly stopAtFirstOperand?: boolean;
+  /**
    * Treats `-123` as an operand rather than an option cluster. Utilities whose
    * operands are signed integers need this; it is mutually exclusive with
    * `oldStyleCount`, which claims the same spelling as an option.
@@ -59,10 +68,18 @@ export function parseUtilityOptions<Name extends string>(
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index] ?? "";
     if (optionsEnded || value === "-" || !value.startsWith("-")) {
+      if (config.stopAtFirstOperand === true) {
+        operands.push(...argv.slice(index));
+        break;
+      }
       operands.push(value);
       continue;
     }
     if (value === "--") {
+      if (config.stopAtFirstOperand === true) {
+        operands.push(...argv.slice(index + 1));
+        break;
+      }
       optionsEnded = true;
       continue;
     }

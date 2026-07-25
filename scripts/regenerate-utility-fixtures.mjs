@@ -55,6 +55,12 @@ async function dockerRun(image, argv, input) {
   return { stdout, stderr, exitCode };
 }
 
+// Bash needs `--noprofile --norc` so a fixture never observes image start-up
+// files. A shell without those options declares no extra arguments.
+function shellArguments(oracle) {
+  return oracle.shellArguments ?? [];
+}
+
 async function pullImage(reference) {
   const child = spawn("docker", ["pull", "--quiet", reference], { stdio: ["ignore", "ignore", "inherit"] });
   const code = await new Promise((resolve, reject) => {
@@ -84,7 +90,7 @@ async function imageDigest(image) {
 const repin = process.argv.includes("--repin");
 for (const [name, oracle] of Object.entries(fixtures.oracles)) {
   if (repin || oracle.digest === undefined) {
-    await dockerRun(oracle.image, [oracle.shell, "-c", "true"], "");
+    await dockerRun(oracle.image, [oracle.shell, ...shellArguments(oracle), "-c", "true"], "");
     oracle.digest = await imageDigest(oracle.image);
   } else {
     await pullImage(oracle.digest);
@@ -105,7 +111,11 @@ const regenerated = [];
 for (const fixture of fixtures.cases) {
   const oracle = fixtures.oracles[fixture.oracle];
   if (oracle === undefined) throw new Error(`${fixture.name} names unknown oracle ${fixture.oracle}`);
-  const result = await dockerRun(oracle.reference, [oracle.shell, "-s"], program(fixture));
+  const result = await dockerRun(
+    oracle.reference,
+    [oracle.shell, ...shellArguments(oracle), "-s"],
+    program(fixture),
+  );
   if (result.stderr !== "") {
     throw new Error(`${fixture.name} wrote to stderr on the oracle:\n${result.stderr}`);
   }

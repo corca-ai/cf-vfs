@@ -19,46 +19,55 @@ const COLON = {
   name: ":",
   usage: "",
   summary: "does nothing and succeeds",
-  builtin: true,
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
-const TRUE = { name: "true", usage: "", summary: "succeeds" } as const satisfies AppletSpec;
+const TRUE = {
+  name: "true",
+  usage: "",
+  summary: "succeeds",
+  kind: "builtin",
+} as const satisfies AppletSpec;
 const FALSE = {
   name: "false",
   usage: "",
   summary: "fails with status 1",
+  kind: "builtin",
 } as const satisfies AppletSpec;
 
 const ECHO = {
   name: "echo",
   usage: "[-n] [ARGUMENT...]",
   summary: "writes arguments separated by spaces",
+  kind: "builtin",
 } as const satisfies AppletSpec;
 
 const PRINTF = {
   name: "printf",
   usage: "FORMAT [ARGUMENT...]",
   summary: "formats arguments with %s, %d, %b, and %%",
+  kind: "builtin",
 } as const satisfies AppletSpec;
 
 const PWD = {
   name: "pwd",
   usage: "",
   summary: "prints the working directory",
+  kind: "builtin",
 } as const satisfies AppletSpec;
 
 const CD = {
   name: "cd",
   usage: "[DIRECTORY]",
   summary: "changes the working directory",
-  builtin: true,
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const EXPORT = {
   name: "export",
   usage: "[NAME[=VALUE]...]",
   summary: "marks variables for the session environment",
-  builtin: true,
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const ENV = {
@@ -71,82 +80,84 @@ const UNSET = {
   name: "unset",
   usage: "[NAME...]",
   summary: "removes variables",
-  builtin: true,
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const READ = {
   name: "read",
   usage: "-r [NAME...]",
   summary: "reads one record from standard input",
-  builtin: true,
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const SHIFT = {
   name: "shift",
   usage: "[COUNT]",
   summary: "drops leading positional parameters",
-  builtin: true,
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const GETOPTS = {
   name: "getopts",
   usage: "OPTSTRING NAME [ARGUMENT...]",
   summary: "parses one option from the positional parameters",
-  builtin: true,
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const LOCAL = {
   name: "local",
   usage: "NAME[=VALUE]...",
   summary: "declares function-scoped variables",
-  builtin: true,
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const RETURN = {
   name: "return",
   usage: "[STATUS]",
   summary: "returns from a function or sourced file",
-  builtin: true,
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const BREAK = {
   name: "break",
   usage: "[LEVELS]",
   summary: "exits enclosing loops",
-  builtin: true,
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const CONTINUE = {
   name: "continue",
   usage: "[LEVELS]",
   summary: "resumes the next iteration of an enclosing loop",
-  builtin: true,
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const EXIT = {
   name: "exit",
   usage: "[STATUS]",
   summary: "ends the execution unit",
-  builtin: true,
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const SET = {
   name: "set",
   usage: "[-e|+e] [-u|+u] [-o|+o OPTION]",
   summary: "sets supported shell options",
-  builtin: true,
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const TEST = {
   name: "test",
   usage: "EXPRESSION",
   summary: "evaluates a bounded conditional expression",
+  kind: "builtin",
 } as const satisfies AppletSpec;
 
 const BRACKET = {
   name: "[",
   usage: "EXPRESSION ]",
   summary: "evaluates a bounded conditional expression, requiring a closing ]",
+  kind: "builtin",
 } as const satisfies AppletSpec;
 
 export const colonCommand = /* @__PURE__ */ defineApplet(COLON, () => 0);
@@ -593,7 +604,7 @@ function defineSourceCommand(name: "source" | ".") {
     name,
     usage: "FILE [ARGUMENT...]",
     summary: "runs a bounded VFS file in the current shell scope",
-    builtin: true,
+    kind: "session-builtin",
   } as const satisfies AppletSpec;
   return defineApplet(spec, async (context, argv, fds) => {
     const [path, ...args] = argv;

@@ -368,22 +368,82 @@ storage work. Because the match is literal, a duplicated separator such as
 `/bin//cat` does not resolve, and neither does any other absolute path: both
 remain `command not found` with status 127.
 
-An applet that changes the calling session — `cd`, `export`, `unset`, `read`,
-`shift`, `getopts`, `local`, `set`, `source`, `.`, `exit`, `return`, `break`,
-`continue`, and `:` — is a shell built-in and is reachable only by its bare
-name, because Linux has no `/bin/cd` either.
+Each applet declares how it participates in resolution:
+
+| Kind | Bare name | Applet path | Examples |
+| --- | --- | --- | --- |
+| program | when the search is off, or when `PATH` names an applet directory | yes | `cat`, `grep`, `ls`, `env`, `which`, `printenv`, `sh` |
+| built-in | always, whatever `PATH` says | yes | `echo`, `printf`, `pwd`, `test`, `[`, `true`, `false` |
+| session built-in | always, whatever `PATH` says | no | `cd`, `export`, `set`, `source`, `.`, `read`, `command`, `type` |
+
+This is Bash's rule: a built-in is found without a search, and a shell built-in
+that changes the calling session has no program form at all, exactly as Linux
+has no `/bin/cd`.
+
+### PATH
+
+The Linux search is opt-in. `ShellOptions.commandResolution` defaults to
+`"registry"`, where every registered applet answers to its bare name and `PATH`
+is an ordinary variable — so an application that sets `PATH` for its own reasons
+cannot lose commands, and `type cat` reports an applet rather than inventing a
+location. Set `commandResolution: "path"`, or spread `LINUX_SHELL_OPTIONS`, to
+get the search.
+
+Under the search, components are looked at left to right and the first applet
+directory decides. A duplicated component is harmless. A component naming
+anything else contributes nothing — including the empty component POSIX gives to
+the working directory, and including `/bin/`, since a component must be spelled
+exactly `/bin` or `/usr/bin` and no namespace directory can supply a command
+until executing a stored file is supported. A prefix assignment applies before
+the search, so `PATH=/opt/tools cat file` reports `cat: command not found`
+exactly as in Bash. An absolute applet path bypasses the search entirely, under
+either setting.
+
+A name the command policy denies is reported as unresolved by `command -v`,
+`type`, and `which`, so discovery never advertises something that would
+immediately fail with 126.
 
 A shell function takes precedence over an applet with the same bare name. As in
-Bash, an applet path such as `/bin/echo` bypasses the function.
+Bash, an applet path such as `/bin/echo` bypasses the function, and so does
+`command echo`.
 
 Diagnostics always name the canonical applet and end with its declared synopsis.
 `ShellPolicy.allowedCommands` is matched against the canonical name, so one
 allowlist entry covers every spelling of that implementation; entries must be
 canonical applet names, since an alias in the list matches nothing.
 
+### The Linux profile
+
+`@corca-ai/cf-vfs/shell/linux` is an opt-in module supplying the locations and
+variables ordinary scripts assume. It is a cf-vfs profile, not Linux and not the
+Filesystem Hierarchy Standard: there is no user database, no package manager, no
+writable `/bin`, and no host process.
+
+`linuxShellEnvironment(options)` returns `PATH`, `HOME`, `USER`, `LOGNAME`,
+`SHELL`, `TMPDIR`, `LANG`, `LC_ALL`, and `TZ`; pass it as `env`, and spread
+`LINUX_SHELL_OPTIONS` into the `Shell` options to enable the search. `SHELL`
+names `/bin/sh`, the canonical spelling of this shell profile. That name
+resolves — `command -v sh` and `type bash` report it — but running it exits 126,
+found but not executable, because only its execution is missing. It claims no
+host Bash: the declared language is `BASH_COMPATIBILITY_VERSION`.
+
+`provisionLinuxFilesystem(fileSystem, options)` creates `/etc`, `/home`,
+`/home/<user>`, `/tmp`, `/var`, `/var/tmp`, and `/workspace`, and returns what
+it created. It is recursive and therefore idempotent. `/bin` and `/usr/bin` are
+deliberately not created: they resolve applets without a namespace entry, so a
+row there would mean nothing and could be removed while `/bin/cat` kept working.
+Listing them is not supported, and a `home` or `cwd` option inside one is a
+usage error.
+
+`LinuxProfileOptions` accepts `user` (default `cf`), `home` (default
+`/home/<user>`), `cwd` (default `/workspace`), and `tmp` (default `/tmp`). `cwd`
+decides which directory is provisioned; pass the same path as the execution
+`cwd` to start there.
+
 | Registry group | Available commands and principal options |
 | --- | --- |
 | shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (`-e/+e`, `-o/+o errexit`, `-u/+u`, `-o/+o nounset`, `-o/+o pipefail`), `test`, `[` |
+| discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
 | namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f`, `ls -l -d -a -A`, `find -name -type -maxdepth`, `stat`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | streaming text/bytes | `cat`, `grep -i -v -n -F -c`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed s/old/new/[g]`, `seq -s -w` |
 | bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
@@ -424,6 +484,19 @@ disables wrapping entirely, including the trailing newline. `env` prints only
 names matching `[A-Za-z_][A-Za-z0-9_]*` in UTF-8 byte order, so positional
 parameters such as `0` are absent; `-i`, `-u`, `-0`, and the bare `-` form are
 outside the profile.
+
+`command -v NAME` prints a spelling a script can run: the applet path when a
+search found one, and the bare name for a function, a built-in, or an applet
+resolved without a search. It exits 1 when the name is unknown, and accepts one
+name. `command NAME [ARGUMENT...]` runs the applet even when a function shadows
+it; option scanning stops at that name, so the invoked utility keeps its own
+options. Bash's `-V` and `-p` forms are outside the profile. `type` classifies each name and reports an
+unknown one on stderr with status 1; it does not print a function body. `which`
+reports only names with a program form, so a function and a shell built-in such
+as `cd` are not found, and it needs a `PATH` to have a path to print.
+`printenv` prints the whole environment in UTF-8 byte order, or one value per
+named variable, exiting 1 when any is unset; the `-0` form is outside the
+profile.
 
 `xargs` reads standard input as data, never as source. Arguments split on the
 fixed whitespace profile, or on NUL under `-0`, and reach the command registry

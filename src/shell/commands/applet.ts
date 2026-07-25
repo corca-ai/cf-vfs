@@ -49,17 +49,24 @@ export interface AppletSpec<Name extends string = string> {
   /** One-line description for command discovery and help output. */
   readonly summary: string;
   /**
-   * Marks a shell built-in, which no virtual applet directory exposes.
+   * How the applet participates in command resolution.
    *
-   * Linux has no `/bin/cd` or `/bin/export`, and an applet that changes the
-   * calling session cannot be a separate program. Keeping those out of
-   * `/bin` and `/usr/bin` means a later filesystem profile can list those
-   * directories without inventing entries resolution would not accept.
+   * - `program`, the default: an ordinary applet. Reachable at `/bin/NAME` and
+   *   `/usr/bin/NAME`, and by bare name only when a `PATH` search is enabled
+   *   and some component names one of those directories.
+   * - `builtin`: a shell built-in that Linux also ships as a program, such as
+   *   `echo` or `test`. Bash prefers the built-in, so it resolves by bare name
+   *   regardless of `PATH`, and it still has an applet path.
+   * - `session-builtin`: changes or inspects the calling session, so it has no
+   *   program form at all. Linux has no `/bin/cd`, and neither does this.
    */
-  readonly builtin?: true;
+  readonly kind?: AppletKind;
   /** Option table, when the applet uses the shared scanner. */
   readonly options?: UtilityOptionParserConfig<Name>;
 }
+
+/** See `AppletSpec.kind`. */
+export type AppletKind = "program" | "builtin" | "session-builtin";
 
 export type AppletSpecWithOptions<Name extends string> = AppletSpec<Name> & {
   readonly options: UtilityOptionParserConfig<Name>;
@@ -127,41 +134,79 @@ export function appletPathName(name: string): string | undefined {
 }
 
 /**
+ * What a registered name is.
+ *
+ * `program` is an ordinary applet: reachable at `/bin/NAME`, and by bare name
+ * only through a `PATH` component naming an applet directory. `builtin` is a
+ * Bash built-in that Linux also ships as a program, so it resolves without a
+ * search and still has an applet path. `session-builtin` changes or inspects
+ * the calling session and therefore has no program form at all.
+ */
+export interface AppletEntry {
+  readonly command: ShellCommand;
+  readonly kind: AppletKind;
+}
+
+/**
+ * Splits a `PATH` value into components.
+ *
+ * Components are returned exactly as written, including empty ones. POSIX
+ * gives an empty component to the working directory, and the caller decides
+ * what a component can supply.
+ */
+export function splitSearchPath(value: string): string[] {
+  return value.split(":");
+}
+
+/**
  * Indexed multicall resolver.
  *
  * One implementation is reachable through its canonical name, its declared
  * aliases, and the virtual applet directories. Every spelling returns the same
  * `ShellCommand` object, so callers can compare identity and report the
  * canonical name for policy decisions and diagnostics.
+ *
+ * The registry answers about one name or one directory at a time and never
+ * walks `PATH` itself. Ordering a search across components belongs to the
+ * shell, which is the only layer that can also consult the namespace.
  */
 export interface AppletRegistry {
   /** Registered commands in registration order. */
   readonly commands: readonly ShellCommand[];
-  /** Resolves a bare name, declared alias, or virtual applet path. */
-  lookup(name: string): ShellCommand | undefined;
+  /** Looks up a bare name or a declared alias, ignoring `PATH`. */
+  find(name: string): AppletEntry | undefined;
+  /** Whether a `PATH` component is one of the virtual applet directories. */
+  isAppletDirectory(directory: string): boolean;
+  /** Resolves an absolute applet path such as `/bin/cat`. */
+  findPath(path: string): AppletEntry | undefined;
 }
 
 export function createAppletRegistry(commands: readonly ShellCommand[]): AppletRegistry {
-  // Snapshot the caller's array so `commands` and `lookup` can never disagree.
+  // Snapshot the caller's array so `commands` and `find` can never disagree.
   const registered = [...commands];
-  const byName = new Map<string, ShellCommand>();
-  const byPath = new Map<string, ShellCommand>();
+  const byName = new Map<string, AppletEntry>();
   for (const command of registered) {
     const spec = (command as Partial<ShellApplet>).spec;
-    const aliases = spec?.aliases ?? [];
-    for (const name of [command.name, ...aliases]) {
+    const entry: AppletEntry = { command, kind: spec?.kind ?? "program" };
+    for (const name of [command.name, ...(spec?.aliases ?? [])]) {
       if (byName.has(name)) throw new VfsError("EINVAL", `duplicate command: ${name}`);
-      byName.set(name, command);
-      if (spec?.builtin !== true) byPath.set(name, command);
+      byName.set(name, entry);
     }
   }
   return {
     commands: registered,
-    lookup(name: string): ShellCommand | undefined {
-      const direct = byName.get(name);
-      if (direct !== undefined) return direct;
-      const base = appletPathName(name);
-      return base === undefined ? undefined : byPath.get(base);
+    find(name: string): AppletEntry | undefined {
+      return byName.get(name);
+    },
+    isAppletDirectory(directory: string): boolean {
+      return APPLET_DIRECTORIES.includes(directory);
+    },
+    findPath(path: string): AppletEntry | undefined {
+      const base = appletPathName(path);
+      if (base === undefined) return undefined;
+      const entry = byName.get(base);
+      // A session-scoped built-in has no program form, so no path selects it.
+      return entry === undefined || entry.kind === "session-builtin" ? undefined : entry;
     },
   };
 }
