@@ -74,6 +74,66 @@ describe("tilde expansion", () => {
       stdout: "/home/cf/bin:/home/cf/tools",
     },
     {
+      name: "leaves a tilde whose prefix is continued by a quoted part",
+      script: "printf '%s|%s' ~\"x\" ~'/y'",
+      env: HOME,
+      stdout: "~x|~/y",
+    },
+    {
+      name: "leaves a tilde whose prefix is continued by an expansion",
+      script: ["printf '%s|' ~$MISSING", "SUFFIX=q", "printf %s ~$SUFFIX"],
+      env: HOME,
+      stdout: "~|~q",
+    },
+    {
+      name: "expands a tilde in a case word and a conditional operand",
+      files: { "/home/cf/keep": "x" },
+      script: [
+        "case ~ in /home/cf) printf match;; *) printf no;; esac",
+        "[[ -d ~ ]] && printf '|dir'",
+      ],
+      env: HOME,
+      stdout: "match|dir",
+    },
+    {
+      name: "expands a tilde in an export or local assignment",
+      script: [
+        "export SHARED=~/bin:~/tools",
+        "wrap() { local INNER=~/inner; printf '%s|' \"$INNER\"; }",
+        "wrap",
+        'printf %s "$SHARED"',
+      ],
+      env: HOME,
+      stdout: "/home/cf/inner|/home/cf/bin:/home/cf/tools",
+    },
+    {
+      name: "expands an assignment-shaped operand and nothing else",
+      script: "printf '%s|%s|%s' X=~/y --opt=~/y 9X=~/y",
+      env: HOME,
+      // The name before `=` must be an identifier, exactly as in Bash.
+      stdout: "X=/home/cf/y|--opt=~/y|9X=~/y",
+    },
+    {
+      name: "expands a tilde in a redirection target",
+      files: { "/home/cf/keep": "x" },
+      script: ["printf body > ~/out.txt", "cat /home/cf/out.txt"],
+      env: HOME,
+      stdout: "body",
+    },
+    {
+      name: "expands a tilde before pathname expansion",
+      files: { "/home/cf/one.txt": "1", "/home/cf/two.txt": "2" },
+      script: "printf '%s ' ~/*.txt",
+      env: HOME,
+      stdout: "/home/cf/one.txt /home/cf/two.txt ",
+    },
+    {
+      name: "applies a prefix assignment after the command word expands",
+      script: "HOME=/other printf %s ~",
+      env: HOME,
+      stdout: "/home/cf",
+    },
+    {
       name: "leaves a quoted assignment value literal",
       script: ["TOOLS='~/bin'", 'printf %s "$TOOLS"'],
       env: HOME,

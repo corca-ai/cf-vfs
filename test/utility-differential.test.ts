@@ -74,6 +74,13 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     // A POSIX shell would print nothing and exit 1 for an unexported name.
     expect(result.stdout).toBe("value\n");
   },
+  "tilde-is-not-expanded-inside-a-parameter-word": async () => {
+    const harness = createBashHarness();
+    const result = await harness.run("printf '%s' ${MISSING-~/d}", { env: { HOME: "/home/cf" } });
+    expect(result.exitCode).toBe(0);
+    // Bash expands the unquoted form to /home/cf/d; the quoted form agrees.
+    expect(result.stdout).toBe("~/d");
+  },
   "permission-predicates-have-no-user": async () => {
     const harness = createBashHarness({ policy: { writeRoots: ["/allowed"] } });
     await harness.fileSystem.writeFile("/only-owner", "body");

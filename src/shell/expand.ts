@@ -471,9 +471,41 @@ function expandTildePrefix(value: string, session: ShellSession): string {
   return home === undefined || home === "" ? value : `${home}${rest}`;
 }
 
+const ASSIGNMENT_WORD = /^[A-Za-z_][A-Za-z0-9_]*=/u;
+
+/** Applies the assignment rule: a tilde after `=` and after each `:`. */
+function expandTildeAssignment(value: string, session: ShellSession): string {
+  return value
+    .split(":")
+    .map((segment) => expandTildePrefix(segment, session))
+    .join(":");
+}
+
+/**
+ * Applies tilde expansion to a word.
+ *
+ * A word shaped like an assignment expands a tilde after `=` and after each
+ * `:`, which is what makes both `PATH=~/bin:~/tools` and `export PATH=~/bin`
+ * work. The name before `=` must be a valid identifier, so `--opt=~/y` and
+ * `9X=~/y` stay literal, exactly as in Bash.
+ */
 function withTildePrefix(parts: readonly WordPart[], session: ShellSession): readonly WordPart[] {
   const [first, ...rest] = parts;
   if (first?.kind !== "literal" || first.quoted) return parts;
+  const separator = ASSIGNMENT_WORD.test(first.value) ? first.value.indexOf("=") : -1;
+  if (separator >= 0) {
+    const expanded = `${first.value.slice(0, separator + 1)}${expandTildeAssignment(
+      first.value.slice(separator + 1),
+      session,
+    )}`;
+    return expanded === first.value ? parts : [{ ...first, value: expanded }, ...rest];
+  }
+  if (!first.value.startsWith("~")) return parts;
+  // The prefix has to end inside this literal part: either the word is exactly
+  // `~`, or a `/` terminates it here. Otherwise a quoted part or an expansion
+  // continues the prefix — `~"x"` and `~$X` — and Bash leaves the tilde alone.
+  const terminated = first.value.length > 1 ? first.value[1] === "/" : rest.length === 0;
+  if (!terminated) return parts;
   const value = expandTildePrefix(first.value, session);
   return value === first.value ? parts : [{ ...first, value }, ...rest];
 }
@@ -553,7 +585,13 @@ export async function expandScalarWord(
   budget: ShellBudget,
   runtime: ExpansionRuntime,
 ): Promise<string> {
-  const value = await scalarParts(word.parts, session, fileSystem, budget, runtime);
+  const value = await scalarParts(
+    withTildePrefix(word.parts, session),
+    session,
+    fileSystem,
+    budget,
+    runtime,
+  );
   budget.expansionOutput(codePointLength(value));
   return value;
 }
@@ -571,12 +609,7 @@ export async function expandAssignmentValue(
   // An assignment expands a tilde after `=` and after each `:`, which is what
   // makes `PATH=~/bin:~/tools` work.
   const assigned = first.value.slice(name.length + 1);
-  const literal = first.quoted
-    ? assigned
-    : assigned
-        .split(":")
-        .map((segment) => expandTildePrefix(segment, session))
-        .join(":");
+  const literal = first.quoted ? assigned : expandTildeAssignment(assigned, session);
   const parts: WordPart[] = [{ ...first, value: literal }, ...rest];
   const value = await scalarParts(parts, session, fileSystem, budget, runtime);
   budget.expansionOutput(codePointLength(value));

@@ -123,6 +123,13 @@
       "oracle": "bash",
       "summary": "-r, -w, and -x report whether any class carries the bit, because there is no user to ask about",
       "reason": "A POSIX shell answers these for the effective user, so the same file gives different answers to different accounts and a privileged account can write a read-only file. There is no user, group, or account here and mode bits enforce nothing, so the predicate reports whether the bit is set for any class. It also does not consult the shell's read and write roots: those refuse the operation, and a predicate that reported them would conflate policy with metadata."
+    },
+    {
+      "id": "tilde-is-not-expanded-inside-a-parameter-word",
+      "command": "tilde expansion",
+      "oracle": "bash",
+      "summary": "an unquoted default such as ${X-~/d} keeps the tilde literal",
+      "reason": "Tilde expansion runs on the written word, where quote provenance is still available. A default inside a parameter expansion is produced during that expansion, so treating it as a tilde prefix would mean re-scanning generated text as syntax — which is exactly what this runtime refuses to do everywhere else. Quoted `\"${X-~/d}\"` agrees with Bash; the unquoted form differs."
     }
   ],
   "cases": [
@@ -965,6 +972,34 @@
       },
       "script": "chmod 600 m.txt; chmod +x m.txt; test -x m.txt && printf 'plus-x '\nchmod 600 m.txt; chmod u+x m.txt; test -x m.txt && printf 'u-plus-x '\nchmod 666 m.txt; chmod go-w m.txt; test -w m.txt && printf 'go-minus-w '\nchmod 600 m.txt; chmod a=rx m.txt; test -x m.txt && printf 'a-equals-rx'\nprintf '\\n'",
       "stdout": "plus-x u-plus-x go-minus-w a-equals-rx\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tilde-prefix-continued-is-literal",
+      "oracle": "bash",
+      "script": "HOME=/tmp/home; printf '%s|%s|%s\\n' ~\"x\" ~'/y' ~$MISSING",
+      "stdout": "~x|~/y|~\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tilde-in-declaration-operand",
+      "oracle": "bash",
+      "script": "HOME=/tmp/home; export SHARED=~/bin:~/tools; printf '%s\\n' \"$SHARED\"",
+      "stdout": "/tmp/home/bin:/tmp/home/tools\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tilde-in-an-assignment-shaped-operand",
+      "oracle": "bash",
+      "script": "HOME=/tmp/home; printf '%s|%s|%s\\n' X=~/y --opt=~/y 9X=~/y",
+      "stdout": "X=/tmp/home/y|--opt=~/y|9X=~/y\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tilde-in-a-case-word",
+      "oracle": "bash",
+      "script": "HOME=/tmp/home; case ~ in /tmp/home) printf 'match\\n';; *) printf 'no\\n';; esac",
+      "stdout": "match\n",
       "exitCode": 0
     }
   ]

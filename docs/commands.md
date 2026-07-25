@@ -347,8 +347,15 @@ form stays literal — `~user`, `~+`, `~-`, `~2` — which is what Bash does for
 name it cannot resolve and the only honest answer here, since there is no user
 database. A tilde with `HOME` unset or empty stays literal too, a quoted tilde is
 never expanded, and a tilde produced by an expansion is data rather than syntax.
-An assignment expands a tilde after `=` and after each `:`, so
-`PATH=~/bin:~/tools` works.
+A tilde whose prefix is continued by a quoted part or an expansion — `~"x"`,
+`~$SUFFIX` — stays literal, because the prefix must end inside the written
+literal for the shell to know it is one.
+
+Any word shaped like an assignment expands a tilde after `=` and after each `:`,
+so `PATH=~/bin:~/tools` and `export PATH=~/bin` both work. The name before `=`
+must be an identifier, so `--opt=~/y` and `9X=~/y` stay literal. A `case` word
+and a `[[ ]]` operand expand a tilde as well; an unquoted default inside a
+parameter expansion, such as `${X-~/d}`, does not.
 
 `cd` maintains `PWD` and `OLDPWD`. `cd -` returns to `OLDPWD` and prints the
 directory it moved to, as Bash does, and fails when there is no previous
