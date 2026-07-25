@@ -50,6 +50,7 @@ export interface ShellSession {
   functions: Map<string, FunctionDefinitionNode>;
   functionDepth: number;
   sourceDepth: number;
+  scriptDepth: number;
   loopDepth: number;
   localFrames: Array<Map<string, string | undefined>>;
   localGetoptsFrames: ShellLocalGetoptsFrame[];
@@ -99,6 +100,7 @@ export interface ShellLimits {
   maxLoopIterations: number;
   maxFunctionDepth: number;
   maxSourceDepth: number;
+  maxScriptDepth: number;
   maxCommandSubstitutionBytes: number;
   maxPipelineBytes: number;
   maxStdoutBytes: number;
@@ -150,6 +152,22 @@ export interface ShellCommandContext {
    * so they do not need to import the registry or the applet table themselves.
    */
   resolveCommand(name: string): ShellCommandResolution | undefined;
+  /**
+   * Runs a bounded source unit in an isolated child scope.
+   *
+   * The child inherits the environment, working directory, shell options,
+   * policy, cancellation, and the execution-wide budget, and receives its own
+   * positional parameters. Variables, functions, and working-directory changes
+   * it makes do not reach the caller, and `exit` ends the child rather than the
+   * caller. This is what running an executable script means; `executeSource`
+   * remains the same-scope form `source` and `.` need.
+   */
+  executeScript(
+    source: string,
+    path: string,
+    args: readonly string[],
+    fds: ShellFileDescriptors,
+  ): Promise<number>;
 }
 
 export interface ExecuteCommandOptions {

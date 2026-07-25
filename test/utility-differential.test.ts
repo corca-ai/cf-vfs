@@ -74,6 +74,16 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     // A POSIX shell would print nothing and exit 1 for an unexported name.
     expect(result.stdout).toBe("value\n");
   },
+  "script-interpreter-profile-is-bounded": async () => {
+    const harness = createBashHarness({ commandResolution: "path" });
+    await harness.fileSystem.writeFile("/work/py.sh", "#!/usr/bin/python3\nprint(1)\n", {
+      createParents: true,
+    });
+    harness.fileSystem.setMetadata("/work/py.sh", { mode: 0o100755 });
+    const result = await harness.run("./py.sh", { cwd: "/work" });
+    expect(result.exitCode).toBe(126);
+    expect(result.stderr).toBe("/work/py.sh: unsupported interpreter: /usr/bin/python3\n");
+  },
   "diff-output-format": async () => {
     const harness = createBashHarness();
     await harness.fileSystem.writeFile("/left", "a\n");

@@ -23,6 +23,7 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
     functions: new Map(),
     functionDepth: 0,
     sourceDepth: 0,
+    scriptDepth: 0,
     loopDepth: 0,
     localFrames: [],
     localGetoptsFrames: [],
@@ -55,6 +56,7 @@ export function cloneShellSession(session: ShellSession): ShellSession {
     functions: new Map(session.functions),
     functionDepth: session.functionDepth,
     sourceDepth: session.sourceDepth,
+    scriptDepth: session.scriptDepth,
     loopDepth: session.loopDepth,
     localFrames: session.localFrames.map((frame) => new Map(frame)),
     localGetoptsFrames: session.localGetoptsFrames.map((frame) => ({
@@ -71,6 +73,7 @@ export function prepareShellSessionUnit(session: ShellSession): void {
   session.requestedExitCode = 0;
   session.functionDepth = 0;
   session.sourceDepth = 0;
+  session.scriptDepth = 0;
   session.loopDepth = 0;
   session.localFrames.length = 0;
   session.localGetoptsFrames.length = 0;

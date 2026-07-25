@@ -233,8 +233,28 @@ unreachable with an empty `PATH`, and a built-in is not.
 
 The registry answers about one name or one directory at a time and never walks
 `PATH`. Ordering a search across components lives in `shell.ts`, which is the
-only layer that can also consult the namespace — that is where executable-file
-support inserts its probe.
+only layer that can also consult the namespace: after no applet answers, it
+tries the same name as an executable VFS file.
+
+## Executable scripts
+
+`src/shell/script.ts` holds the interpreter policy and the byte-prefix shebang
+scan; it imports nothing but the error type, so the shell carries it and no
+applet does. Read the interpreter line from bytes before decoding — an
+interpreter line is ASCII by construction, and a 256-byte cap keeps the scan a
+fixed prefix rather than a function of file size.
+
+Every refusal to run a file that exists is `ENOEXEC` or `EACCES`, which both map
+to status 126; only an absent path falls through to 127. Keep that split, since
+it is the only way a caller can tell "nothing by that name" from "there is, and
+it cannot run".
+
+Script execution clones the session through `cloneShellSession`, so the child
+inherits the environment, working directory, and options while its variables,
+functions, working directory, and `exit` stay inside it. Parse the complete unit
+before it can mutate anything, count depth with `maxScriptDepth` rather than
+`maxSourceDepth` so a script that sources a file that runs a script is still
+bounded, and share every other budget with the caller.
 
 Command discovery lives in `src/shell/commands/discovery.ts` and reads
 `ShellCommandContext.resolveCommand()`, which runs exactly the resolution order

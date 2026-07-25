@@ -23,13 +23,7 @@ import {
   trueCommand,
   unsetCommand,
 } from "./core.js";
-import {
-  commandCommand,
-  printenvCommand,
-  shCommand,
-  typeCommand,
-  whichCommand,
-} from "./discovery.js";
+import { commandCommand, printenvCommand, typeCommand, whichCommand } from "./discovery.js";
 import {
   basenameCommand,
   catCommand,
@@ -50,6 +44,7 @@ import {
   treeCommand,
 } from "./fs.js";
 import { lsCommand } from "./ls.js";
+import { shCommand } from "./sh.js";
 import {
   base64Command,
   cmpCommand,

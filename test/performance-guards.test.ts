@@ -184,6 +184,31 @@ describe("common-path SQL cost", () => {
     expect(bare).toBe(0);
   });
 
+  it("reads an executable script once and charges nothing to a bare applet", async () => {
+    const { fileSystem, meter } = meteredFileSystem();
+    await fileSystem.writeFile("/w/run.sh", "#!/bin/sh\nprintf ran\n", { createParents: true });
+    fileSystem.setMetadata("/w/run.sh", { mode: 0o100755 });
+    const shell = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      commandResolution: "path",
+    });
+
+    meter.reset();
+    const script = await shell.executeText({ script: "/w/run.sh" });
+    expect(script.stdout).toBe("ran");
+    // One stat to classify the file plus the inline read. A resolution that
+    // probed every PATH component, or read the file twice for the shebang and
+    // then for the source, would show up here immediately.
+    expect(meter.statements).toBeGreaterThan(0);
+    expect(meter.statements).toBeLessThanOrEqual(4);
+
+    // A bare applet name never touches storage, even with the search enabled.
+    meter.reset();
+    await shell.executeText({ script: "PATH=/bin:/usr/bin printf ok" });
+    expect(meter.statements).toBe(0);
+  });
+
   it("walks a subtree with one set-based traversal", async () => {
     const { fileSystem, meter } = meteredFileSystem();
     for (let index = 0; index < 20; index += 1) {
