@@ -15,7 +15,8 @@ import {
   type ShellApplet,
   splitSearchPath,
 } from "./commands/applet.js";
-import { FILE_TYPE_MASK, REGULAR_FILE_TYPE } from "./commands/format.js";
+import { isCharacterDevice, isRegularFile } from "./commands/format.js";
+import { DeviceFileSystem } from "./devices.js";
 import { optindGeneration } from "./environment.js";
 import { ShellNounsetError } from "./errors.js";
 import { emitShellEvent, type ShellEventSink } from "./events.js";
@@ -61,6 +62,7 @@ import type {
   ShellCommandResolution,
   ShellExecution,
   ShellFileDescriptors,
+  ShellFileSystem,
   ShellLimits,
   ShellLocalGetoptsFrame,
   ShellOptions,
@@ -127,7 +129,7 @@ interface Runtime {
   commands: AppletRegistry;
   pathLookup: boolean;
   now: () => number;
-  fileSystem: ScopedFileSystem;
+  fileSystem: ShellFileSystem;
   budget: ShellBudget;
   policy: ShellPolicy;
   signal: AbortSignal;
@@ -1013,10 +1015,12 @@ function conditionalFileTest(operator: ConditionalUnaryOperator, stat: VfsStat):
     case "-L":
     case "-h":
       return stat.kind === "symlink";
+    case "-c":
+      return isCharacterDevice(stat);
     case "-f":
       // A regular file, which a character device is not — the mode's type
       // field is the only thing that distinguishes them here.
-      return stat.kind === "file" && (stat.mode & FILE_TYPE_MASK) === REGULAR_FILE_TYPE;
+      return stat.kind === "file" && isRegularFile(stat);
     case "-d":
       return stat.kind === "directory";
     case "-s":
@@ -1609,7 +1613,13 @@ export class Shell {
       if (options.signal.aborted) externalAbort();
       else options.signal.addEventListener("abort", externalAbort, { once: true });
     }
-    const scoped = new ScopedFileSystem(this.fileSystem, this.policy, budget);
+    // Devices sit above the policy rather than under it, because they are
+    // outside the namespace the roots govern: `/dev/null` discards, and the
+    // descriptor paths duplicate streams the caller already handed this
+    // execution. None of them can name anything the roots protect, so
+    // requiring `/dev` in a session's roots would break `> /dev/null` for
+    // every scoped caller while preventing nothing.
+    const scoped = new DeviceFileSystem(new ScopedFileSystem(this.fileSystem, this.policy, budget));
     const stdout = createBytePipe({
       maximumBytes: this.limits.maxStdoutBytes,
       signal: controller.signal,

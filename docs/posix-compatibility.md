@@ -23,8 +23,9 @@ host filesystem access.
 
 `/dev/null` and the descriptor paths `/dev/stdin`, `/dev/stdout`, `/dev/stderr`
 and their `/dev/fd/N` spellings exist during a shell execution and nowhere
-else. They are not namespace entries, they cost no storage, and they are
-subject to the declared roots like any other path. No other device exists.
+else. They are not namespace entries and cost no storage. The whole of `/dev`
+is reserved against change, and the declared roots do not govern devices
+because a device can name nothing the roots protect. No other device exists.
 
 Virtual descriptors `0`, `1`, and `2` exist only for one submitted source
 unit, including in an interactive session. Pipelines connect them with byte

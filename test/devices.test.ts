@@ -47,14 +47,16 @@ describe("virtual devices", () => {
       stderrIncludes: "two",
     },
     {
-      name: "reports a device the way the oracle does",
+      name: "reports a device as a character device",
       script:
         "[ -e /dev/null ] && printf 'e'; [ -f /dev/null ] || printf ' not-f'; " +
         "[ -r /dev/null ] && printf ' r'; [ -w /dev/null ] && printf ' w'; " +
-        "[ -d /dev/null ] || printf ' not-d'; printf '\\n'; stat -c '%F %s' /dev/null; " +
+        "[ -d /dev/null ] || printf ' not-d'; [ -c /dev/null ] && printf ' c'; " +
+        "printf '\\n'; stat -c '%F %s' /dev/null; stat /dev/null | sed -n '3p'; " +
         "file /dev/null; ls -d /dev/null; ls -l /dev/null",
       stdout:
-        "e not-f r w not-d\ncharacter special file 0\n/dev/null: character special file\n" +
+        "e not-f r w not-d c\ncharacter special file 0\n  Type: character special file\n" +
+        "/dev/null: character special file\n" +
         "/dev/null\ncrw-rw-rw-        0 /dev/null\n",
     },
     {
@@ -101,19 +103,19 @@ describe("virtual devices", () => {
     expect(statements).toEqual([]);
   });
 
-  it("charges discarded bytes to the I/O budget", async () => {
+  it("costs the same I/O budget as writing the bytes to a file", async () => {
     const run = async (limit: number, target: string): Promise<number> => {
       const harness = createBashHarness({ limits: { maxTotalIoBytes: limit } });
-      await harness.fileSystem.writeFile("/big.txt", "x".repeat(16384));
+      await harness.fileSystem.writeFile("/big.txt", "x".repeat(100_000));
       return (await harness.run(`cat /big.txt > ${target}`)).exitCode;
     };
-    // Discarding is not a way to move bytes for free: the same budget that
-    // refuses writing them to a file refuses throwing them away, and the same
-    // budget that allows it allows both.
-    expect(await run(4096, "/dev/null")).not.toBe(0);
-    expect(await run(4096, "/out.txt")).not.toBe(0);
-    expect(await run(1_000_000, "/dev/null")).toBe(0);
-    expect(await run(1_000_000, "/out.txt")).toBe(0);
+    // Pinned at the boundary, not far outside it: charging the discard as well
+    // as the read would make `> /dev/null` fail here while `> /out.txt` passed,
+    // so a script that silences a command would exhaust its budget sooner.
+    expect(await run(100_000, "/out.txt")).toBe(0);
+    expect(await run(100_000, "/dev/null")).toBe(0);
+    expect(await run(50_000, "/out.txt")).not.toBe(0);
+    expect(await run(50_000, "/dev/null")).not.toBe(0);
   });
 
   it("keeps a device alias from closing the descriptor it duplicates", async () => {
@@ -136,28 +138,98 @@ describe("virtual devices", () => {
   it("wakes a device write when the execution is cancelled", async () => {
     const harness = createBashHarness();
     const controller = new AbortController();
-    const running = harness.run("sleep 20 > /dev/null; echo finished", {
-      signal: controller.signal,
-    });
+    const started = Date.now();
+    // Cancelled while bytes are actually moving into the device, which a sleep
+    // in front of one would never exercise. The producer is a loop so it
+    // cannot finish before the abort lands.
+    const running = harness.run(
+      "i=0; while [ $i -lt 200000 ]; do echo x; i=$((i+1)); done > /dev/null; echo finished",
+      { signal: controller.signal },
+    );
     setTimeout(() => controller.abort(), 20);
     const result = await running;
     expect(result.stdout).toBe("");
     expect(result.exitCode).not.toBe(0);
+    expect(Date.now() - started).toBeLessThan(5_000);
   });
 
-  it("applies the declared roots to a device rather than exempting it", async () => {
+  it("exempts a device from the roots without letting it reach the namespace", async () => {
     const scoped = createBashHarness({ policy: { readRoots: ["/w"], writeRoots: ["/w"] } });
     await scoped.fileSystem.mkdir("/w", true);
-    const denied = await scoped.run("echo hi > /dev/null");
-    expect(denied.exitCode).toBe(126);
-    expect(denied.stderr).toContain("outside the writable roots");
+    await scoped.fileSystem.writeFile("/secret.txt", "secret\n");
 
-    // A session that wants the devices lists them, like any other path.
-    const allowed = createBashHarness({
-      policy: { readRoots: ["/w", "/dev"], writeRoots: ["/w", "/dev"] },
-    });
-    await allowed.fileSystem.mkdir("/w", true);
-    expect((await allowed.run("echo hi > /dev/null; echo ok")).stdout).toBe("ok\n");
+    // A device names nothing the roots protect, so requiring `/dev` in every
+    // scoped session's roots would break `> /dev/null` and prevent nothing.
+    expect((await scoped.run("echo hi > /dev/null; echo ok")).stdout).toBe("ok\n");
+    expect((await scoped.run("cat /dev/null; echo ok")).stdout).toBe("ok\n");
+    expect((await scoped.run("printf 'x\\n' | cat < /dev/stdin")).stdout).toBe("x\n");
+    expect((await scoped.run("echo shown > /dev/stdout")).stdout).toBe("shown\n");
+
+    // The roots still govern everything they name. Nothing reachable through a
+    // device leads back into the namespace.
+    const denied = await scoped.run("cat /secret.txt");
+    expect(denied.exitCode).not.toBe(0);
+    expect(denied.stdout).toBe("");
+    for (const outward of ["/dev/../secret.txt", "/dev/fd/../../secret.txt"]) {
+      const result = await scoped.run(`cat ${outward}`);
+      expect(result.exitCode, outward).not.toBe(0);
+      expect(result.stdout, outward).toBe("");
+    }
+  });
+
+  it("reserves the whole device namespace against change", async () => {
+    const harness = createBashHarness();
+    // Without this the two views could disagree: a real `/dev/null` would be
+    // read as the device but removed, moved, and listed as an entry, and a
+    // write to it would be silently discarded.
+    for (const script of [
+      "mkdir /dev",
+      "mkdir -p /dev/null",
+      "rm /dev/null",
+      "touch /dev/null",
+      "mv /dev/null /elsewhere",
+      "chmod 600 /dev/null",
+      "ln -s /tmp /dev/link",
+    ]) {
+      const result = await harness.run(script);
+      expect(result.exitCode, script).not.toBe(0);
+      expect(result.stderr, script).toContain("device namespace cannot be changed");
+    }
+    // And the directory reads as one, listing exactly what it holds.
+    expect((await harness.run("ls /dev")).stdout).toBe("fd\nnull\nstderr\nstdin\nstdout\n");
+    expect((await harness.run("find /dev -type f | sort")).stdout).toBe(
+      "/dev/fd/0\n/dev/fd/1\n/dev/fd/2\n/dev/null\n/dev/stderr\n/dev/stdin\n/dev/stdout\n",
+    );
+  });
+
+  it("follows a link to a device", async () => {
+    const harness = createBashHarness();
+    const result = await harness.run([
+      "ln -s /dev/null quiet",
+      "echo discarded > quiet",
+      "[ -e quiet ] && echo e",
+      "[ -c quiet ] && echo c",
+      "[ -L quiet ] && echo L",
+      "cat quiet; echo empty",
+      "stat -L -c '%F' quiet",
+      "readlink quiet",
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("e\nc\nL\nempty\ncharacter special file\n/dev/null\n");
+  });
+
+  it("keeps a failed redirection from destroying the descriptor an alias duplicates", async () => {
+    const harness = createBashHarness();
+    // The alias must be able to release its own reference without tearing down
+    // the stream it duplicates — otherwise a later redirection that fails
+    // discards everything the execution had already written.
+    const result = await harness.run("echo a; echo b > /dev/stdout > /nope/x; echo c");
+    expect(result.stdout).toBe("a\nc\n");
+    expect(result.stderr).toContain("no such file or directory");
+
+    const stderrCase = await harness.run("echo a; echo b 2> /dev/stderr 2> /nope/x; echo c");
+    expect(stderrCase.stdout).toBe("a\nc\n");
+    expect(stderrCase.stderr).toContain("no such file or directory");
   });
 
   it("keeps devices out of the namespace", async () => {

@@ -9,7 +9,7 @@ import {
   defineApplet,
   parseAppletOptions,
 } from "./applet.js";
-import { CHARACTER_DEVICE_TYPE, FILE_TYPE_MASK, modeString, REGULAR_FILE_TYPE } from "./format.js";
+import { CHARACTER_DEVICE_TYPE, FILE_TYPE_MASK, isRegularFile, modeString } from "./format.js";
 import {
   BufferedTextWriter,
   commandPath,
@@ -469,11 +469,11 @@ function statText(stat: VfsStat): string {
     `  File: ${stat.path}`,
     `  Size: ${stat.sizeBytes}`,
     `  Type: ${
-      stat.kind === "directory"
-        ? "directory"
-        : stat.kind === "symlink"
-          ? `symbolic link -> ${stat.linkTarget}`
-          : `${stat.contentClass} file`
+      stat.kind === "symlink"
+        ? `symbolic link -> ${stat.linkTarget}`
+        : stat.kind === "file" && isRegularFile(stat)
+          ? `${stat.contentClass} file`
+          : describeKind(stat)
     }`,
     `  Mode: ${stat.mode.toString(8)} (${modeString(stat.mode)})`,
     `Revision: ${stat.revision}`,
@@ -663,7 +663,7 @@ export const fileCommand = /* @__PURE__ */ defineApplet(FILE, async (context, ar
         ? `symbolic link to ${stat.linkTarget}`
         : stat.kind === "file" && stat.contentClass === "opaque"
           ? "opaque R2 content"
-          : stat.kind === "file" && (stat.mode & FILE_TYPE_MASK) === REGULAR_FILE_TYPE
+          : stat.kind === "file" && isRegularFile(stat)
             ? "inline data"
             : describeKind(stat);
     await writeText(fds[1], `${path}: ${description}\n`);

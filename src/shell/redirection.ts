@@ -150,11 +150,11 @@ export async function applyRedirections(
       const path = await targetPath(redirection.target, session, fileSystem, budget, runtime);
       const device = shellDevice(path);
       // A device is a path like any other as far as the declared roots are
-      // concerned, so the check happens before the descriptor layer answers.
-      // Going straight to the device would be the accidental bypass.
+      // concerned, so the roots are checked before the descriptor layer
+      // answers. Going straight to the device would be the accidental bypass.
       if (device !== undefined) {
-        if (redirection.operator === "<") fileSystem.stat(path);
-        else fileSystem.inspectWriteTarget(path);
+        if (redirection.operator === "<") fileSystem.assertReadable(path);
+        else fileSystem.assertWritable(path);
       }
       if (redirection.operator === "<") {
         // `< /dev/stdin` names the input it would replace, so it changes
@@ -171,9 +171,10 @@ export async function applyRedirections(
         continue;
       }
       const descriptor = redirection.operator.startsWith("2") ? 2 : 1;
-      // Built before the descriptor it replaces is closed, because a device
-      // alias duplicates one of these very descriptors: `> /dev/stdout` has to
-      // take its reference while the original is still open.
+      // The sink is built before the descriptor it replaces is closed, so a
+      // constructor that throws leaves the current descriptor intact. A device
+      // alias needs the same ordering for its own reason: `> /dev/stdout`
+      // takes its reference while the original is still open.
       const replacement =
         device === undefined
           ? atomicFileSink(
@@ -183,7 +184,7 @@ export async function applyRedirections(
               budget.limits.maxPipelineBytes,
               budget,
             )
-          : deviceSink(device, fds, budget, path);
+          : deviceSink(device, fds, path);
       try {
         await fds[descriptor].close();
       } catch (error) {
