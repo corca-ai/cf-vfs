@@ -1,4 +1,5 @@
 import { VfsError } from "../core/errors.js";
+import type { VfsEventSink } from "./events.js";
 import { MAX_INLINE_FILE_BYTES, type OpaqueStore } from "./types.js";
 
 export const DIRECTORY_MODE = 0o040755;
@@ -28,6 +29,12 @@ export interface CommonFileSystemOptions {
   now?: () => number;
   createId?: () => string;
   workspaceId?: string;
+  /**
+   * Observes quota, usage, opaque-upload, and garbage-collection events. Never
+   * invoked when omitted — the filesystem also skips the usage query that would
+   * feed it — and a throwing sink cannot roll back a mutation or mask an error.
+   */
+  onEvent?: VfsEventSink;
 }
 
 export interface ResolvedFileSystemLimits {

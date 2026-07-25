@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { defineCommand, writeText } from "../src/shell/commands/helpers.js";
+import type { ShellEvent } from "../src/shell/events.js";
 import { Shell } from "../src/shell/shell.js";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import { putOpaque } from "../src/vfs/opaque.js";
@@ -1179,6 +1180,65 @@ describe("stream-first shell runtime", () => {
         "diff /before /after > /change.patch || :; patch /before /change.patch; cmp /before /after",
     });
     expect(result).toMatchObject({ exitCode: 0, stdout: "", stderr: "" });
+  });
+
+  it("reports commands, executions, and the limit that refused work", async () => {
+    const events: ShellEvent[] = [];
+    const fileSystem = createTestFileSystem();
+    const shell = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      onEvent: (event) => events.push(event),
+    });
+
+    expect(await shell.executeText({ script: "true; echo hi; missing-tool" })).toMatchObject({
+      exitCode: 127,
+    });
+    expect(events.filter((event) => event.type === "shell.command")).toEqual([
+      { type: "shell.command", name: "true", exitCode: 0 },
+      { type: "shell.command", name: "echo", exitCode: 0 },
+      { type: "shell.command", name: "missing-tool", exitCode: 127 },
+    ]);
+    expect(events.at(-1)).toMatchObject({ type: "shell.execution", exitCode: 127 });
+    expect(events.at(-1)).not.toHaveProperty("failureCode");
+
+    events.length = 0;
+    const bounded = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      limits: { maxCommands: 2 },
+      onEvent: (event) => events.push(event),
+    });
+    expect(await bounded.executeText({ script: "true; true; true" })).toMatchObject({
+      exitCode: 1,
+    });
+    expect(events).toContainEqual({
+      type: "shell.limit",
+      limit: "maxCommands",
+      used: 3,
+      max: 2,
+    });
+    expect(events.at(-1)).toMatchObject({
+      type: "shell.execution",
+      exitCode: 1,
+      failureCode: "E2BIG",
+    });
+  });
+
+  it("keeps a throwing shell observer from changing an exit status", async () => {
+    const fileSystem = createTestFileSystem();
+    const shell = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      onEvent: () => {
+        throw new Error("observer failure must not escape");
+      },
+    });
+    expect(await shell.executeText({ script: "echo hi > /out; cat /out" })).toMatchObject({
+      exitCode: 0,
+      stdout: "hi\n",
+      stderr: "",
+    });
   });
 
   it("charges recursive mutation budgets with a counting query, not a materialized subtree", async () => {

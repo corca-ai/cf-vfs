@@ -3,13 +3,14 @@ import {
   type NormalizedDecimalInteger,
   normalizeDecimalInteger,
 } from "../core/decimal-integer.js";
-import { isVfsError, VfsError } from "../core/errors.js";
+import { isVfsError, VfsError, type VfsErrorCode } from "../core/errors.js";
 import { compareUtf8, normalizePath, normalizePathPreservingTrailingSlash } from "../core/path.js";
 import { bodyToStream, readAllBytes } from "../vfs/streams.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 import { ExecutionBudget, resolveShellLimits } from "./budget.js";
 import { optindGeneration } from "./environment.js";
 import { ShellNounsetError } from "./errors.js";
+import { emitShellEvent, type ShellEventSink } from "./events.js";
 import {
   type ExpansionRuntime,
   expandAssignmentValue,
@@ -113,6 +114,7 @@ interface Runtime {
   signal: AbortSignal;
   limits: ShellLimits;
   parserBudget: ParserBudget;
+  onEvent: ShellEventSink | undefined;
 }
 
 interface EvaluationContext {
@@ -483,6 +485,7 @@ async function executeSimpleCommand(
       const command = runtime.commands.get(name);
       if (command === undefined) {
         await fds[2].write(new TextEncoder().encode(`${name}: command not found\n`));
+        emitShellEvent(runtime.onEvent, { type: "shell.command", name, exitCode: 127 });
         return 127;
       }
       exitCode = (
@@ -504,6 +507,7 @@ async function executeSimpleCommand(
         throw new RangeError(`command ${name} returned an invalid exit status: ${exitCode}`);
       }
     }
+    emitShellEvent(runtime.onEvent, { type: "shell.command", name, exitCode });
     return exitCode;
   } finally {
     const preserved =
@@ -1046,6 +1050,7 @@ export class Shell {
   private readonly policy: ShellPolicy;
   private readonly limits: ShellLimits;
   private readonly now: () => number;
+  private readonly onEvent: ShellEventSink | undefined;
 
   constructor(options: ShellOptions) {
     const commands = new Map<string, ShellCommand>();
@@ -1083,6 +1088,7 @@ export class Shell {
       }),
     );
     this.now = options.now ?? Date.now;
+    this.onEvent = options.onEvent;
   }
 
   executeStream(options: ExecuteStreamOptions): ShellExecution {
@@ -1094,7 +1100,7 @@ export class Shell {
     session: ShellSession,
   ): ShellExecution {
     const parserBudget: ParserBudget = { sourceBytes: 0, astNodes: 0 };
-    const budget = new ExecutionBudget(this.limits, this.now);
+    const budget = new ExecutionBudget(this.limits, this.now, this.onEvent);
     let parsed: ScriptNode | undefined;
     let parseError: VfsError | undefined;
     try {
@@ -1119,8 +1125,15 @@ export class Shell {
       name: "stdout",
       account: (bytes) => budget.io(bytes),
       idleTimeoutMs: this.limits.outputIdleTimeoutMs,
-      onIdle: () =>
-        controller.abort(new VfsError("ETIMEDOUT", "stdout consumer did not relieve backpressure")),
+      onIdle: () => {
+        emitShellEvent(this.onEvent, {
+          type: "shell.limit",
+          limit: "outputIdleTimeoutMs",
+          used: this.limits.outputIdleTimeoutMs,
+          max: this.limits.outputIdleTimeoutMs,
+        });
+        controller.abort(new VfsError("ETIMEDOUT", "stdout consumer did not relieve backpressure"));
+      },
       onConsumerCancel: (reason) => controller.abort(cancelled(reason)),
     });
     const stderr = createBytePipe({
@@ -1129,8 +1142,15 @@ export class Shell {
       name: "stderr",
       account: (bytes) => budget.io(bytes),
       idleTimeoutMs: this.limits.outputIdleTimeoutMs,
-      onIdle: () =>
-        controller.abort(new VfsError("ETIMEDOUT", "stderr consumer did not relieve backpressure")),
+      onIdle: () => {
+        emitShellEvent(this.onEvent, {
+          type: "shell.limit",
+          limit: "outputIdleTimeoutMs",
+          used: this.limits.outputIdleTimeoutMs,
+          max: this.limits.outputIdleTimeoutMs,
+        });
+        controller.abort(new VfsError("ETIMEDOUT", "stderr consumer did not relieve backpressure"));
+      },
       onConsumerCancel: (reason) => controller.abort(cancelled(reason)),
     });
     const timeout = setTimeout(() => {
@@ -1141,6 +1161,7 @@ export class Shell {
       1: stdout.sink,
       2: stderr.sink,
     };
+    let failureCode: VfsErrorCode | undefined;
     const completed = (async () => {
       try {
         if (parseError !== undefined) {
@@ -1148,6 +1169,7 @@ export class Shell {
           await closeDescriptors(rootFds);
           const exitCode = parseError.code === "EINVAL" ? 2 : 1;
           session.lastExitCode = exitCode;
+          failureCode = parseError.code;
           return { exitCode };
         }
         if (parsed === undefined) throw new VfsError("EIO", "parser produced no script");
@@ -1159,6 +1181,7 @@ export class Shell {
           signal: controller.signal,
           limits: this.limits,
           parserBudget,
+          onEvent: this.onEvent,
         });
         await closeDescriptors(rootFds);
         return { exitCode: result.status };
@@ -1170,6 +1193,7 @@ export class Shell {
         const message = formatError(error);
         const exitCode = statusFor(error);
         session.lastExitCode = exitCode;
+        failureCode = error.code;
         if (!controller.signal.aborted || error.code === "ETIMEDOUT") {
           try {
             await rootFds[2].write(new TextEncoder().encode(`${message}\n`));
@@ -1189,10 +1213,30 @@ export class Shell {
           options.signal?.removeEventListener("abort", externalAbort);
       }
     })();
+    const observed = completed.then(
+      (result) => {
+        emitShellEvent(this.onEvent, {
+          type: "shell.execution",
+          exitCode: result.exitCode,
+          durationMs: budget.elapsedMs(),
+          ...(failureCode === undefined ? {} : { failureCode }),
+        });
+        return result;
+      },
+      (error: unknown) => {
+        emitShellEvent(this.onEvent, {
+          type: "shell.execution",
+          exitCode: 1,
+          durationMs: budget.elapsedMs(),
+          ...(isVfsError(error) ? { failureCode: error.code } : {}),
+        });
+        throw error;
+      },
+    );
     return {
       stdout: stdout.readable,
       stderr: stderr.readable,
-      completed,
+      completed: observed,
       cancel(reason) {
         controller.abort(cancelled(reason));
       },

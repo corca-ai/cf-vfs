@@ -1,4 +1,4 @@
-import { VfsError } from "../core/errors.js";
+import { isVfsError, VfsError } from "../core/errors.js";
 import { globToRegExp } from "../core/glob.js";
 import {
   basename,
@@ -22,6 +22,7 @@ import {
   resolveFileSystemLimits,
   validatePositiveInteger,
 } from "./config.js";
+import { emitVfsEvent, type VfsEventSink, type VfsQuotaLimit } from "./events.js";
 import { rechunk, streamFromChunks } from "./streams.js";
 import type {
   AppendFileOptions,
@@ -291,7 +292,10 @@ export class SqlFileSystem implements VirtualFileSystem {
   private readonly clock: () => number;
   private readonly createId: () => string;
   private readonly workspaceId: string;
+  private readonly onEvent: VfsEventSink | undefined;
   private readonly mutationEpoch: string;
+  /** Set inside a transaction, reported once the commit is durable. */
+  private pendingUsage: { inlineBytes: number; entries: number } | undefined;
 
   constructor(storage: SqlFileSystemStorage, options: SqlFileSystemOptions = {}) {
     const limits = resolveFileSystemLimits(options);
@@ -301,7 +305,8 @@ export class SqlFileSystem implements VirtualFileSystem {
     this.maxInlineFileBytes = limits.maxInlineFileBytes;
     this.maxInlineLogicalBytes = limits.maxInlineLogicalBytes;
     this.maxEntries = limits.maxEntries;
-    this.inFlightBytes = new InFlightByteBudget(limits.maxInFlightBufferedBytes);
+    this.onEvent = options.onEvent;
+    this.inFlightBytes = new InFlightByteBudget(limits.maxInFlightBufferedBytes, options.onEvent);
     this.maxDatabaseBytes = options.maxDatabaseBytes ?? DEFAULT_MAX_DATABASE_BYTES;
     this.minDatabaseHeadroomBytes =
       options.minDatabaseHeadroomBytes ?? DEFAULT_DATABASE_HEADROOM_BYTES;
@@ -330,8 +335,17 @@ export class SqlFileSystem implements VirtualFileSystem {
 
   private transaction<T>(callback: () => T): T {
     try {
-      return this.storage.transactionSync(callback);
+      const result = this.storage.transactionSync(callback);
+      // Report only after the commit succeeded, and never from inside the
+      // transaction, where a throwing observer would roll the mutation back.
+      const usage = this.pendingUsage;
+      if (usage !== undefined) {
+        this.pendingUsage = undefined;
+        emitVfsEvent(this.onEvent, { type: "vfs.usage", ...usage });
+      }
+      return result;
     } catch (error) {
+      this.pendingUsage = undefined;
       const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       if (/SQLITE_FULL|database or disk is full/iu.test(message)) {
         throw new VfsError("ENOSPC", "SQLite database capacity is exhausted");
@@ -619,18 +633,61 @@ export class SqlFileSystem implements VirtualFileSystem {
       inlineDelta,
       entryDelta,
     );
+    if (this.onEvent !== undefined) this.pendingUsage = this.usage();
+  }
+
+  /** Reports the storage limit that refused work, then fails. */
+  private quotaExceeded(
+    limit: VfsQuotaLimit,
+    requested: number,
+    used: number,
+    max: number,
+    message: string,
+    path?: string,
+  ): never {
+    emitVfsEvent(this.onEvent, {
+      type: "vfs.quota",
+      limit,
+      requested,
+      used,
+      max,
+      ...(path === undefined ? {} : { path }),
+    });
+    throw new VfsError("ENOSPC", message, path);
   }
 
   private assertCapacity(inlineDelta: number, entryDelta: number, path?: string): void {
     const usage = this.usage();
     if (usage.inlineBytes + inlineDelta > this.maxInlineLogicalBytes) {
-      throw new VfsError("ENOSPC", "workspace inline-byte quota exceeded", path);
+      this.quotaExceeded(
+        "maxInlineLogicalBytes",
+        inlineDelta,
+        usage.inlineBytes,
+        this.maxInlineLogicalBytes,
+        "workspace inline-byte quota exceeded",
+        path,
+      );
     }
     if (usage.entries + entryDelta > this.maxEntries) {
-      throw new VfsError("ENOSPC", "filesystem entry quota exceeded", path);
+      this.quotaExceeded(
+        "maxEntries",
+        entryDelta,
+        usage.entries,
+        this.maxEntries,
+        "filesystem entry quota exceeded",
+        path,
+      );
     }
-    if (this.sql.databaseSize + this.minDatabaseHeadroomBytes > this.maxDatabaseBytes) {
-      throw new VfsError("ENOSPC", "SQLite database headroom is exhausted", path);
+    const databaseSize = this.sql.databaseSize;
+    if (databaseSize + this.minDatabaseHeadroomBytes > this.maxDatabaseBytes) {
+      this.quotaExceeded(
+        "databaseHeadroom",
+        this.minDatabaseHeadroomBytes,
+        databaseSize,
+        this.maxDatabaseBytes,
+        "SQLite database headroom is exhausted",
+        path,
+      );
     }
   }
 
@@ -733,8 +790,26 @@ export class SqlFileSystem implements VirtualFileSystem {
     for (const parent of missing) this.createDirectory(parent, now);
   }
 
-  private collectInline(body: ByteBody) {
-    return collectInlineBytes(body, this.maxInlineFileBytes, this.chunkBytes, this.inFlightBytes);
+  private async collectInline(body: ByteBody) {
+    try {
+      return await collectInlineBytes(
+        body,
+        this.maxInlineFileBytes,
+        this.chunkBytes,
+        this.inFlightBytes,
+      );
+    } catch (error) {
+      // Collection aborts at the ceiling, so the body's real size is unknown.
+      if (isVfsError(error) && error.code === "EFBIG") {
+        emitVfsEvent(this.onEvent, {
+          type: "vfs.quota",
+          limit: "maxInlineFileBytes",
+          used: this.maxInlineFileBytes,
+          max: this.maxInlineFileBytes,
+        });
+      }
+      throw error;
+    }
   }
 
   private useBuffered<T>(
@@ -1116,6 +1191,14 @@ export class SqlFileSystem implements VirtualFileSystem {
         }
         const sizeBytes = current.sizeBytes + suffixBytes;
         if (sizeBytes > this.maxInlineFileBytes) {
+          emitVfsEvent(this.onEvent, {
+            type: "vfs.quota",
+            limit: "maxInlineFileBytes",
+            requested: sizeBytes,
+            used: current.sizeBytes,
+            max: this.maxInlineFileBytes,
+            path: normalized,
+          });
           throw new VfsError(
             "EFBIG",
             `inline content exceeds the ${this.maxInlineFileBytes}-byte limit`,
@@ -1589,6 +1672,13 @@ export class SqlFileSystem implements VirtualFileSystem {
       };
     });
     await this.scheduleGarbageAlarm();
+    emitVfsEvent(this.onEvent, {
+      type: "vfs.opaque-upload",
+      phase: "begin",
+      uploadId: reservation.uploadId,
+      objectKey: reservation.objectKey,
+      path: reservation.path,
+    });
     return reservation;
   }
 
@@ -1625,8 +1715,9 @@ export class SqlFileSystem implements VirtualFileSystem {
     objectKey: string,
     verificationToken: string,
     now: number,
+    reason?: string,
   ): boolean {
-    return this.transaction(() => {
+    const rejected = this.transaction(() => {
       const session = this.upload(uploadId);
       if (
         session === null ||
@@ -1644,8 +1735,18 @@ export class SqlFileSystem implements VirtualFileSystem {
         verificationToken,
       );
       this.queueUploadGarbage(session, now);
-      return true;
+      return { path: session.path };
     });
+    if (rejected === false) return false;
+    emitVfsEvent(this.onEvent, {
+      type: "vfs.opaque-upload",
+      phase: "reject",
+      uploadId,
+      objectKey,
+      path: rejected.path,
+      ...(reason === undefined ? {} : { reason }),
+    });
+    return true;
   }
 
   async commitOpaqueUpload(
@@ -1721,6 +1822,7 @@ export class SqlFileSystem implements VirtualFileSystem {
           started.session.objectKey,
           started.verificationToken,
           this.now(),
+          "object-missing",
         )
       )
         throw new VfsError("EREVISION", "upload verification lease was lost", started.session.path);
@@ -1734,6 +1836,7 @@ export class SqlFileSystem implements VirtualFileSystem {
           started.session.objectKey,
           started.verificationToken,
           this.now(),
+          "key-mismatch",
         )
       )
         throw new VfsError("EREVISION", "upload verification lease was lost", started.session.path);
@@ -1754,6 +1857,7 @@ export class SqlFileSystem implements VirtualFileSystem {
           started.session.objectKey,
           started.verificationToken,
           this.now(),
+          "size-mismatch",
         )
       )
         throw new VfsError("EREVISION", "upload verification lease was lost", started.session.path);
@@ -1770,6 +1874,7 @@ export class SqlFileSystem implements VirtualFileSystem {
           started.session.objectKey,
           started.verificationToken,
           this.now(),
+          "digest-unverified",
         )
       )
         throw new VfsError("EREVISION", "upload verification lease was lost", started.session.path);
@@ -1798,7 +1903,7 @@ export class SqlFileSystem implements VirtualFileSystem {
           uploadId,
         );
         this.queueUploadGarbage(session, this.now());
-        return { stale: true, path: session.path } as const;
+        return { stale: true, path: session.path, objectKey: session.objectKey } as const;
       }
       const existing = this.oneEntry(session.path);
       if (existing?.kind === "directory")
@@ -1890,14 +1995,29 @@ export class SqlFileSystem implements VirtualFileSystem {
     });
     if (committed.stale) {
       await this.scheduleGarbageAlarm();
+      emitVfsEvent(this.onEvent, {
+        type: "vfs.opaque-upload",
+        phase: "reject",
+        uploadId,
+        objectKey: committed.objectKey,
+        path: committed.path,
+        reason: "stale-path-token",
+      });
       throw new VfsError("EREVISION", "path changed after upload reservation", committed.path);
     }
     await this.scheduleGarbageAlarm();
+    emitVfsEvent(this.onEvent, {
+      type: "vfs.opaque-upload",
+      phase: "commit",
+      uploadId,
+      objectKey: started.session.objectKey,
+      path: committed.stat.path,
+    });
     return committed.stat;
   }
 
   async abortOpaqueUpload(uploadId: string): Promise<void> {
-    let queued = false;
+    let aborted: { path: string; objectKey: string } | undefined;
     this.transaction(() => {
       const session = this.upload(uploadId);
       if (session === null || session.state === "garbage" || session.state === "committed") return;
@@ -1909,9 +2029,17 @@ export class SqlFileSystem implements VirtualFileSystem {
         uploadId,
       );
       this.queueUploadGarbage(session, this.now());
-      queued = true;
+      aborted = { path: session.path, objectKey: session.objectKey };
     });
-    if (queued) await this.scheduleGarbageAlarm();
+    if (aborted === undefined) return;
+    await this.scheduleGarbageAlarm();
+    emitVfsEvent(this.onEvent, {
+      type: "vfs.opaque-upload",
+      phase: "abort",
+      uploadId,
+      objectKey: aborted.objectKey,
+      path: aborted.path,
+    });
   }
 
   resolveOpaqueRead(path: string, leaseMs = DEFAULT_READ_LEASE_MS): OpaqueReadLease {
@@ -1946,6 +2074,7 @@ export class SqlFileSystem implements VirtualFileSystem {
     const store = this.opaqueStore;
     const batchLimit = Math.min(limit, MAX_GC_BATCH);
     const now = this.now();
+    const expiredSessions: Array<{ uploadId: string; objectKey: string; path: string }> = [];
     const keys = this.transaction(() => {
       const expired = this.sql
         .exec<SqlRow>(
@@ -1968,7 +2097,14 @@ export class SqlFileSystem implements VirtualFileSystem {
           id,
         );
         const session = this.upload(id);
-        if (session !== null) this.queueUploadGarbage(session, now);
+        if (session !== null) {
+          this.queueUploadGarbage(session, now);
+          expiredSessions.push({
+            uploadId: id,
+            objectKey: session.objectKey,
+            path: session.path,
+          });
+        }
       }
       this.sql.exec(
         "DELETE FROM vfs_upload_sessions WHERE state = 'committed' AND expires_at_ms <= ?",
@@ -1986,12 +2122,18 @@ export class SqlFileSystem implements VirtualFileSystem {
         .toArray()
         .map((row) => stringColumn(row, "r2_key"));
     });
+    for (const session of expiredSessions) {
+      emitVfsEvent(this.onEvent, { type: "vfs.opaque-upload", phase: "expire", ...session });
+    }
     if (store === undefined || keys.length === 0) {
       await this.scheduleGarbageAlarm();
-      const remaining = integerColumn(
-        this.sql.exec<SqlRow>("SELECT COUNT(*) AS value FROM vfs_gc_queue").one(),
-        "value",
-      );
+      const remaining = this.garbageDepth();
+      emitVfsEvent(this.onEvent, {
+        type: "vfs.garbage",
+        deleted: 0,
+        remaining,
+        failed: 0,
+      });
       return { deleted: 0, remaining };
     }
     try {
@@ -2026,13 +2168,29 @@ export class SqlFileSystem implements VirtualFileSystem {
         }
       });
       await this.scheduleGarbageAlarm();
+      emitVfsEvent(this.onEvent, {
+        type: "vfs.garbage",
+        deleted: 0,
+        remaining: this.garbageDepth(),
+        failed: keys.length,
+      });
       throw error;
     }
     await this.scheduleGarbageAlarm();
-    const remaining = integerColumn(
+    const remaining = this.garbageDepth();
+    emitVfsEvent(this.onEvent, {
+      type: "vfs.garbage",
+      deleted: keys.length,
+      remaining,
+      failed: 0,
+    });
+    return { deleted: keys.length, remaining };
+  }
+
+  private garbageDepth(): number {
+    return integerColumn(
       this.sql.exec<SqlRow>("SELECT COUNT(*) AS value FROM vfs_gc_queue").one(),
       "value",
     );
-    return { deleted: keys.length, remaining };
   }
 }

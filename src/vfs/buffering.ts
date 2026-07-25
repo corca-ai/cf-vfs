@@ -1,5 +1,6 @@
 import { VfsError } from "../core/errors.js";
 import { validatePositiveInteger } from "./config.js";
+import { emitVfsEvent, type VfsEventSink } from "./events.js";
 import { collectRechunkedBytes } from "./streams.js";
 import type { ByteBody } from "./types.js";
 
@@ -11,12 +12,22 @@ export interface BufferedChunksLease {
 export class InFlightByteBudget {
   private usedBytes = 0;
 
-  constructor(private readonly maximumBytes: number) {
+  constructor(
+    private readonly maximumBytes: number,
+    private readonly onEvent?: VfsEventSink,
+  ) {
     validatePositiveInteger(maximumBytes, "maxInFlightBufferedBytes");
   }
 
   acquire(bytes: number): void {
     if (this.usedBytes + bytes > this.maximumBytes) {
+      emitVfsEvent(this.onEvent, {
+        type: "vfs.quota",
+        limit: "maxInFlightBufferedBytes",
+        requested: bytes,
+        used: this.usedBytes,
+        max: this.maximumBytes,
+      });
       throw new VfsError("ENOSPC", "runtime in-flight byte budget exceeded");
     }
     this.usedBytes += bytes;

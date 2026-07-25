@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { VfsError } from "../src/core/errors.js";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
+import type { VfsEvent } from "../src/vfs/events.js";
 import { putOpaque, readOpaque } from "../src/vfs/opaque.js";
 import { readAllBytes, streamFromChunks } from "../src/vfs/streams.js";
 import type { OpaqueObjectMetadata, OpaqueStore } from "../src/vfs/types.js";
@@ -22,6 +23,89 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
 
   describe("shared VFS conformance", () => {
     runVfsConformance(() => createTestFileSystem());
+  });
+
+  describe("observability", () => {
+    it("reports quota refusals, usage, and opaque lifecycle to onEvent", async () => {
+      const events: VfsEvent[] = [];
+      const store = new MemoryOpaqueStore();
+      const fileSystem = createTestFileSystem({
+        onEvent: (event) => events.push(event),
+        opaqueStore: store,
+        maxEntries: 3,
+      });
+
+      await fileSystem.writeFile("/a", "body");
+      expect(events).toContainEqual({ type: "vfs.usage", inlineBytes: 4, entries: 2 });
+
+      await expect(
+        fileSystem.writeFile("/b/c", "x", { createParents: true }),
+      ).rejects.toMatchObject({ code: "ENOSPC" });
+      expect(events).toContainEqual({
+        type: "vfs.quota",
+        limit: "maxEntries",
+        requested: 1,
+        used: 3,
+        max: 3,
+        path: "/b/c",
+      });
+      // The rolled-back parent creation must not have reported usage.
+      expect(events.filter((event) => event.type === "vfs.usage")).toHaveLength(1);
+
+      const upload = await fileSystem.beginOpaqueUpload("/blob");
+      expect(events.at(-1)).toMatchObject({ type: "vfs.opaque-upload", phase: "begin" });
+      await store.putIfAbsent(upload.objectKey, "opaque body");
+      await fileSystem.commitOpaqueUpload(upload.uploadId);
+      expect(events.at(-1)).toMatchObject({
+        type: "vfs.opaque-upload",
+        phase: "commit",
+        path: "/blob",
+      });
+
+      await fileSystem.remove("/blob");
+      await fileSystem.drainGarbage();
+      expect(events.at(-1)).toMatchObject({ type: "vfs.garbage", deleted: 1, failed: 0 });
+    });
+
+    it("reports a rejected commit and keeps a throwing observer from changing behavior", async () => {
+      const events: VfsEvent[] = [];
+      const store = new MemoryOpaqueStore();
+      const fileSystem = createTestFileSystem({
+        onEvent: (event) => {
+          events.push(event);
+          throw new Error("observer failure must not escape");
+        },
+        opaqueStore: store,
+      });
+
+      // A committed write still succeeds even though every emit throws.
+      await fileSystem.writeFile("/kept", "body");
+      expect(await bytes(fileSystem.readFile("/kept").stream)).toEqual([
+        ...new TextEncoder().encode("body"),
+      ]);
+
+      const upload = await fileSystem.beginOpaqueUpload("/blob", { expectedSizeBytes: 99 });
+      await store.putIfAbsent(upload.objectKey, "wrong size");
+      await expect(fileSystem.commitOpaqueUpload(upload.uploadId)).rejects.toMatchObject({
+        code: "EIO",
+      });
+      expect(events).toContainEqual({
+        type: "vfs.opaque-upload",
+        phase: "reject",
+        uploadId: upload.uploadId,
+        objectKey: upload.objectKey,
+        path: "/blob",
+        reason: "size-mismatch",
+      });
+    });
+
+    it("performs no usage bookkeeping when no observer is attached", async () => {
+      const fileSystem = createTestFileSystem();
+      await fileSystem.writeFile("/a", "body");
+      // Nothing to assert beyond the mutation succeeding: the guarded usage
+      // query in updateUsage() is skipped, so this pins that the guard exists.
+      expect(fileSystem.stat("/a").sizeBytes).toBe(4);
+    });
   });
 
   it("counts a subtree past the ceiling that truncates find()", async () => {

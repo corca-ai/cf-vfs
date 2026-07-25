@@ -1,7 +1,9 @@
 import { VfsError } from "../core/errors.js";
 import type { DurableObjectFileSystemOptions } from "../vfs/do-sql.js";
 import { VfsDurableObject } from "../vfs/durable-object.js";
+import type { VfsEvent } from "../vfs/events.js";
 import { rpcByteBody, rpcString } from "../vfs/rpc-validation.js";
+import type { ShellEvent } from "./events.js";
 import { Shell } from "./shell.js";
 import type {
   ExecuteBytesResult,
@@ -12,10 +14,12 @@ import type {
   ShellPolicy,
 } from "./types.js";
 
-export interface ShellDurableObjectOptions extends DurableObjectFileSystemOptions {
+export interface ShellDurableObjectOptions extends Omit<DurableObjectFileSystemOptions, "onEvent"> {
   commands: readonly ShellCommand[];
   policy?: ShellPolicy;
   limits?: Partial<ShellLimits>;
+  /** Observes storage and execution events from this object's single hook. */
+  onEvent?: (event: VfsEvent | ShellEvent) => void;
 }
 
 export interface ExecuteToOptions {
@@ -105,6 +109,7 @@ export abstract class ShellDurableObject<Environment> extends VfsDurableObject<E
       commands: options.commands,
       ...(options.policy === undefined ? {} : { policy: options.policy }),
       ...(options.limits === undefined ? {} : { limits: options.limits }),
+      ...(options.onEvent === undefined ? {} : { onEvent: options.onEvent }),
     });
   }
 

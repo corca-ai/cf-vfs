@@ -1,4 +1,5 @@
 import type { VfsStat, VirtualFileSystem } from "../vfs/types.js";
+import type { ShellEventSink } from "./events.js";
 import type { FunctionDefinitionNode } from "./parser.js";
 
 export type ShellFileSystem = Pick<
@@ -175,6 +176,11 @@ export interface ShellOptions {
   policy?: ShellPolicy;
   limits?: Partial<ShellLimits>;
   now?: () => number;
+  /**
+   * Observes bounded-execution events. Never invoked when omitted, and a
+   * throwing sink cannot change an exit status or mask an error.
+   */
+  onEvent?: ShellEventSink;
 }
 
 export interface ShellBudget {
