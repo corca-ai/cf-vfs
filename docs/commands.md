@@ -372,9 +372,9 @@ Each applet declares how it participates in resolution:
 
 | Kind | Bare name | Applet path | Examples |
 | --- | --- | --- | --- |
-| program | only when `PATH` names an applet directory | yes | `cat`, `grep`, `ls`, `env`, `which`, `printenv` |
+| program | when the search is off, or when `PATH` names an applet directory | yes | `cat`, `grep`, `ls`, `env`, `which`, `printenv`, `sh` |
 | built-in | always, whatever `PATH` says | yes | `echo`, `printf`, `pwd`, `test`, `[`, `true`, `false` |
-| shell built-in | always, whatever `PATH` says | no | `cd`, `export`, `set`, `source`, `.`, `read`, `command`, `type` |
+| session built-in | always, whatever `PATH` says | no | `cd`, `export`, `set`, `source`, `.`, `read`, `command`, `type` |
 
 This is Bash's rule: a built-in is found without a search, and a shell built-in
 that changes the calling session has no program form at all, exactly as Linux
@@ -382,19 +382,26 @@ has no `/bin/cd`.
 
 ### PATH
 
-When the session has no `PATH`, every registered applet answers to its bare
-name. That is what a `Shell` built without the Linux profile expects, and
-nothing is searched, so `type cat` reports an applet rather than inventing a
-location.
+The Linux search is opt-in. `ShellOptions.commandResolution` defaults to
+`"registry"`, where every registered applet answers to its bare name and `PATH`
+is an ordinary variable — so an application that sets `PATH` for its own reasons
+cannot lose commands, and `type cat` reports an applet rather than inventing a
+location. Set `commandResolution: "path"`, or spread `LINUX_SHELL_OPTIONS`, to
+get the search.
 
-When `PATH` is set, components are searched left to right and the first applet
-directory decides. A duplicated component is harmless, and a component naming
-anything else contributes nothing — including the empty component, which POSIX
-gives to the working directory and which no namespace directory can satisfy
-because executing a stored file is not supported yet. A prefix assignment
-applies before the search, so `PATH=/opt/tools cat file` reports
-`cat: command not found` exactly as in Bash. An absolute applet path bypasses
-the search entirely.
+Under the search, components are looked at left to right and the first applet
+directory decides. A duplicated component is harmless. A component naming
+anything else contributes nothing — including the empty component POSIX gives to
+the working directory, and including `/bin/`, since a component must be spelled
+exactly `/bin` or `/usr/bin` and no namespace directory can supply a command
+until executing a stored file is supported. A prefix assignment applies before
+the search, so `PATH=/opt/tools cat file` reports `cat: command not found`
+exactly as in Bash. An absolute applet path bypasses the search entirely, under
+either setting.
+
+A name the command policy denies is reported as unresolved by `command -v`,
+`type`, and `which`, so discovery never advertises something that would
+immediately fail with 126.
 
 A shell function takes precedence over an applet with the same bare name. As in
 Bash, an applet path such as `/bin/echo` bypasses the function, and so does
@@ -412,16 +419,26 @@ variables ordinary scripts assume. It is a cf-vfs profile, not Linux and not the
 Filesystem Hierarchy Standard: there is no user database, no package manager, no
 writable `/bin`, and no host process.
 
-`linuxShellEnvironment()` returns `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`,
-`TMPDIR`, `LANG`, `LC_ALL`, and `TZ`; pass it as `env`. `SHELL` names
-`/bin/sh`, the canonical spelling of this shell profile — executing that path is
-not supported yet.
+`linuxShellEnvironment(options)` returns `PATH`, `HOME`, `USER`, `LOGNAME`,
+`SHELL`, `TMPDIR`, `LANG`, `LC_ALL`, and `TZ`; pass it as `env`, and spread
+`LINUX_SHELL_OPTIONS` into the `Shell` options to enable the search. `SHELL`
+names `/bin/sh`, the canonical spelling of this shell profile. That name
+resolves — `command -v sh` and `type bash` report it — but running it exits 126,
+found but not executable, because only its execution is missing. It claims no
+host Bash: the declared language is `BASH_COMPATIBILITY_VERSION`.
 
-`provisionLinuxFilesystem()` creates `/etc`, `/home`, `/home/<user>`, `/tmp`,
-`/var`, `/var/tmp`, and `/workspace`. It is recursive and therefore idempotent.
-`/bin` and `/usr/bin` are deliberately not created: they resolve applets without
-a namespace entry, so a row there would mean nothing and could be removed while
-`/bin/cat` kept working. Listing them is not supported.
+`provisionLinuxFilesystem(fileSystem, options)` creates `/etc`, `/home`,
+`/home/<user>`, `/tmp`, `/var`, `/var/tmp`, and `/workspace`, and returns what
+it created. It is recursive and therefore idempotent. `/bin` and `/usr/bin` are
+deliberately not created: they resolve applets without a namespace entry, so a
+row there would mean nothing and could be removed while `/bin/cat` kept working.
+Listing them is not supported, and a `home` or `cwd` option inside one is a
+usage error.
+
+`LinuxProfileOptions` accepts `user` (default `cf`), `home` (default
+`/home/<user>`), `cwd` (default `/workspace`), and `tmp` (default `/tmp`). `cwd`
+decides which directory is provisioned; pass the same path as the execution
+`cwd` to start there.
 
 | Registry group | Available commands and principal options |
 | --- | --- |
@@ -470,9 +487,10 @@ outside the profile.
 
 `command -v NAME` prints a spelling a script can run: the applet path when a
 search found one, and the bare name for a function, a built-in, or an applet
-resolved without a `PATH`. It exits 1 when the name is unknown. `command NAME
-[ARGUMENT...]` runs the applet even when a function shadows it. Bash's `-V` and
-`-p` forms are outside the profile. `type` classifies each name and reports an
+resolved without a search. It exits 1 when the name is unknown, and accepts one
+name. `command NAME [ARGUMENT...]` runs the applet even when a function shadows
+it; option scanning stops at that name, so the invoked utility keeps its own
+options. Bash's `-V` and `-p` forms are outside the profile. `type` classifies each name and reports an
 unknown one on stderr with status 1; it does not print a function body. `which`
 reports only names with a program form, so a function and a shell built-in such
 as `cd` are not found, and it needs a `PATH` to have a path to print.

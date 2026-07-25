@@ -51,19 +51,22 @@ export interface AppletSpec<Name extends string = string> {
   /**
    * How the applet participates in command resolution.
    *
-   * - absent, the default: an ordinary program. Reachable at `/bin/NAME` and
-   *   `/usr/bin/NAME`, and by bare name only when `PATH` names one of those
-   *   directories.
+   * - `program`, the default: an ordinary applet. Reachable at `/bin/NAME` and
+   *   `/usr/bin/NAME`, and by bare name only when a `PATH` search is enabled
+   *   and some component names one of those directories.
    * - `builtin`: a shell built-in that Linux also ships as a program, such as
    *   `echo` or `test`. Bash prefers the built-in, so it resolves by bare name
    *   regardless of `PATH`, and it still has an applet path.
-   * - `shell-builtin`: changes or inspects the calling session, so it has no
+   * - `session-builtin`: changes or inspects the calling session, so it has no
    *   program form at all. Linux has no `/bin/cd`, and neither does this.
    */
-  readonly kind?: "builtin" | "shell-builtin";
+  readonly kind?: AppletKind;
   /** Option table, when the applet uses the shared scanner. */
   readonly options?: UtilityOptionParserConfig<Name>;
 }
+
+/** See `AppletSpec.kind`. */
+export type AppletKind = "program" | "builtin" | "session-builtin";
 
 export type AppletSpecWithOptions<Name extends string> = AppletSpec<Name> & {
   readonly options: UtilityOptionParserConfig<Name>;
@@ -131,30 +134,25 @@ export function appletPathName(name: string): string | undefined {
 }
 
 /**
- * How a name reached its implementation.
+ * What a registered name is.
  *
- * `builtin` means the name resolved without consulting `PATH`, exactly as Bash
- * resolves its built-ins. `program` means a `PATH` search or an absolute applet
- * path selected it.
+ * `program` is an ordinary applet: reachable at `/bin/NAME`, and by bare name
+ * only through a `PATH` component naming an applet directory. `builtin` is a
+ * Bash built-in that Linux also ships as a program, so it resolves without a
+ * search and still has an applet path. `session-builtin` changes or inspects
+ * the calling session and therefore has no program form at all.
  */
-export interface AppletResolution {
+export interface AppletEntry {
   readonly command: ShellCommand;
-  readonly kind: "builtin" | "program";
-  /**
-   * The applet path this name has, when it has one and a search found it.
-   *
-   * Absent for a session-scoped built-in, which has no program form, and for a
-   * bare name resolved without a `PATH`, where nothing was searched.
-   */
-  readonly path?: string;
+  readonly kind: AppletKind;
 }
 
 /**
  * Splits a `PATH` value into components.
  *
- * An empty component means the working directory in POSIX. No directory in the
- * namespace can supply a command yet, so an empty component contributes
- * nothing here rather than being silently treated as an applet directory.
+ * Components are returned exactly as written, including empty ones. POSIX
+ * gives an empty component to the working directory, and the caller decides
+ * what a component can supply.
  */
 export function splitSearchPath(value: string): string[] {
   return value.split(":");
@@ -167,79 +165,48 @@ export function splitSearchPath(value: string): string[] {
  * aliases, and the virtual applet directories. Every spelling returns the same
  * `ShellCommand` object, so callers can compare identity and report the
  * canonical name for policy decisions and diagnostics.
+ *
+ * The registry answers about one name or one directory at a time and never
+ * walks `PATH` itself. Ordering a search across components belongs to the
+ * shell, which is the only layer that can also consult the namespace.
  */
 export interface AppletRegistry {
   /** Registered commands in registration order. */
   readonly commands: readonly ShellCommand[];
-  /**
-   * Resolves a bare name, declared alias, or virtual applet path.
-   *
-   * `searchPath` is the session's `PATH`. When it is `undefined` every
-   * registered applet answers to its bare name, which is what a `Shell`
-   * configured without the Linux profile expects. When it is present, a
-   * non-built-in applet answers to a bare name only if some component names a
-   * virtual applet directory, and components are searched left to right.
-   */
-  resolve(name: string, searchPath?: string): AppletResolution | undefined;
-  /** The implementation `resolve` selects, or `undefined`. */
-  lookup(name: string, searchPath?: string): ShellCommand | undefined;
+  /** Looks up a bare name or a declared alias, ignoring `PATH`. */
+  find(name: string): AppletEntry | undefined;
+  /** Whether a `PATH` component is one of the virtual applet directories. */
+  isAppletDirectory(directory: string): boolean;
+  /** Resolves an absolute applet path such as `/bin/cat`. */
+  findPath(path: string): AppletEntry | undefined;
 }
 
 export function createAppletRegistry(commands: readonly ShellCommand[]): AppletRegistry {
-  // Snapshot the caller's array so `commands` and `lookup` can never disagree.
+  // Snapshot the caller's array so `commands` and `find` can never disagree.
   const registered = [...commands];
-  const byName = new Map<string, ShellCommand>();
-  // Names with a program form, and names that resolve without consulting PATH.
-  const programs = new Map<string, ShellCommand>();
-  const builtins = new Set<string>();
+  const byName = new Map<string, AppletEntry>();
   for (const command of registered) {
     const spec = (command as Partial<ShellApplet>).spec;
-    const aliases = spec?.aliases ?? [];
-    for (const name of [command.name, ...aliases]) {
+    const entry: AppletEntry = { command, kind: spec?.kind ?? "program" };
+    for (const name of [command.name, ...(spec?.aliases ?? [])]) {
       if (byName.has(name)) throw new VfsError("EINVAL", `duplicate command: ${name}`);
-      byName.set(name, command);
-      if (spec?.kind !== "shell-builtin") programs.set(name, command);
-      if (spec?.kind !== undefined) builtins.add(name);
+      byName.set(name, entry);
     }
   }
-
-  // Left to right, first match wins, so a duplicated component is harmless and
-  // the reported path is always the one that would run. Every applet is present
-  // in every applet directory, so the component alone decides the result.
-  const searchDirectory = (searchPath: string): string | undefined =>
-    splitSearchPath(searchPath).find((directory) => APPLET_DIRECTORIES.includes(directory));
-
-  const resolve = (name: string, searchPath?: string): AppletResolution | undefined => {
-    const base = appletPathName(name);
-    if (base !== undefined) {
-      // An absolute applet path bypasses PATH, exactly as in Linux.
-      const command = programs.get(base);
-      return command === undefined
-        ? undefined
-        : { command, kind: "program", path: `${name.slice(0, name.lastIndexOf("/"))}/${base}` };
-    }
-    const command = byName.get(name);
-    if (command === undefined) return undefined;
-    const directory =
-      searchPath === undefined || !programs.has(name) ? undefined : searchDirectory(searchPath);
-    if (builtins.has(name)) {
-      // A built-in resolves whatever PATH says. It still reports the applet
-      // path it has, so `which echo` can find one.
-      return directory === undefined
-        ? { command, kind: "builtin" }
-        : { command, kind: "builtin", path: `${directory}/${name}` };
-    }
-    if (searchPath === undefined) return { command, kind: "program" };
-    return directory === undefined
-      ? undefined
-      : { command, kind: "program", path: `${directory}/${name}` };
-  };
-
   return {
     commands: registered,
-    resolve,
-    lookup(name: string, searchPath?: string): ShellCommand | undefined {
-      return resolve(name, searchPath)?.command;
+    find(name: string): AppletEntry | undefined {
+      return byName.get(name);
+    },
+    isAppletDirectory(directory: string): boolean {
+      return APPLET_DIRECTORIES.includes(directory);
+    },
+    findPath(path: string): AppletEntry | undefined {
+      const base = appletPathName(path);
+      if (base === undefined) return undefined;
+      const entry = byName.get(base);
+      // A session-scoped built-in has no program form, so no path selects it.
+      return entry === undefined || entry.kind === "session-builtin" ? undefined : entry;
     },
   };
 }

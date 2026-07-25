@@ -19,7 +19,7 @@ const COLON = {
   name: ":",
   usage: "",
   summary: "does nothing and succeeds",
-  kind: "shell-builtin",
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const TRUE = {
@@ -60,14 +60,14 @@ const CD = {
   name: "cd",
   usage: "[DIRECTORY]",
   summary: "changes the working directory",
-  kind: "shell-builtin",
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const EXPORT = {
   name: "export",
   usage: "[NAME[=VALUE]...]",
   summary: "marks variables for the session environment",
-  kind: "shell-builtin",
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const ENV = {
@@ -80,70 +80,70 @@ const UNSET = {
   name: "unset",
   usage: "[NAME...]",
   summary: "removes variables",
-  kind: "shell-builtin",
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const READ = {
   name: "read",
   usage: "-r [NAME...]",
   summary: "reads one record from standard input",
-  kind: "shell-builtin",
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const SHIFT = {
   name: "shift",
   usage: "[COUNT]",
   summary: "drops leading positional parameters",
-  kind: "shell-builtin",
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const GETOPTS = {
   name: "getopts",
   usage: "OPTSTRING NAME [ARGUMENT...]",
   summary: "parses one option from the positional parameters",
-  kind: "shell-builtin",
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const LOCAL = {
   name: "local",
   usage: "NAME[=VALUE]...",
   summary: "declares function-scoped variables",
-  kind: "shell-builtin",
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const RETURN = {
   name: "return",
   usage: "[STATUS]",
   summary: "returns from a function or sourced file",
-  kind: "shell-builtin",
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const BREAK = {
   name: "break",
   usage: "[LEVELS]",
   summary: "exits enclosing loops",
-  kind: "shell-builtin",
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const CONTINUE = {
   name: "continue",
   usage: "[LEVELS]",
   summary: "resumes the next iteration of an enclosing loop",
-  kind: "shell-builtin",
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const EXIT = {
   name: "exit",
   usage: "[STATUS]",
   summary: "ends the execution unit",
-  kind: "shell-builtin",
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const SET = {
   name: "set",
   usage: "[-e|+e] [-u|+u] [-o|+o OPTION]",
   summary: "sets supported shell options",
-  kind: "shell-builtin",
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const TEST = {
@@ -604,7 +604,7 @@ function defineSourceCommand(name: "source" | ".") {
     name,
     usage: "FILE [ARGUMENT...]",
     summary: "runs a bounded VFS file in the current shell scope",
-    kind: "shell-builtin",
+    kind: "session-builtin",
   } as const satisfies AppletSpec;
   return defineApplet(spec, async (context, argv, fds) => {
     const [path, ...args] = argv;

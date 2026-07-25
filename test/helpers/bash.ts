@@ -85,10 +85,10 @@ async function arrangeFiles(
   }
 }
 
-export function bashCases(cases: readonly BashCase[]): void {
+export function bashCases(cases: readonly BashCase[], options: BashHarnessOptions = {}): void {
   for (const specification of cases) {
     it(specification.name, async () => {
-      const harness = createBashHarness();
+      const harness = createBashHarness(options);
       await arrangeFiles(harness.fileSystem, specification.files ?? {});
       const result = await harness.run(specification.script, {
         ...(specification.stdin === undefined ? {} : { stdin: specification.stdin }),

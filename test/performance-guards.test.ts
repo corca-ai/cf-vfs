@@ -139,7 +139,11 @@ describe("common-path SQL cost", () => {
 
   it("charges no storage work to a PATH search or to command discovery", async () => {
     const { fileSystem, meter } = meteredFileSystem();
-    const shell = new Shell({ fileSystem, commands: defaultShellCommands });
+    const shell = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      commandResolution: "path",
+    });
     await fileSystem.writeFile("/probe", "x");
     meter.reset();
     await shell.executeText({ script: "cat /probe" });

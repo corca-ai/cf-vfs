@@ -88,6 +88,13 @@
       "oracle": "bash",
       "summary": "type reports that a name is a function without printing its definition",
       "reason": "Bash re-renders the parsed function body, which would make `type` output depend on the formatter rather than on the profile. Reporting the classification keeps the output stable and is what a script testing for a function needs."
+    },
+    {
+      "id": "printenv-reads-one-variable-map",
+      "command": "printenv, env",
+      "oracle": "coreutils",
+      "summary": "printenv reports any set variable, not only exported ones",
+      "reason": "A cf-vfs shell has one variable map and no separate process environment to hand a child, so `export` records intent rather than moving a value between scopes. `printenv NAME` therefore prints a variable a POSIX shell would keep to itself. Scripts that test for an inherited variable must not rely on the distinction."
     }
   ],
   "cases": [
@@ -691,29 +698,29 @@
     },
     {
       "name": "which-external",
-      "oracle": "bash",
-      "script": "PATH=/bin:/usr/bin; which cat",
+      "oracle": "busybox",
+      "script": "PATH=/bin; which cat",
       "stdout": "/bin/cat\n",
       "exitCode": 0
     },
     {
       "name": "which-builtin-status",
-      "oracle": "bash",
-      "script": "PATH=/bin:/usr/bin; which cd; printf 'status=%s\\n' \"$?\"",
+      "oracle": "busybox",
+      "script": "PATH=/bin; which cd; printf 'status=%s\\n' \"$?\"",
       "stdout": "status=1\n",
       "exitCode": 0
     },
     {
       "name": "printenv-named-values",
-      "oracle": "bash",
-      "script": "PATH=/bin:/usr/bin; FIRST=one; SECOND=two; export FIRST SECOND; printenv FIRST SECOND",
+      "oracle": "coreutils",
+      "script": "FIRST=one; SECOND=two; export FIRST SECOND; printenv FIRST SECOND",
       "stdout": "one\ntwo\n",
       "exitCode": 0
     },
     {
       "name": "printenv-unset-status",
-      "oracle": "bash",
-      "script": "PATH=/bin:/usr/bin; printenv NOT_SET_ANYWHERE; printf 'status=%s\\n' \"$?\"",
+      "oracle": "coreutils",
+      "script": "printenv NOT_SET_ANYWHERE; printf 'status=%s\\n' \"$?\"",
       "stdout": "status=1\n",
       "exitCode": 0
     }

@@ -121,15 +121,19 @@ Deliberate deterministic choices include:
   file at the same path. The directory match is literal, so `/bin//cat` does not
   resolve. Diagnostics and `allowedCommands` use the canonical applet name, and
   a usage diagnostic ends with the applet's declared synopsis;
-- `PATH` is searched left to right and only an applet directory can satisfy a
-  component, because executing a stored file is not supported yet. A built-in
-  resolves without a search, as in Bash, and a prefix assignment applies before
-  the search. An empty component names the working directory in POSIX and
-  therefore satisfies nothing here;
+- the `PATH` search is opt-in through `commandResolution: "path"`. Without it a
+  `PATH` is an ordinary variable and every registered applet answers to its bare
+  name, so an application that sets `PATH` for its own reasons cannot lose
+  commands. With it, components are searched left to right and only a component
+  spelled exactly `/bin` or `/usr/bin` can satisfy one, because executing a
+  stored file is not supported yet. A built-in resolves without a search, as in
+  Bash, and a prefix assignment applies before the search;
 - the opt-in Linux profile is a cf-vfs environment, not the Filesystem Hierarchy
   Standard. It provides `/etc`, `/home`, `/tmp`, `/var/tmp`, and `/workspace` as
   ordinary directories, resolves `/bin` and `/usr/bin` virtually, and adds no
-  user database, package manager, writable `/bin`, or host process;
+  user database, package manager, writable `/bin`, or host process. `/bin/sh`
+  names the profile and resolves, but running it is status 126 until executable
+  files are supported;
 - status 2 is syntax/usage, 126 is policy denial, and 127 is command-not-found.
 
 Differential fixtures are pinned against `bash:5.3.3` with the same locale and

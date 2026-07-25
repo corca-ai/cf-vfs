@@ -82,6 +82,7 @@ try {
     import { typeCommand, whichCommand } from "@corca-ai/cf-vfs/shell/commands/discovery";
     import {
       LINUX_APPLET_DIRECTORIES,
+      LINUX_SHELL_OPTIONS,
       linuxShellEnvironment,
       provisionLinuxFilesystem,
     } from "@corca-ai/cf-vfs/shell/linux";
@@ -95,11 +96,14 @@ try {
       lsCommand,
       defineApplet({ name: "probe", aliases: ["p"], usage: "", summary: "probe" }, () => 0),
     ]);
-    for (const spelling of ["ls", "/bin/ls", "/usr/bin/ls"]) {
-      if (applets.lookup(spelling) !== lsCommand) throw new Error(\`applet path \${spelling}\`);
+    for (const spelling of ["/bin/ls", "/usr/bin/ls"]) {
+      if (applets.findPath(spelling)?.command !== lsCommand) {
+        throw new Error("applet path " + spelling);
+      }
     }
-    if (applets.lookup("p")?.name !== "probe") throw new Error("applet alias");
-    if (applets.lookup("/sbin/ls") !== undefined) throw new Error("unexpected applet directory");
+    if (applets.find("ls")?.command !== lsCommand) throw new Error("applet name");
+    if (applets.find("p")?.command.name !== "probe") throw new Error("applet alias");
+    if (applets.findPath("/sbin/ls") !== undefined) throw new Error("unexpected applet directory");
     if (typeCommand.name !== "type" || whichCommand.name !== "which") {
       throw new Error("discovery exports");
     }
@@ -123,7 +127,12 @@ try {
     const result = await shell.executeText({ script: 'X=$(printf ok); printf "package-%s" "$X"' });
     if (result.stdout !== "package-ok") throw new Error("shell execution");
     provisionLinuxFilesystem(fileSystem);
-    const discovery = await shell.executeText({
+    const linuxShell = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      ...LINUX_SHELL_OPTIONS,
+    });
+    const discovery = await linuxShell.executeText({
       script: "cd $HOME; pwd; command -v grep",
       env: linuxShellEnvironment(),
     });

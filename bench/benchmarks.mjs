@@ -245,18 +245,23 @@ await measure("concurrent-shells", { concurrency: 4, sizeBytes: 256 * 1024 }, as
   };
 });
 
-// Command resolution is on the hot path of every simple command. These two
-// scenarios are identical except for the search: 500 invocations of the
-// cheapest applet, once by bare name with no PATH and once through a PATH
-// search. The loop overhead is common to both, so the difference between them
-// isolates the resolver.
-for (const [name, prologue] of [
-  ["command-lookup-bare", ""],
-  ["command-lookup-path", "PATH=/usr/bin:/bin; "],
+// Command resolution is on the hot path of every simple command, so these two
+// scenarios keep a regression ceiling on it: 500 invocations of the cheapest
+// applets with the search off and on. Loop overhead dominates at this scale, so
+// treat the pair as a ceiling rather than as an isolated measurement of the
+// resolver; `test/performance-guards.test.ts` carries the structural claim that
+// neither path touches storage.
+for (const [name, prologue, resolution] of [
+  ["command-lookup-bare", "", "registry"],
+  ["command-lookup-path", "PATH=/usr/bin:/bin; ", "path"],
 ]) {
   await measure(name, { invocations: 500 }, async () => {
     const fileSystem = createFileSystem();
-    const shell = new Shell({ fileSystem, commands: defaultShellCommands });
+    const shell = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      commandResolution: resolution,
+    });
     const result = await shell.executeText({
       script: `${prologue}index=0; while [ $index -lt 500 ]; do true; index=$((index + 1)); done; printf done`,
     });

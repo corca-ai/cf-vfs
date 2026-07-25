@@ -214,6 +214,20 @@ export interface ExecuteBytesResult {
 export interface ShellOptions {
   fileSystem: VirtualFileSystem;
   commands: readonly ShellCommand[];
+  /**
+   * How a bare command name reaches an applet.
+   *
+   * `"registry"`, the default, resolves every registered applet by its name
+   * and ignores `PATH` entirely, so a `PATH` an application sets for its own
+   * reasons cannot make commands disappear.
+   *
+   * `"path"` adds the Linux search: a `PATH` component must name a virtual
+   * applet directory for an ordinary applet to resolve, while a built-in
+   * resolves regardless, exactly as in Bash. Use it with the environment from
+   * `@corca-ai/cf-vfs/shell/linux`; an absolute applet path such as `/bin/cat`
+   * works under both settings.
+   */
+  commandResolution?: "registry" | "path";
   policy?: ShellPolicy;
   limits?: Partial<ShellLimits>;
   now?: () => number;

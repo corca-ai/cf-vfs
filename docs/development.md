@@ -224,12 +224,17 @@ the applet-path branch is guarded by a single character comparison — and resol
 before checking `allowedCommands` so a policy decision always names the
 canonical applet.
 
-Declare `kind` when the applet is not an ordinary program. `builtin` means Bash
-resolves it without a `PATH` search but Linux still ships a program, such as
-`echo` or `test`. `shell-builtin` means it changes or inspects the calling
+Declare `kind` when the applet is not an ordinary `program`. `builtin` means
+Bash resolves it without a `PATH` search but Linux still ships a program, such
+as `echo` or `test`. `session-builtin` means it changes or inspects the calling
 session and therefore has no program form, so it never answers to `/bin/NAME`.
-Getting this wrong is observable: a program is unreachable under an empty
-`PATH`, and a built-in is not.
+Getting this wrong is observable under `commandResolution: "path"`: a program is
+unreachable with an empty `PATH`, and a built-in is not.
+
+The registry answers about one name or one directory at a time and never walks
+`PATH`. Ordering a search across components lives in `shell.ts`, which is the
+only layer that can also consult the namespace — that is where executable-file
+support inserts its probe.
 
 Command discovery lives in `src/shell/commands/discovery.ts` and reads
 `ShellCommandContext.resolveCommand()`, which runs exactly the resolution order
@@ -272,13 +277,13 @@ recorded byte budget in `test/fixtures/bundle-budgets.json`. Size alone is
 insufficient, so the inclusion check reads the emitted source map, whose
 `sources` array is exactly the module list esbuild kept: renaming a diagnostic
 or rewording a comment cannot weaken it. Every fixture imports through a package
-subpath so all seven measure the same compiled output. A bundle far below its
+subpath so all eight measure the same compiled output. A bundle far below its
 budget fails too, so a stale budget can never quietly stop protecting anything;
 record new sizes with `npm run test:bundle-budgets:record` and explain the diff
 in review.
 
-`test/fixtures/utility-compat.json` pins utility behavior against BusyBox and
-Debian's GNU tools by image digest and exact tool version, and carries the
+`test/fixtures/utility-compat.json` pins utility behavior against BusyBox,
+Debian's GNU tools, and Bash by image digest and exact tool version, and carries the
 registry of deliberate divergences described in
 [the compatibility profile](posix-compatibility.md). Every case must produce
 empty stderr on the oracle; the generator refuses one that does not, because

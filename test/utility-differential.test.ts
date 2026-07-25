@@ -67,6 +67,13 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe("greet is a function\n");
   },
+  "printenv-reads-one-variable-map": async () => {
+    const harness = createBashHarness();
+    const result = await harness.run(["LOCAL_ONLY=value", "printenv LOCAL_ONLY"]);
+    expect(result.exitCode).toBe(0);
+    // A POSIX shell would print nothing and exit 1 for an unexported name.
+    expect(result.stdout).toBe("value\n");
+  },
   "diff-output-format": async () => {
     const harness = createBashHarness();
     await harness.fileSystem.writeFile("/left", "a\n");
@@ -124,7 +131,9 @@ for (const [name, oracle] of Object.entries(fixtures.oracles)) {
 
     for (const fixture of cases) {
       it(fixture.name, async () => {
-        const harness = createBashHarness();
+        // Fixtures run with the Linux search enabled, because an oracle shell
+        // always resolves through PATH.
+        const harness = createBashHarness({ commandResolution: "path" });
         harness.fileSystem.mkdir(WORKDIR, true);
         for (const [path, content] of Object.entries(fixture.files ?? {})) {
           await harness.fileSystem.writeFile(`${WORKDIR}/${path}`, content);

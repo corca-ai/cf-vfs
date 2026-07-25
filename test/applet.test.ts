@@ -81,6 +81,7 @@ const DEFAULT_REGISTRY = [
   "sed",
   "seq",
   "set",
+  "sh",
   "sha256sum",
   "shift",
   "sort",
@@ -174,13 +175,19 @@ describe("applet registry", () => {
   it("resolves a canonical name, an alias, and a virtual path to one implementation", () => {
     const applet = marker("hello", ["hi"]);
     const registry = createAppletRegistry([applet]);
-    for (const spelling of ["hello", "hi", "/bin/hello", "/usr/bin/hi"]) {
-      expect(registry.lookup(spelling), spelling).toBe(applet);
+    for (const spelling of ["hello", "hi"]) {
+      expect(registry.find(spelling)?.command, spelling).toBe(applet);
     }
-    expect(registry.lookup("/sbin/hello")).toBeUndefined();
-    expect(registry.lookup("missing")).toBeUndefined();
+    for (const spelling of ["/bin/hello", "/usr/bin/hi"]) {
+      expect(registry.findPath(spelling)?.command, spelling).toBe(applet);
+    }
+    expect(registry.findPath("/sbin/hello")).toBeUndefined();
+    expect(registry.find("missing")).toBeUndefined();
     // The directory match is literal, so a duplicated separator fails closed.
-    expect(registry.lookup("/bin//hello")).toBeUndefined();
+    expect(registry.findPath("/bin//hello")).toBeUndefined();
+    expect(registry.isAppletDirectory("/bin")).toBe(true);
+    expect(registry.isAppletDirectory("/bin/")).toBe(false);
+    expect(registry.isAppletDirectory("/opt")).toBe(false);
     expect(registry.commands).toEqual([applet]);
   });
 
@@ -198,21 +205,31 @@ describe("applet registry", () => {
 
   it("ignores a prototype-shaped spelling", () => {
     const registry = createAppletRegistry([marker("safe")]);
-    for (const spelling of ["__proto__", "constructor", "toString", "/bin/__proto__"]) {
-      expect(registry.lookup(spelling), spelling).toBeUndefined();
+    for (const spelling of ["__proto__", "constructor", "toString"]) {
+      expect(registry.find(spelling), spelling).toBeUndefined();
     }
+    expect(registry.findPath("/bin/__proto__")).toBeUndefined();
   });
 
   it("keeps a session-scoped built-in out of the virtual applet directories", () => {
     const registry = createAppletRegistry(defaultShellCommands);
     for (const builtin of ["cd", "export", "set", "source", "local", "exit", "command", "type"]) {
-      expect(registry.lookup(builtin), builtin).toBeDefined();
-      expect(registry.lookup(`/bin/${builtin}`), builtin).toBeUndefined();
-      expect(registry.lookup(`/usr/bin/${builtin}`), builtin).toBeUndefined();
+      expect(registry.find(builtin)?.kind, builtin).toBe("session-builtin");
+      expect(registry.findPath(`/bin/${builtin}`), builtin).toBeUndefined();
+      expect(registry.findPath(`/usr/bin/${builtin}`), builtin).toBeUndefined();
     }
     // A built-in Linux also ships as a program keeps both spellings.
-    for (const program of ["cat", "ls", "grep", "printf", "echo", "test", "env", "which"]) {
-      expect(registry.lookup(`/bin/${program}`), program).toBe(registry.lookup(program));
+    for (const program of ["printf", "echo", "test", "true", "pwd"]) {
+      expect(registry.find(program)?.kind, program).toBe("builtin");
+      expect(registry.findPath(`/bin/${program}`)?.command, program).toBe(
+        registry.find(program)?.command,
+      );
+    }
+    for (const program of ["cat", "ls", "grep", "env", "which", "sh"]) {
+      expect(registry.find(program)?.kind, program).toBe("program");
+      expect(registry.findPath(`/bin/${program}`)?.command, program).toBe(
+        registry.find(program)?.command,
+      );
     }
   });
 
@@ -221,12 +238,14 @@ describe("applet registry", () => {
     const registry = createAppletRegistry(commands);
     commands.push(marker("second"));
     expect(registry.commands).toHaveLength(1);
-    expect(registry.lookup("second")).toBeUndefined();
+    expect(registry.find("second")).toBeUndefined();
   });
 
   it("accepts a plain ShellCommand without a specification", () => {
     const plain = { name: "plain", run: () => ({ completed: Promise.resolve({ exitCode: 0 }) }) };
-    expect(createAppletRegistry([plain]).lookup("/bin/plain")).toBe(plain);
+    const registry = createAppletRegistry([plain]);
+    expect(registry.find("plain")).toEqual({ command: plain, kind: "program" });
+    expect(registry.findPath("/bin/plain")?.command).toBe(plain);
   });
 });
 

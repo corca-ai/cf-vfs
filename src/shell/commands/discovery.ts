@@ -13,21 +13,28 @@ const COMMAND = {
   name: "command",
   usage: "[-v] NAME [ARGUMENT...]",
   summary: "runs a command ignoring shell functions, or reports how a name resolves",
-  kind: "shell-builtin",
-  options: { short: { v: { name: "verify" } } },
+  kind: "session-builtin",
+  options: { short: { v: { name: "verify" } }, stopAtFirstOperand: true },
 } as const satisfies AppletSpecWithOptions<"verify">;
 
 const TYPE = {
   name: "type",
   usage: "NAME...",
   summary: "reports whether each name is a function, a built-in, or an applet",
-  kind: "shell-builtin",
+  kind: "session-builtin",
 } as const satisfies AppletSpec;
 
 const WHICH = {
   name: "which",
   usage: "NAME...",
   summary: "prints the applet path each name resolves to",
+} as const satisfies AppletSpec;
+
+const SH = {
+  name: "sh",
+  aliases: ["bash"],
+  usage: "[-c COMMAND]",
+  summary: "names the cf-vfs shell profile, which is not yet executable",
 } as const satisfies AppletSpec;
 
 const PRINTENV = {
@@ -140,7 +147,8 @@ export const whichCommand = /* @__PURE__ */ defineApplet(WHICH, async (context, 
 export const printenvCommand = /* @__PURE__ */ defineApplet(
   PRINTENV,
   async (context, argv, fds) => {
-    for (const value of argv) {
+    const names = argv[0] === "--" ? argv.slice(1) : argv;
+    for (const value of names) {
       if (value.startsWith("-") && value !== "-") {
         throw appletUsageError(PRINTENV, `unsupported option ${value}`);
       }
@@ -148,7 +156,7 @@ export const printenvCommand = /* @__PURE__ */ defineApplet(
     const output = new BufferedTextWriter(context, fds[1]);
     let status = 0;
     try {
-      if (argv.length === 0) {
+      if (names.length === 0) {
         const names = [...context.session.env.keys()]
           .filter((name) => /^[A-Za-z_][A-Za-z0-9_]*$/u.test(name))
           .sort(compareUtf8);
@@ -156,7 +164,7 @@ export const printenvCommand = /* @__PURE__ */ defineApplet(
           await output.write(`${name}=${context.session.env.get(name) ?? ""}\n`);
         }
       } else {
-        for (const name of argv) {
+        for (const name of names) {
           const value = context.session.env.get(name);
           if (value === undefined) {
             status = 1;
@@ -173,10 +181,28 @@ export const printenvCommand = /* @__PURE__ */ defineApplet(
   },
 );
 
+/**
+ * Declares `/bin/sh` and `/bin/bash` as the cf-vfs shell profile.
+ *
+ * The name resolves, so `command -v sh` and `type sh` report it and `SHELL`
+ * names something that exists. Running it exits 126 — found but not
+ * executable — rather than 127, because the profile is real and only its
+ * execution is missing. Running a shell script needs an isolated child scope,
+ * which is tracked separately; this applet becomes runnable there.
+ *
+ * It claims no host Bash. The declared language is the cf-vfs profile exported
+ * as `BASH_COMPATIBILITY_VERSION`.
+ */
+export const shCommand = /* @__PURE__ */ defineApplet(SH, async (_context, _argv, fds) => {
+  await writeText(fds[2], `${SH.name}: executing the cf-vfs shell profile is not supported yet\n`);
+  return 126;
+});
+
 /** Every command-discovery applet, for a registry that wants all of them. */
 export const discoveryShellCommands = [
   commandCommand,
   typeCommand,
   whichCommand,
   printenvCommand,
+  shCommand,
 ] as const;

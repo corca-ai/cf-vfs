@@ -1,3 +1,4 @@
+import { VfsError } from "../core/errors.js";
 import { normalizePath } from "../core/path.js";
 import type { VfsStat, VirtualFileSystem } from "../vfs/types.js";
 import { APPLET_DIRECTORIES } from "./commands/applet.js";
@@ -46,18 +47,33 @@ export const LINUX_APPLET_DIRECTORIES: readonly string[] = APPLET_DIRECTORIES;
 /**
  * The canonical spelling of the cf-vfs shell profile.
  *
- * `SHELL` names it so a script can report which shell it is under. Executing
- * that path is not supported yet; a shell script becomes runnable with the
- * executable-file support tracked separately.
+ * `SHELL` names it, and the `sh` applet makes the name resolve so `command -v`
+ * and `type` report it. Running it exits 126, found but not executable: only
+ * execution is missing, and it arrives with executable-file support.
  */
 export const LINUX_SHELL_PATH = "/bin/sh";
+
+/**
+ * `Shell` options the profile expects.
+ *
+ * The Linux `PATH` search is opt-in, so spread this into the `Shell` options
+ * alongside `linuxShellEnvironment()`. Without it a `PATH` is an ordinary
+ * variable and every registered applet answers to its bare name.
+ */
+export const LINUX_SHELL_OPTIONS = { commandResolution: "path" } as const;
 
 export interface LinuxProfileOptions {
   /** Account name reported by `USER` and `LOGNAME`. Defaults to `cf`. */
   readonly user?: string;
   /** Home directory. Defaults to `/home/<user>`. */
   readonly home?: string;
-  /** Initial working directory. Defaults to the workspace. */
+  /**
+   * Directory to provision as the working directory. Defaults to the
+   * workspace.
+   *
+   * This decides what `provisionLinuxFilesystem` creates. It does not start a
+   * shell there: pass the same path as `cwd` when executing.
+   */
   readonly cwd?: string;
   /** Temporary directory reported by `TMPDIR`. Defaults to `/tmp`. */
   readonly tmp?: string;
@@ -116,7 +132,19 @@ export function provisionLinuxFilesystem(
 ): VfsStat[] {
   const { home, cwd } = profile(options);
   const created: VfsStat[] = [];
+  const seen = new Set<string>();
   for (const path of [...LINUX_DATA_DIRECTORIES, home, cwd]) {
+    if (seen.has(path)) continue;
+    // The applet directories resolve commands without a namespace entry, so a
+    // row there would contradict the model rather than extend it.
+    if (
+      LINUX_APPLET_DIRECTORIES.some(
+        (directory) => path === directory || path.startsWith(`${directory}/`),
+      )
+    ) {
+      throw new VfsError("EINVAL", `${path} is a virtual applet directory`);
+    }
+    seen.add(path);
     created.push(fileSystem.mkdir(path, true));
   }
   return created;

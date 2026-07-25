@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createAppletRegistry, splitSearchPath } from "../src/shell/commands/applet.js";
+import {
+  createAppletRegistry,
+  defineApplet,
+  splitSearchPath,
+} from "../src/shell/commands/applet.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import {
   LINUX_APPLET_DIRECTORIES,
@@ -13,65 +17,46 @@ import { bashCases, createBashHarness } from "./helpers/bash.js";
 
 const PATH = LINUX_APPLET_DIRECTORIES.join(":");
 
-describe("PATH resolution", () => {
+describe("PATH components", () => {
   const registry = createAppletRegistry(defaultShellCommands);
 
-  it("splits components without collapsing empty or duplicated entries", () => {
+  it("returns components exactly as written", () => {
     expect(splitSearchPath("/bin:/usr/bin")).toEqual(["/bin", "/usr/bin"]);
     expect(splitSearchPath("")).toEqual([""]);
     expect(splitSearchPath("/bin::/bin")).toEqual(["/bin", "", "/bin"]);
   });
 
-  it("resolves every applet by bare name when no PATH is set", () => {
-    expect(registry.resolve("cat")).toEqual({ command: registry.lookup("cat"), kind: "program" });
-    expect(registry.resolve("cd")).toEqual({ command: registry.lookup("cd"), kind: "builtin" });
-    expect(registry.resolve("echo")).toEqual({ command: registry.lookup("echo"), kind: "builtin" });
-  });
-
-  it("reports the first applet directory on PATH", () => {
-    expect(registry.resolve("cat", PATH)?.path).toBe("/bin/cat");
-    expect(registry.resolve("cat", "/usr/bin:/bin")?.path).toBe("/usr/bin/cat");
-    // A duplicated component is harmless; the first match still decides.
-    expect(registry.resolve("cat", "/usr/bin:/usr/bin:/bin")?.path).toBe("/usr/bin/cat");
-    // Components that name nothing resolvable are skipped, not fatal.
-    expect(registry.resolve("cat", ":/opt/tools:/bin")?.path).toBe("/bin/cat");
-  });
-
-  it("finds no applet when PATH names no applet directory", () => {
-    for (const searchPath of ["", "/opt/tools", "/bin/", "/usr/local/bin", ":"]) {
-      expect(registry.resolve("cat", searchPath), searchPath).toBeUndefined();
+  it("recognizes only the exact applet directory spellings", () => {
+    for (const directory of LINUX_APPLET_DIRECTORIES) {
+      expect(registry.isAppletDirectory(directory), directory).toBe(true);
+    }
+    // A component must be spelled exactly; a trailing slash is a different
+    // string and no namespace directory can supply a command yet.
+    for (const directory of ["", "/bin/", "/opt/tools", "/usr/local/bin", "/BIN", "bin"]) {
+      expect(registry.isAppletDirectory(directory), directory).toBe(false);
     }
   });
 
-  it("keeps built-ins reachable regardless of PATH", () => {
-    for (const searchPath of ["", "/opt/tools", PATH]) {
-      expect(registry.resolve("cd", searchPath), searchPath).toEqual({
-        command: registry.lookup("cd"),
-        kind: "builtin",
-      });
-    }
-    // A built-in that Linux also ships as a program keeps its applet path.
-    expect(registry.resolve("echo", "")).toEqual({
-      command: registry.lookup("echo"),
-      kind: "builtin",
-    });
-    expect(registry.resolve("echo", PATH)).toEqual({
-      command: registry.lookup("echo"),
-      kind: "builtin",
-      path: "/bin/echo",
-    });
-  });
-
-  it("lets an absolute applet path bypass PATH entirely", () => {
-    expect(registry.resolve("/bin/cat", "")?.path).toBe("/bin/cat");
-    expect(registry.resolve("/usr/bin/cat", "/opt/tools")?.path).toBe("/usr/bin/cat");
-    // A built-in has no program spelling, on PATH or off it.
-    expect(registry.resolve("/bin/cd", PATH)).toBeUndefined();
+  it("classifies each applet kind", () => {
+    expect(registry.find("cat")?.kind).toBe("program");
+    expect(registry.find("echo")?.kind).toBe("builtin");
+    expect(registry.find("cd")?.kind).toBe("session-builtin");
   });
 });
 
+type HarnessOptions = Parameters<typeof createBashHarness>[0];
+
+/** Every case in this file exercises the opt-in `PATH` search. */
+function pathHarness(options: HarnessOptions = {}) {
+  return createBashHarness({ commandResolution: "path", ...options });
+}
+
+function pathCases(cases: Parameters<typeof bashCases>[0]): void {
+  bashCases(cases, { commandResolution: "path" });
+}
+
 describe("PATH resolution in the shell", () => {
-  bashCases([
+  pathCases([
     {
       name: "runs an applet found through PATH",
       script: "PATH=/bin cat /file",
@@ -110,15 +95,48 @@ describe("PATH resolution in the shell", () => {
   ]);
 
   it("denies a PATH-resolved applet the policy does not allow", async () => {
-    const harness = createBashHarness({ policy: { allowedCommands: ["echo"] } });
+    const harness = pathHarness({ policy: { allowedCommands: ["echo", "printf"] } });
     const result = await harness.run(`PATH=${PATH} cat /nowhere`);
     expect(result.exitCode).toBe(126);
     expect(result.stderr).toBe("command is not allowed: cat\n");
   });
+
+  it("leaves a prefix assignment undone when the policy denies the command", async () => {
+    const harness = pathHarness({ policy: { allowedCommands: ["printf"] } });
+    const result = await harness.run(["X=1 export X 2>/dev/null", "printf '[%s]' \"${X-unset}\""]);
+    expect(result.stdout).toBe("[unset]");
+  });
+
+  it("leaves a prefix assignment undone when a function shadows export", async () => {
+    const harness = createBashHarness();
+    const result = await harness.run([
+      "export() { printf 'fn'; }",
+      "X=1 export X",
+      "printf '[%s]' \"${X-unset}\"",
+    ]);
+    expect(result.stdout).toBe("fn[unset]");
+  });
+
+  it("ignores PATH entirely under the default resolution mode", async () => {
+    const harness = createBashHarness();
+    const result = await harness.run("PATH=/opt/tools cat /file", {});
+    // The default keeps every registered applet reachable, so an application
+    // that sets PATH for its own reasons cannot lose commands.
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("no such file or directory");
+  });
+
+  it("resolves an alias through a PATH search", async () => {
+    const registry = createAppletRegistry([
+      defineApplet({ name: "canonical", aliases: ["alias"], usage: "", summary: "probe" }, () => 0),
+    ]);
+    expect(registry.find("alias")?.command).toBe(registry.find("canonical")?.command);
+    expect(registry.findPath("/bin/alias")?.command).toBe(registry.find("canonical")?.command);
+  });
 });
 
 describe("command discovery", () => {
-  bashCases([
+  pathCases([
     {
       name: "command -v prints the applet path found on PATH",
       script: `PATH=${PATH}; command -v cat`,
@@ -197,6 +215,18 @@ describe("command discovery", () => {
 });
 
 describe("Linux filesystem profile", () => {
+  it("declares the shell profile as a name that resolves but does not run", async () => {
+    const harness = pathHarness();
+    const named = await harness.run(`PATH=${PATH}; command -v sh; type bash`);
+    expect(named.exitCode).toBe(0);
+    // An alias reports the spelling that was asked for, as Linux would.
+    expect(named.stdout).toBe("/bin/sh\nbash is /bin/bash\n");
+    // Found but not executable is 126, not 127: the profile exists.
+    const run = await harness.run(`PATH=${PATH}; /bin/sh -c 'true'`);
+    expect(run.exitCode).toBe(126);
+    expect(run.stderr).toBe("sh: executing the cf-vfs shell profile is not supported yet\n");
+  });
+
   it("publishes environment defaults naming the applet directories", () => {
     const environment = linuxShellEnvironment();
     expect(environment).toEqual({
@@ -224,11 +254,7 @@ describe("Linux filesystem profile", () => {
   it("creates only data directories, never an applet directory", async () => {
     const harness = createBashHarness();
     const created = provisionLinuxFilesystem(harness.fileSystem);
-    expect(created.map((stat) => stat.path)).toEqual([
-      ...LINUX_DATA_DIRECTORIES,
-      "/home/cf",
-      LINUX_WORKSPACE,
-    ]);
+    expect(created.map((stat) => stat.path)).toEqual([...LINUX_DATA_DIRECTORIES, "/home/cf"]);
     for (const path of LINUX_DATA_DIRECTORIES) {
       expect(harness.fileSystem.stat(path).kind, path).toBe("directory");
     }
@@ -239,14 +265,24 @@ describe("Linux filesystem profile", () => {
     }
   });
 
-  it("is idempotent", () => {
+  it("is idempotent and creates each directory once", () => {
     const harness = createBashHarness();
-    provisionLinuxFilesystem(harness.fileSystem);
+    const created = provisionLinuxFilesystem(harness.fileSystem);
+    expect(new Set(created.map((stat) => stat.path)).size).toBe(created.length);
     expect(() => provisionLinuxFilesystem(harness.fileSystem)).not.toThrow();
   });
 
-  it("runs a familiar script end to end", async () => {
+  it("refuses to create a namespace row inside a virtual applet directory", () => {
     const harness = createBashHarness();
+    for (const options of [{ cwd: "/bin" }, { home: "/usr/bin/agent" }]) {
+      expect(() => provisionLinuxFilesystem(harness.fileSystem, options)).toThrowError(
+        /virtual applet directory/u,
+      );
+    }
+  });
+
+  it("runs a familiar script end to end", async () => {
+    const harness = pathHarness();
     provisionLinuxFilesystem(harness.fileSystem);
     const result = await harness.run(
       [
