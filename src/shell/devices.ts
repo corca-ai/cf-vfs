@@ -100,7 +100,7 @@ export function deviceInput(
  * there is nothing to publish or undo, which is also what makes it safe to
  * hand the same sink to two descriptors.
  */
-export function nullSink(budget: ShellBudget): ShellSink {
+function nullSink(budget: ShellBudget): ShellSink {
   const sink: ShellSink = {
     async write(chunk: Uint8Array): Promise<void> {
       budget.io(chunk.byteLength);

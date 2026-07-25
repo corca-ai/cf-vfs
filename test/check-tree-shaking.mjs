@@ -35,7 +35,6 @@ const M = {
   sed: "shell/commands/sed",
   system: "shell/commands/system",
   posixRegex: "core/posix-regex",
-  devices: "shell/devices",
   script: "shell/script",
   devices: "shell/devices",
   linux: "shell/linux",
