@@ -42,10 +42,29 @@ ordinary redirection, here-documents, here-strings, and pathname expansion. See
 [Shell, commands, and direct API](commands.md) for the exact grammar and limits.
 
 The parser rejects unsupported syntax before running any command. In
-particular, process substitution, backticks, arrays, brace expansion,
-out-of-profile extended-test operators, C-style `for`, background jobs, and
-arbitrary descriptors are not approximated. The language version is exported
-as `BASH_COMPATIBILITY_VERSION`.
+particular, process substitution, arrays, out-of-profile extended-test
+operators, C-style `for`, background jobs, and arbitrary descriptors are not
+approximated. The language version is exported as
+`BASH_COMPATIBILITY_VERSION`.
+
+Brace expansion runs first among the expansions and reads only the word, so a
+brace that arrives through a parameter is text rather than syntax:
+`v={a,b}; echo $v` prints the braces. Lists, ranges over integers and code
+points, an increment, zero-padded ranges, nesting, and adjacency all follow
+Bash — `pre{a,b}post`, `{1..10..3}`, `{01..3}`, `{a..e}`, `{a,{b,c}}`, and
+`{a,b}{1,2}`. Braces that spell no group stay literal, which covers `{a}`,
+`{}`, and an unmatched `{`, and quoting suppresses expansion whether written
+as `"{a,b}"` or `\{a,b\}`. An alternative that contributes nothing
+contributes no word, so `{a,}` is one word and `{,}` is none. Assignments and
+`case` patterns are single-word positions and are not expanded, matching Bash.
+A redirection target that expands to other than one word is an error; the
+status differs from Bash and is a declared divergence.
+
+Backtick command substitution runs. The closing backtick is found by scanning
+rather than parsing — quoting does not protect one and only `` \` ``, `\\`,
+and `\$` escape — so it nests solely through escaping and `$(...)` remains the
+spelling to prefer. It is supported because generated scripts contain it, not
+because it is the better form.
 
 Version 3 additionally includes `source` and `.`, which read only an explicit
 inline VFS path, never search `PATH`, parse the complete sourced unit before

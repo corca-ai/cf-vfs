@@ -258,6 +258,17 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     expect(result.exitCode).toBe(1);
     expect(result.stdout.startsWith("--- /left\n+++ /right\n@@")).toBe(true);
   },
+  "ambiguous-redirection-status": async () => {
+    const harness = createBashHarness();
+    // Brace expansion makes the two-word case easy to write; the one-word
+    // spelling still redirects, so the count is what fails, not the braces.
+    const many = await harness.run("echo hi > /out{1,2}");
+    expect(many.exitCode).toBe(2);
+    expect(many.stderr).toContain("ambiguous redirection target");
+    const one = await harness.run("echo hi > /out{1} && cat '/out{1}'");
+    expect(one.exitCode).toBe(0);
+    expect(one.stdout).toBe("hi\n");
+  },
 };
 
 describe("deliberate divergences", () => {

@@ -200,6 +200,13 @@
       "oracle": "bash",
       "summary": "`/dev/stdin`, `/dev/stdout`, and `/dev/stderr` work as redirection sources and targets; as command operands they are a usage error",
       "reason": "A descriptor alias is a capability of the redirection layer, which holds this execution's streams. A command operand is a path, and this runtime has no file behind a descriptor for one to name. `< /dev/stdin` and `> /dev/stderr` are the supported spellings, and they compose the same way. `/dev/null` has no such restriction because it is not an alias."
+    },
+    {
+      "id": "ambiguous-redirection-status",
+      "command": "sh",
+      "oracle": "bash",
+      "summary": "a redirection target that expands to other than one word fails with status 2, where Bash uses 1",
+      "reason": "Redirection targets are resolved through the same expansion as any other word, and a field count that is not one is a usage error in this profile's status taxonomy: 2 is syntax and usage, 126 is policy, 127 is not found. Bash spends 1 on redirection failures generally. Brace expansion makes the case easy to write \u2014 `> f{1,2}` \u2014 so the difference is declared rather than left to be discovered."
     }
   ],
   "cases": [

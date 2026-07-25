@@ -736,7 +736,12 @@ class Lexer {
         continue;
       }
       if (character === "`" && !delimiterMode) {
-        throw this.error("backtick command substitution is not supported; use $(...)", this.offset);
+        this.append(parts, {
+          kind: "command",
+          script: this.readBacktickSubstitution(),
+          quoted: inheritedQuoted,
+        });
+        continue;
       }
       if (character === "$" && !delimiterMode) {
         if (this.source[this.offset + 1] === "'" || this.source[this.offset + 1] === '"') {
@@ -793,7 +798,12 @@ class Lexer {
         continue;
       }
       if (character === "`" && !delimiterMode) {
-        throw this.error("backtick command substitution is not supported; use $(...)", this.offset);
+        this.append(parts, {
+          kind: "command",
+          script: this.readBacktickSubstitution(),
+          quoted: true,
+        });
+        continue;
       }
       if (character === "$" && !delimiterMode) {
         const expansion = this.readExpansion(true);
@@ -1000,6 +1010,52 @@ class Lexer {
       }
     }
     throw this.incompleteError("unterminated parameter expansion", this.offset);
+  }
+
+  /**
+   * Reads a backtick command substitution, the older spelling of `$(...)`.
+   *
+   * The closing backtick is found by scanning, not by parsing: quotes do not
+   * protect one, and a backslash escapes only `` ` ``, `\`, and `$`. That is
+   * why the form nests only through escaping, and why `$(...)` is the spelling
+   * to reach for — but it is what a generated script tends to contain, so it
+   * runs rather than being refused.
+   *
+   * Removing those backslashes shifts the offsets the inner parse reports. The
+   * shift is the number of escapes removed before the point in question, and is
+   * zero for a substitution that contains none.
+   */
+  private readBacktickSubstitution(): ScriptNode {
+    const start = this.offset;
+    let index = start + 1;
+    let content = "";
+    for (; index < this.source.length; index += 1) {
+      this.checkOffset(index);
+      const character = this.source[index];
+      if (character === "`") break;
+      if (character === "\\") {
+        const next = this.source[index + 1];
+        if (next === "`" || next === "\\" || next === "$") {
+          content += next;
+          index += 1;
+          continue;
+        }
+      }
+      content += character ?? "";
+    }
+    if (this.source[index] !== "`") {
+      throw this.incompleteError("unterminated backtick command substitution", start);
+    }
+    const probe = new ParseContext(
+      this.context.remainingNodes(),
+      this.context.maximumDepth,
+      () => undefined,
+      () => this.context.checkDeadline(),
+    );
+    const script = parseInternal(content, probe, this.absoluteOffset(start + 1), this.depth + 1);
+    this.context.add(probe.nodes);
+    this.offset = index + 1;
+    return script;
   }
 
   private readCommandSubstitution(): ScriptNode {
@@ -1764,15 +1820,6 @@ class Parser {
         "EINVAL",
         `array and extended-test syntax is not supported at byte ${commandWord?.sourceOffset ?? sourceOffset}`,
       );
-    }
-    for (const word of words) {
-      const raw = staticWord(word);
-      if (raw !== undefined && /\{[^{}]*,[^{}]*\}/u.test(raw)) {
-        throw new VfsError(
-          "EINVAL",
-          `brace expansion is not supported at byte ${word.sourceOffset}`,
-        );
-      }
     }
     return { type: "command", words, redirections, sourceOffset };
   }
