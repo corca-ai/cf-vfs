@@ -33,6 +33,8 @@ for (const excluded of [
   "mktemp: template must contain XXXXXX",
   "opaque R2 content",
   "shell AST node limit exceeded",
+  "xargs: command exited with status 255",
+  "seq: INCREMENT must not be zero",
 ])
   assert(!lsBundle.includes(excluded), `ls-only bundle contains ${excluded}`);
 
@@ -54,6 +56,8 @@ for (const excluded of [
   "patch: usage",
   "join: requires two files",
   "opaque R2 content",
+  "xargs: command exited with status 255",
+  "seq: INCREMENT must not be zero",
 ])
   assert(!commandsBundle.includes(excluded), `cat+grep bundle contains ${excluded}`);
 

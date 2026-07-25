@@ -121,6 +121,13 @@ export interface ShellCommandContext {
     args: readonly string[],
     fds: ShellFileDescriptors,
   ): Promise<number>;
+  /**
+   * Runs one already-expanded command through the same registry, policy, and
+   * budget as an ordinary simple command. `argv` is never re-parsed, so a
+   * utility that builds an invocation from untrusted data cannot inject shell
+   * syntax. The invoked status does not request errexit on its own.
+   */
+  executeCommand(argv: readonly string[], fds: ShellFileDescriptors): Promise<number>;
 }
 
 export interface ShellProcess {

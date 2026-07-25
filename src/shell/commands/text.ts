@@ -1108,3 +1108,137 @@ export const patchCommand = /* @__PURE__ */ defineCommand("patch", async (contex
     source.release();
   }
 });
+
+const SEQ_OPTIONS = {
+  short: {
+    s: { name: "separator", argument: true },
+    w: { name: "equal-width" },
+  },
+  negativeNumberOperands: true,
+} as const;
+
+function seqOperand(value: string, name: string): number {
+  if (!/^-?[0-9]+$/u.test(value)) {
+    throw new VfsError("EINVAL", `seq: ${name} must be a decimal integer`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new VfsError("EINVAL", `seq: ${name} exceeds the safe integer range`);
+  }
+  return parsed;
+}
+
+/**
+ * Prints an integer sequence. Operands are strict decimal integers rather than
+ * Bash arithmetic or floating point, matching the project's deterministic
+ * integer profile; the produced count charges the shared expansion budget.
+ */
+export const seqCommand = /* @__PURE__ */ defineCommand("seq", async (context, argv, fds) => {
+  const parsed = parseUtilityOptions("seq", argv, SEQ_OPTIONS);
+  let separator = "\n";
+  let equalWidth = false;
+  for (const option of parsed.options) {
+    if (option.name === "separator" && "argument" in option) separator = option.argument;
+    if (option.name === "equal-width") equalWidth = true;
+  }
+  if (parsed.operands.length === 0 || parsed.operands.length > 3) {
+    throw new VfsError("EINVAL", "seq: requires one to three integer operands");
+  }
+  const [one = "", two, three] = parsed.operands;
+  const first = two === undefined ? 1 : seqOperand(one, "FIRST");
+  const increment = three === undefined ? 1 : seqOperand(two ?? "", "INCREMENT");
+  const last = seqOperand(three ?? two ?? one, "LAST");
+  if (increment === 0) throw new VfsError("EINVAL", "seq: INCREMENT must not be zero");
+
+  const values: number[] = [];
+  for (let value = first; increment > 0 ? value <= last : value >= last; value += increment) {
+    context.budget.step();
+    context.budget.expansionOutput(String(value).length, 1);
+    values.push(value);
+  }
+  const width = equalWidth ? Math.max(0, ...values.map((value) => String(value).length)) : 0;
+  const output = new BufferedTextWriter(context, fds[1]);
+  try {
+    for (const value of values) {
+      await output.write(`${String(value).padStart(width, "0")}${separator}`);
+    }
+    await output.flush();
+  } finally {
+    output.abort();
+  }
+  return 0;
+});
+
+const BASE64_OPTIONS = {
+  short: {
+    d: { name: "decode" },
+    w: { name: "wrap", argument: true },
+  },
+  long: {
+    decode: { name: "decode" },
+    wrap: { name: "wrap", argument: true },
+  },
+} as const;
+
+/** Encodes or decodes standard base64. Decoding rejects invalid input. */
+export const base64Command = /* @__PURE__ */ defineCommand("base64", async (context, argv, fds) => {
+  const parsed = parseUtilityOptions("base64", argv, BASE64_OPTIONS);
+  let decode = false;
+  let wrap = 76;
+  for (const option of parsed.options) {
+    if (option.name === "decode") decode = true;
+    if (option.name === "wrap" && "argument" in option) {
+      wrap = parseInteger(option.argument, "base64: -w", 0);
+    }
+  }
+  if (parsed.operands.length > 1) throw new VfsError("EINVAL", "base64: accepts at most one file");
+
+  const [path] = parsed.operands;
+  if (decode) {
+    const input =
+      path === undefined || path === "-"
+        ? await collectText(context, fds[0])
+        : await readFileText(context, path);
+    try {
+      const compact = input.value.replace(/[\n\r]/gu, "");
+      if (!/^[A-Za-z0-9+/]*={0,2}$/u.test(compact) || compact.length % 4 !== 0) {
+        throw new VfsError("EINVAL", "base64: invalid input");
+      }
+      const binary = atob(compact);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+      }
+      await writeBytes(fds[1], bytes);
+      return 0;
+    } finally {
+      input.release();
+    }
+  }
+
+  const input =
+    path === undefined || path === "-"
+      ? await collectStream(context, fds[0])
+      : await readFileBytes(context, path);
+  try {
+    let binary = "";
+    for (const byte of input.value) binary += String.fromCharCode(byte);
+    const encoded = btoa(binary);
+    if (wrap === 0) {
+      await writeText(fds[1], encoded.length === 0 ? "" : `${encoded}\n`);
+      return 0;
+    }
+    const output = new BufferedTextWriter(context, fds[1]);
+    try {
+      for (let index = 0; index < encoded.length; index += wrap) {
+        await output.write(`${encoded.slice(index, index + wrap)}\n`);
+      }
+      await output.flush();
+    } finally {
+      output.abort();
+    }
+    return 0;
+  } finally {
+    input.release();
+  }
+});

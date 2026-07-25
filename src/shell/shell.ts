@@ -498,6 +498,18 @@ async function executeSimpleCommand(
             policy: runtime.policy,
             executeSource: async (source, path, sourceArgs, sourceFds) =>
               await runSourcedUnit(source, path, sourceArgs, session, sourceFds, runtime, context),
+            executeCommand: async (commandArgv, commandFds) => {
+              runtime.budget.command();
+              // The invoked status belongs to the invoking utility, not to the
+              // enclosing shell, so it never requests errexit on its own.
+              return await executeSimpleCommand(
+                { assignments: [], argv: [...commandArgv] },
+                session,
+                commandFds,
+                runtime,
+                SUPPRESSED_EVALUATION_CONTEXT,
+              );
+            },
           },
           argv,
           fds,

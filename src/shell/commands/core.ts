@@ -4,7 +4,11 @@ import {
   normalizeDecimalInteger,
 } from "../../core/decimal-integer.js";
 import { VfsError } from "../../core/errors.js";
-import { normalizePath, normalizePathPreservingTrailingSlash } from "../../core/path.js";
+import {
+  compareUtf8,
+  normalizePath,
+  normalizePathPreservingTrailingSlash,
+} from "../../core/path.js";
 import { optindGeneration, setOptindFromGetopts } from "../environment.js";
 import { readInputRecord } from "../input.js";
 import type { ShellCommandContext } from "../types.js";
@@ -211,6 +215,58 @@ export const exportCommand = /* @__PURE__ */ defineCommand("export", (context, a
     );
   }
   return 0;
+});
+
+/**
+ * Prints the session environment, or runs a command with added assignments.
+ *
+ * Names sort by UTF-8 byte order so output is deterministic. Bash's `-i`,
+ * `-u`, and `-0` options and the bare `-` form are outside this profile;
+ * positional-parameter and shell-option state is not environment.
+ */
+export const envCommand = /* @__PURE__ */ defineCommand("env", async (context, argv, fds) => {
+  let index = 0;
+  const assignments: Array<{ name: string; value: string }> = [];
+  while (index < argv.length) {
+    const value = argv[index] ?? "";
+    if (value === "--") {
+      index += 1;
+      break;
+    }
+    if (value.startsWith("-")) throw new VfsError("EINVAL", `env: unsupported option ${value}`);
+    if (!/^[A-Za-z_][A-Za-z0-9_]*=/u.test(value)) break;
+    const separator = value.indexOf("=");
+    assignments.push({ name: value.slice(0, separator), value: value.slice(separator + 1) });
+    index += 1;
+  }
+
+  const invocation = argv.slice(index);
+  if (invocation.length === 0) {
+    for (const { name, value } of assignments) context.session.env.set(name, value);
+    const names = [...context.session.env.keys()]
+      .filter((name) => /^[A-Za-z_][A-Za-z0-9_]*$/u.test(name))
+      .sort(compareUtf8);
+    let output = "";
+    for (const name of names) output += `${name}=${context.session.env.get(name) ?? ""}\n`;
+    await writeText(fds[1], output);
+    return 0;
+  }
+
+  // Assignments apply only to the invoked command, exactly like a prefixed
+  // assignment on an ordinary simple command.
+  const previous = new Map<string, string | undefined>();
+  for (const { name, value } of assignments) {
+    previous.set(name, context.session.env.get(name));
+    context.session.env.set(name, value);
+  }
+  try {
+    return await context.executeCommand(invocation, fds);
+  } finally {
+    for (const [name, value] of previous) {
+      if (value === undefined) context.session.env.delete(name);
+      else context.session.env.set(name, value);
+    }
+  }
 });
 
 export const unsetCommand = /* @__PURE__ */ defineCommand("unset", (context, argv) => {

@@ -65,7 +65,9 @@ deploying or rotating its secret.
 `biome.jsonc` turns off two recommended rules deliberately.
 `noTemplateCurlyInString` fires on the `${...}` Bash syntax the parser,
 expander, and their tests match as ordinary strings, and `useLiteralKeys`
-contradicts `noPropertyAccessFromIndexSignature` in `tsconfig.json`.
+contradicts `noPropertyAccessFromIndexSignature` in `tsconfig.json`. Test
+fixtures are excluded from formatting because they pin exact Bash-observable
+strings.
 
 `knip.jsonc` treats every subpath in the package `exports` map as an entry
 point, so anything a consumer can import is reachable by definition and only
@@ -200,6 +202,13 @@ category implementations under `src/shell/commands`; use a dedicated module
 when consumers should import one command without pulling siblings. Export the
 command from `shell/commands`, and add it to `defaultShellCommands` only when it
 belongs in the convenience preset.
+
+A utility that invokes another command must use
+`ShellCommandContext.executeCommand(argv, fds)`, never a generated source
+string. It dispatches an already-expanded argv through the same registry,
+allowlist, and budgets, so untrusted data cannot become shell syntax, and it
+charges the command budget so a dispatching utility cannot escape it. Reserve
+`executeSource` for `source` and `.`, which genuinely parse a file.
 
 Use byte streams incrementally unless the operation has a semantic barrier.
 Text operations use the shared fatal incremental decoder and line/record

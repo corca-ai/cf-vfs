@@ -2272,3 +2272,148 @@ describe("Bash v2 pathname expansion", () => {
     },
   ]);
 });
+
+describe("argument, sequence, encoding, and environment utilities", () => {
+  bashCases([
+    {
+      name: "xargs batches whitespace-separated input into one invocation",
+      script: "printf 'a b\\nc\\n' | xargs echo",
+      stdout: "a b c\n",
+    },
+    {
+      name: "xargs -n splits input into fixed-size batches",
+      script: "printf '1 2 3 4 5\\n' | xargs -n 2 echo",
+      stdout: "1 2\n3 4\n5\n",
+    },
+    {
+      name: "xargs appends collected arguments after fixed operands",
+      files: { "/one": "first\n", "/two": "second\n" },
+      script: "printf '/one\\n/two\\n' | xargs cat",
+      stdout: "first\nsecond\n",
+    },
+    {
+      name: "xargs treats input as data rather than shell syntax",
+      script: "printf '%s\\n' '$HOME' 'a;rm -rf /' '`id`' | xargs -n 1 echo",
+      stdout: "$HOME\na;rm\n-rf\n/\n`id`\n",
+    },
+    {
+      name: "xargs runs once on empty input and -r suppresses that run",
+      script: [`printf '' | xargs echo empty`, `printf '' | xargs -r echo skipped`],
+      stdout: "empty\n",
+    },
+    {
+      name: "xargs reports a failing invocation as status 123",
+      script: "printf '1\\n2\\n' | xargs -n 1 false",
+      exitCode: 123,
+    },
+    {
+      name: "xargs propagates command-not-found without running further batches",
+      script: "printf '1\\n2\\n' | xargs -n 1 no-such-tool",
+      exitCode: 127,
+      stderrIncludes: "command not found",
+    },
+    {
+      name: "xargs charges the shared mutation budget through the invoked command",
+      script: "printf '/a\\n/b\\n' | xargs -n 1 touch; ls /",
+      stdout: "a\nb\n",
+    },
+    {
+      name: "seq counts from one when given a single operand",
+      script: "seq 3",
+      stdout: "1\n2\n3\n",
+    },
+    {
+      name: "seq accepts explicit first, increment, and last operands",
+      script: "seq 2 3 11",
+      stdout: "2\n5\n8\n11\n",
+    },
+    {
+      name: "seq counts down with a negative increment",
+      script: "seq 3 -1 1",
+      stdout: "3\n2\n1\n",
+    },
+    {
+      name: "seq produces nothing when the range is empty",
+      script: "seq 5 3",
+      stdout: "",
+    },
+    {
+      name: "seq honors an explicit separator and equal-width padding",
+      script: "seq -s , -w 8 11",
+      stdout: "08,09,10,11,",
+    },
+    {
+      name: "seq rejects a zero increment as a usage error",
+      script: "seq 1 0 5",
+      exitCode: 2,
+      stderrIncludes: "INCREMENT must not be zero",
+    },
+    {
+      name: "seq rejects floating point operands rather than approximating them",
+      script: "seq 1.5",
+      exitCode: 2,
+      stderrIncludes: "must be a decimal integer",
+    },
+    {
+      name: "base64 round-trips arbitrary bytes through the shell",
+      script: "printf 'hello world' | base64 | base64 -d",
+      stdout: "hello world",
+    },
+    {
+      name: "base64 wraps encoded output at the requested width",
+      script:
+        "printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' | base64 -w 20",
+      stdout:
+        "YWFhYWFhYWFhYWFhYWFh\nYWFhYWFhYWFhYWFhYWFh\nYWFhYWFhYWFhYWFhYWFh\nYWFhYWFhYWFhYWFhYWFh\n",
+    },
+    {
+      name: "base64 encodes a named file without wrapping when -w 0 is given",
+      files: { "/data": "hi" },
+      script: "base64 -w 0 /data",
+      stdout: "aGk=\n",
+    },
+    {
+      name: "base64 -d rejects invalid input instead of guessing",
+      script: "printf 'not!base64' | base64 -d",
+      exitCode: 2,
+      stderrIncludes: "invalid input",
+    },
+    {
+      name: "env prints the session environment in byte order",
+      script: "env",
+      env: { B: "2", A: "1" },
+      stdout: "A=1\nB=2\nIFS= \t\n\nLC_ALL=C\nOPTIND=1\nPWD=/\nTZ=UTC\n",
+    },
+    {
+      name: "env assignments without a command persist in the session",
+      script: [`env X=kept`, `printf '%s\\n' "$X"`],
+      stdout: "IFS= \t\n\nLC_ALL=C\nOPTIND=1\nPWD=/\nTZ=UTC\nX=kept\nkept\n",
+    },
+    {
+      name: "env rejects options rather than silently ignoring them",
+      script: "env -i true",
+      exitCode: 2,
+      stderrIncludes: "unsupported option -i",
+    },
+  ]);
+
+  it("splits NUL-separated input under xargs -0 so whitespace stays in one argument", async () => {
+    const harness = createBashHarness();
+    expect(await harness.run("xargs -0 -n 1 echo", { stdin: "a b\0c d\0" })).toMatchObject({
+      exitCode: 0,
+      stdout: "a b\nc d\n",
+      stderr: "",
+    });
+  });
+
+  it("runs a command with env-scoped assignments and restores the prior value", async () => {
+    const probe = defineCommand("probe", async (context, _argv, fds) => {
+      await fds[1].write(new TextEncoder().encode(`${context.session.env.get("X") ?? ""}\n`));
+      return 0;
+    });
+    const harness = createBashHarness({ extraCommands: [probe] });
+    expect(
+      await harness.run([`export X=outer`, `env X=inner probe`, `probe`, `printf '%s\\n' "$X"`]),
+    ).toMatchObject({ exitCode: 0, stdout: "inner\nouter\nouter\n", stderr: "" });
+  });
+});
