@@ -1181,6 +1181,61 @@ describe("stream-first shell runtime", () => {
     expect(result).toMatchObject({ exitCode: 0, stdout: "", stderr: "" });
   });
 
+  it("charges recursive mutation budgets with a counting query, not a materialized subtree", async () => {
+    const fileSystem = createTestFileSystem();
+    await fileSystem.writeFile("/tree/nested/leaf", "leaf", { createParents: true });
+    await fileSystem.writeFile("/tree/file", "file");
+
+    const calls: string[] = [];
+    const observed = new Proxy(fileSystem, {
+      get(target, property) {
+        const value = Reflect.get(target, property);
+        if (typeof value !== "function") return value;
+        return (...args: unknown[]) => {
+          calls.push(String(property));
+          return (value as (...rest: unknown[]) => unknown).apply(target, args);
+        };
+      },
+    });
+    const shell = new Shell({ fileSystem: observed, commands: defaultShellCommands });
+
+    expect(
+      await shell.executeText({
+        script: "cp -r /tree /copy; mv /copy /moved; rm -r /moved",
+      }),
+    ).toMatchObject({ exitCode: 0, stderr: "" });
+
+    expect(calls.filter((name) => name === "countSubtree")).toHaveLength(3);
+    expect(calls).not.toContain("find");
+    expect(calls).not.toContain("findPage");
+  });
+
+  it("charges the exact recursive mutation count a counting query reports", async () => {
+    const fileSystem = createTestFileSystem();
+    await fileSystem.writeFile("/tree/nested/leaf", "leaf", { createParents: true });
+    await fileSystem.writeFile("/tree/file", "file");
+    // /tree, /tree/file, /tree/nested, /tree/nested/leaf
+    expect(fileSystem.countSubtree("/tree")).toBe(4);
+
+    const denied = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      policy: { maxMutations: 3 },
+    });
+    expect(await denied.executeText({ script: "rm -r /tree" })).toMatchObject({ exitCode: 1 });
+    expect(fileSystem.stat("/tree/file").kind).toBe("file");
+
+    const allowed = new Shell({
+      fileSystem,
+      commands: defaultShellCommands,
+      policy: { maxMutations: 4 },
+    });
+    expect(await allowed.executeText({ script: "rm -r /tree" })).toMatchObject({
+      exitCode: 0,
+      stderr: "",
+    });
+  });
+
   it("shares glob, record, and recursive mutation budgets across the execution", async () => {
     const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/tree/a", "a", { createParents: true });

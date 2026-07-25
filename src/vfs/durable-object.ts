@@ -79,6 +79,10 @@ export abstract class VfsDurableObject<Environment> extends DurableObject<Enviro
     return this.fileSystem.find(rpcFindOptions(options));
   }
 
+  countSubtree(path: string): number {
+    return this.fileSystem.countSubtree(rpcString(path, "path"));
+  }
+
   readFile(path: string): InlineReadResult {
     return this.fileSystem.readFile(rpcString(path, "path"));
   }

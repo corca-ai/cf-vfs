@@ -24,6 +24,19 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     runVfsConformance(() => createTestFileSystem());
   });
 
+  it("counts a subtree past the ceiling that truncates find()", async () => {
+    const fileSystem = createTestFileSystem();
+    await fileSystem.mkdir("/bulk");
+    for (let index = 0; index < 10_050; index += 1) {
+      await fileSystem.writeFile(`/bulk/f${index}`, "x");
+    }
+
+    // find() materializes a VfsStat per entry and stops at its 10,000 default,
+    // so it cannot be used to charge a mutation budget accurately.
+    expect(fileSystem.find({ path: "/bulk", includeRoot: true })).toHaveLength(10_000);
+    expect(fileSystem.countSubtree("/bulk")).toBe(10_051);
+  });
+
   it("stores arbitrary bytes and gives active readers a bounded snapshot", async () => {
     const fileSystem = createTestFileSystem({ chunkBytes: 2 });
     await fileSystem.writeFile("/data", new Uint8Array([0xff, 0, 1, 2, 3]));

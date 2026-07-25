@@ -9,6 +9,7 @@ export type ShellFileSystem = Pick<
   | "listPage"
   | "find"
   | "findPage"
+  | "countSubtree"
   | "readFile"
   | "writeFile"
   | "appendFile"

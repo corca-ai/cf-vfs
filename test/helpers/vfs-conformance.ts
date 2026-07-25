@@ -226,6 +226,26 @@ export function runVfsConformance(
     expect(await fileSystem.getMutationToken("/moved/file")).not.toBe(movedToken);
   });
 
+  it("conforms: counts a subtree without a result ceiling", async () => {
+    const fileSystem = await factory();
+    await fileSystem.mkdir("/counted/nested", true);
+    await fileSystem.writeFile("/counted/file", "body");
+    await fileSystem.writeFile("/counted/nested/leaf", "body");
+
+    // /counted, /counted/file, /counted/nested, /counted/nested/leaf
+    expect(await fileSystem.countSubtree("/counted")).toBe(4);
+    expect(await fileSystem.countSubtree("/counted/nested")).toBe(2);
+    expect(await fileSystem.countSubtree("/counted/file")).toBe(1);
+    expect(await fileSystem.countSubtree("/")).toBe(
+      (await fileSystem.find({ path: "/", includeRoot: true })).length,
+    );
+
+    // A local backend throws synchronously; RPC rejects. Normalize both.
+    await expect((async () => fileSystem.countSubtree("/counted/absent"))()).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
   it("conforms: applies namespace operations and paginated traversal consistently", async () => {
     const fileSystem = await factory();
     await fileSystem.mkdir("/tree", true);

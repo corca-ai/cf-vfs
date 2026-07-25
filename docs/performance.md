@@ -35,6 +35,12 @@ This is usually faster and simpler than a paged pull protocol at this size, but
 concurrent snapshots and writes are capped by the instance-wide in-flight
 budget.
 
+The shell preserves that property. `rm -r`, `mv`, and `cp -r` charge their
+mutation budget from `countSubtree()` — one indexed range count — rather than
+materializing the subtree through `find()`, so a recursive shell command costs a
+constant number of SQL statements and allocates nothing per entry. The charge is
+also exact above `find()`'s 10,000-result ceiling.
+
 Opaque work is payload-size-independent inside the metadata DO. Upload/download
 bytes go directly to R2; the DO performs metadata SQL plus one R2 `HEAD` during
 commit. Recursive copy, move, and remove use a constant number of SQL statements

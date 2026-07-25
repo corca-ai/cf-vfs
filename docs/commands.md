@@ -407,7 +407,7 @@ they are not present on `ShellCommandContext.fileSystem`.
 
 `VirtualFileSystem` operates on bytes and canonical paths:
 
-- `stat`, `list`/`listPage`, and `find`/`findPage`;
+- `stat`, `list`/`listPage`, `find`/`findPage`, and `countSubtree`;
 - `readFile`, `writeFile`, `appendFile`, `touch`, and `setMetadata`;
 - `mkdir`, `remove`, `move`, and `copy`;
 - `getMutationToken` and optional revision/token guards;
@@ -427,3 +427,10 @@ Pagination cursors are keyset positions, not durable snapshots. Continue
 through empty filtered pages until `nextCursor` is null. A concurrent mutation
 before the cursor can be missed; restart when a fresh complete traversal is
 required.
+
+`find()` materializes a `VfsStat` per match and stops at its 10,000 default
+limit. When only the size of a subtree matters — charging a budget, deciding
+whether a recursive removal is worth confirming — use `countSubtree()`, which
+answers with one indexed range query, allocates nothing per entry, and has no
+result ceiling. It counts the root itself and raises `ENOENT` for an absent
+path.

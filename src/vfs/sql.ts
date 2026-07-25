@@ -866,6 +866,12 @@ export class SqlFileSystem implements VirtualFileSystem {
     };
   }
 
+  countSubtree(path: string): number {
+    const normalized = this.normalizeAccessPath(path);
+    this.requireEntry(normalized);
+    return this.subtreeSummary(normalized).entries;
+  }
+
   readFile(path: string): InlineReadResult {
     const normalized = this.normalizeAccessPath(path);
     const entry = this.requireInline(normalized);
