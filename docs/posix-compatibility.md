@@ -67,6 +67,16 @@ commands, functions, sources, and subshells.
 
 Deliberate deterministic choices include:
 
+- `grep` and `sed` patterns are a declared subset of POSIX basic and extended
+  regular expressions, translated rather than passed to the JavaScript engine.
+  Back-references and the GNU extensions are usage errors, and `-i` folds ASCII
+  only;
+- `sed` implements `s`, `p`, and `d` with addresses; the rest of the language is
+  a usage error. `-i` is one guarded whole-file publication, never a temporary
+  file;
+- `find -exec` and `xargs` dispatch an already-expanded argv through the command
+  registry, so a matched path cannot become shell syntax;
+
 - fixed `LC_ALL=C`, `TZ=UTC`, and whitespace `IFS` defaults, which reassignment
   cannot change because collation and timestamps do not read them;
 - tilde expansion covers `~` and `~/path` from `HOME`. `~user`, `~+`, `~-`, and

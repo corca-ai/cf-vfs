@@ -30,6 +30,8 @@ try {
     "dist/shell/commands/applet.js",
     "dist/shell/commands/discovery.js",
     "dist/shell/commands/help.js",
+    "dist/shell/commands/sed.js",
+    "dist/shell/commands/system.js",
     "dist/shell/commands/sh.js",
     "dist/shell/linux.js",
     "dist/shell/commands/default.js",

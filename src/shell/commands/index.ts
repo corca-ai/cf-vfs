@@ -3,6 +3,8 @@ export * from "./discovery.js";
 export * from "./fs.js";
 export * from "./help.js";
 export * from "./ls.js";
+export * from "./sed.js";
 export * from "./sh.js";
+export * from "./system.js";
 export * from "./text.js";
 export * from "./xargs.js";

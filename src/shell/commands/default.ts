@@ -45,7 +45,9 @@ import {
 } from "./fs.js";
 import { helpCommand } from "./help.js";
 import { lsCommand } from "./ls.js";
+import { sedCommand } from "./sed.js";
 import { shCommand } from "./sh.js";
+import { dateCommand, exprCommand, sleepCommand } from "./system.js";
 import {
   base64Command,
   cmpCommand,
@@ -59,7 +61,6 @@ import {
   nlCommand,
   pasteCommand,
   patchCommand,
-  sedCommand,
   seqCommand,
   sha256sumCommand,
   sortCommand,
@@ -140,5 +141,8 @@ export const defaultShellCommands = [
   patchCommand,
   seqCommand,
   base64Command,
+  dateCommand,
+  sleepCommand,
+  exprCommand,
   xargsCommand,
 ] as const;

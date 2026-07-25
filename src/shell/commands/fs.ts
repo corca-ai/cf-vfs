@@ -9,7 +9,10 @@ import {
   parseAppletOptions,
 } from "./applet.js";
 import { modeString } from "./format.js";
-import { BufferedTextWriter, commandPath, pipeToSink, writeText } from "./helpers.js";
+import { BufferedTextWriter, commandPath, displayPath, pipeToSink, writeText } from "./helpers.js";
+
+/** Paths one `-exec ... +` invocation may carry. */
+const FIND_EXEC_BATCH = 256;
 
 const CAT = {
   name: "cat",
@@ -78,32 +81,38 @@ const MV = {
 
 const CP = {
   name: "cp",
-  usage: "[-rRf] SOURCE DESTINATION",
+  usage: "[-rRfp] SOURCE DESTINATION",
   summary: "copies a file or, with -r, a directory subtree",
   options: {
     short: {
       f: { name: "force" },
       r: { name: "recursive" },
       R: { name: "recursive" },
+      p: { name: "preserve" },
     },
     long: {
       force: { name: "force" },
       recursive: { name: "recursive" },
+      preserve: { name: "preserve" },
     },
   },
-} as const satisfies AppletSpecWithOptions<"force" | "recursive">;
+} as const satisfies AppletSpecWithOptions<"force" | "recursive" | "preserve">;
 
 const FIND = {
   name: "find",
-  usage: "[PATH...] [-name PATTERN] [-type f|d] [-maxdepth N] [-print]",
-  summary: "walks a subtree and prints matching paths",
+  usage: "[PATH...] [-name PATTERN] [-type f|d] [-maxdepth N] [-print|-print0|-exec ... ;|+]",
+  summary: "walks a subtree and prints or runs a command on matching paths",
 } as const satisfies AppletSpec;
 
 const STAT = {
   name: "stat",
-  usage: "PATH...",
+  usage: "[-c FORMAT] PATH...",
   summary: "prints size, kind, mode, revision, and mutation token",
-} as const satisfies AppletSpec;
+  options: {
+    short: { c: { name: "format", argument: true } },
+    long: { format: { name: "format", argument: true } },
+  },
+} as const satisfies AppletSpecWithOptions<"format">;
 
 const CHMOD = {
   name: "chmod",
@@ -296,19 +305,43 @@ export const cpCommand = /* @__PURE__ */ defineApplet(CP, async (context, argv) 
   const parsed = parseAppletOptions(CP, argv);
   const replace = parsed.options.some((option) => option.name === "force");
   const recursive = parsed.options.some((option) => option.name === "recursive");
+  const preserve = parsed.options.some((option) => option.name === "preserve");
   const values = parsed.operands;
   if (values.length !== 2) throw appletUsageError(CP, "requires source and destination");
   const source = commandPath(context, values[0]);
   const target = destinationPath(context, source, values[1] ?? "");
+  const preserved = preserve ? context.fileSystem.stat(source) : undefined;
   await context.fileSystem.copy(source, target, { replace, recursive });
+  // Mode bits and the modification time are what this namespace has to
+  // preserve; there is no owner, group, or access time behind them. A copy
+  // carries each entry's own bits already but stamps every entry with the
+  // current time, so the named target is restated here. Descendants of a
+  // recursive copy keep the copy's time, which is a declared divergence.
+  if (preserved !== undefined) {
+    context.fileSystem.setMetadata(target, {
+      mode: preserved.mode,
+      modifiedAtMs: preserved.modifiedAtMs,
+    });
+  }
   return 0;
 });
 
+/**
+ * Walks a subtree and prints or runs a command on matching paths.
+ *
+ * `-print0` separates with NUL so a path containing a newline survives the
+ * hand-off to `xargs -0`. `-exec` dispatches an already-expanded argv through
+ * the same registry, policy, and budget as any other command, so a matched path
+ * can never become shell syntax; `;` runs once per path and `+` batches, both
+ * charging the command budget per invocation.
+ */
 export const findCommand = /* @__PURE__ */ defineApplet(FIND, async (context, argv, fds) => {
   const roots: string[] = [];
   let name: string | undefined;
   let type: "file" | "directory" | undefined;
   let maxDepth: number | undefined;
+  let separator: string | undefined;
+  let exec: { argv: string[]; batch: boolean } | undefined;
   let index = 0;
   while (index < argv.length && !(argv[index] ?? "").startsWith("-"))
     roots.push(argv[index++] ?? ".");
@@ -329,28 +362,82 @@ export const findCommand = /* @__PURE__ */ defineApplet(FIND, async (context, ar
         throw appletUsageError(FIND, "-maxdepth requires a non-negative integer");
       }
       maxDepth = Number(value);
-    } else if (option === "-print") continue;
-    else throw appletUsageError(FIND, `unsupported expression ${option ?? ""}`);
+    } else if (option === "-print") separator = "\n";
+    else if (option === "-print0") separator = "\0";
+    else if (option === "-exec") {
+      const command: string[] = [];
+      let terminator: string | undefined;
+      while (index < argv.length) {
+        const word = argv[index++];
+        if (word === ";" || word === "+") {
+          terminator = word;
+          break;
+        }
+        command.push(word ?? "");
+      }
+      if (terminator === undefined) throw appletUsageError(FIND, "-exec requires ; or +");
+      if (command.length === 0) throw appletUsageError(FIND, "-exec requires a command");
+      const batch = terminator === "+";
+      if (batch && command.at(-1) !== "{}") {
+        throw appletUsageError(FIND, "-exec ... + requires {} as the last argument");
+      }
+      exec = { argv: command, batch };
+    } else throw appletUsageError(FIND, `unsupported expression ${option ?? ""}`);
   }
-  const output = new BufferedTextWriter(context, fds[1]);
-  try {
-    for (const root of roots) {
-      const normalized = commandPath(context, root);
-      const entries = context.fileSystem.find({
-        path: normalized,
-        includeRoot: true,
-        ...(name === undefined ? {} : { name }),
-        ...(type === undefined ? {} : { type }),
-        ...(maxDepth === undefined ? {} : { maxDepth }),
-        limit: context.budget.limits.maxGlobMatches,
-      });
-      for (const entry of entries) await output.write(`${entry.path}\n`);
+  if (exec !== undefined && separator !== undefined) {
+    throw appletUsageError(FIND, "specify either -exec or a print action");
+  }
+
+  const matched: string[] = [];
+  for (const root of roots) {
+    const normalized = commandPath(context, root);
+    const entries = context.fileSystem.find({
+      path: normalized,
+      includeRoot: true,
+      ...(name === undefined ? {} : { name }),
+      ...(type === undefined ? {} : { type }),
+      ...(maxDepth === undefined ? {} : { maxDepth }),
+      limit: context.budget.limits.maxGlobMatches,
+    });
+    // Report each match the way the operand was written, as `find` does.
+    for (const entry of entries) matched.push(displayPath(root, normalized, entry.path));
+  }
+
+  if (exec === undefined) {
+    const end = separator ?? "\n";
+    const output = new BufferedTextWriter(context, fds[1]);
+    try {
+      for (const path of matched) await output.write(`${path}${end}`);
+      await output.flush();
+    } finally {
+      output.abort();
     }
-    await output.flush();
-  } finally {
-    output.abort();
+    return 0;
   }
-  return 0;
+
+  // A failing invocation does not stop the walk; the status reports that one
+  // of them failed, which is what `find` promises.
+  let failed = false;
+  const run = async (paths: readonly string[]): Promise<void> => {
+    const expanded = exec.batch
+      ? [...exec.argv.slice(0, -1), ...paths]
+      : // Every occurrence, not only a word that is exactly `{}`: the idiom
+        // `-exec mv {} {}.bak ;` otherwise renames onto a literal `{}.bak`.
+        exec.argv.map((word) => word.split("{}").join(paths[0] ?? ""));
+    const status = await context.executeCommand(expanded, fds);
+    // Only the `+` form propagates a failing invocation. With `;` the status of
+    // each command is `find`'s business and not its result, as POSIX has it.
+    if (status !== 0 && exec.batch) failed = true;
+  };
+  if (exec.batch) {
+    // Batches are bounded so one invocation cannot carry an unbounded argv.
+    for (let start = 0; start < matched.length; start += FIND_EXEC_BATCH) {
+      await run(matched.slice(start, start + FIND_EXEC_BATCH));
+    }
+  } else {
+    for (const path of matched) await run([path]);
+  }
+  return failed ? 1 : 0;
 });
 
 function statText(stat: VfsStat): string {
@@ -364,13 +451,59 @@ function statText(stat: VfsStat): string {
   ].join("\n")}\n`;
 }
 
+/**
+ * Prints entry metadata.
+ *
+ * `-c` selects a machine-stable format so a script can read one field without
+ * parsing a human report. The conversions name what this namespace actually
+ * has: there is no owner, group, inode, or link count to report, so those
+ * spellings are refused rather than filled with a placeholder.
+ */
 export const statCommand = /* @__PURE__ */ defineApplet(STAT, async (context, argv, fds) => {
-  if (argv.length === 0) throw appletUsageError(STAT, "missing operand");
-  for (const path of argv) {
-    await writeText(fds[1], statText(context.fileSystem.stat(commandPath(context, path))));
+  const parsed = parseAppletOptions(STAT, argv);
+  const format = parsed.options.find(
+    (option): option is { name: "format"; argument: string } =>
+      option.name === "format" && "argument" in option,
+  )?.argument;
+  if (parsed.operands.length === 0) throw appletUsageError(STAT, "missing operand");
+  for (const path of parsed.operands) {
+    const stat = context.fileSystem.stat(commandPath(context, path));
+    await writeText(
+      fds[1],
+      format === undefined ? statText(stat) : `${statFormat(format, stat, path)}\n`,
+    );
   }
   return 0;
 });
+
+/** Expands the `-c` conversions this namespace can answer. */
+function statFormat(format: string, stat: VfsStat, operand: string): string {
+  let output = "";
+  for (let index = 0; index < format.length; index += 1) {
+    const character = format[index] ?? "";
+    if (character === "\\") {
+      const next = format[++index];
+      output += next === "n" ? "\n" : next === "t" ? "\t" : (next ?? "\\");
+      continue;
+    }
+    if (character !== "%") {
+      output += character;
+      continue;
+    }
+    const conversion = format[++index];
+    if (conversion === "n") output += operand;
+    else if (conversion === "s") output += String(stat.sizeBytes);
+    // `%f` is the raw mode in hex, which is what GNU prints; `%a` is the
+    // permission bits in octal.
+    else if (conversion === "f") output += stat.mode.toString(16);
+    else if (conversion === "a") output += (stat.mode & 0o7777).toString(8);
+    else if (conversion === "A") output += modeString(stat.mode);
+    else if (conversion === "F") output += stat.kind === "directory" ? "directory" : "regular file";
+    else if (conversion === "%") output += "%";
+    else throw appletUsageError(STAT, `unsupported conversion %${conversion ?? ""}`);
+  }
+  return output;
+}
 
 export const chmodCommand = /* @__PURE__ */ defineApplet(CHMOD, async (context, argv) => {
   const [modeValue, ...paths] = argv;

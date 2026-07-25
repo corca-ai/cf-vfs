@@ -20,13 +20,14 @@ const fixtures = JSON.parse(await readFile(fixtureUrl, "utf8"));
 // a NUL-free control character, or any quoting the oracle shell would mangle.
 function writeFile(path, content) {
   const encoded = Buffer.from(content, "utf8").toString("base64");
-  return `printf '%s' '${encoded}' | base64 -d > '${path}'\n`;
+  const directory = path.includes("/") ? `mkdir -p '${path.replace(/\/[^/]*$/u, "")}'\n` : "";
+  return `${directory}printf '%s' '${encoded}' | base64 -d > '${path}'\n`;
 }
 
 function program(fixture) {
   let text = `rm -rf ${WORKDIR}\nmkdir -p ${WORKDIR}\ncd ${WORKDIR} || exit 99\n`;
   for (const [path, content] of Object.entries(fixture.files ?? {})) {
-    if (!/^[A-Za-z0-9._-]+$/u.test(path)) throw new Error(`unsupported fixture file name ${path}`);
+    if (!/^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/u.test(path)) throw new Error(`unsupported fixture file name ${path}`);
     text += writeFile(path, content);
   }
   text += writeFile(".cf-vfs-stdin", fixture.stdin ?? "");

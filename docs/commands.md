@@ -565,10 +565,101 @@ decides which directory is provisioned; pass the same path as the execution
 | discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
 | help | `help -s`, from the dedicated `/shell/commands/help` subpath |
 | shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
-| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f`, `ls -l -d -a -A`, `find -name -type -maxdepth`, `stat`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
-| streaming text/bytes | `cat`, `grep -i -v -n -F -c`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed s/old/new/[g]`, `seq -s -w` |
+| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p`, `ls -l -d -a -A -1 -R`, `find -name -type -maxdepth -print -print0 -exec`, `stat -c`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
+| streaming text/bytes | `cat`, `grep -i -v -n -F -E -c -l -q -r -R -h`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed -n -e -i`, `seq -s -w` |
+| deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, from the dedicated `/shell/commands/system` subpath |
 | bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
 | argument dispatch | `xargs -n -0 -r -t`, from the dedicated `/shell/commands/xargs` subpath |
+
+### Regular expressions
+
+`grep` and `sed` take POSIX basic regular expressions, and `grep -E` takes
+extended ones. Patterns are parsed and matched here rather than handed to the
+JavaScript engine, so no JavaScript-only construct can mean something here that
+it does not mean in `grep`: `a+` repeats in an extended expression and is a
+literal plus in a basic one, and `(?:a)` does not open a non-capturing group.
+
+The declared subset is literals, `.`, `*`, bracket expressions with ranges and
+POSIX character classes, the anchors `^` and `$`, grouping, alternation, `+`,
+`?`, and the intervals `{n}`, `{n,}`, and `{n,m}` — spelled bare in an extended
+expression and backslashed in a basic one. Back-references, the GNU extensions
+`\w`, `\b`, `\<`, and `\>`, equivalence classes, and collating symbols are usage
+errors rather than approximations. `-i` folds the twenty-six ASCII pairs only,
+because the runtime declares `LC_ALL=C`: the Kelvin sign does not match `k`.
+
+Matching runs a Thompson simulation, so the work is bounded by the record length
+times the pattern size **however the pattern is written**. That bound is the
+reason for the one visible divergence from GNU: alternation is leftmost-first
+rather than POSIX leftmost-longest, so `sed 's/a\|ab/X/'` on `ab` gives `Xb`
+where GNU gives `X`. Whether a record matches is unaffected; only which text a
+group captures can differ. A backtracking engine would give leftmost-longest for
+free, but it has no bound — `grep 'a*a*a*a*a*a*a*a*b'` against thirty-two
+characters takes seconds — and a synchronous match cannot be interrupted by the
+abort signal or the execution deadline, so one short pattern from a caller would
+burn the whole CPU limit. Patterns that would still be large after expansion
+(`(x{50}){50}`) are refused with status 2 rather than compiled.
+
+### Recursive and batched actions
+
+`grep -r` walks a subtree through the paged traversal, so a large directory
+costs a bounded number of indexed queries and charges the shared glob budget;
+`ls -R` lists one directory at a time as it descends. Both report each path the
+way the operand was written, as GNU does, so `grep -r x t` prints `t/sub/file`.
+A file `grep -r` cannot open is reported on stderr and the walk continues, so
+one unreadable entry does not discard the matches already found; the status is
+then 2 rather than 0 or 1. With `-r` the filename is prefixed only when more
+than one file can be searched, so `grep -r x one.txt` prints bare lines.
+
+`find -print0` separates with NUL so a path containing a newline survives the
+hand-off to `xargs -0`. `find -exec` dispatches an already-expanded argv through
+the same registry, policy, and budget as any other command, so a matched path
+can never become shell syntax; `;` runs once per match and `+` batches up to 256
+paths per invocation. Every `{}` in a word is substituted, not only a word that
+is exactly `{}`, so `-exec mv {} {}.bak ';'` renames rather than writing to a
+file called `{}.bak`. A failing invocation does not stop the walk; as POSIX has
+it, only the `+` form reports it in `find`'s own status.
+
+### The sed profile
+
+`sed` implements `s`, `p`, and `d`, each optionally selected by a line number,
+`$`, a `/regex/`, or a two-address range, and optionally negated with `!`.
+`-n` suppresses the automatic print, `-e` repeats, and the `s` flags are `g`,
+`p`, `i`, and an occurrence number, which combine as `2g` does in GNU sed. A
+replacement expands `&` and `\1`…`\9` and writes everything else literally.
+
+Hold space, branching, labels, and `a`, `i`, `c`, `y`, `r`, and `w` are outside
+the profile and are usage errors: they are a programming language rather than a
+utility, and several need state across records that a streaming profile cannot
+bound. Every command in the subset reads only the current record, so ordinary
+operation streams.
+
+Several details follow GNU exactly because getting them wrong is silent. The
+operands are one stream: line numbers run continuously across them and `$` is
+the last record of the last file. A range's end address is looked for starting
+at the record *after* the one that opened it, so `1,/a/` reaches the second `a`
+and `2,1` selects one record. A record the input left unterminated is written
+back unterminated. An empty match touching the end of the previous one is not a
+second occurrence, so `s/a*/-/g` on `baaac` gives `-b-c-`.
+
+`-i` is the one barrier: it publishes a single guarded whole-file write
+protected by the path's mutation token, so a concurrent change loses rather than
+interleaves, and there is never a visible temporary file. Each operand is edited
+under its own token; one that fails is reported on stderr while the rest are
+still edited, and the status is 2.
+
+### Deterministic utilities
+
+`date` always reports UTC, because the runtime fixes `TZ=UTC` and has no
+timezone database; `-u` is accepted and changes nothing. The conversions are
+`%Y %m %d %H %M %S %F %T %s %%`, and setting the clock is not supported. The
+value comes from the execution's injected clock, which on Workers advances only
+across I/O — see [the deadline note](operations.md#execution-budgets).
+
+`sleep` takes whole seconds, wakes immediately on cancellation, and refuses a
+duration that could not finish inside the execution deadline rather than serving
+it until the timeout. `expr` evaluates one infix operation — integer arithmetic,
+a comparison, or `length` — and exits 1 when the result is zero or empty. It is
+deliberately not a grammar: precedence and grouping belong in `$(( ))`.
 
 General utilities share a deterministic option syntax. Supported short flags
 may be clustered (`rm -rf`, `grep -inF`, `wc -lwc`, `comm -123`), and a short
