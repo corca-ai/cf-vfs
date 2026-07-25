@@ -20,6 +20,10 @@ export type ShellFileSystem = Pick<
   | "remove"
   | "move"
   | "copy"
+  | "lstat"
+  | "readlink"
+  | "symlink"
+  | "realpath"
 > & {
   inspectWriteTarget(path: string): VfsStat | null;
 };

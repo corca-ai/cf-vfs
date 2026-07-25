@@ -1,3 +1,4 @@
+import { VfsError } from "../../core/errors.js";
 import type { VfsStat } from "../../vfs/types.js";
 import { type AppletSpecWithOptions, defineApplet, parseAppletOptions } from "./applet.js";
 import { modeString } from "./format.js";
@@ -36,10 +37,14 @@ export const lsCommand = /* @__PURE__ */ defineApplet(LS, async (context, argv, 
   const recursive = parsed.options.some((option) => option.name === "recursive");
   const paths = parsed.operands.length === 0 ? ["."] : parsed.operands;
   const output = new BufferedTextWriter(context, fds[1]);
-  const format = (entry: VfsStat, name: string): string =>
-    long
-      ? `${modeString(entry.mode)} ${entry.sizeBytes.toString().padStart(8)} ${name}\n`
+  const format = (entry: VfsStat, name: string): string => {
+    // The long form names the target, because a link's own size and mode say
+    // nothing useful and the target is the thing a reader wants.
+    const arrow = entry.kind === "symlink" ? ` -> ${entry.linkTarget}` : "";
+    return long
+      ? `${modeString(entry.mode)} ${entry.sizeBytes.toString().padStart(8)} ${name}${arrow}\n`
       : `${name}\n`;
+  };
   let written = false;
   try {
     const listDirectory = async (
@@ -56,9 +61,33 @@ export const lsCommand = /* @__PURE__ */ defineApplet(LS, async (context, argv, 
     };
     for (const path of paths) {
       const normalized = commandPath(context, path);
-      const stat = context.fileSystem.stat(normalized);
-      if (stat.kind !== "directory" || directory) {
-        await output.write(format(stat, path));
+      const entry = context.fileSystem.lstat(normalized);
+      // A link to a directory is listed through the way `ls dir` is, but `-l`
+      // and `-d` both stop that: POSIX has them describe the operand, which is
+      // why `ls -l dirlink` is one line about the link. Only a link needs the
+      // second lookup; a directory is already the answer.
+      const linksToDirectory = (): boolean => {
+        try {
+          return context.fileSystem.stat(normalized).kind === "directory";
+        } catch (error) {
+          // A link that leads nowhere is still an entry to describe: `ls
+          // dangling` names it, as `ls` does, rather than failing and taking
+          // the remaining operands with it. A refusal is not that — a link the
+          // policy will not follow must still be refused, not quietly listed.
+          if (
+            error instanceof VfsError &&
+            (error.code === "ENOENT" || error.code === "ELOOP" || error.code === "ENOTDIR")
+          ) {
+            return false;
+          }
+          throw error;
+        }
+      };
+      const listsThrough =
+        !directory &&
+        (entry.kind === "directory" || (entry.kind === "symlink" && !long && linksToDirectory()));
+      if (!listsThrough) {
+        await output.write(format(entry, path));
         written = true;
         continue;
       }

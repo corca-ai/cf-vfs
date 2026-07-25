@@ -79,6 +79,72 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     // The named target keeps its mode; a descendant's timestamp is the copy's.
     expect(result.stdout).toBe("604\n");
   },
+  "glob-does-not-cross-a-link-matched-by-a-wildcard": async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/dir/a.txt", "1\n", { createParents: true });
+    await harness.fileSystem.writeFile("/dir/b.txt", "2\n");
+    harness.fileSystem.symlink("/link", "/dir");
+    // The forms that matter resolve: a literal prefix through a link, and any
+    // pattern from a working directory reached through one.
+    expect((await harness.run("echo /link/*")).stdout).toBe("/link/a.txt /link/b.txt\n");
+    expect((await harness.run("cd /link; echo *")).stdout).toBe("a.txt b.txt\n");
+    // A wildcard that would have to match the link's own name does not.
+    expect((await harness.run("echo /li*/a.txt")).stdout).toBe("/li*/a.txt\n");
+  },
+  "a-trailing-slash-is-not-an-assertion-about-the-path": async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/real.txt", "body\n");
+    harness.fileSystem.symlink("/filelink", "/real.txt");
+    // GNU refuses this with ENOTDIR; the slash is gone before `cat` sees it.
+    expect((await harness.run("cat /filelink/")).stdout).toBe("body\n");
+    // The filesystem itself does honour the distinction.
+    expect(() => harness.fileSystem.stat("/filelink/")).toThrowError(/not a directory/u);
+  },
+  "dot-dot-is-collapsed-before-a-link-is-followed": async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/x/y/here.txt", "near\n", { createParents: true });
+    await harness.fileSystem.writeFile("/deep.txt", "far\n");
+    harness.fileSystem.symlink("/x/y/l", "/");
+    // GNU resolves `..` against `/`, reaching nothing; here it cancels the
+    // link lexically and names `/x/y`.
+    expect(harness.fileSystem.realpath("/x/y/l/..")).toBe("/x/y");
+    expect((await harness.run("cat /x/y/l/../here.txt")).stdout).toBe("near\n");
+  },
+  "hard-links-are-not-supported": async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/real.txt", "x\n");
+    const result = await harness.run("ln /real.txt /hard.txt");
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("only symbolic links are supported");
+    // `-s` is accepted, so the refusal is about the kind of link and not `ln`.
+    expect((await harness.run("ln -s /real.txt /soft.txt")).exitCode).toBe(0);
+  },
+  "symlink-resolution-is-bounded-by-a-hop-count": async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/end.txt", "x\n");
+    harness.fileSystem.symlink("/chain0", "/end.txt");
+    for (let index = 1; index <= 60; index += 1) {
+      harness.fileSystem.symlink(`/chain${index}`, `/chain${index - 1}`);
+    }
+    // Inside the bound the chain resolves; past it the read is refused even
+    // though every link in it points at something real.
+    expect((await harness.run("cat /chain30")).stdout).toBe("x\n");
+    const refused = await harness.run("cat /chain60");
+    expect(refused.exitCode).not.toBe(0);
+    expect(refused.stderr).toContain("too many levels of symbolic links");
+  },
+  "symlink-targets-are-stored-but-not-interpreted-for-policy": async () => {
+    const harness = createBashHarness({ policy: { writeRoots: ["/w"], readRoots: ["/w"] } });
+    await harness.fileSystem.mkdir("/w", true);
+    await harness.fileSystem.writeFile("/outside.txt", "secret\n");
+    // Creating the link succeeds: the target is text, not an access.
+    expect((await harness.run("ln -s /outside.txt /w/escape")).exitCode).toBe(0);
+    expect((await harness.run("readlink /w/escape")).stdout).toBe("/outside.txt\n");
+    // Following it is what the roots refuse.
+    const read = await harness.run("cat /w/escape");
+    expect(read.exitCode).not.toBe(0);
+    expect(read.stdout).toBe("");
+  },
   "sed-language-is-a-bounded-subset": async () => {
     const harness = createBashHarness();
     for (const script of ["y/a/b/", "1h", ":top", "a\\text"]) {

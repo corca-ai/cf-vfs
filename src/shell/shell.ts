@@ -1009,6 +1009,9 @@ function conditionalFileTest(operator: ConditionalUnaryOperator, stat: VfsStat):
   switch (operator) {
     case "-e":
       return true;
+    case "-L":
+    case "-h":
+      return stat.kind === "symlink";
     case "-f":
       return stat.kind === "file";
     case "-d":
@@ -1081,9 +1084,11 @@ async function evaluateConditional(
       else if (operand.length === 0) value = false;
       else {
         try {
-          const stat = runtime.fileSystem.stat(
-            normalizePathPreservingTrailingSlash(operand, session.cwd),
-          );
+          const path = normalizePathPreservingTrailingSlash(operand, session.cwd);
+          // `-L` and `-h` ask about the link; every other predicate asks about
+          // what it points at, which is why a dangling link fails `-e`.
+          const asks = current.operator === "-L" || current.operator === "-h";
+          const stat = asks ? runtime.fileSystem.lstat(path) : runtime.fileSystem.stat(path);
           value = conditionalFileTest(current.operator, stat);
         } catch (error) {
           if (error instanceof VfsError && (error.code === "ENOENT" || error.code === "ENOTDIR")) {

@@ -20,6 +20,7 @@ import {
   MAX_READ_LEASE_MS,
   NEVER_MUTATED_TOKEN,
   resolveFileSystemLimits,
+  SYMLINK_MODE,
   validatePositiveInteger,
 } from "./config.js";
 import { emitVfsEvent, type VfsEventSink, type VfsQuotaLimit } from "./events.js";
@@ -31,6 +32,7 @@ import type {
   CommitOpaqueUploadOptions,
   CopyOptions,
   CopyResult,
+  EntryKind,
   EntryPage,
   FindOptions,
   GarbageDrainResult,
@@ -39,6 +41,7 @@ import type {
   MetadataUpdateOptions,
   MoveOptions,
   MoveResult,
+  MutationTokenOptions,
   OpaqueFileStat,
   OpaqueObjectMetadata,
   OpaqueReadLease,
@@ -47,20 +50,142 @@ import type {
   PageOptions,
   RemoveOptions,
   RemoveResult,
+  SymlinkOptions,
   TouchOptions,
   VfsStat,
   VirtualFileSystem,
   WriteFileOptions,
   WriteResult,
 } from "./types.js";
+import { MAX_SYMLINK_HOPS, MAX_SYMLINK_TARGET_BYTES } from "./types.js";
 
 const DEFAULT_MAX_DATABASE_BYTES = 10_000_000_000;
 const DEFAULT_DATABASE_HEADROOM_BYTES = 64 * 1024 * 1024;
 const MAX_GC_BATCH = 100;
 
+/**
+ * The entry table and its indexes.
+ *
+ * One definition serves both the fresh schema and the rebuild that migrates an
+ * existing one, so the two cannot drift: a database created today and a
+ * database migrated from version 1 have the same constraints, and the migration
+ * test compares them directly.
+ *
+ * The CHECK is the point. A symlink carries a target and no content, a
+ * directory carries neither, and a file carries exactly one content class, so
+ * a row that is two of those things at once cannot be written even by code
+ * that has forgotten the rule.
+ */
+const ENTRIES_SCHEMA = `
+        CREATE TABLE vfs_entries (
+          id INTEGER PRIMARY KEY,
+          path TEXT NOT NULL,
+          parent_path TEXT NOT NULL,
+          name TEXT NOT NULL,
+          kind TEXT NOT NULL CHECK (kind IN ('directory', 'file', 'symlink')),
+          content_class TEXT CHECK (content_class IN ('inline', 'opaque')),
+          opaque_object_id INTEGER,
+          link_target TEXT,
+          size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+          mode INTEGER NOT NULL,
+          created_at_ms INTEGER NOT NULL,
+          modified_at_ms INTEGER NOT NULL,
+          revision INTEGER NOT NULL CHECK (revision >= 1),
+          CHECK (
+            (kind = 'directory' AND content_class IS NULL AND opaque_object_id IS NULL
+              AND link_target IS NULL)
+            OR (kind = 'file' AND content_class = 'inline' AND opaque_object_id IS NULL
+              AND link_target IS NULL)
+            OR (kind = 'file' AND content_class = 'opaque' AND opaque_object_id IS NOT NULL
+              AND link_target IS NULL)
+            OR (kind = 'symlink' AND content_class IS NULL AND opaque_object_id IS NULL
+              AND link_target IS NOT NULL AND length(link_target) > 0)
+          )
+        );
+        CREATE UNIQUE INDEX vfs_entries_path
+          ON vfs_entries(path);
+        CREATE UNIQUE INDEX vfs_entries_parent_name
+          ON vfs_entries(parent_path, name);
+        CREATE INDEX vfs_entries_opaque_object
+          ON vfs_entries(opaque_object_id) WHERE opaque_object_id IS NOT NULL;
+        -- Resolution asks only for links, and only ever by path. A partial
+        -- index keeps that query proportional to the number of links rather
+        -- than to the size of the namespace.
+        CREATE INDEX vfs_entries_symlink
+          ON vfs_entries(path) WHERE kind = 'symlink';`;
+
+/**
+ * The row-shape guards that SQLite enforces rather than JavaScript.
+ *
+ * These live beside `ENTRIES_SCHEMA` and are recreated with it, because
+ * `ALTER TABLE ... RENAME` rewrites a trigger to follow the table it was
+ * attached to: renaming the old entries table out of the way carries these onto
+ * it, and dropping it takes them along. Re-running one definition is what keeps
+ * a migrated database enforcing exactly what a fresh one does.
+ */
+/**
+ * The row-shape guards SQLite enforces rather than JavaScript.
+ *
+ * Recreated wholesale by the version-2 rebuild, because `ALTER TABLE ...
+ * RENAME` does two different things to them. The four attached to the entry
+ * table follow it to its temporary name and are dropped with it. The two
+ * attached to `vfs_opaque_objects` and `vfs_inline_chunks` survive — but
+ * SQLite rewrites their bodies to reference the renamed table, leaving them
+ * guarding a table that no longer exists. Dropping all six by name and
+ * reinstalling this one definition is what keeps a migrated database enforcing
+ * exactly what a fresh one does.
+ */
+const ENTRY_TRIGGERS = `
+        CREATE TRIGGER vfs_opaque_entry_insert_guard
+          BEFORE INSERT ON vfs_entries
+          WHEN NEW.content_class = 'opaque' AND NOT EXISTS (
+            SELECT 1 FROM vfs_opaque_objects WHERE id = NEW.opaque_object_id
+          )
+          BEGIN SELECT RAISE(ABORT, 'opaque object does not exist'); END;
+        CREATE TRIGGER vfs_opaque_entry_update_guard
+          BEFORE UPDATE OF content_class, opaque_object_id ON vfs_entries
+          WHEN NEW.content_class = 'opaque' AND NOT EXISTS (
+            SELECT 1 FROM vfs_opaque_objects WHERE id = NEW.opaque_object_id
+          )
+          BEGIN SELECT RAISE(ABORT, 'opaque object does not exist'); END;
+        CREATE TRIGGER vfs_inline_entry_delete_guard
+          BEFORE DELETE ON vfs_entries
+          WHEN EXISTS (
+            SELECT 1 FROM vfs_inline_chunks WHERE entry_id = OLD.id
+          )
+          BEGIN SELECT RAISE(ABORT, 'inline entry still has chunks'); END;
+        CREATE TRIGGER vfs_inline_entry_update_guard
+          BEFORE UPDATE OF content_class ON vfs_entries
+          WHEN OLD.content_class = 'inline' AND NEW.content_class <> 'inline'
+            AND EXISTS (
+              SELECT 1 FROM vfs_inline_chunks WHERE entry_id = OLD.id
+            )
+          BEGIN SELECT RAISE(ABORT, 'inline entry still has chunks'); END;
+        CREATE TRIGGER vfs_opaque_object_delete_guard
+          BEFORE DELETE ON vfs_opaque_objects
+          WHEN EXISTS (
+            SELECT 1 FROM vfs_entries WHERE opaque_object_id = OLD.id
+          )
+          BEGIN SELECT RAISE(ABORT, 'opaque object is still referenced'); END;
+        CREATE TRIGGER vfs_inline_chunk_insert_guard
+          BEFORE INSERT ON vfs_inline_chunks
+          WHEN NOT EXISTS (
+            SELECT 1 FROM vfs_entries
+            WHERE id = NEW.entry_id AND content_class = 'inline'
+          )
+          BEGIN SELECT RAISE(ABORT, 'inline chunk has no inline entry'); END;`;
+
+const DROP_ENTRY_TRIGGERS = `
+        DROP TRIGGER IF EXISTS vfs_opaque_entry_insert_guard;
+        DROP TRIGGER IF EXISTS vfs_opaque_entry_update_guard;
+        DROP TRIGGER IF EXISTS vfs_inline_entry_delete_guard;
+        DROP TRIGGER IF EXISTS vfs_inline_entry_update_guard;
+        DROP TRIGGER IF EXISTS vfs_opaque_object_delete_guard;
+        DROP TRIGGER IF EXISTS vfs_inline_chunk_insert_guard;`;
+
 const ENTRY_COLUMNS = `
   e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,
-  e.opaque_object_id, e.size_bytes, e.mode, e.created_at_ms,
+  e.opaque_object_id, e.link_target, e.size_bytes, e.mode, e.created_at_ms,
   e.modified_at_ms, e.revision, p.version AS mutation_version
 `;
 
@@ -93,9 +218,10 @@ interface EntryRow {
   path: string;
   parentPath: string;
   name: string;
-  kind: "directory" | "file";
+  kind: EntryKind;
   contentClass: "inline" | "opaque" | null;
   opaqueObjectId: number | null;
+  linkTarget: string | null;
   sizeBytes: number;
   mode: number;
   createdAtMs: number;
@@ -183,7 +309,10 @@ function parseEntry(row: SqlRow, mutationEpoch: string): EntryRow {
   const kind = stringColumn(row, "kind");
   const contentClass = nullableStringColumn(row, "content_class");
   const opaqueObjectId = nullableIntegerColumn(row, "opaque_object_id");
-  if (kind !== "directory" && kind !== "file") invalidColumn("kind", "directory or file");
+  const linkTarget = nullableStringColumn(row, "link_target");
+  if (kind !== "directory" && kind !== "file" && kind !== "symlink") {
+    invalidColumn("kind", "directory, file, or symlink");
+  }
   if (contentClass !== null && contentClass !== "inline" && contentClass !== "opaque") {
     invalidColumn("content_class", "inline, opaque, or null");
   }
@@ -191,7 +320,8 @@ function parseEntry(row: SqlRow, mutationEpoch: string): EntryRow {
     (kind === "directory" && (contentClass !== null || opaqueObjectId !== null)) ||
     (kind === "file" && contentClass === null) ||
     (contentClass === "inline" && opaqueObjectId !== null) ||
-    (contentClass === "opaque" && opaqueObjectId === null)
+    (contentClass === "opaque" && opaqueObjectId === null) ||
+    (kind === "symlink") !== (linkTarget !== null)
   ) {
     throw new VfsError("EIO", "invalid SQLite entry state", stringColumn(row, "path"));
   }
@@ -202,6 +332,7 @@ function parseEntry(row: SqlRow, mutationEpoch: string): EntryRow {
     name: stringColumn(row, "name"),
     kind,
     contentClass,
+    linkTarget,
     opaqueObjectId,
     sizeBytes: integerColumn(row, "size_bytes"),
     mode: integerColumn(row, "mode"),
@@ -225,6 +356,10 @@ function rowToStat(row: EntryRow): VfsStat {
     mutationToken: row.mutationToken,
   };
   if (row.kind === "directory") return { ...common, kind: "directory", contentClass: null };
+  if (row.kind === "symlink") {
+    if (row.linkTarget === null) throw new VfsError("EIO", "invalid SQLite entry state", row.path);
+    return { ...common, kind: "symlink", contentClass: null, linkTarget: row.linkTarget };
+  }
   if (row.contentClass === "inline") return { ...common, kind: "file", contentClass: "inline" };
   if (row.contentClass === "opaque") return { ...common, kind: "file", contentClass: "opaque" };
   throw new VfsError("EIO", "invalid SQLite entry state", row.path);
@@ -296,6 +431,26 @@ export class SqlFileSystem implements VirtualFileSystem {
   private readonly mutationEpoch: string;
   /** Set inside a transaction, reported once the commit is durable. */
   private pendingUsage: { inlineBytes: number; entries: number } | undefined;
+  /**
+   * How many links exist, so a namespace without any pays nothing for them.
+   *
+   * Resolution consults this before doing any extra work: at zero it is exactly
+   * the single indexed lookup the filesystem made before links existed, which
+   * is what keeps the common case from slowing down. The Durable Object owns
+   * its database outright and runs single-threaded, so a cached count cannot go
+   * stale behind another writer.
+   */
+  private symlinkCount: number;
+  /**
+   * Set when a delete or a copy may have changed the link count.
+   *
+   * The count is only ever consulted to answer "are there any links?", so
+   * over-counting merely does correct work that turns out to be unnecessary,
+   * while under-counting to zero would skip resolution entirely. Recomputing on
+   * demand keeps that impossible, and a namespace with no links never reaches
+   * the recompute at all.
+   */
+  private symlinkCountStale = false;
 
   constructor(storage: SqlFileSystemStorage, options: SqlFileSystemOptions = {}) {
     const limits = resolveFileSystemLimits(options);
@@ -323,6 +478,25 @@ export class SqlFileSystem implements VirtualFileSystem {
     ] as const)
       validatePositiveInteger(value, name);
     this.mutationEpoch = this.migrate();
+    this.symlinkCount = this.countSymlinks();
+  }
+
+  private countSymlinks(): number {
+    return integerColumn(
+      this.sql
+        .exec<SqlRow>("SELECT COUNT(*) AS links FROM vfs_entries WHERE kind = 'symlink'")
+        .one(),
+      "links",
+    );
+  }
+
+  /** How many links exist, recomputed only when a mutation may have changed it. */
+  private links(): number {
+    if (this.symlinkCountStale) {
+      this.symlinkCount = this.countSymlinks();
+      this.symlinkCountStale = false;
+    }
+    return this.symlinkCount;
   }
 
   private now(): number {
@@ -369,6 +543,7 @@ export class SqlFileSystem implements VirtualFileSystem {
           .one(),
         "version",
       );
+      const now = this.now();
       if (currentVersion < 1) {
         this.storage.execBatch(`
         CREATE TABLE vfs_state (
@@ -390,31 +565,7 @@ export class SqlFileSystem implements VirtualFileSystem {
           retain_until_ms INTEGER NOT NULL DEFAULT 0,
           created_at_ms INTEGER NOT NULL
         );
-        CREATE TABLE vfs_entries (
-          id INTEGER PRIMARY KEY,
-          path TEXT NOT NULL,
-          parent_path TEXT NOT NULL,
-          name TEXT NOT NULL,
-          kind TEXT NOT NULL CHECK (kind IN ('directory', 'file')),
-          content_class TEXT CHECK (content_class IN ('inline', 'opaque')),
-          opaque_object_id INTEGER,
-          size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
-          mode INTEGER NOT NULL,
-          created_at_ms INTEGER NOT NULL,
-          modified_at_ms INTEGER NOT NULL,
-          revision INTEGER NOT NULL CHECK (revision >= 1),
-          CHECK (
-            (kind = 'directory' AND content_class IS NULL AND opaque_object_id IS NULL)
-            OR (kind = 'file' AND content_class = 'inline' AND opaque_object_id IS NULL)
-            OR (kind = 'file' AND content_class = 'opaque' AND opaque_object_id IS NOT NULL)
-          )
-        );
-        CREATE UNIQUE INDEX vfs_entries_path
-          ON vfs_entries(path);
-        CREATE UNIQUE INDEX vfs_entries_parent_name
-          ON vfs_entries(parent_path, name);
-        CREATE INDEX vfs_entries_opaque_object
-          ON vfs_entries(opaque_object_id) WHERE opaque_object_id IS NOT NULL;
+${ENTRIES_SCHEMA}
         CREATE TABLE vfs_inline_chunks (
           entry_id INTEGER NOT NULL,
           chunk_index INTEGER NOT NULL,
@@ -452,44 +603,7 @@ export class SqlFileSystem implements VirtualFileSystem {
           inline_bytes INTEGER NOT NULL CHECK (inline_bytes >= 0),
           entries INTEGER NOT NULL CHECK (entries >= 1)
         );
-        CREATE TRIGGER vfs_opaque_entry_insert_guard
-          BEFORE INSERT ON vfs_entries
-          WHEN NEW.content_class = 'opaque' AND NOT EXISTS (
-            SELECT 1 FROM vfs_opaque_objects WHERE id = NEW.opaque_object_id
-          )
-          BEGIN SELECT RAISE(ABORT, 'opaque object does not exist'); END;
-        CREATE TRIGGER vfs_opaque_entry_update_guard
-          BEFORE UPDATE OF content_class, opaque_object_id ON vfs_entries
-          WHEN NEW.content_class = 'opaque' AND NOT EXISTS (
-            SELECT 1 FROM vfs_opaque_objects WHERE id = NEW.opaque_object_id
-          )
-          BEGIN SELECT RAISE(ABORT, 'opaque object does not exist'); END;
-        CREATE TRIGGER vfs_opaque_object_delete_guard
-          BEFORE DELETE ON vfs_opaque_objects
-          WHEN EXISTS (
-            SELECT 1 FROM vfs_entries WHERE opaque_object_id = OLD.id
-          )
-          BEGIN SELECT RAISE(ABORT, 'opaque object is still referenced'); END;
-        CREATE TRIGGER vfs_inline_chunk_insert_guard
-          BEFORE INSERT ON vfs_inline_chunks
-          WHEN NOT EXISTS (
-            SELECT 1 FROM vfs_entries
-            WHERE id = NEW.entry_id AND content_class = 'inline'
-          )
-          BEGIN SELECT RAISE(ABORT, 'inline chunk has no inline entry'); END;
-        CREATE TRIGGER vfs_inline_entry_delete_guard
-          BEFORE DELETE ON vfs_entries
-          WHEN EXISTS (
-            SELECT 1 FROM vfs_inline_chunks WHERE entry_id = OLD.id
-          )
-          BEGIN SELECT RAISE(ABORT, 'inline entry still has chunks'); END;
-        CREATE TRIGGER vfs_inline_entry_update_guard
-          BEFORE UPDATE OF content_class ON vfs_entries
-          WHEN OLD.content_class = 'inline' AND NEW.content_class <> 'inline'
-            AND EXISTS (
-              SELECT 1 FROM vfs_inline_chunks WHERE entry_id = OLD.id
-            )
-          BEGIN SELECT RAISE(ABORT, 'inline entry still has chunks'); END;
+${ENTRY_TRIGGERS}
         `);
         const now = this.now();
         this.sql.exec(
@@ -508,6 +622,37 @@ export class SqlFileSystem implements VirtualFileSystem {
         this.sql.exec("INSERT INTO vfs_usage (singleton, inline_bytes, entries) VALUES (1, 0, 1)");
         this.sql.exec(
           "INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (1, ?)",
+          now,
+        );
+        migrated = true;
+      }
+      if (currentVersion < 2) {
+        // SQLite cannot widen a CHECK constraint in place, so version 2 is the
+        // standard rebuild: create the new shape, copy every row, swap. The
+        // definition comes from `ENTRIES_SCHEMA`, the same text a fresh
+        // database uses, so a migrated database and a new one cannot differ.
+        if (currentVersion === 1) {
+          this.storage.execBatch(`
+${DROP_ENTRY_TRIGGERS}
+        ALTER TABLE vfs_entries RENAME TO vfs_entries_v1;
+        DROP INDEX vfs_entries_path;
+        DROP INDEX vfs_entries_parent_name;
+        DROP INDEX vfs_entries_opaque_object;
+${ENTRIES_SCHEMA}
+        INSERT INTO vfs_entries (
+          id, path, parent_path, name, kind, content_class, opaque_object_id,
+          link_target, size_bytes, mode, created_at_ms, modified_at_ms, revision
+        )
+        SELECT
+          id, path, parent_path, name, kind, content_class, opaque_object_id,
+          NULL, size_bytes, mode, created_at_ms, modified_at_ms, revision
+        FROM vfs_entries_v1;
+        DROP TABLE vfs_entries_v1;
+${ENTRY_TRIGGERS}
+      `);
+        }
+        this.sql.exec(
+          "INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (2, ?)",
           now,
         );
         migrated = true;
@@ -541,20 +686,146 @@ export class SqlFileSystem implements VirtualFileSystem {
     return row === undefined ? null : parseEntry(row, this.mutationEpoch);
   }
 
-  private requireEntry(path: string): EntryRow {
-    const row = this.oneEntry(path);
+  /**
+   * The absolute form of a link target, read from the link's own parent.
+   *
+   * POSIX resolves a relative target against the directory holding the link,
+   * not the working directory of whoever is looking, so a tree keeps meaning
+   * the same thing wherever it is read from.
+   */
+  private linkDestination(row: EntryRow): string {
+    const target = row.linkTarget ?? "";
+    return target.startsWith("/") ? normalizePath(target) : normalizePath(target, row.parentPath);
+  }
+
+  /**
+   * Finds the outermost link on the way to `path`, if there is one.
+   *
+   * A path that is not in the table either does not exist or lies under a
+   * link, and only the second case needs more work. Asking for the ancestors
+   * by exact path uses the partial link index and costs one query, rather than
+   * one query per component.
+   */
+  private linkAncestor(path: string): EntryRow | null {
+    const ancestors: string[] = [];
+    for (let at = dirname(path); at !== "/"; at = dirname(at)) ancestors.push(at);
+    if (ancestors.length === 0) return null;
+    const placeholders = ancestors.map(() => "?").join(", ");
+    const row = firstRow(
+      this.sql.exec<SqlRow>(
+        `SELECT ${ENTRY_COLUMNS}
+       FROM vfs_entries e
+       CROSS JOIN vfs_path_versions p
+       WHERE e.kind = 'symlink' AND e.path IN (${placeholders}) AND p.path = e.path
+       ORDER BY length(e.path) ASC
+       LIMIT 1`,
+        ...ancestors,
+      ),
+    );
+    return row === undefined ? null : parseEntry(row, this.mutationEpoch);
+  }
+
+  /**
+   * Resolves a pathname, following links in every component.
+   *
+   * This is the only place a link is ever followed. Everything that reads or
+   * writes an entry goes through it, so a policy check, a loop bound, and the
+   * rule that a relative target reads from the link's parent cannot be skipped
+   * by a caller that has not thought about links.
+   *
+   * `follow` governs the final component only, which is the difference between
+   * `stat` and `lstat`: the components leading up to it are always followed,
+   * because a link in the middle of a path is not a thing a caller can act on.
+   *
+   * When the namespace holds no links at all this is one lookup, the same query
+   * the filesystem made before links existed.
+   */
+  private resolveEntry(
+    input: string,
+    follow: boolean,
+  ): { path: string; row: EntryRow | null; followed: string[] } {
+    let path = input;
+    // The links crossed on the way, so a guard can cover the whole chain
+    // rather than only where it currently ends.
+    const followed: string[] = [];
+    for (let hops = 0; hops <= MAX_SYMLINK_HOPS; hops += 1) {
+      const row = this.oneEntry(path);
+      if (row === null) {
+        if (this.links() === 0) return { path, row: null, followed };
+        const ancestor = this.linkAncestor(path);
+        if (ancestor === null) return { path, row: null, followed };
+        followed.push(ancestor.path);
+        path = normalizePath(
+          `${this.linkDestination(ancestor)}/${path.slice(ancestor.path.length)}`,
+        );
+        continue;
+      }
+      if (row.kind !== "symlink" || !follow) return { path, row, followed };
+      followed.push(row.path);
+      path = this.linkDestination(row);
+    }
+    throw new VfsError("ELOOP", "too many levels of symbolic links", input);
+  }
+
+  /**
+   * The token a guard is taken and checked against.
+   *
+   * A path that crosses a link means whatever the link currently says, so each
+   * link's own version is part of what the caller reserved. Without them,
+   * repointing a link between the read and the write is invisible whenever the
+   * old and new targets happen to share a version — the exact ABA the token
+   * exists to catch.
+   */
+  private guardToken(path: string): string {
+    const normalized = normalizePath(path);
+    if (this.links() === 0) return this.tokenFor(normalized);
+    const resolved = this.resolveEntry(normalized, true);
+    const base = this.tokenFor(resolved.path);
+    if (resolved.followed.length === 0) return base;
+    return [base, ...resolved.followed.map((link) => this.tokenFor(link))].join("|");
+  }
+
+  /**
+   * Canonicalizes a path, keeping a final component that does not exist.
+   *
+   * A caller canonicalizing the destination of a write it has not made yet
+   * needs an answer, and refusing would make the policy check below depend on
+   * whether the file happened to be there already.
+   */
+  realpath(path: string, options: { follow?: boolean } = {}): string {
+    const normalized = normalizePath(path);
+    if (this.links() === 0) return normalized;
+    const resolved = this.resolveEntry(normalized, options.follow !== false);
+    // Already canonical, present or not: `resolveEntry` substitutes every link
+    // ancestor before it gives up, so an absent final component is reported
+    // under a path whose parents have all been resolved. Recursing on the
+    // parent to "finish the job" would redo that walk once per component, and
+    // the hop bound does not apply to depth — a four-thousand-byte path is
+    // legal and would cost seconds of uninterruptible CPU.
+    return resolved.path;
+  }
+
+  private oneResolved(path: string, follow = true): EntryRow | null {
+    return this.resolveEntry(path, follow).row;
+  }
+
+  private requireEntry(path: string, follow = true): EntryRow {
+    const row = this.oneResolved(path, follow);
     if (row === null) throw new VfsError("ENOENT", "no such file or directory", path);
     return row;
   }
 
-  private requireDirectory(path: string): EntryRow {
-    const row = this.requireEntry(path);
+  private requireDirectory(path: string, resolved?: EntryRow | null): EntryRow {
+    // The row resolution already landed on, when the caller has it.
+    const row = resolved ?? this.requireEntry(path);
     if (row.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", path);
     return row;
   }
 
-  private requireInline(path: string): EntryRow {
-    const row = this.requireEntry(path);
+  private requireInline(path: string, resolved?: EntryRow | null): EntryRow {
+    // The row resolution already landed on, when the caller has it: looking it
+    // up again would resolve the same path a second time.
+    const row = resolved ?? this.requireEntry(path);
     if (row.kind === "directory") throw new VfsError("EISDIR", "is a directory", path);
     if (row.contentClass !== "inline") {
       throw new VfsError("ENOTSUP", "opaque R2 content is not available to shell commands", path);
@@ -562,16 +833,63 @@ export class SqlFileSystem implements VirtualFileSystem {
     return row;
   }
 
-  private normalizeAccessPath(path: string, allowMissingDirectory = false): string {
+  /**
+   * Normalizes a path and resolves every link in it to a canonical one.
+   *
+   * Every operation goes through here, so the paths that reach the table are
+   * always canonical: a link can never end up as the parent of an entry, which
+   * is what lets an exact-path hit be trusted without walking the components.
+   *
+   * `followTerminal` is false for the operations that act on a link rather than
+   * through it — `rm`, `mv`, `cp`, and `mkdir` name the link itself.
+   */
+  /**
+   * Resolves a path to a canonical one and keeps the entry it landed on.
+   *
+   * Returning the row rather than only the path is what lets a caller act on a
+   * link it asked not to follow. Looking the path up again afterwards would
+   * resolve it a second time — with the follow flag lost — and a `rm` of a
+   * dangling or cyclic link would fail on the target that is not there.
+   *
+   * `followTerminal` is false for the operations that name a link rather than
+   * reach through it: `rm`, `mv`, `cp -P`, `mkdir`, and `ln -sf`.
+   */
+  private resolveAccess(
+    path: string,
+    allowMissingDirectory = false,
+    followTerminal = true,
+  ): { path: string; row: EntryRow | null } {
+    // A trailing slash asserts that the path names a directory, so the link is
+    // followed even when the caller asked not to follow one: `rm dirlink/` is
+    // a question about the directory, not about the link.
+    const requiresDirectory = pathRequiresDirectory(path);
     const normalized = normalizePath(path);
-    if (!pathRequiresDirectory(path) || normalized === "/") return normalized;
-    const entry = this.oneEntry(normalized);
-    if (entry === null) {
-      if (allowMissingDirectory) return normalized;
-      throw new VfsError("ENOENT", "no such directory", normalized);
+    // With no links there is nothing to resolve and no row to fetch, so this
+    // costs exactly what it did before links existed: nothing.
+    const resolved =
+      this.links() === 0
+        ? { path: normalized, row: null }
+        : this.resolveEntry(normalized, followTerminal || requiresDirectory);
+    if (requiresDirectory && resolved.row === null && resolved.path !== "/") {
+      resolved.row = this.oneEntry(resolved.path);
     }
-    if (entry.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", normalized);
-    return normalized;
+    if (!requiresDirectory || resolved.path === "/") return resolved;
+    if (resolved.row === null) {
+      if (allowMissingDirectory) return resolved;
+      throw new VfsError("ENOENT", "no such directory", resolved.path);
+    }
+    if (resolved.row.kind !== "directory") {
+      throw new VfsError("ENOTDIR", "not a directory", resolved.path);
+    }
+    return resolved;
+  }
+
+  private normalizeAccessPath(
+    path: string,
+    allowMissingDirectory = false,
+    followTerminal = true,
+  ): string {
+    return this.resolveAccess(path, allowMissingDirectory, followTerminal).path;
   }
 
   private tokenFor(path: string): string {
@@ -606,11 +924,17 @@ export class SqlFileSystem implements VirtualFileSystem {
     path: string,
     entry: EntryRow | null,
     guard: { ifRevision?: number; ifMutationToken?: string },
+    written?: string,
   ): void {
     if (guard.ifRevision !== undefined && entry?.revision !== guard.ifRevision) {
       throw new VfsError("EREVISION", "file revision does not match", path);
     }
-    if (guard.ifMutationToken !== undefined && this.tokenFor(path) !== guard.ifMutationToken) {
+    if (guard.ifMutationToken === undefined) return;
+    // Checked against the path the caller named, not the one it resolved to,
+    // so the token covers every link crossed on the way. `getMutationToken`
+    // composes it the same way from the same written path.
+    const current = written === undefined ? this.tokenFor(path) : this.guardToken(written);
+    if (current !== guard.ifMutationToken) {
       throw new VfsError("EREVISION", "path mutation token does not match", path);
     }
   }
@@ -766,6 +1090,7 @@ export class SqlFileSystem implements VirtualFileSystem {
       kind: "directory",
       contentClass: null,
       opaqueObjectId: null,
+      linkTarget: null,
       sizeBytes: 0,
       mode,
       createdAtMs: now,
@@ -778,10 +1103,14 @@ export class SqlFileSystem implements VirtualFileSystem {
   private ensureParents(path: string, recursive: boolean, now: number): void {
     const missing: string[] = [];
     let current = dirname(path);
-    while (this.oneEntry(current) === null) {
+    while (this.oneResolved(current) === null) {
       missing.unshift(current);
       current = dirname(current);
     }
+    // `requireDirectory` follows, so a link to a directory is a fine parent —
+    // but a link to a file, or a dangling one, is not, and the entry created
+    // below would otherwise become a child of something that is not a
+    // directory. That invariant is what lets resolution trust an exact hit.
     this.requireDirectory(current);
     if (missing.length > 0 && !recursive) {
       throw new VfsError("ENOENT", "parent directory does not exist", dirname(path));
@@ -824,7 +1153,44 @@ export class SqlFileSystem implements VirtualFileSystem {
   }
 
   stat(path: string): VfsStat {
-    const row = this.requireEntry(this.normalizeAccessPath(path));
+    return this.statEntry(path, true);
+  }
+
+  /** Reports a link as itself rather than as what it points at. */
+  lstat(path: string): VfsStat {
+    return this.statEntry(path, false);
+  }
+
+  readlink(path: string): string {
+    const row = this.requireEntry(normalizePath(path), false);
+    if (row.kind !== "symlink" || row.linkTarget === null) {
+      throw new VfsError("EINVAL", "not a symbolic link", row.path);
+    }
+    return row.linkTarget;
+  }
+
+  /**
+   * Resolves a path once and keeps the row it landed on.
+   *
+   * Normalizing and then looking up would resolve the same path twice, which
+   * would double what every read costs as soon as a single link exists
+   * anywhere in the namespace.
+   */
+  private accessEntry(path: string, follow: boolean): { path: string; row: EntryRow | null } {
+    const requiresDirectory = pathRequiresDirectory(path);
+    const resolved = this.resolveEntry(normalizePath(path), follow || requiresDirectory);
+    if (requiresDirectory && resolved.row !== null && resolved.row.kind !== "directory") {
+      throw new VfsError("ENOTDIR", "not a directory", resolved.path);
+    }
+    return resolved;
+  }
+
+  private statEntry(path: string, follow: boolean): VfsStat {
+    const access = this.accessEntry(path, follow);
+    if (access.row === null) {
+      throw new VfsError("ENOENT", "no such file or directory", access.path);
+    }
+    const row = access.row;
     const stat = rowToStat(row);
     if (stat.kind !== "file" || stat.contentClass !== "opaque" || row.opaqueObjectId === null) {
       return stat;
@@ -838,13 +1204,21 @@ export class SqlFileSystem implements VirtualFileSystem {
     };
   }
 
-  getMutationToken(path: string): string {
-    return this.transaction(() => this.tokenFor(normalizePath(path)));
+  getMutationToken(path: string, options: MutationTokenOptions = {}): string {
+    // Resolved by default, so the token belongs to the row the matching write
+    // would guard. Reading it from the written path would return the link's
+    // version and never match the target's.
+    return this.transaction(() =>
+      options.follow === false
+        ? this.tokenFor(this.normalizeAccessPath(path, true, false))
+        : this.guardToken(path),
+    );
   }
 
   list(path: string): VfsStat[] {
-    const normalized = this.normalizeAccessPath(path);
-    this.requireDirectory(normalized);
+    const access = this.resolveAccess(path);
+    const normalized = access.path;
+    this.requireDirectory(normalized, access.row);
     return this.rows(
       `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e INDEXED BY vfs_entries_parent_name
@@ -856,8 +1230,9 @@ export class SqlFileSystem implements VirtualFileSystem {
   }
 
   listPage(path: string, options: PageOptions = {}): EntryPage {
-    const normalized = this.normalizeAccessPath(path);
-    this.requireDirectory(normalized);
+    const access = this.resolveAccess(path);
+    const normalized = access.path;
+    this.requireDirectory(normalized, access.row);
     const limit = options.limit ?? 1000;
     validatePositiveInteger(limit, "limit");
     const rows = this.rows(
@@ -942,14 +1317,19 @@ export class SqlFileSystem implements VirtualFileSystem {
   }
 
   countSubtree(path: string): number {
-    const normalized = this.normalizeAccessPath(path);
-    this.requireEntry(normalized);
-    return this.subtreeSummary(normalized).entries;
+    // A link names one entry and has no subtree, so the count does not follow
+    // it. The callers are budget accounting for `rm`, `mv`, and `cp`, all of
+    // which act on the link; following would also make a dangling one throw.
+    const access = this.resolveAccess(path, false, false);
+    const entry = access.row ?? this.requireEntry(access.path, false);
+    if (entry.kind === "symlink") return 1;
+    return this.subtreeSummary(access.path).entries;
   }
 
   readFile(path: string): InlineReadResult {
-    const normalized = this.normalizeAccessPath(path);
-    const entry = this.requireInline(normalized);
+    const access = this.resolveAccess(path);
+    const normalized = access.path;
+    const entry = this.requireInline(normalized, access.row);
     const chunks = this.sql
       .exec<SqlRow>(
         `SELECT body FROM vfs_inline_chunks
@@ -1037,6 +1417,7 @@ export class SqlFileSystem implements VirtualFileSystem {
       this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", entry.id);
     }
     this.sql.exec("DELETE FROM vfs_entries WHERE id = ?", entry.id);
+    if (entry.kind === "symlink") this.symlinkCountStale = true;
     if (bumpPath) this.bumpToken(path);
     this.updateUsage(entry.contentClass === "inline" ? -entry.sizeBytes : 0, -1);
     if (
@@ -1087,7 +1468,7 @@ export class SqlFileSystem implements VirtualFileSystem {
       throw new VfsError("ENOENT", "no such file", normalized);
     }
     if (before?.kind === "directory") throw new VfsError("EISDIR", "is a directory", normalized);
-    this.validateGuard(normalized, before, options);
+    this.validateGuard(normalized, before, options, path);
     const capturedToken = this.tokenFor(normalized);
     const buffered = await this.collectInline(body);
 
@@ -1099,7 +1480,7 @@ export class SqlFileSystem implements VirtualFileSystem {
         if (this.tokenFor(normalized) !== capturedToken) {
           throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
         }
-        this.validateGuard(normalized, current, options);
+        this.validateGuard(normalized, current, options, path);
         if (current?.kind === "directory")
           throw new VfsError("EISDIR", "is a directory", normalized);
         const previousInlineBytes = current?.contentClass === "inline" ? current.sizeBytes : 0;
@@ -1169,7 +1550,7 @@ export class SqlFileSystem implements VirtualFileSystem {
   ): Promise<WriteResult> {
     const normalized = this.normalizeAccessPath(path);
     const before = this.requireInline(normalized);
-    this.validateGuard(normalized, before, options);
+    this.validateGuard(normalized, before, options, path);
     const capturedToken = before.mutationToken;
     const buffered = await this.collectInline(body);
     return this.useBuffered(buffered, (suffixChunks) => {
@@ -1179,7 +1560,7 @@ export class SqlFileSystem implements VirtualFileSystem {
         if (current.mutationToken !== capturedToken) {
           throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
         }
-        this.validateGuard(normalized, current, options);
+        this.validateGuard(normalized, current, options, path);
         if (suffixBytes === 0) {
           return {
             path: normalized,
@@ -1335,7 +1716,9 @@ export class SqlFileSystem implements VirtualFileSystem {
   }
 
   mkdir(path: string, recursive = false, mode = DIRECTORY_MODE): VfsStat {
-    const normalized = this.normalizeAccessPath(path, true);
+    // An existing link at the path is an existing entry, so `mkdir` reports
+    // EEXIST rather than creating a directory at whatever it points at.
+    const normalized = this.normalizeAccessPath(path, true, false);
     return this.transaction(() => {
       const existing = this.oneEntry(normalized);
       if (existing !== null) {
@@ -1349,12 +1732,83 @@ export class SqlFileSystem implements VirtualFileSystem {
     });
   }
 
+  symlink(path: string, target: string, options: SymlinkOptions = {}): VfsStat {
+    const normalized = this.normalizeAccessPath(path, true, false);
+    if (normalized === "/") throw new VfsError("EEXIST", "file or directory exists", normalized);
+    if (target.length === 0) throw new VfsError("EINVAL", "link target is empty", normalized);
+    const bytes = new TextEncoder().encode(target).byteLength;
+    if (bytes > MAX_SYMLINK_TARGET_BYTES) {
+      throw new VfsError("ENAMETOOLONG", "link target is too long", normalized);
+    }
+    return this.transaction(() => {
+      const existing = this.oneEntry(normalized);
+      if (existing !== null) {
+        if (!(options.replace ?? false)) {
+          throw new VfsError("EEXIST", "file or directory exists", normalized);
+        }
+        if (existing.kind === "directory") {
+          throw new VfsError("EISDIR", "is a directory", normalized);
+        }
+      }
+      this.validateGuard(normalized, existing, {
+        ...(options.ifMutationToken === undefined
+          ? {}
+          : { ifMutationToken: options.ifMutationToken }),
+      });
+      const now = this.now();
+      this.ensureParents(normalized, options.createParents ?? false, now);
+      if (existing !== null) this.removeExact(normalized, now, false);
+      this.assertCapacity(0, 1, normalized);
+      const inserted = this.sql
+        .exec<SqlRow>(
+          `INSERT INTO vfs_entries (
+             path, parent_path, name, kind, content_class, opaque_object_id,
+             link_target, size_bytes, mode, created_at_ms, modified_at_ms, revision
+           ) VALUES (?, ?, ?, 'symlink', NULL, NULL, ?, ?, ?, ?, ?, 1)
+           RETURNING id`,
+          normalized,
+          dirname(normalized),
+          basename(normalized),
+          target,
+          bytes,
+          SYMLINK_MODE,
+          now,
+          now,
+        )
+        .one();
+      this.updateUsage(0, 1);
+      this.publishPathVersion(normalized);
+      this.symlinkCount += 1;
+      return rowToStat({
+        id: integerColumn(inserted, "id"),
+        path: normalized,
+        parentPath: dirname(normalized),
+        name: basename(normalized),
+        kind: "symlink",
+        contentClass: null,
+        opaqueObjectId: null,
+        linkTarget: target,
+        sizeBytes: bytes,
+        mode: SYMLINK_MODE,
+        createdAtMs: now,
+        modifiedAtMs: now,
+        revision: 1,
+        mutationToken: this.tokenFor(normalized),
+      });
+    });
+  }
+
   async remove(path: string, options: RemoveOptions = {}): Promise<RemoveResult> {
-    const normalized = this.normalizeAccessPath(path);
+    // `rm link` removes the link. Following it would delete the target and
+    // leave the link behind, which is the opposite of what was asked.
+    const access = this.resolveAccess(path, false, false);
+    const normalized = access.path;
     if (normalized === "/") throw new VfsError("EINVAL", "cannot remove root", normalized);
     let queued = 0;
     const result = this.transaction(() => {
-      const root = this.requireEntry(normalized);
+      // The row resolution already landed on, so a link whose target is
+      // missing or cyclic is still removable — it is the link being removed.
+      const root = access.row ?? this.requireEntry(normalized, false);
       const range = descendantRange(normalized);
       const hasDescendants = firstRow(
         this.sql.exec<SqlRow>(
@@ -1424,6 +1878,9 @@ export class SqlFileSystem implements VirtualFileSystem {
         range.lower,
         range.upper,
       );
+      // A set-based delete does not report what it removed, so the link count
+      // is recomputed on demand rather than tracked here.
+      this.symlinkCountStale = true;
       this.sql.exec(
         `DELETE FROM vfs_opaque_objects
          WHERE NOT EXISTS (
@@ -1446,8 +1903,10 @@ export class SqlFileSystem implements VirtualFileSystem {
   }
 
   async move(from: string, to: string, options: MoveOptions = {}): Promise<MoveResult> {
-    const source = this.normalizeAccessPath(from);
-    const target = this.normalizeAccessPath(to, true);
+    // Both ends name the link itself: renaming a link moves the link.
+    const sourceAccess = this.resolveAccess(from, false, false);
+    const source = sourceAccess.path;
+    const target = this.normalizeAccessPath(to, true, false);
     if (source === "/") throw new VfsError("EINVAL", "cannot move root", source);
     if (source === target) return { from: source, to: target, moved: 1, replaced: false };
     if (isDescendant(source, target)) {
@@ -1455,7 +1914,7 @@ export class SqlFileSystem implements VirtualFileSystem {
     }
     let queued = 0;
     const result = this.transaction(() => {
-      const sourceEntry = this.requireEntry(source);
+      const sourceEntry = sourceAccess.row ?? this.requireEntry(source, false);
       this.requireDirectory(dirname(target));
       const destination = this.oneEntry(target);
       if (destination !== null && !(options.replace ?? false)) {
@@ -1471,7 +1930,14 @@ export class SqlFileSystem implements VirtualFileSystem {
         if (children !== undefined)
           throw new VfsError("ENOTEMPTY", "directory is not empty", target);
       }
-      if (destination !== null && destination.kind !== sourceEntry.kind) {
+      // A directory and a non-directory cannot replace each other. A link can
+      // be replaced by anything and can replace anything that is not a
+      // directory, because it is one entry holding text — `mv file link`
+      // replaces the link, as it does elsewhere.
+      const directoryMismatch =
+        destination !== null &&
+        (destination.kind === "directory") !== (sourceEntry.kind === "directory");
+      if (directoryMismatch && destination !== null) {
         throw new VfsError(
           destination.kind === "directory" ? "EISDIR" : "ENOTDIR",
           "source and destination kinds differ",
@@ -1519,14 +1985,19 @@ export class SqlFileSystem implements VirtualFileSystem {
   }
 
   async copy(from: string, to: string, options: CopyOptions = {}): Promise<CopyResult> {
-    const source = this.normalizeAccessPath(from);
-    const target = this.normalizeAccessPath(to, true);
+    // A link is copied as a link, target text and all: reading through it
+    // would turn one entry into a second copy of a possibly enormous file, and
+    // a recursive copy would do that for every link in the subtree. Only the
+    // named source can be dereferenced, and only when asked.
+    const sourceAccess = this.resolveAccess(from, false, options.dereference ?? false);
+    const source = sourceAccess.path;
+    const target = this.normalizeAccessPath(to, true, false);
     if (source === target) {
       throw new VfsError("EINVAL", "source and destination are the same path", target);
     }
     let queued = 0;
     const result = this.transaction(() => {
-      const sourceEntry = this.requireEntry(source);
+      const sourceEntry = sourceAccess.row ?? this.requireEntry(source, false);
       if (sourceEntry.kind === "directory" && !(options.recursive ?? false)) {
         throw new VfsError("EISDIR", "recursive copy is required for directories", source);
       }
@@ -1562,7 +2033,7 @@ export class SqlFileSystem implements VirtualFileSystem {
       this.sql.exec(
         `INSERT INTO vfs_entries (
            path, parent_path, name, kind, content_class, opaque_object_id,
-           size_bytes, mode, created_at_ms, modified_at_ms, revision
+           link_target, size_bytes, mode, created_at_ms, modified_at_ms, revision
          )
          SELECT
            ? || substr(e.path, ?),
@@ -1570,7 +2041,7 @@ export class SqlFileSystem implements VirtualFileSystem {
              ELSE ? || substr(e.parent_path, ?) END,
            CASE WHEN e.path = ? THEN ? ELSE e.name END,
            e.kind, e.content_class, e.opaque_object_id,
-           e.size_bytes, e.mode, ?, ?, 1
+           e.link_target, e.size_bytes, e.mode, ?, ?, 1
          FROM vfs_entries e
          WHERE e.path = ? OR (e.path >= ? AND e.path < ?)`,
         target,
@@ -1602,6 +2073,9 @@ export class SqlFileSystem implements VirtualFileSystem {
         sourceRange.lower,
         sourceRange.upper,
       );
+      // The copy is set-based and carries `kind` across, so it may have
+      // produced links; the count is recomputed rather than guessed.
+      this.symlinkCountStale = true;
       this.updateUsage(
         summary.inlineBytes - replacedInlineBytes,
         summary.entries - (destination === null ? 0 : 1),

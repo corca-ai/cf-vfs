@@ -4,6 +4,11 @@ import { MAX_INLINE_FILE_BYTES, type OpaqueStore } from "./types.js";
 
 export const DIRECTORY_MODE = 0o040755;
 export const FILE_MODE = 0o100644;
+/**
+ * The mode a link carries: `S_IFLNK` with the `777` bits Linux gives every
+ * link, because the permission that matters is the target's.
+ */
+export const SYMLINK_MODE = 0o120777;
 export const DEFAULT_UPLOAD_TTL_MS = 15 * 60 * 1000;
 export const DEFAULT_VERIFY_LEASE_MS = 60_000;
 const DEFAULT_UPLOAD_SETTLEMENT_GRACE_MS = 60_000;

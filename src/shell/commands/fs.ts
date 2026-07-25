@@ -1,6 +1,7 @@
 import { VfsError } from "../../core/errors.js";
+import { matchesGlob } from "../../core/glob.js";
 import { basename, dirname, normalizePath } from "../../core/path.js";
-import type { VfsStat } from "../../vfs/types.js";
+import type { EntryKind, VfsStat } from "../../vfs/types.js";
 import {
   type AppletSpec,
   type AppletSpecWithOptions,
@@ -9,7 +10,14 @@ import {
   parseAppletOptions,
 } from "./applet.js";
 import { modeString } from "./format.js";
-import { BufferedTextWriter, commandPath, displayPath, pipeToSink, writeText } from "./helpers.js";
+import {
+  BufferedTextWriter,
+  commandPath,
+  destinationPath,
+  displayPath,
+  pipeToSink,
+  writeText,
+} from "./helpers.js";
 
 /** Paths one `-exec ... +` invocation may carry. */
 const FIND_EXEC_BATCH = 256;
@@ -81,7 +89,7 @@ const MV = {
 
 const CP = {
   name: "cp",
-  usage: "[-rRfp] SOURCE DESTINATION",
+  usage: "[-rRfpP] SOURCE DESTINATION",
   summary: "copies a file or, with -r, a directory subtree",
   options: {
     short: {
@@ -89,30 +97,32 @@ const CP = {
       r: { name: "recursive" },
       R: { name: "recursive" },
       p: { name: "preserve" },
+      P: { name: "no-dereference" },
     },
     long: {
       force: { name: "force" },
       recursive: { name: "recursive" },
       preserve: { name: "preserve" },
+      "no-dereference": { name: "no-dereference" },
     },
   },
-} as const satisfies AppletSpecWithOptions<"force" | "recursive" | "preserve">;
+} as const satisfies AppletSpecWithOptions<"force" | "recursive" | "preserve" | "no-dereference">;
 
 const FIND = {
   name: "find",
-  usage: "[PATH...] [-name PATTERN] [-type f|d] [-maxdepth N] [-print|-print0|-exec ... ;|+]",
+  usage: "[PATH...] [-name PATTERN] [-type f|d|l] [-maxdepth N] [-print|-print0|-exec ... ;|+]",
   summary: "walks a subtree and prints or runs a command on matching paths",
 } as const satisfies AppletSpec;
 
 const STAT = {
   name: "stat",
-  usage: "[-c FORMAT] PATH...",
+  usage: "[-L] [-c FORMAT] PATH...",
   summary: "prints size, kind, mode, revision, and mutation token",
   options: {
-    short: { c: { name: "format", argument: true } },
-    long: { format: { name: "format", argument: true } },
+    short: { c: { name: "format", argument: true }, L: { name: "dereference" } },
+    long: { format: { name: "format", argument: true }, dereference: { name: "dereference" } },
   },
-} as const satisfies AppletSpecWithOptions<"format">;
+} as const satisfies AppletSpecWithOptions<"format" | "dereference">;
 
 const CHMOD = {
   name: "chmod",
@@ -279,17 +289,6 @@ export const rmdirCommand = /* @__PURE__ */ defineApplet(RMDIR, async (context, 
   return 0;
 });
 
-function destinationPath(
-  context: Parameters<typeof commandPath>[0],
-  source: string,
-  targetValue: string,
-): string {
-  const target = commandPath(context, targetValue);
-  const stat = context.fileSystem.inspectWriteTarget(target);
-  if (stat === null) return target;
-  return stat.kind === "directory" ? `${target === "/" ? "" : target}/${basename(source)}` : target;
-}
-
 export const mvCommand = /* @__PURE__ */ defineApplet(MV, async (context, argv) => {
   const parsed = parseAppletOptions(MV, argv);
   const replace = parsed.options.some((option) => option.name === "force");
@@ -306,18 +305,30 @@ export const cpCommand = /* @__PURE__ */ defineApplet(CP, async (context, argv) 
   const replace = parsed.options.some((option) => option.name === "force");
   const recursive = parsed.options.some((option) => option.name === "recursive");
   const preserve = parsed.options.some((option) => option.name === "preserve");
+  const noDereference = parsed.options.some((option) => option.name === "no-dereference");
   const values = parsed.operands;
   if (values.length !== 2) throw appletUsageError(CP, "requires source and destination");
   const source = commandPath(context, values[0]);
   const target = destinationPath(context, source, values[1] ?? "");
-  const preserved = preserve ? context.fileSystem.stat(source) : undefined;
-  await context.fileSystem.copy(source, target, { replace, recursive });
+  // A named link is copied through, as GNU does; `-r` and `-P` copy the link
+  // itself, because a subtree full of dereferenced links is a different tree.
+  const dereference = !recursive && !noDereference;
+  // The metadata of what was copied, which is the target when the copy
+  // followed the link and the link itself when it did not.
+  const preserved = preserve
+    ? dereference
+      ? context.fileSystem.stat(source)
+      : context.fileSystem.lstat(source)
+    : undefined;
+  await context.fileSystem.copy(source, target, { replace, recursive, dereference });
   // Mode bits and the modification time are what this namespace has to
   // preserve; there is no owner, group, or access time behind them. A copy
   // carries each entry's own bits already but stamps every entry with the
   // current time, so the named target is restated here. Descendants of a
   // recursive copy keep the copy's time, which is a declared divergence.
-  if (preserved !== undefined) {
+  // A copied link is skipped: its mode is fixed, and `setMetadata` follows, so
+  // restating it would stamp whatever it points at instead.
+  if (preserved !== undefined && preserved.kind !== "symlink") {
     context.fileSystem.setMetadata(target, {
       mode: preserved.mode,
       modifiedAtMs: preserved.modifiedAtMs,
@@ -338,7 +349,7 @@ export const cpCommand = /* @__PURE__ */ defineApplet(CP, async (context, argv) 
 export const findCommand = /* @__PURE__ */ defineApplet(FIND, async (context, argv, fds) => {
   const roots: string[] = [];
   let name: string | undefined;
-  let type: "file" | "directory" | undefined;
+  let type: EntryKind | undefined;
   let maxDepth: number | undefined;
   let separator: string | undefined;
   let exec: { argv: string[]; batch: boolean } | undefined;
@@ -355,7 +366,8 @@ export const findCommand = /* @__PURE__ */ defineApplet(FIND, async (context, ar
       const value = argv[index++];
       if (value === "f") type = "file";
       else if (value === "d") type = "directory";
-      else throw appletUsageError(FIND, "-type must be f or d");
+      else if (value === "l") type = "symlink";
+      else throw appletUsageError(FIND, "-type must be f, d, or l");
     } else if (option === "-maxdepth") {
       const value = argv[index++];
       if (value === undefined || !/^[0-9]+$/u.test(value)) {
@@ -391,6 +403,18 @@ export const findCommand = /* @__PURE__ */ defineApplet(FIND, async (context, ar
   const matched: string[] = [];
   for (const root of roots) {
     const normalized = commandPath(context, root);
+    // A link named on the command line is not descended into, as POSIX has it:
+    // `find dirlink` reports the link and stops. Following it would let one
+    // operand walk a tree that is not below where the caller pointed.
+    const operand = context.fileSystem.lstat(normalized);
+    if (operand.kind === "symlink") {
+      const selected =
+        (type === undefined || type === "symlink") &&
+        (name === undefined || matchesGlob(operand.name, name));
+      // Named the way the operand was written, like every other match.
+      if (selected) matched.push(displayPath(root, normalized, normalized));
+      continue;
+    }
     const entries = context.fileSystem.find({
       path: normalized,
       includeRoot: true,
@@ -444,7 +468,13 @@ function statText(stat: VfsStat): string {
   return `${[
     `  File: ${stat.path}`,
     `  Size: ${stat.sizeBytes}`,
-    `  Type: ${stat.kind === "directory" ? "directory" : `${stat.contentClass} file`}`,
+    `  Type: ${
+      stat.kind === "directory"
+        ? "directory"
+        : stat.kind === "symlink"
+          ? `symbolic link -> ${stat.linkTarget}`
+          : `${stat.contentClass} file`
+    }`,
     `  Mode: ${stat.mode.toString(8)} (${modeString(stat.mode)})`,
     `Revision: ${stat.revision}`,
     `Mutation: ${stat.mutationToken}`,
@@ -466,8 +496,14 @@ export const statCommand = /* @__PURE__ */ defineApplet(STAT, async (context, ar
       option.name === "format" && "argument" in option,
   )?.argument;
   if (parsed.operands.length === 0) throw appletUsageError(STAT, "missing operand");
+  // GNU reports the link itself unless `-L` is given, so `stat link` says
+  // "symbolic link" and does not quietly describe something else.
+  const dereference = parsed.options.some((option) => option.name === "dereference");
   for (const path of parsed.operands) {
-    const stat = context.fileSystem.stat(commandPath(context, path));
+    const resolved = commandPath(context, path);
+    const stat = dereference
+      ? context.fileSystem.stat(resolved)
+      : context.fileSystem.lstat(resolved);
     await writeText(
       fds[1],
       format === undefined ? statText(stat) : `${statFormat(format, stat, path)}\n`,
@@ -498,8 +534,14 @@ function statFormat(format: string, stat: VfsStat, operand: string): string {
     else if (conversion === "f") output += stat.mode.toString(16);
     else if (conversion === "a") output += (stat.mode & 0o7777).toString(8);
     else if (conversion === "A") output += modeString(stat.mode);
-    else if (conversion === "F") output += stat.kind === "directory" ? "directory" : "regular file";
-    else if (conversion === "%") output += "%";
+    else if (conversion === "F") {
+      output +=
+        stat.kind === "directory"
+          ? "directory"
+          : stat.kind === "symlink"
+            ? "symbolic link"
+            : "regular file";
+    } else if (conversion === "%") output += "%";
     else throw appletUsageError(STAT, `unsupported conversion %${conversion ?? ""}`);
   }
   return output;
@@ -579,8 +621,11 @@ export const realpathCommand = /* @__PURE__ */ defineApplet(
     if (argv.length === 0) throw appletUsageError(REALPATH, "missing operand");
     for (const path of argv) {
       const normalized = normalizePath(path, context.session.cwd);
-      context.fileSystem.stat(normalized);
-      await writeText(fds[1], `${normalized}\n`);
+      // Resolve first, then confirm: a link is only canonical once it has been
+      // followed, and `stat` on the written path would follow it anyway.
+      const canonical = context.fileSystem.realpath(normalized);
+      context.fileSystem.stat(canonical);
+      await writeText(fds[1], `${canonical}\n`);
     }
     return 0;
   },
@@ -608,13 +653,16 @@ export const mktempCommand = /* @__PURE__ */ defineApplet(MKTEMP, async (context
 export const fileCommand = /* @__PURE__ */ defineApplet(FILE, async (context, argv, fds) => {
   if (argv.length === 0) throw appletUsageError(FILE, "missing operand");
   for (const path of argv) {
-    const stat = context.fileSystem.stat(commandPath(context, path));
+    // `lstat`, so a link is described as a link rather than as its target.
+    const stat = context.fileSystem.lstat(commandPath(context, path));
     const description =
       stat.kind === "directory"
         ? "directory"
-        : stat.contentClass === "opaque"
-          ? "opaque R2 content"
-          : "inline data";
+        : stat.kind === "symlink"
+          ? `symbolic link to ${stat.linkTarget}`
+          : stat.contentClass === "opaque"
+            ? "opaque R2 content"
+            : "inline data";
     await writeText(fds[1], `${path}: ${description}\n`);
   }
   return 0;

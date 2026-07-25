@@ -44,6 +44,7 @@ import {
   treeCommand,
 } from "./fs.js";
 import { helpCommand } from "./help.js";
+import { lnCommand, readlinkCommand } from "./link.js";
 import { lsCommand } from "./ls.js";
 import { sedCommand } from "./sed.js";
 import { shCommand } from "./sh.js";
@@ -110,6 +111,8 @@ export const defaultShellCommands = [
   mvCommand,
   cpCommand,
   lsCommand,
+  lnCommand,
+  readlinkCommand,
   findCommand,
   statCommand,
   chmodCommand,

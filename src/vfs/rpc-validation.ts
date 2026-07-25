@@ -10,6 +10,7 @@ import type {
   MoveOptions,
   PageOptions,
   RemoveOptions,
+  SymlinkOptions,
   TouchOptions,
   WriteFileOptions,
 } from "./types.js";
@@ -24,6 +25,8 @@ interface UnknownRecord extends Readonly<Record<string, unknown>> {
   readonly pathGlob?: unknown;
   readonly type?: unknown;
   readonly createParents?: unknown;
+  readonly dereference?: unknown;
+  readonly follow?: unknown;
   readonly disposition?: unknown;
   readonly ifRevision?: unknown;
   readonly ifMutationToken?: unknown;
@@ -121,8 +124,8 @@ export function rpcFindOptions(value: unknown): FindOptions {
     "options",
   );
   const type = optionalString(input.type, "options.type");
-  if (type !== undefined && type !== "file" && type !== "directory") {
-    throw new VfsError("EINVAL", "options.type must be file or directory");
+  if (type !== undefined && type !== "file" && type !== "directory" && type !== "symlink") {
+    throw new VfsError("EINVAL", "options.type must be file, directory, or symlink");
   }
   return {
     path: rpcString(input.path, "options.path"),
@@ -182,6 +185,28 @@ export function rpcMetadataOptions(value: unknown): MetadataUpdateOptions {
   };
 }
 
+export function rpcSymlinkOptions(value: unknown): SymlinkOptions | undefined {
+  if (value === undefined) return undefined;
+  const input = record(value, "options");
+  keys(input, ["createParents", "ifMutationToken", "replace"], "options");
+  const createParents = optionalBoolean(input.createParents, "options.createParents");
+  const replace = optionalBoolean(input.replace, "options.replace");
+  const ifMutationToken = optionalString(input.ifMutationToken, "options.ifMutationToken");
+  return {
+    ...(ifMutationToken === undefined ? {} : { ifMutationToken }),
+    ...(createParents === undefined ? {} : { createParents }),
+    ...(replace === undefined ? {} : { replace }),
+  };
+}
+
+export function rpcFollowOptions(value: unknown): { follow?: boolean } | undefined {
+  if (value === undefined) return undefined;
+  const input = record(value, "options");
+  keys(input, ["follow"], "options");
+  const follow = optionalBoolean(input.follow, "options.follow");
+  return follow === undefined ? {} : { follow };
+}
+
 export function rpcTouchOptions(value: unknown): TouchOptions | undefined {
   if (value === undefined) return undefined;
   const input = record(value, "options");
@@ -223,14 +248,16 @@ export function rpcMoveOptions(value: unknown): MoveOptions | undefined {
 export function rpcCopyOptions(value: unknown): CopyOptions | undefined {
   if (value === undefined) return undefined;
   const input = record(value, "options");
-  keys(input, ["replace", "recursive", "createParents"], "options");
+  keys(input, ["replace", "recursive", "createParents", "dereference"], "options");
   const replace = optionalBoolean(input.replace, "options.replace");
   const recursive = optionalBoolean(input.recursive, "options.recursive");
   const createParents = optionalBoolean(input.createParents, "options.createParents");
+  const dereference = optionalBoolean(input.dereference, "options.dereference");
   return {
     ...(replace === undefined ? {} : { replace }),
     ...(recursive === undefined ? {} : { recursive }),
     ...(createParents === undefined ? {} : { createParents }),
+    ...(dereference === undefined ? {} : { dereference }),
   };
 }
 
