@@ -10,6 +10,7 @@ import type {
   MoveOptions,
   PageOptions,
   RemoveOptions,
+  SymlinkOptions,
   TouchOptions,
   WriteFileOptions,
 } from "./types.js";
@@ -24,6 +25,7 @@ interface UnknownRecord extends Readonly<Record<string, unknown>> {
   readonly pathGlob?: unknown;
   readonly type?: unknown;
   readonly createParents?: unknown;
+  readonly follow?: unknown;
   readonly disposition?: unknown;
   readonly ifRevision?: unknown;
   readonly ifMutationToken?: unknown;
@@ -180,6 +182,28 @@ export function rpcMetadataOptions(value: unknown): MetadataUpdateOptions {
     ...(mode === undefined ? {} : { mode }),
     ...(modifiedAtMs === undefined ? {} : { modifiedAtMs }),
   };
+}
+
+export function rpcSymlinkOptions(value: unknown): SymlinkOptions | undefined {
+  if (value === undefined) return undefined;
+  const input = record(value, "options");
+  keys(input, ["createParents", "ifMutationToken", "replace"], "options");
+  const createParents = optionalBoolean(input.createParents, "options.createParents");
+  const replace = optionalBoolean(input.replace, "options.replace");
+  const guard = guardOptions(input);
+  return {
+    ...(guard.ifMutationToken === undefined ? {} : { ifMutationToken: guard.ifMutationToken }),
+    ...(createParents === undefined ? {} : { createParents }),
+    ...(replace === undefined ? {} : { replace }),
+  };
+}
+
+export function rpcFollowOptions(value: unknown): { follow?: boolean } | undefined {
+  if (value === undefined) return undefined;
+  const input = record(value, "options");
+  keys(input, ["follow"], "options");
+  const follow = optionalBoolean(input.follow, "options.follow");
+  return follow === undefined ? {} : { follow };
 }
 
 export function rpcTouchOptions(value: unknown): TouchOptions | undefined {

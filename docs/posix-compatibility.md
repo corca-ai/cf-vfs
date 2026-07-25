@@ -12,13 +12,14 @@ host filesystem access.
 | Paths | `/`-separated canonical Unicode strings with `.`, `..`, repeated-separator, name-length, path-length, and trailing-slash validation. Shell-relative paths resolve from `cwd`. Paths are not arbitrary POSIX byte strings. |
 | Regular files | Inline files contain arbitrary bytes and are limited to 8 MiB. Opaque files are immutable R2 generations whose metadata participates in the namespace but whose bodies are unavailable to shell commands. |
 | Directories | Direct children, recursive traversal, atomic subtree move, recursive copy/remove, keyset pagination, and deterministic UTF-8 ordering are supported. A paginated traversal is mutation-tolerant, not snapshot-isolated. |
-| Metadata | Kind, content class, byte size, mode-shaped bits, timestamps, revision, and mutation token are available. There are no inode, owner, group, link-count, access-time, or POSIX change-time guarantees. |
+| Metadata | Kind, content class, byte size, mode-shaped bits, timestamps, revision, and mutation token are available. A link carries its own revision and token, separate from its target's. There are no inode, owner, group, link-count, access-time, or POSIX change-time guarantees. |
 | Modes | A default `022`-like result (`0755` directories and `0644` files) and explicit mode updates are metadata only. They do not enforce access. |
 | Concurrency | Whole-file publication and namespace changes are atomic within one DO. Revision and mutation-token guards reject stale work, including absent-path ABA. |
-| Links and special files | Symbolic links, hard links, devices, sockets, FIFOs, sparse files, xattrs, and `mmap` are unsupported. |
+| Symbolic links | Supported, with the target stored verbatim and a relative one resolved from the link's parent. Resolution follows every component, is bounded at forty hops, and reports `ELOOP` beyond that. `lstat`, `readlink`, `realpath`, and `ln -s` are available; a dangling link is a valid link. |
+| Other links and special files | Hard links, devices, sockets, FIFOs, sparse files, xattrs, and `mmap` are unsupported. A hard link needs an inode identity this namespace does not have, so `ln` without `-s` is a usage error rather than a copy. |
 | Execution | An inline file with an executable mode bit runs as a shell script in an isolated child scope. There are no processes, `fork`, `execve`, signals, job control, or native binaries, and no interpreter other than this shell profile. |
 | Locks and open handles | There is no persistent descriptor lifecycle or advisory/mandatory locking. Returned inline streams are bounded snapshots; guards provide optimistic concurrency. |
-| Errors | Familiar codes include `ENOENT`, `ENOEXEC`, `EEXIST`, `ENOTDIR`, `EISDIR`, `ENOTEMPTY`, `EFBIG`, `ENOSPC`, `EPIPE`, and `ENOTSUP`. `EREVISION` denotes a stale guard. This is not the complete POSIX errno set. |
+| Errors | Familiar codes include `ENOENT`, `ENOEXEC`, `EEXIST`, `ENOTDIR`, `EISDIR`, `ENOTEMPTY`, `ELOOP`, `EFBIG`, `ENOSPC`, `EPIPE`, and `ENOTSUP`. `EREVISION` denotes a stale guard. This is not the complete POSIX errno set. |
 
 Virtual descriptors `0`, `1`, and `2` exist only for one submitted source
 unit, including in an interactive session. Pipelines connect them with byte

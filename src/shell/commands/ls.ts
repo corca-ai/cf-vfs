@@ -36,10 +36,14 @@ export const lsCommand = /* @__PURE__ */ defineApplet(LS, async (context, argv, 
   const recursive = parsed.options.some((option) => option.name === "recursive");
   const paths = parsed.operands.length === 0 ? ["."] : parsed.operands;
   const output = new BufferedTextWriter(context, fds[1]);
-  const format = (entry: VfsStat, name: string): string =>
-    long
-      ? `${modeString(entry.mode)} ${entry.sizeBytes.toString().padStart(8)} ${name}\n`
+  const format = (entry: VfsStat, name: string): string => {
+    // The long form names the target, because a link's own size and mode say
+    // nothing useful and the target is the thing a reader wants.
+    const arrow = entry.kind === "symlink" ? ` -> ${entry.linkTarget}` : "";
+    return long
+      ? `${modeString(entry.mode)} ${entry.sizeBytes.toString().padStart(8)} ${name}${arrow}\n`
       : `${name}\n`;
+  };
   let written = false;
   try {
     const listDirectory = async (
@@ -56,8 +60,21 @@ export const lsCommand = /* @__PURE__ */ defineApplet(LS, async (context, argv, 
     };
     for (const path of paths) {
       const normalized = commandPath(context, path);
-      const stat = context.fileSystem.stat(normalized);
-      if (stat.kind !== "directory" || directory) {
+      // An operand is described as itself: `ls -l link` reports the link, not
+      // its target. The one exception is a link to a directory, which is
+      // listed through the way `ls dir` is — unless `-d` stops even that.
+      const entry = context.fileSystem.lstat(normalized);
+      // A link to a directory is listed through the way `ls dir` is, but `-l`
+      // and `-d` both stop that: POSIX has them describe the operand, which is
+      // why `ls -l dirlink` is one line about the link.
+      const listsThrough =
+        !directory &&
+        (entry.kind === "directory" ||
+          (entry.kind === "symlink" &&
+            !long &&
+            context.fileSystem.stat(normalized).kind === "directory"));
+      const stat = listsThrough ? context.fileSystem.stat(normalized) : entry;
+      if (!listsThrough) {
         await output.write(format(stat, path));
         written = true;
         continue;

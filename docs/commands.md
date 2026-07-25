@@ -565,7 +565,8 @@ decides which directory is provisioned; pass the same path as the execution
 | discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
 | help | `help -s`, from the dedicated `/shell/commands/help` subpath |
 | shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
-| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p`, `ls -l -d -a -A -1 -R`, `find -name -type -maxdepth -print -print0 -exec`, `stat -c`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
+| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p -P`, `ls -l -d -a -A -1 -R`, `find -name -type -maxdepth -print -print0 -exec`, `stat -L -c`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
+| links | `ln -s -f`, `readlink -f`, from the dedicated `/shell/commands/link` subpath |
 | streaming text/bytes | `cat`, `grep -i -v -n -F -E -c -l -q -r -R -h`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed -n -e -i`, `seq -s -w` |
 | deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, from the dedicated `/shell/commands/system` subpath |
 | bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
@@ -598,6 +599,39 @@ characters takes seconds — and a synchronous match cannot be interrupted by th
 abort signal or the execution deadline, so one short pattern from a caller would
 burn the whole CPU limit. Patterns that would still be large after expansion
 (`(x{50}){50}`) are refused with status 2 rather than compiled.
+
+### Symbolic links
+
+`ln -s` creates a link and stores the target exactly as written. The target is
+not resolved, not checked, and not required to exist: a dangling link is a valid
+link, and refusing to create one would make the order a tree is restored in
+significant. `ln` without `-s` is a usage error — a hard link needs an inode
+identity this namespace does not have.
+
+Which commands follow a link and which act on it is the POSIX split, and it is
+the part worth reading twice. `cat`, `test -f`, `chmod`, and a redirection
+follow it, so writing through a link writes the target and leaves the link
+alone. `rm`, `mv`, `mkdir`, and `ln -sf` act on the link itself, so removing a
+link to a directory leaves the directory. `stat`, `ls -l`, `ls -d`, `file`,
+`find`, and `test -L` report the link, with `stat -L` following instead. `ls`
+without `-l` or `-d` lists through a link to a directory, as `ls` does. `cp`
+follows a named link but `cp -r` and `cp -P` copy the link itself, because a
+subtree with every link expanded is a different subtree.
+
+`readlink` prints the stored target and exits 1 without output when the path is
+not a link, which is what makes it usable in a conditional. `readlink -f` and
+`realpath` print the canonical path with every link on the way resolved.
+
+A link may name anything, including a path outside the shell's roots. The
+refusal happens when it is followed rather than when it is made: every read and
+write resolves the path first and checks the roots against what it resolved to,
+so `EACCES` is reported at the moment of access. `lstat` and `readlink` are
+checked against where the link lives instead, because they answer questions
+about the link and not about its target.
+
+Resolution is bounded at forty hops. Past that the path is refused with
+`ELOOP`, whether it is a cycle or merely a long chain — the two cannot be told
+apart without a bound, and a constant makes the refusal deterministic.
 
 ### Recursive and batched actions
 

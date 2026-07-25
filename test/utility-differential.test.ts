@@ -79,6 +79,41 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     // The named target keeps its mode; a descendant's timestamp is the copy's.
     expect(result.stdout).toBe("604\n");
   },
+  "hard-links-are-not-supported": async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/real.txt", "x\n");
+    const result = await harness.run("ln /real.txt /hard.txt");
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("only symbolic links are supported");
+    // `-s` is accepted, so the refusal is about the kind of link and not `ln`.
+    expect((await harness.run("ln -s /real.txt /soft.txt")).exitCode).toBe(0);
+  },
+  "symlink-resolution-is-bounded-by-a-hop-count": async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/end.txt", "x\n");
+    harness.fileSystem.symlink("/chain0", "/end.txt");
+    for (let index = 1; index <= 60; index += 1) {
+      harness.fileSystem.symlink(`/chain${index}`, `/chain${index - 1}`);
+    }
+    // Inside the bound the chain resolves; past it the read is refused even
+    // though every link in it points at something real.
+    expect((await harness.run("cat /chain30")).stdout).toBe("x\n");
+    const refused = await harness.run("cat /chain60");
+    expect(refused.exitCode).not.toBe(0);
+    expect(refused.stderr).toContain("too many levels of symbolic links");
+  },
+  "symlink-targets-are-stored-but-not-interpreted-for-policy": async () => {
+    const harness = createBashHarness({ policy: { writeRoots: ["/w"], readRoots: ["/w"] } });
+    await harness.fileSystem.mkdir("/w", true);
+    await harness.fileSystem.writeFile("/outside.txt", "secret\n");
+    // Creating the link succeeds: the target is text, not an access.
+    expect((await harness.run("ln -s /outside.txt /w/escape")).exitCode).toBe(0);
+    expect((await harness.run("readlink /w/escape")).stdout).toBe("/outside.txt\n");
+    // Following it is what the roots refuse.
+    const read = await harness.run("cat /w/escape");
+    expect(read.exitCode).not.toBe(0);
+    expect(read.stdout).toBe("");
+  },
   "sed-language-is-a-bounded-subset": async () => {
     const harness = createBashHarness();
     for (const script of ["y/a/b/", "1h", ":top", "a\\text"]) {

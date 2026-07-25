@@ -151,7 +151,18 @@ export interface ArithmeticCommandNode {
   sourceOffset: number;
 }
 
-export type ConditionalUnaryOperator = "-n" | "-z" | "-e" | "-f" | "-d" | "-s" | "-r" | "-w" | "-x";
+export type ConditionalUnaryOperator =
+  | "-n"
+  | "-z"
+  | "-e"
+  | "-f"
+  | "-d"
+  | "-s"
+  | "-r"
+  | "-w"
+  | "-x"
+  | "-L"
+  | "-h";
 export type ConditionalBinaryOperator =
   | "=="
   | "!="
@@ -284,9 +295,7 @@ const UNSUPPORTED_CONDITIONAL_UNARY = new Set([
   "-b",
   "-c",
   "-g",
-  "-h",
   "-k",
-  "-L",
   "-N",
   "-O",
   "-p",
@@ -311,6 +320,8 @@ const CONDITIONAL_UNARY_OPERATORS: readonly ConditionalUnaryOperator[] = [
   "-r",
   "-w",
   "-x",
+  "-L",
+  "-h",
 ];
 
 function conditionalUnaryOperator(value: string | undefined): ConditionalUnaryOperator | undefined {

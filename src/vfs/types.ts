@@ -1,7 +1,20 @@
 export const MAX_INLINE_FILE_BYTES = 8 * 1024 * 1024;
 
 export type ContentClass = "inline" | "opaque";
-export type EntryKind = "directory" | "file";
+export type EntryKind = "directory" | "file" | "symlink";
+
+/**
+ * How many links one pathname resolution may follow before it is refused.
+ *
+ * Linux uses forty for the same reason: a cycle is indistinguishable from deep
+ * nesting without a bound, and a bound that is a constant makes the refusal
+ * deterministic rather than dependent on how much work the caller has already
+ * done.
+ */
+export const MAX_SYMLINK_HOPS = 40;
+
+/** The largest link target this filesystem stores, in UTF-8 bytes. */
+export const MAX_SYMLINK_TARGET_BYTES = 4096;
 export type WriteDisposition = "create" | "replace" | "upsert";
 
 export interface StatBase {
@@ -33,7 +46,14 @@ export interface OpaqueFileStat extends StatBase {
   verifiedSha256?: string;
 }
 
-export type VfsStat = DirectoryStat | InlineFileStat | OpaqueFileStat;
+export interface SymlinkStat extends StatBase {
+  kind: "symlink";
+  contentClass: null;
+  /** The target exactly as it was supplied, relative or absolute. */
+  linkTarget: string;
+}
+
+export type VfsStat = DirectoryStat | InlineFileStat | OpaqueFileStat | SymlinkStat;
 
 export interface PageOptions {
   cursor?: string;
@@ -124,6 +144,14 @@ export interface CopyOptions {
   replace?: boolean;
   recursive?: boolean;
   createParents?: boolean;
+  /**
+   * Copies what a named link points at instead of the link.
+   *
+   * Off by default, and only ever applied to the named source: dereferencing a
+   * whole subtree would turn every link in it into another copy of its target,
+   * which is unbounded work behind an option that reads as a detail.
+   */
+  dereference?: boolean;
 }
 
 export interface CopyResult {
@@ -192,9 +220,41 @@ export interface GarbageDrainResult {
   remaining: number;
 }
 
+export interface SymlinkOptions {
+  createParents?: boolean;
+  ifMutationToken?: string;
+  /** Replaces an existing link or file at the path rather than failing. */
+  replace?: boolean;
+}
+
 export interface VirtualFileSystem {
   getMutationToken(path: string): string;
+  /** Resolves symbolic links in every component, as `stat(2)` does. */
   stat(path: string): VfsStat;
+  /**
+   * Resolves symbolic links in every component except the last, as `lstat(2)`
+   * does, so a link is reported as itself rather than as what it points at.
+   */
+  lstat(path: string): VfsStat;
+  /** Returns the target of a symbolic link exactly as it was supplied. */
+  readlink(path: string): string;
+  /**
+   * Creates a symbolic link at `path` holding `target` verbatim.
+   *
+   * The target is not resolved, checked, or required to exist: a dangling link
+   * is a valid link, and refusing to create one would make the order in which a
+   * caller restores a tree significant.
+   */
+  symlink(path: string, target: string, options?: SymlinkOptions): VfsStat;
+  /**
+   * Canonicalizes a path by resolving every symbolic link in it.
+   *
+   * A final component that does not exist is kept rather than refused, so a
+   * caller can canonicalize the destination of a write it has not made yet.
+   * This is the single place link resolution happens, which is what keeps a
+   * policy check or a loop bound from being bypassed by a new caller.
+   */
+  realpath(path: string, options?: { follow?: boolean }): string;
   list(path: string): VfsStat[];
   listPage(path: string, options?: PageOptions): EntryPage;
   find(options: FindOptions): VfsStat[];

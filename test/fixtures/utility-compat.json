@@ -144,6 +144,27 @@
       "oracle": "coreutils",
       "summary": "-p restores the mode and modification time of the named target only; entries beneath a recursive copy keep the time of the copy",
       "reason": "Restating every descendant would mean a second full walk of the subtree with one write per entry, which is unbounded work hidden behind a two-character option. The named target covers the ordinary use, and `find`-driven restatement covers the rest."
+    },
+    {
+      "id": "hard-links-are-not-supported",
+      "command": "ln",
+      "oracle": "coreutils",
+      "summary": "ln requires -s; a hard link is a usage error rather than a copy",
+      "reason": "A hard link needs an inode identity and a link count separate from the path, and this namespace has neither \u2014 an entry is its path. Making one silently copy would produce two files that agree until the first write and then diverge, which is worse than saying so. Status 2 with the reason named."
+    },
+    {
+      "id": "symlink-resolution-is-bounded-by-a-hop-count",
+      "command": "ln, cat, ls",
+      "oracle": "coreutils",
+      "summary": "a chain of more than forty links is refused with ELOOP even when it is not a cycle",
+      "reason": "Linux uses the same bound for the same reason: a cycle cannot be told from deep nesting without one, and a constant makes the refusal deterministic rather than dependent on how much work the caller has already done. Resolution costs one indexed lookup per hop, so the bound is also what keeps a pathname from costing an unbounded number of queries."
+    },
+    {
+      "id": "symlink-targets-are-stored-but-not-interpreted-for-policy",
+      "command": "ln",
+      "oracle": "coreutils",
+      "summary": "a link may name any path, including one outside the shell's roots; the refusal happens when it is followed",
+      "reason": "Checking the target at creation would freeze the policy that was in force when the link was made, and a link is text rather than an access. Every read and write resolves the path first and checks the roots against what it resolved to, so a link out of the roots is created happily and refused with EACCES the moment anything follows it."
     }
   ],
   "cases": [
@@ -1466,6 +1487,158 @@
       },
       "script": "chmod 644 t/a.txt; stat -c '%n %f %a' t/a.txt",
       "stdout": "t/a.txt 81a4 644\n",
+      "exitCode": 0
+    },
+    {
+      "name": "ln-symbolic-creates-a-link-reported-as-itself",
+      "oracle": "coreutils",
+      "files": {
+        "real.txt": "body\n"
+      },
+      "script": "ln -s real.txt link.txt; stat -c '%F' link.txt; stat -L -c '%F' link.txt; readlink link.txt; cat link.txt",
+      "stdout": "symbolic link\nregular file\nreal.txt\nbody\n",
+      "exitCode": 0
+    },
+    {
+      "name": "ln-symbolic-stores-the-target-verbatim",
+      "oracle": "coreutils",
+      "files": {
+        "d/real.txt": "body\n"
+      },
+      "script": "ln -s real.txt d/rel; ln -s /tmp/work/d/real.txt d/abs; readlink d/rel; readlink d/abs; cat d/rel; cat d/abs",
+      "stdout": "real.txt\n/tmp/work/d/real.txt\nbody\nbody\n",
+      "exitCode": 0
+    },
+    {
+      "name": "symlink-in-a-middle-component-is-followed",
+      "oracle": "coreutils",
+      "files": {
+        "t/sub/deep.txt": "deep\n"
+      },
+      "script": "ln -s t/sub dirlink; cat dirlink/deep.txt; readlink -f dirlink/deep.txt",
+      "stdout": "deep\n/tmp/work/t/sub/deep.txt\n",
+      "exitCode": 0
+    },
+    {
+      "name": "dangling-link-exists-but-does-not-resolve",
+      "oracle": "coreutils",
+      "files": {
+        "keep.txt": "x\n"
+      },
+      "script": "ln -s nowhere dangling; [ -L dangling ] && echo L-yes; [ -e dangling ] && echo e-yes || echo e-no; readlink dangling",
+      "stdout": "L-yes\ne-no\nnowhere\n",
+      "exitCode": 0
+    },
+    {
+      "name": "symlink-predicates-ask-about-the-link-or-the-target",
+      "oracle": "coreutils",
+      "files": {
+        "real.txt": "x\n"
+      },
+      "script": "ln -s real.txt l; [ -L l ] && echo L; [ -h l ] && echo h; [ -f l ] && echo f; [ -e l ] && echo e; [ -L real.txt ] || echo plain-not-link",
+      "stdout": "L\nh\nf\ne\nplain-not-link\n",
+      "exitCode": 0
+    },
+    {
+      "name": "find-reports-links-and-does-not-descend-into-one",
+      "oracle": "coreutils",
+      "files": {
+        "t/a.txt": "x\n",
+        "t/sub/b.txt": "y\n"
+      },
+      "script": "ln -s t dirlink; find t dirlink -type l | sort; find t dirlink -type f | sort; find dirlink | sort",
+      "stdout": "dirlink\nt/a.txt\nt/sub/b.txt\ndirlink\n",
+      "exitCode": 0
+    },
+    {
+      "name": "rm-removes-the-link-and-not-the-directory-it-names",
+      "oracle": "coreutils",
+      "files": {
+        "d/keep.txt": "x\n"
+      },
+      "script": "ln -s d dl; rm dl; ls d; if [ -e dl ]; then echo still-there; else echo link-gone; fi",
+      "stdout": "keep.txt\nlink-gone\n",
+      "exitCode": 0
+    },
+    {
+      "name": "mv-renames-the-link-itself",
+      "oracle": "coreutils",
+      "files": {
+        "real.txt": "x\n"
+      },
+      "script": "ln -s real.txt a; mv a b; stat -c '%F' b; readlink b; stat -c '%F' real.txt",
+      "stdout": "symbolic link\nreal.txt\nregular file\n",
+      "exitCode": 0
+    },
+    {
+      "name": "cp-dereferences-a-named-link-but-a-recursive-copy-does-not",
+      "oracle": "coreutils",
+      "files": {
+        "tree/f.txt": "x\n"
+      },
+      "script": "ln -s f.txt tree/l.txt; cp tree/l.txt flat.txt; stat -c '%F' flat.txt; cp -P tree/l.txt kept.txt; stat -c '%F' kept.txt; cp -r tree t2; stat -c '%F' t2/l.txt; readlink t2/l.txt",
+      "stdout": "regular file\nsymbolic link\nsymbolic link\nf.txt\n",
+      "exitCode": 0
+    },
+    {
+      "name": "writing-through-a-link-writes-the-target",
+      "oracle": "coreutils",
+      "files": {
+        "real.txt": "old\n"
+      },
+      "script": "ln -s real.txt l; printf 'new\\n' > l; cat real.txt; stat -c '%F' l",
+      "stdout": "new\nsymbolic link\n",
+      "exitCode": 0
+    },
+    {
+      "name": "mkdir-on-an-existing-link-is-refused",
+      "oracle": "coreutils",
+      "files": {
+        "real.txt": "x\n"
+      },
+      "script": "ln -s real.txt l; if mkdir l 2>err.txt; then echo made; else echo refused; fi; stat -c '%F' l",
+      "stdout": "refused\nsymbolic link\n",
+      "exitCode": 0
+    },
+    {
+      "name": "ls-lists-through-a-directory-link-unless-d",
+      "oracle": "coreutils",
+      "files": {
+        "d/one.txt": "x\n",
+        "d/two.txt": "y\n"
+      },
+      "script": "ln -s d dl; ls dl | sort; ls -d dl; ls -l dl | cut -c1",
+      "stdout": "one.txt\ntwo.txt\ndl\nl\n",
+      "exitCode": 0
+    },
+    {
+      "name": "readlink-canonicalizes-with-f-and-fails-on-a-plain-file",
+      "oracle": "coreutils",
+      "files": {
+        "d/real.txt": "x\n"
+      },
+      "script": "ln -s d/real.txt l; readlink l; readlink -f l; readlink d/real.txt; printf 'rc=%s\\n' \"$?\"",
+      "stdout": "d/real.txt\n/tmp/work/d/real.txt\nrc=1\n",
+      "exitCode": 0
+    },
+    {
+      "name": "a-link-chain-resolves-to-the-end",
+      "oracle": "coreutils",
+      "files": {
+        "real.txt": "body\n"
+      },
+      "script": "ln -s real.txt one; ln -s one two; ln -s two three; cat three; readlink three; readlink -f three",
+      "stdout": "body\ntwo\n/tmp/work/real.txt\n",
+      "exitCode": 0
+    },
+    {
+      "name": "a-symlink-cycle-is-refused-rather-than-followed",
+      "oracle": "coreutils",
+      "files": {
+        "keep.txt": "x\n"
+      },
+      "script": "ln -s b a; ln -s a b; if cat a 2>err.txt; then echo read; else echo loop-refused; fi; [ -L a ] && echo still-a-link",
+      "stdout": "loop-refused\nstill-a-link\n",
       "exitCode": 0
     }
   ]

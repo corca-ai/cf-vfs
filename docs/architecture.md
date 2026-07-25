@@ -115,8 +115,11 @@ The schema also contains:
 - `vfs_gc_queue` with due time, attempts, retry time, and last error;
 - `vfs_usage` for atomic logical-byte and entry quotas.
 
-Checks and triggers reject invalid directory/content combinations, dangling
-opaque references, orphan inline chunks, and deletion of referenced content.
+Checks and triggers reject invalid directory/content/link combinations,
+dangling opaque references, orphan inline chunks, and deletion of referenced
+content. An entry is a directory, a file with exactly one content class, or a
+symbolic link with a non-empty target; SQLite refuses a row that is two of
+those at once, so a caller that has forgotten the rule cannot write one.
 Opaque liveness is derived from the indexed entry rows with `NOT EXISTS`; no
 stored reference count can drift.
 
@@ -124,6 +127,34 @@ Recursive namespace mutations stay inside SQLite. Copy uses `INSERT ... SELECT`
 for entries and an entry-ID join for inline BLOB chunks, move uses one range
 `UPDATE`, and remove uses set-based token publication, GC queuing, and range
 deletes. JavaScript receives only aggregate counts and result metadata.
+
+## Symbolic links and pathname resolution
+
+`vfs_entries` holds a link as `kind = 'symlink'` with the target stored in
+`link_target` exactly as it was supplied. The target is never rewritten: a
+relative target is what makes a subtree relocatable, and it resolves against
+the directory holding the link rather than against any caller's working
+directory.
+
+Resolution happens in exactly one place, and every operation reaches the table
+through it. That is what keeps a policy check, the loop bound, and the relative
+target rule from being bypassed by a caller who has not thought about links.
+The path a mutation writes is always the canonical one, so a link can never
+become the parent of an entry — which in turn is what lets an exact-path lookup
+be trusted without walking components.
+
+The cost is deliberately shaped so a namespace without links pays nothing.
+Resolution first asks how many links exist; at zero it is the single indexed
+lookup the filesystem made before links existed. Above zero, a path that is
+present resolves in that same one lookup, and a path that is absent costs one
+more — a single `path IN (…)` query over the ancestors, served by a partial
+index on links alone, rather than one query per component. A chain costs one
+lookup per hop and is bounded at forty hops, so a cycle ends in `ELOOP` rather
+than in a hang.
+
+The link and its target are separate paths, so they carry separate revisions
+and mutation tokens: writing the target does not disturb the link's token, and
+replacing the link does not disturb the target's.
 
 ## Opaque R2 lifecycle
 
@@ -201,6 +232,13 @@ there is no compatibility migration from the experimental `vfs2_` layout.
 
 Schema initialization is gated by `vfs_schema_migrations`; ordinary Durable
 Object restarts perform only the migration-table bootstrap and version check.
+Version 2 adds symbolic links. SQLite cannot widen a `CHECK` constraint in
+place, so it is the standard rebuild: create the new entry table, copy every
+row, swap. The definition is a single constant shared with the fresh schema, so
+a migrated database and a new one cannot drift, and the migration test compares
+the two directly. The rebuild also recreates the entry triggers, because
+`ALTER TABLE ... RENAME` moves a trigger onto the table it was attached to and
+dropping that table takes the trigger with it.
 The explicit table is intentional because Durable Objects do not support
 [`PRAGMA user_version`](https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/#initialize-storage-and-run-migrations-in-the-constructor).
 A schema change runs `PRAGMA optimize` after its tables and indexes are installed.

@@ -7,6 +7,7 @@ import {
   rpcCommitUploadOptions,
   rpcCopyOptions,
   rpcFindOptions,
+  rpcFollowOptions,
   rpcMetadataOptions,
   rpcMoveOptions,
   rpcOptionalNonnegativeInteger,
@@ -14,6 +15,7 @@ import {
   rpcPageOptions,
   rpcRemoveOptions,
   rpcString,
+  rpcSymlinkOptions,
   rpcTouchOptions,
   rpcWriteOptions,
 } from "./rpc-validation.js";
@@ -37,6 +39,7 @@ import type {
   PageOptions,
   RemoveOptions,
   RemoveResult,
+  SymlinkOptions,
   TouchOptions,
   VfsStat,
   WriteFileOptions,
@@ -57,6 +60,26 @@ export abstract class VfsDurableObject<Environment> extends DurableObject<Enviro
 
   stat(path: string): VfsStat {
     return this.fileSystem.stat(rpcString(path, "path"));
+  }
+
+  lstat(path: string): VfsStat {
+    return this.fileSystem.lstat(rpcString(path, "path"));
+  }
+
+  readlink(path: string): string {
+    return this.fileSystem.readlink(rpcString(path, "path"));
+  }
+
+  symlink(path: string, target: string, options?: SymlinkOptions): VfsStat {
+    return this.fileSystem.symlink(
+      rpcString(path, "path"),
+      rpcString(target, "target"),
+      rpcSymlinkOptions(options),
+    );
+  }
+
+  realpath(path: string, options?: { follow?: boolean }): string {
+    return this.fileSystem.realpath(rpcString(path, "path"), rpcFollowOptions(options));
   }
 
   getMutationToken(path: string): string {

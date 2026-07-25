@@ -14,6 +14,7 @@ import type {
   PageOptions,
   RemoveOptions,
   RemoveResult,
+  SymlinkOptions,
   TouchOptions,
   VfsStat,
   VirtualFileSystem,
@@ -42,14 +43,53 @@ export class ScopedFileSystem implements ShellFileSystem {
     this.#budget = budget;
   }
 
+  /**
+   * The path a root check has to be made against.
+   *
+   * A link inside an allowed root can name anything at all, so checking the
+   * path as written would let `/allowed/escape -> /etc` hand out the whole
+   * namespace. The check is made against what the path actually resolves to.
+   * The written form is checked too, so a caller naming an out-of-bounds path
+   * directly still gets the error that names what they asked for.
+   */
+  #resolved(path: string, follow = true): string {
+    try {
+      return this.#inner.realpath(path, { follow });
+    } catch {
+      // A path that cannot be resolved — a loop, or a missing parent — is
+      // refused by the operation itself; the root check uses the written form
+      // so the diagnostic is about the roots and not about the link.
+      return normalizePath(path);
+    }
+  }
+
+  /**
+   * Checks the roots for an operation that acts on a link rather than through
+   * it.
+   *
+   * `lstat` and `readlink` answer questions about the link itself, so the
+   * check is about where the link lives, not where it points — refusing them
+   * would be inconsistent with `ls -l`, which shows the same target text for
+   * every entry in a readable directory. Everything on the way to the link is
+   * still resolved, so an escaping directory link cannot be used to reach one.
+   */
+  private readLink(path: string): void {
+    const resolved = this.#resolved(path, false);
+    if (!allowed(path, this.#policy.readRoots) || !allowed(resolved, this.#policy.readRoots)) {
+      throw new VfsError("EACCES", "path is outside the readable roots", normalizePath(path));
+    }
+  }
+
   private read(path: string): void {
-    if (!allowed(path, this.#policy.readRoots)) {
+    const resolved = this.#resolved(path);
+    if (!allowed(path, this.#policy.readRoots) || !allowed(resolved, this.#policy.readRoots)) {
       throw new VfsError("EACCES", "path is outside the readable roots", normalizePath(path));
     }
   }
 
   private write(path: string): void {
-    if (!allowed(path, this.#policy.writeRoots)) {
+    const resolved = this.#resolved(path);
+    if (!allowed(path, this.#policy.writeRoots) || !allowed(resolved, this.#policy.writeRoots)) {
       throw new VfsError("EACCES", "path is outside the writable roots", normalizePath(path));
     }
   }
@@ -74,10 +114,36 @@ export class ScopedFileSystem implements ShellFileSystem {
   }
 
   getMutationToken(path: string) {
-    if (!allowed(path, this.#policy.readRoots) && !allowed(path, this.#policy.writeRoots)) {
+    const resolved = this.#resolved(path);
+    const scoped = (candidate: string): boolean =>
+      allowed(candidate, this.#policy.readRoots) || allowed(candidate, this.#policy.writeRoots);
+    if (!scoped(path) || !scoped(resolved)) {
       throw new VfsError("EACCES", "path is outside the scoped roots", normalizePath(path));
     }
     return this.#inner.getMutationToken(path);
+  }
+
+  lstat(path: string) {
+    this.readLink(path);
+    return this.#inner.lstat(path);
+  }
+
+  readlink(path: string) {
+    this.readLink(path);
+    return this.#inner.readlink(path);
+  }
+
+  realpath(path: string, options?: { follow?: boolean }) {
+    this.read(path);
+    return this.#inner.realpath(path, options);
+  }
+
+  symlink(path: string, target: string, options?: SymlinkOptions) {
+    this.write(path);
+    // The link is created inside the roots, but what it names is checked when
+    // it is followed rather than here: a link may point anywhere, and a policy
+    // that changes later must still govern what the link reaches.
+    return this.#inner.symlink(path, target, options);
   }
 
   inspectWriteTarget(path: string): VfsStat | null {

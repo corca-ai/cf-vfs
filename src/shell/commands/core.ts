@@ -303,8 +303,12 @@ function formatPrintf(
 }
 
 export const printfCommand = /* @__PURE__ */ defineApplet(PRINTF, async (_context, argv, fds) => {
-  if (argv.length === 0) throw appletUsageError(PRINTF, "missing format");
-  const formatted = formatPrintf(argv[0] ?? "", argv.slice(1));
+  // `--` ends the options, so a format that begins with a dash can still be
+  // written. `printf` has no options here, but a caller writing portable
+  // scripts has no way to know that.
+  const operands = argv[0] === "--" ? argv.slice(1) : argv;
+  if (operands.length === 0) throw appletUsageError(PRINTF, "missing format");
+  const formatted = formatPrintf(operands[0] ?? "", operands.slice(1));
   await Promise.all([
     writeText(fds[1], formatted.output),
     formatted.diagnostics.length === 0
@@ -774,7 +778,7 @@ export const setCommand = /* @__PURE__ */ defineApplet(SET, (context, argv) => {
 });
 
 /** Unary predicates that consult namespace metadata. */
-const FILE_PREDICATES = ["-e", "-f", "-d", "-s", "-r", "-w", "-x"] as const;
+const FILE_PREDICATES = ["-e", "-f", "-d", "-s", "-r", "-w", "-x", "-L", "-h"] as const;
 type FilePredicate = (typeof FILE_PREDICATES)[number];
 type PermissionPredicate = "-r" | "-w" | "-x";
 
@@ -811,9 +815,12 @@ async function evaluateTest(
     if (FILE_PREDICATES.includes(unary as FilePredicate)) {
       if (operand.length === 0) return false;
       try {
-        const stat = context.fileSystem.stat(
-          normalizePathPreservingTrailingSlash(operand, context.session.cwd),
-        );
+        const path = normalizePathPreservingTrailingSlash(operand, context.session.cwd);
+        // `-L` and `-h` ask about the link itself; every other predicate asks
+        // about what it points at, which is why a dangling link fails `-e`.
+        const asks = unary === "-L" || unary === "-h";
+        const stat = asks ? context.fileSystem.lstat(path) : context.fileSystem.stat(path);
+        if (asks) return stat.kind === "symlink";
         if (unary === "-e") return true;
         if (unary === "-f") return stat.kind === "file";
         if (unary === "-d") return stat.kind === "directory";
