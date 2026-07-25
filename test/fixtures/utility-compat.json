@@ -101,7 +101,7 @@
       "command": "$-",
       "oracle": "bash",
       "summary": "$- lists only the options this profile spells as short flags",
-      "reason": "Bash also reports `h`, `B`, `c`, and interactivity flags for behavior that does not exist here — hashing, brace expansion, and a command-string invocation mode. Reporting `e` and `u` in a fixed order makes the value a declaration of what is on rather than an imitation of a flag set the runtime does not have."
+      "reason": "Bash also reports `h`, `B`, `c`, and interactivity flags for behavior that does not exist here \u2014 hashing, brace expansion, and a command-string invocation mode. Reporting `e` and `u` in a fixed order makes the value a declaration of what is on rather than an imitation of a flag set the runtime does not have."
     },
     {
       "id": "permission-predicates-have-no-user",
@@ -115,14 +115,14 @@
       "command": "tilde expansion",
       "oracle": "bash",
       "summary": "an unquoted default such as ${X-~/d} keeps the tilde literal",
-      "reason": "Tilde expansion runs on the written word, where quote provenance is still available. A default inside a parameter expansion is produced during that expansion, so treating it as a tilde prefix would mean re-scanning generated text as syntax — which is exactly what this runtime refuses to do everywhere else. Quoted `\"${X-~/d}\"` agrees with Bash; the unquoted form differs."
+      "reason": "Tilde expansion runs on the written word, where quote provenance is still available. A default inside a parameter expansion is produced during that expansion, so treating it as a tilde prefix would mean re-scanning generated text as syntax \u2014 which is exactly what this runtime refuses to do everywhere else. Quoted `\"${X-~/d}\"` agrees with Bash; the unquoted form differs."
     },
     {
       "id": "regexp-subset-is-declared",
       "command": "grep, sed",
       "oracle": "coreutils",
       "summary": "patterns are a declared subset of POSIX basic and extended expressions; anything outside it is a usage error",
-      "reason": "Patterns are translated rather than handed to the JavaScript engine, so no JavaScript-only construct can mean something here that it does not mean in grep. The subset is literals, `.`, `*`, bracket expressions with ranges and POSIX classes, `^`, `$`, grouping, alternation, `+`, `?`, and intervals. Back-references and the GNU extensions `\\\\w`, `\\\\b`, `\\\\<`, and `\\\\>` are refused with status 2 rather than approximated, and `-i` folds the twenty-six ASCII pairs only, because the runtime declares LC_ALL=C."
+      "reason": "Patterns are translated rather than handed to the JavaScript engine, so no JavaScript-only construct can mean something here that it does not mean in grep. The subset is literals, `.`, `*`, bracket expressions with ranges and POSIX classes, `^`, `$`, grouping, alternation, `+`, `?`, and intervals. Back-references and the GNU extensions `\\\\w`, `\\\\b`, `\\\\<`, and `\\\\>` are refused with status 2 rather than approximated, and `-i` folds the twenty-six ASCII pairs only, because the runtime declares LC_ALL=C. A repetition operator also cannot be stacked: GNU accepts `a**` and `a??`, while this profile refuses them, because a repetition consumes what it repeats and the alternative is emitting a JavaScript lazy quantifier that means something else."
     },
     {
       "id": "sed-language-is-a-bounded-subset",

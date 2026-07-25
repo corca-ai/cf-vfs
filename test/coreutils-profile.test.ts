@@ -64,6 +64,26 @@ describe("POSIX regular-expression translation", () => {
     expect(compilePosixRegex("*ab", "extended", "grep").test("*ab")).toBe(true);
   });
 
+  it("never emits a source JavaScript cannot compile", () => {
+    // A repetition operator consumes what it repeats, so a stacked one has
+    // nothing left and must be refused rather than emitted as `b?*`, which
+    // JavaScript rejects and which would surface as an opaque failure.
+    for (const stacked of ["b?*", "b*+", "a\\{2\\}*", "^*"]) {
+      for (const dialect of ["basic", "extended"] as const) {
+        let source: string | undefined;
+        try {
+          source = translatePosixRegex(stacked, dialect, "grep");
+        } catch (error) {
+          expect((error as { name?: string }).name, `${stacked} ${dialect}`).toBe("VfsError");
+          continue;
+        }
+        expect(() => new RegExp(source, "u"), `${stacked} ${dialect}`).not.toThrow();
+      }
+    }
+    // A `*` after an anchor is a literal asterisk, as GNU has it.
+    expect(compilePosixRegex("^*x", "basic", "grep").test("*x")).toBe(true);
+  });
+
   it("keeps a JavaScript group construct from meaning anything", () => {
     // `(?:` is a non-capturing group in JavaScript and three literals in POSIX.
     expect(compilePosixRegex("(?:a)", "basic", "grep").test("(?:a)")).toBe(true);

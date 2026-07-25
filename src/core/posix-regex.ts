@@ -190,6 +190,7 @@ export function translatePosixRegex(
         } else {
           if (!repeatable) unsupported(command, `nothing to repeat before \\${next}`);
           source += next;
+          repeatable = false;
         }
         continue;
       }
@@ -199,6 +200,7 @@ export function translatePosixRegex(
         if (!repeatable) unsupported(command, "nothing to repeat before \\{");
         const translated = interval(index + 1, close);
         source += translated.source;
+        repeatable = false;
         index = close + 1;
         continue;
       }
@@ -232,18 +234,19 @@ export function translatePosixRegex(
     }
 
     if (character === "*") {
-      // A leading `*` is a literal asterisk in both dialects.
-      if (!repeatable) source += "\\*";
-      else source += "*";
-      repeatable = repeatable ? false : true;
+      // A leading `*` is a literal asterisk in both dialects; a repetition
+      // operator consumes what it repeats, so it cannot itself be repeated.
+      source += repeatable ? "*" : "\\*";
+      repeatable = !repeatable;
       continue;
     }
 
     if (character === "^") {
-      // Anchored only at the start; elsewhere it is a literal in `basic`.
-      if (source === "" || (extended && !repeatable)) source += "^";
-      else source += "\\^";
-      repeatable = !extended;
+      // Anchored only at the start; elsewhere it is a literal in `basic`. An
+      // anchor has nothing to repeat, so a `*` after one is a literal asterisk.
+      const anchor: boolean = source === "" || (extended && !repeatable);
+      source += anchor ? "^" : "\\^";
+      repeatable = !anchor;
       continue;
     }
 
@@ -276,6 +279,7 @@ export function translatePosixRegex(
       } else {
         if (!repeatable) unsupported(command, `nothing to repeat before ${character}`);
         source += character;
+        repeatable = false;
       }
       continue;
     }
@@ -286,6 +290,7 @@ export function translatePosixRegex(
       if (!repeatable) unsupported(command, "nothing to repeat before {");
       const translated = interval(index + 1, close);
       source += translated.source;
+      repeatable = false;
       index = close;
       continue;
     }
