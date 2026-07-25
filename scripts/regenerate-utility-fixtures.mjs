@@ -12,7 +12,7 @@ import { readFile, writeFile as writeHostFile } from "node:fs/promises";
 
 // Must match `WORKDIR` in test/utility-differential.test.ts: a case that
 // observes the working directory has to see the same path on both sides.
-const WORKDIR = "/work";
+const WORKDIR = "/tmp/work";
 const fixtureUrl = new URL("../test/fixtures/utility-compat.json", import.meta.url);
 const fixtures = JSON.parse(await readFile(fixtureUrl, "utf8"));
 
@@ -36,7 +36,21 @@ function program(fixture) {
 async function dockerRun(image, argv, input) {
   const child = spawn(
     "docker",
-    ["run", "--rm", "-i", "-e", `LC_ALL=${fixtures.locale}`, "-e", `TZ=${fixtures.timezone}`, image, ...argv],
+    [
+      "run",
+      "--rm",
+      "-i",
+      // Unprivileged, so a permission predicate answers from the mode bits
+      // rather than from root's ability to ignore them.
+      "--user",
+      "1000:1000",
+      "-e",
+      `LC_ALL=${fixtures.locale}`,
+      "-e",
+      `TZ=${fixtures.timezone}`,
+      image,
+      ...argv,
+    ],
     { stdio: ["pipe", "pipe", "pipe"] },
   );
   let stdout = "";

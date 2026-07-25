@@ -67,7 +67,18 @@ commands, functions, sources, and subshells.
 
 Deliberate deterministic choices include:
 
-- fixed `LC_ALL=C`, `TZ=UTC`, and whitespace `IFS` defaults;
+- fixed `LC_ALL=C`, `TZ=UTC`, and whitespace `IFS` defaults, which reassignment
+  cannot change because collation and timestamps do not read them;
+- tilde expansion covers `~` and `~/path` from `HOME`. `~user`, `~+`, `~-`, and
+  `~N` stay literal: there is no user database and no directory stack, so a name
+  after the tilde identifies nothing. The substituted value is treated as
+  quoted, as in Bash, so a `HOME` holding a glob character cannot turn a
+  home-relative path into a wildcard, and it is charged to the expansion budget
+  before it is materialized;
+- `$-` reports only the options this profile spells as short flags;
+- `test -r`, `-w`, and `-x` read compatibility mode bits and ask whether any
+  class carries the bit. There is no user or group, they enforce nothing, and
+  they do not consult the shell's read and write roots;
 - UTF-8 byte ordering rather than host locale collation;
 - documented utility short options may be clustered, required option arguments
   may be attached or separate, and `--` ends utility option parsing; unsupported
@@ -175,6 +186,9 @@ Currently declared divergences:
 | `diff` | Output is always the unified format `patch` consumes; the normal, context, and `ed` formats are outside the profile. |
 | `grep`, `sed` | Patterns use JavaScript regular-expression syntax under the Unicode flag, not POSIX basic or extended regular expressions. Literals, `.`, `*`, `^`, `$`, and bracket expressions agree with both and are pinned by fixtures; every other metacharacter differs. `a+` repeats here and is a literal plus under POSIX, while `a\|x` alternates under POSIX and is a literal here. |
 | script execution | An executable file runs only as the cf-vfs shell profile, whatever its shebang names. There is no process runtime to hand a file to, so an unsupported interpreter — including an interpreter argument such as `#!/bin/sh -e` — is status 126 rather than something the file did not ask for. |
+| `test` | `-r`, `-w`, and `-x` report whether any class carries the bit, because there is no user to ask about. That agrees with an unprivileged POSIX user, which the fixtures pin, and differs from a privileged one. They do not consult the shell's read and write roots, and `test -x /bin/cat` is false even though `/bin/cat` runs: an applet path has no namespace entry. |
+| `$-` | Lists only `e` and `u`. Bash also reports flags for hashing, brace expansion, and invocation mode, none of which exist here. |
+| `cd` | `cd -` with no `OLDPWD`, a bare `cd` with no `HOME`, and an empty operand are usage errors with status 2 rather than Bash's 1. A missing or non-directory target is status 1, as in Bash. `OLDPWD` comes from the working directory the shell tracks, not from `$PWD`, so a reassigned `PWD` cannot desynchronize `cd -`. |
 | `type` | Reports that a name is a function without printing its definition. Bash re-renders the parsed body, which would make the output depend on the formatter rather than on the profile. |
 | `sed` | The replacement is literal text. GNU expands `&` to the match and `\1` to a capture group; both are written literally here, and JavaScript's `$&`, ``$` ``, `$'`, and `$n` forms are escaped so replacement text taken from data can never splice another part of the record into the output. |
 

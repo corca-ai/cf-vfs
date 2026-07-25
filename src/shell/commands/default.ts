@@ -43,6 +43,7 @@ import {
   touchCommand,
   treeCommand,
 } from "./fs.js";
+import { helpCommand } from "./help.js";
 import { lsCommand } from "./ls.js";
 import { shCommand } from "./sh.js";
 import {
@@ -90,6 +91,7 @@ export const defaultShellCommands = [
   typeCommand,
   whichCommand,
   printenvCommand,
+  helpCommand,
   shCommand,
   exitCommand,
   setCommand,

@@ -759,10 +759,9 @@ describe("Bash v3 nounset", () => {
       stderrIncludes: "set: unsupported option name: unsupported",
     },
     {
-      name: "rejects unsupported combined nounset forms",
-      script: "set -uo nounset || printf 'status=%s' \"$?\"",
-      stdout: "status=2",
-      stderrIncludes: "set: supported forms are",
+      name: "accepts a clustered short flag beside a named option",
+      script: "set -uo nounset; printf '%s' \"$-\"",
+      stdout: "u",
     },
     {
       name: "terminates the current shell scope on a plain unset scalar",
@@ -1031,10 +1030,10 @@ describe("Bash v4 deterministic errexit", () => {
       stdout: "ab",
     },
     {
-      name: "rejects unsupported combined option forms without terminating a guarded list",
-      script: "set -eu || printf 'caught:%s' \"$?\"; printf after",
+      name: "rejects an unsupported combined form without terminating a guarded list",
+      script: "set -ex || printf 'caught:%s' \"$?\"; printf after",
       stdout: "caught:2after",
-      stderrIncludes: "set: supported forms are",
+      stderrIncludes: "set: unsupported option -x",
     },
     {
       name: "suppresses every non-final pipeline in and-or lists",
@@ -1418,7 +1417,7 @@ describe("Bash v3 bounded double-bracket conditionals", () => {
   const rejectedConditionals: ReadonlyArray<readonly [string, string, string]> = [
     ["regex matching", "[[ x =~ x ]]", "unsupported [[ operator =~"],
     ["single-equals matching", "[[ x = x ]]", "unsupported [[ operator ="],
-    ["unsupported metadata predicates", "[[ -s /side ]]", "unsupported [[ unary operator -s"],
+    ["unsupported metadata predicates", "[[ -O /side ]]", "unsupported [[ unary operator -O"],
     ["timestamp comparisons", "[[ /left -nt /right ]]", "unsupported [[ operator -nt"],
     ["a missing expression", "[[ ]]", "[[ expression is missing"],
     ["a missing unary operand", "[[ -n ]]", "[[ operand for -n is missing"],
@@ -2123,7 +2122,6 @@ const rejectedSyntax: ReadonlyArray<readonly [name: string, syntax: string, diag
   ["C-style for loop", "for ((N=0; N<1; N++)); do :; done", "unexpected character"],
   ["ANSI-C quoting", "printf $'x'", "ANSI-C quotes"],
   ["unsupported $*", "printf $*", "special parameter"],
-  ["unsupported $-", "printf $-", "special parameter"],
   ["unsupported $$", "printf $$", "special parameter"],
 ];
 

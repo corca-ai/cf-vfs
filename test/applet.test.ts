@@ -61,6 +61,7 @@ const DEFAULT_REGISTRY = [
   "getopts",
   "grep",
   "head",
+  "help",
   "join",
   "local",
   "ls",

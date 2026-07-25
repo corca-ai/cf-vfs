@@ -340,6 +340,56 @@ See [POSIX and Bash compatibility](posix-compatibility.md) for deterministic
 locale, glob, and redirection details and [the parser spike](parser-spike.md)
 for parser selection.
 
+### Environment ergonomics
+
+An unquoted leading `~` expands to `HOME`: `~` and `~/path` only. Every other
+form stays literal — `~user`, `~+`, `~-`, `~2` — which is what Bash does for a
+name it cannot resolve and the only honest answer here, since there is no user
+database. A tilde with `HOME` unset or empty stays literal too, a quoted tilde is
+never expanded, and a tilde produced by an expansion is data rather than syntax.
+A tilde whose prefix is continued by a quoted part or an expansion — `~"x"`,
+`~$SUFFIX` — stays literal, because the prefix must end inside the written
+literal for the shell to know it is one. The substituted value is treated as
+quoted, as Bash does: it is a value, not syntax, so it is neither field-split
+nor matched as a pattern, and a `HOME` holding `*` cannot turn `~/notes` into a
+wildcard. Each substitution is charged to the expansion budget before it is
+materialized, so a value naming many boundaries fails with a budget diagnostic
+rather than building an unbounded string.
+
+Any word shaped like an assignment expands a tilde after `=` and after each `:`,
+so `PATH=~/bin:~/tools`, `PATH=$PATH:~/bin`, and `export PATH=~/bin` all work.
+A `:` produced by an expansion is data and opens no boundary. The name before `=`
+must be an identifier, so `--opt=~/y` and `9X=~/y` stay literal. A `case` word
+and a `[[ ]]` operand expand a tilde as well; an unquoted default inside a
+parameter expansion, such as `${X-~/d}`, does not.
+
+`cd` maintains `PWD` and `OLDPWD`. `cd -` returns to `OLDPWD` and prints the
+directory it moved to, as Bash does, and fails when there is no previous
+directory. A bare `cd` uses `HOME` and fails when it is unset. Both failures are
+usage errors with status 2 rather than Bash's 1, matching the profile's rule that
+2 is a usage failure. A directory change persists in the caller's session from a
+function, a group, and a sourced unit; a subshell, a pipeline stage, and an
+executable script each clone the session, so their changes are discarded with the
+clone.
+
+`set` accepts clustered short flags and named options in one invocation:
+`set -eu`, `set +eu`, `set -e -o nounset`, and `set -uo nounset` all work. `$-`
+reports the options that are on, as `e` and `u` in that order. It lists only what
+this profile spells as a short flag, so `pipefail` — which has no short form —
+never appears, and neither do Bash's `h`, `B`, and `c`.
+
+`test`, `[`, and `[[ ]]` all offer `-e`, `-f`, `-d`, `-s`, `-r`, `-w`, and `-x`. They
+read compatibility mode bits and report whether *any* class carries the bit,
+because there is no user, group, or account to ask about. They enforce nothing,
+and they do not consult the shell's read and write roots: those refuse an
+operation, and a predicate that reported them would conflate policy with
+metadata. `chmod` accordingly accepts symbolic clauses as well as an octal mode.
+
+`help` lists the registered commands with their summaries, `help NAME...`
+describes named ones and exits 1 for an unknown one, and `help -s` prints only
+the synopsis. It reads the active registry, so a narrow registry describes
+exactly what it registered.
+
 ## Built-ins and utilities
 
 The default registry is available only from
@@ -490,6 +540,20 @@ row there would mean nothing and could be removed while `/bin/cat` kept working.
 Listing them is not supported, and a `home` or `cwd` option inside one is a
 usage error.
 
+`LINUX_PROFILE_VARIABLES` names what the profile sets. Seven of them are
+defaults: a caller may override one by passing its own value after the
+profile's, and a script may reassign it. `LC_ALL` and `TZ` are controlled — the
+session sets them after the caller's environment, so they always read `C` and
+`UTC`, which is the truth about a runtime whose collation and timestamps do not
+follow them.
+
+Nothing is `readonly`: this language has no such concept, and adding one would
+create a restriction the shell cannot enforce anywhere else. What bounds a
+reassignment instead is the execution unit. `Shell` builds a fresh session per
+execution, so a script that overwrites `HOME` or `PATH` affects that unit only
+and the next one starts from the profile again. `InteractiveShell` deliberately
+persists a session, so there a reassignment lasts until the session ends.
+
 `LinuxProfileOptions` accepts `user` (default `cf`), `home` (default
 `/home/<user>`), `cwd` (default `/workspace`), and `tmp` (default `/tmp`). `cwd`
 decides which directory is provisioned; pass the same path as the execution
@@ -497,8 +561,9 @@ decides which directory is provisioned; pass the same path as the execution
 
 | Registry group | Available commands and principal options |
 | --- | --- |
-| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (`-e/+e`, `-o/+o errexit`, `-u/+u`, `-o/+o nounset`, `-o/+o pipefail`), `test`, `[` |
+| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd -`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (clustered `-eu/+eu`, `-o/+o errexit`, `-o/+o nounset`, `-o/+o pipefail`), `test`/`[` (`-e -f -d -s -r -w -x`, string and integer comparison) |
 | discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
+| help | `help -s`, from the dedicated `/shell/commands/help` subpath |
 | shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
 | namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f`, `ls -l -d -a -A`, `find -name -type -maxdepth`, `stat`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | streaming text/bytes | `cat`, `grep -i -v -n -F -c`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed s/old/new/[g]`, `seq -s -w` |

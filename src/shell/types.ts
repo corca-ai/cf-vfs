@@ -155,6 +155,14 @@ export interface ShellCommandContext {
    */
   resolveCommand(name: string): Promise<ShellCommandResolution | undefined>;
   /**
+   * Describes every registered applet, in UTF-8 byte order by name.
+   *
+   * Help and completion need the whole set, and taking it from the active
+   * registry keeps them from importing the applet table themselves.
+   */
+  listCommands(): readonly ShellCommandDescription[];
+
+  /**
    * Runs a bounded source unit in an isolated child scope.
    *
    * The child inherits the environment, working directory, shell options,
@@ -192,6 +200,14 @@ export interface ShellCommandContext {
 
 export interface ExecuteCommandOptions {
   readonly bypassFunctions?: boolean;
+}
+
+export interface ShellCommandDescription {
+  readonly name: string;
+  readonly kind: "builtin" | "program" | "session-builtin";
+  /** Operand syntax, or `""` when the applet takes none. */
+  readonly usage: string;
+  readonly summary: string;
 }
 
 export type ShellCommandResolution =

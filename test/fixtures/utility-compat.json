@@ -109,6 +109,27 @@
       "oracle": "bash",
       "summary": "a script sees every variable, function, and shell option of its caller, not only the exported ones",
       "reason": "A Bash script runs in a separate process and inherits only exported variables and no functions. There is no process boundary here and one variable map, so `export` records intent rather than moving a value; a child therefore sees unexported variables, the caller's functions, and options such as `set -e`. The isolation that does hold is outbound: nothing the child defines, and no working-directory change or `exit` it performs, reaches the caller. Do not rely on `export` to keep a value from a script."
+    },
+    {
+      "id": "dollar-dash-reports-only-declared-options",
+      "command": "$-",
+      "oracle": "bash",
+      "summary": "$- lists only the options this profile spells as short flags",
+      "reason": "Bash also reports `h`, `B`, `c`, and interactivity flags for behavior that does not exist here — hashing, brace expansion, and a command-string invocation mode. Reporting `e` and `u` in a fixed order makes the value a declaration of what is on rather than an imitation of a flag set the runtime does not have."
+    },
+    {
+      "id": "permission-predicates-have-no-user",
+      "command": "test",
+      "oracle": "bash",
+      "summary": "-r, -w, and -x report whether any class carries the bit, because there is no user to ask about",
+      "reason": "A POSIX shell answers these for the effective user, so the same file gives different answers to different accounts and a privileged account can write a read-only file. There is no user, group, or account here and mode bits enforce nothing, so the predicate reports whether the bit is set for any class. That agrees with an unprivileged POSIX user, which the fixtures pin, and differs from a privileged one. It also does not consult the shell's read and write roots: those refuse the operation, and a predicate that reported them would conflate policy with metadata."
+    },
+    {
+      "id": "tilde-is-not-expanded-inside-a-parameter-word",
+      "command": "tilde expansion",
+      "oracle": "bash",
+      "summary": "an unquoted default such as ${X-~/d} keeps the tilde literal",
+      "reason": "Tilde expansion runs on the written word, where quote provenance is still available. A default inside a parameter expansion is produced during that expansion, so treating it as a tilde prefix would mean re-scanning generated text as syntax — which is exactly what this runtime refuses to do everywhere else. Quoted `\"${X-~/d}\"` agrees with Bash; the unquoted form differs."
     }
   ],
   "cases": [
@@ -811,7 +832,7 @@
       "files": {
         "scope.sh": "#!/bin/sh\nV=child\ncd /\nprintf '%s\\n' \"$V\"\n"
       },
-      "script": "chmod 755 scope.sh\nV=parent\n./scope.sh\nprintf '%s\\n' \"$V\"\ntest \"$PWD\" = /work && printf 'cwd-kept\\n'",
+      "script": "chmod 755 scope.sh\nSTART=$PWD\nV=parent\n./scope.sh\nprintf '%s\\n' \"$V\"\ntest \"$PWD\" = \"$START\" && printf 'cwd-kept\\n'",
       "stdout": "child\nparent\ncwd-kept\n",
       "exitCode": 0
     },
@@ -857,6 +878,128 @@
       },
       "script": "PATH=/bin:/usr/bin; sh lib.sh arg",
       "stdout": "lib arg\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tilde-bare-and-prefix",
+      "oracle": "bash",
+      "script": "HOME=/tmp/home; printf '%s|%s\\n' ~ ~/notes",
+      "stdout": "/tmp/home|/tmp/home/notes\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tilde-quoted-is-literal",
+      "oracle": "bash",
+      "script": "HOME=/tmp/home; printf '%s|%s|%s\\n' '~' \"~\" \\\\~",
+      "stdout": "~|~|\\~\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tilde-not-at-word-start-is-literal",
+      "oracle": "bash",
+      "script": "HOME=/tmp/home; printf '%s|%s\\n' a~ /x/~/y",
+      "stdout": "a~|/x/~/y\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tilde-from-an-expansion-is-literal",
+      "oracle": "bash",
+      "script": "HOME=/tmp/home; VALUE='~/notes'; printf '%s\\n' \"$VALUE\"",
+      "stdout": "~/notes\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tilde-in-an-assignment",
+      "oracle": "bash",
+      "script": "HOME=/tmp/home; TOOLS=~/bin:~/tools; printf '%s\\n' \"$TOOLS\"",
+      "stdout": "/tmp/home/bin:/tmp/home/tools\n",
+      "exitCode": 0
+    },
+    {
+      "name": "cd-records-oldpwd",
+      "oracle": "bash",
+      "script": "mkdir -p /tmp/a /tmp/b; cd /tmp/a; cd /tmp/b; printf '%s|%s\\n' \"$PWD\" \"$OLDPWD\"",
+      "stdout": "/tmp/b|/tmp/a\n",
+      "exitCode": 0
+    },
+    {
+      "name": "cd-dash-swaps-and-reports",
+      "oracle": "bash",
+      "script": "mkdir -p /tmp/a /tmp/b; cd /tmp/a; cd /tmp/b; cd -; printf '%s|%s\\n' \"$PWD\" \"$OLDPWD\"",
+      "stdout": "/tmp/a\n/tmp/a|/tmp/b\n",
+      "exitCode": 0
+    },
+    {
+      "name": "cd-with-no-operand-uses-home",
+      "oracle": "bash",
+      "script": "mkdir -p /tmp/home; HOME=/tmp/home; cd /tmp; cd; pwd",
+      "stdout": "/tmp/home\n",
+      "exitCode": 0
+    },
+    {
+      "name": "subshell-directory-change-is-discarded",
+      "oracle": "bash",
+      "script": "mkdir -p /tmp/a /tmp/b; cd /tmp/a; (cd /tmp/b; printf '%s|' \"$PWD\"); printf '%s\\n' \"$PWD\"",
+      "stdout": "/tmp/b|/tmp/a\n",
+      "exitCode": 0
+    },
+    {
+      "name": "test-permission-predicates",
+      "oracle": "bash",
+      "files": {
+        "perm.txt": "body\n"
+      },
+      "script": "chmod 400 perm.txt\ntest -r perm.txt && printf 'r'\ntest -w perm.txt || printf ' no-w'\ntest -x perm.txt || printf ' no-x'\nchmod 755 perm.txt\ntest -x perm.txt && printf ' now-x'\nprintf '\\n'",
+      "stdout": "r no-w no-x now-x\n",
+      "exitCode": 0
+    },
+    {
+      "name": "test-size-predicate",
+      "oracle": "bash",
+      "files": {
+        "full.txt": "body\n",
+        "empty.txt": ""
+      },
+      "script": "test -s full.txt && printf 'full'\ntest -s empty.txt || printf ' empty'\nprintf '\\n'",
+      "stdout": "full empty\n",
+      "exitCode": 0
+    },
+    {
+      "name": "chmod-symbolic-modes",
+      "oracle": "bash",
+      "files": {
+        "m.txt": "body\n"
+      },
+      "script": "chmod 600 m.txt; chmod +x m.txt; test -x m.txt && printf 'plus-x '\nchmod 600 m.txt; chmod u+x m.txt; test -x m.txt && printf 'u-plus-x '\nchmod 666 m.txt; chmod go-w m.txt; test -w m.txt && printf 'go-minus-w '\nchmod 600 m.txt; chmod a=rx m.txt; test -x m.txt && printf 'a-equals-rx'\nprintf '\\n'",
+      "stdout": "plus-x u-plus-x go-minus-w a-equals-rx\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tilde-prefix-continued-is-literal",
+      "oracle": "bash",
+      "script": "HOME=/tmp/home; printf '%s|%s|%s\\n' ~\"x\" ~'/y' ~$MISSING",
+      "stdout": "~x|~/y|~\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tilde-in-declaration-operand",
+      "oracle": "bash",
+      "script": "HOME=/tmp/home; export SHARED=~/bin:~/tools; printf '%s\\n' \"$SHARED\"",
+      "stdout": "/tmp/home/bin:/tmp/home/tools\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tilde-in-an-assignment-shaped-operand",
+      "oracle": "bash",
+      "script": "HOME=/tmp/home; printf '%s|%s|%s\\n' X=~/y --opt=~/y 9X=~/y",
+      "stdout": "X=/tmp/home/y|--opt=~/y|9X=~/y\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tilde-in-a-case-word",
+      "oracle": "bash",
+      "script": "HOME=/tmp/home; case ~ in /tmp/home) printf 'match\\n';; *) printf 'no\\n';; esac",
+      "stdout": "match\n",
       "exitCode": 0
     }
   ]

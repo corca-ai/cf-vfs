@@ -8,6 +8,7 @@ import { defaultShellCommands } from "../src/shell/commands/default.js";
 import {
   LINUX_APPLET_DIRECTORIES,
   LINUX_DATA_DIRECTORIES,
+  LINUX_PROFILE_VARIABLES,
   LINUX_SHELL_PATH,
   LINUX_WORKSPACE,
   linuxShellEnvironment,
@@ -248,6 +249,20 @@ describe("Linux filesystem profile", () => {
       HOME: "/srv/app",
       TMPDIR: "/var/tmp",
     });
+  });
+
+  it("names exactly the variables it controls", () => {
+    expect([...LINUX_PROFILE_VARIABLES].sort()).toEqual(
+      Object.keys(linuxShellEnvironment()).sort(),
+    );
+  });
+
+  it("lets a caller override a profile value", async () => {
+    const harness = pathHarness();
+    const result = await harness.run('printf \'%s|%s\' "$USER" "$HOME"', {
+      env: { ...linuxShellEnvironment(), USER: "agent" },
+    });
+    expect(result.stdout).toBe("agent|/home/cf");
   });
 
   it("creates only data directories, never an applet directory", async () => {
