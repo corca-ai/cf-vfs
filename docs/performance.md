@@ -11,6 +11,17 @@ These commands are deliberately excluded from ordinary unit tests and
 [Durable Object baseline](../bench/do-baseline-2026-07-24.md) record their
 environments and interpretation.
 
+## Structural guards versus wall-clock benchmarks
+
+Elapsed time is noisy enough that a small regression hides inside it, so the
+gates split in two. Counted work — output chunks, SQL statements, rows read, and
+whether command resolution touches storage at all — is asserted in
+`test/performance-guards.test.ts` and runs in `npm run check`. Worker bundle size
+is asserted per preset against recorded budgets in
+`test/fixtures/bundle-budgets.json` by `npm run test:tree-shaking`. Only
+genuinely time- and memory-dependent scenarios stay in `bench/`, where a broad
+ceiling and a checked-in baseline carry the interpretation.
+
 ## Stream and storage cost model
 
 Pipeline edges carry `Uint8Array` chunks through a small raw
@@ -20,7 +31,10 @@ start concurrently; the runtime does not materialize a whole pipeline between
 commands.
 
 Small command output is coalesced into roughly 64 KiB writes to avoid one
-promise/microtask per line. Text decoders preserve partial UTF-8 sequences
+promise/microtask per line. `test/performance-guards.test.ts` pins that
+structurally: 20,000 records must reach the consumer in a handful of chunks
+rather than one per record, and it runs inside `npm run check` because a counted
+regression needs no benchmark environment to be believable. Text decoders preserve partial UTF-8 sequences
 across source chunks. Utilities such as `cat`, byte `head`, and `wc` can remain
 incremental. `sort`, `diff`, `join`, `patch`, atomic redirection, and whole-file
 VFS commit buffer because their semantics require a barrier; separate byte,

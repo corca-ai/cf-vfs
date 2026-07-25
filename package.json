@@ -54,6 +54,10 @@
       "types": "./dist/shell/commands/index.d.ts",
       "import": "./dist/shell/commands/index.js"
     },
+    "./shell/commands/applet": {
+      "types": "./dist/shell/commands/applet.d.ts",
+      "import": "./dist/shell/commands/applet.js"
+    },
     "./shell/commands/default": {
       "types": "./dist/shell/commands/default.d.ts",
       "import": "./dist/shell/commands/default.js"
@@ -129,6 +133,8 @@
     "repl": "npm run build && node scripts/repl.mjs",
     "repl:sqlite": "npm run build && node scripts/repl-sqlite.mjs",
     "test:bash-fixtures:regenerate": "node scripts/regenerate-bash-fixtures.mjs",
+    "test:utility-fixtures:regenerate": "node scripts/regenerate-utility-fixtures.mjs",
+    "test:bundle-budgets:record": "npm run build && node test/check-tree-shaking.mjs --record",
     "check": "npm run typegen && npm run build && npm run typecheck && npm run lint && npm run knip && npm test && npm run test:docs && npm run test:package && npm run test:tree-shaking"
   },
   "devDependencies": {

@@ -1,21 +1,26 @@
 import { VfsError } from "../../core/errors.js";
-import { defineCommand, parseInteger, readTextLines, writeText } from "./helpers.js";
-import { parseUtilityOptions } from "./options.js";
+import { type AppletSpecWithOptions, defineApplet, parseAppletOptions } from "./applet.js";
+import { parseInteger, readTextLines, writeText } from "./helpers.js";
 
-const XARGS_OPTIONS = {
-  short: {
-    n: { name: "max-args", argument: true },
-    r: { name: "no-run-if-empty" },
-    t: { name: "verbose" },
-    "0": { name: "null" },
+const XARGS = {
+  name: "xargs",
+  usage: "[-0rt] [-n MAX-ARGS] [COMMAND [ARGUMENT...]]",
+  summary: "runs a command once per batch of arguments read from standard input",
+  options: {
+    short: {
+      n: { name: "max-args", argument: true },
+      r: { name: "no-run-if-empty" },
+      t: { name: "verbose" },
+      "0": { name: "null" },
+    },
+    long: {
+      "max-args": { name: "max-args", argument: true },
+      "no-run-if-empty": { name: "no-run-if-empty" },
+      verbose: { name: "verbose" },
+      null: { name: "null" },
+    },
   },
-  long: {
-    "max-args": { name: "max-args", argument: true },
-    "no-run-if-empty": { name: "no-run-if-empty" },
-    verbose: { name: "verbose" },
-    null: { name: "null" },
-  },
-} as const;
+} as const satisfies AppletSpecWithOptions<"max-args" | "no-run-if-empty" | "verbose" | "null">;
 
 /**
  * Runs a command once per batch of arguments read from standard input.
@@ -26,8 +31,8 @@ const XARGS_OPTIONS = {
  * never introduce shell syntax. Bash's quote-aware splitting and the `-I`,
  * `-P`, and `-L` options are outside this profile.
  */
-export const xargsCommand = /* @__PURE__ */ defineCommand("xargs", async (context, argv, fds) => {
-  const parsed = parseUtilityOptions("xargs", argv, XARGS_OPTIONS);
+export const xargsCommand = /* @__PURE__ */ defineApplet(XARGS, async (context, argv, fds) => {
+  const parsed = parseAppletOptions(XARGS, argv);
   let maxArgs: number | undefined;
   let nullSeparated = false;
   let skipWhenEmpty = false;

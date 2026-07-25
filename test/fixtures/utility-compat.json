@@ -1,0 +1,549 @@
+{
+  "oracles": {
+    "coreutils": {
+      "image": "debian:trixie-slim",
+      "shell": "/bin/sh",
+      "probe": {
+        "coreutils": "sort --version",
+        "grep": "grep --version",
+        "sed": "sed --version",
+        "diffutils": "cmp --version"
+      },
+      "digest": "debian@sha256:020c0d20b9880058cbe785a9db107156c3c75c2ac944a6aa7ab59f2add76a7bd",
+      "versions": {
+        "coreutils": "sort (GNU coreutils) 9.7",
+        "grep": "grep (GNU grep) 3.11",
+        "sed": "sed (GNU sed) 4.9",
+        "diffutils": "cmp (GNU diffutils) 3.10"
+      }
+    },
+    "busybox": {
+      "image": "busybox:1.37.0",
+      "shell": "/bin/sh",
+      "probe": {
+        "busybox": "busybox 2>&1"
+      },
+      "digest": "busybox@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028",
+      "versions": {
+        "busybox": "BusyBox v1.37.0 (2024-09-26 21:31:42 UTC) multi-call binary."
+      }
+    }
+  },
+  "locale": "C",
+  "timezone": "UTC",
+  "divergences": [
+    {
+      "id": "cut-list-ranges-unsupported",
+      "command": "cut",
+      "oracle": "coreutils",
+      "summary": "-f and -c accept a comma-separated list of positive integers, not ranges or open-ended selections",
+      "reason": "A range needs an ordering and clamping model the streaming record profile does not yet declare. `cut -c2-4` is a usage error with status 2 rather than a silent approximation of GNU behavior."
+    },
+    {
+      "id": "wc-multi-field-padding",
+      "command": "wc",
+      "oracle": "coreutils",
+      "summary": "multi-field wc output is single-space separated instead of right-aligned in width-dependent columns",
+      "reason": "GNU pads each count to a width derived from the largest input, which makes output depend on values the streaming profile never buffers. Single-field forms such as `wc -l` match exactly."
+    },
+    {
+      "id": "diff-output-format",
+      "command": "diff",
+      "oracle": "coreutils",
+      "summary": "diff always emits the unified format used by patch, with no context or ed output modes",
+      "reason": "GNU diff defaults to the normal format and selects others by option. cf-vfs documents one format so `diff | patch` composes deterministically."
+    }
+  ],
+  "cases": [
+    {
+      "name": "sort-byte-order",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "pear\nApple\nbanana\napple\n"
+      },
+      "script": "sort in.txt",
+      "stdout": "Apple\napple\nbanana\npear\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sort-numeric",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "10\n9\n100\n-3\n0\n"
+      },
+      "script": "sort -n in.txt",
+      "stdout": "-3\n0\n9\n10\n100\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sort-reverse-unique",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "b\na\nb\nc\na\n"
+      },
+      "script": "sort -ru in.txt",
+      "stdout": "c\nb\na\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sort-stdin",
+      "oracle": "busybox",
+      "stdin": "gamma\nalpha\nbeta\n",
+      "script": "sort",
+      "stdout": "alpha\nbeta\ngamma\n",
+      "exitCode": 0
+    },
+    {
+      "name": "uniq-adjacent",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "a\na\nb\na\n"
+      },
+      "script": "uniq in.txt",
+      "stdout": "a\nb\na\n",
+      "exitCode": 0
+    },
+    {
+      "name": "uniq-count",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "a\na\nb\na\n"
+      },
+      "script": "uniq -c in.txt",
+      "stdout": "      2 a\n      1 b\n      1 a\n",
+      "exitCode": 0
+    },
+    {
+      "name": "cut-fields",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "one:two:three\nfour:five:six\n"
+      },
+      "script": "cut -d: -f1,3 in.txt",
+      "stdout": "one:three\nfour:six\n",
+      "exitCode": 0
+    },
+    {
+      "name": "cut-fields-no-delimiter",
+      "oracle": "busybox",
+      "files": {
+        "in.txt": "one:two\nplain\n"
+      },
+      "script": "cut -d: -f2 in.txt",
+      "stdout": "two\nplain\n",
+      "exitCode": 0
+    },
+    {
+      "name": "cut-characters",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "abcdef\nghijkl\n"
+      },
+      "script": "cut -c2,3,4 in.txt",
+      "stdout": "bcd\nhij\n",
+      "exitCode": 0
+    },
+    {
+      "name": "head-default",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n"
+      },
+      "script": "head in.txt",
+      "stdout": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n",
+      "exitCode": 0
+    },
+    {
+      "name": "head-lines",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "1\n2\n3\n4\n"
+      },
+      "script": "head -n 2 in.txt",
+      "stdout": "1\n2\n",
+      "exitCode": 0
+    },
+    {
+      "name": "head-bytes",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "abcdefgh\n"
+      },
+      "script": "head -c 5 in.txt",
+      "stdout": "abcde",
+      "exitCode": 0
+    },
+    {
+      "name": "head-old-style-count",
+      "oracle": "busybox",
+      "files": {
+        "in.txt": "1\n2\n3\n4\n"
+      },
+      "script": "head -2 in.txt",
+      "stdout": "1\n2\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tail-lines",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "1\n2\n3\n4\n"
+      },
+      "script": "tail -n 2 in.txt",
+      "stdout": "3\n4\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tail-bytes",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "abcdefgh\n"
+      },
+      "script": "tail -c 4 in.txt",
+      "stdout": "fgh\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tail-unterminated-final-record",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "1\n2\n3"
+      },
+      "script": "tail -n 2 in.txt",
+      "stdout": "2\n3",
+      "exitCode": 0
+    },
+    {
+      "name": "wc-lines-stdin",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "a\nb\nc\n"
+      },
+      "script": "wc -l < in.txt",
+      "stdout": "3\n",
+      "exitCode": 0
+    },
+    {
+      "name": "wc-words-stdin",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "one two\nthree\n"
+      },
+      "script": "wc -w < in.txt",
+      "stdout": "3\n",
+      "exitCode": 0
+    },
+    {
+      "name": "wc-bytes-stdin",
+      "oracle": "busybox",
+      "files": {
+        "in.txt": "abc\n"
+      },
+      "script": "wc -c < in.txt",
+      "stdout": "4\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-literal",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "alpha\nbeta\ngamma\n"
+      },
+      "script": "grep a in.txt",
+      "stdout": "alpha\nbeta\ngamma\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-invert-count",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "alpha\nbeta\ngamma\n"
+      },
+      "script": "grep -vc t in.txt",
+      "stdout": "2\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-ignore-case-line-numbers",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "Alpha\nbeta\nALPHA\n"
+      },
+      "script": "grep -in alpha in.txt",
+      "stdout": "1:Alpha\n3:ALPHA\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-fixed-string",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "a.c\nabc\n"
+      },
+      "script": "grep -F a.c in.txt",
+      "stdout": "a.c\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-no-match-status",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "alpha\n"
+      },
+      "script": "grep zzz in.txt; printf 'status=%s\\n' \"$?\"",
+      "stdout": "status=1\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-stdin",
+      "oracle": "busybox",
+      "stdin": "keep\ndrop\n",
+      "script": "grep keep",
+      "stdout": "keep\n",
+      "exitCode": 0
+    },
+    {
+      "name": "tr-translate",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "abcabc\n"
+      },
+      "script": "tr abc xyz < in.txt",
+      "stdout": "xyzxyz\n",
+      "exitCode": 0
+    },
+    {
+      "name": "nl-skips-blank-lines",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "one\n\ntwo\n"
+      },
+      "script": "nl in.txt",
+      "stdout": "     1\tone\n       \n     2\ttwo\n",
+      "exitCode": 0
+    },
+    {
+      "name": "fold-width",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "abcdefghij\n"
+      },
+      "script": "fold -w 3 in.txt",
+      "stdout": "abc\ndef\nghi\nj\n",
+      "exitCode": 0
+    },
+    {
+      "name": "paste-columns",
+      "oracle": "coreutils",
+      "files": {
+        "left.txt": "1\n2\n3\n",
+        "right.txt": "a\nb\n"
+      },
+      "script": "paste left.txt right.txt",
+      "stdout": "1\ta\n2\tb\n3\t\n",
+      "exitCode": 0
+    },
+    {
+      "name": "comm-sorted-files",
+      "oracle": "coreutils",
+      "files": {
+        "left.txt": "a\nb\nd\n",
+        "right.txt": "b\nc\nd\n"
+      },
+      "script": "comm left.txt right.txt",
+      "stdout": "a\n\t\tb\n\tc\n\t\td\n",
+      "exitCode": 0
+    },
+    {
+      "name": "comm-suppress-columns",
+      "oracle": "coreutils",
+      "files": {
+        "left.txt": "a\nb\nd\n",
+        "right.txt": "b\nc\nd\n"
+      },
+      "script": "comm -12 left.txt right.txt",
+      "stdout": "b\nd\n",
+      "exitCode": 0
+    },
+    {
+      "name": "join-common-field",
+      "oracle": "coreutils",
+      "files": {
+        "left.txt": "1 one\n2 two\n3 three\n",
+        "right.txt": "1 uno\n3 tres\n"
+      },
+      "script": "join left.txt right.txt",
+      "stdout": "1 one uno\n3 three tres\n",
+      "exitCode": 0
+    },
+    {
+      "name": "join-unpaired-left",
+      "oracle": "coreutils",
+      "files": {
+        "left.txt": "1 one\n2 two\n3 three\n",
+        "right.txt": "1 uno\n3 tres\n"
+      },
+      "script": "join -a 1 left.txt right.txt",
+      "stdout": "1 one uno\n2 two\n3 three tres\n",
+      "exitCode": 0
+    },
+    {
+      "name": "seq-range",
+      "oracle": "coreutils",
+      "script": "seq 1 5",
+      "stdout": "1\n2\n3\n4\n5\n",
+      "exitCode": 0
+    },
+    {
+      "name": "seq-separator",
+      "oracle": "coreutils",
+      "script": "seq -s , 1 4",
+      "stdout": "1,2,3,4\n",
+      "exitCode": 0
+    },
+    {
+      "name": "seq-equal-width",
+      "oracle": "coreutils",
+      "script": "seq -w 8 11",
+      "stdout": "08\n09\n10\n11\n",
+      "exitCode": 0
+    },
+    {
+      "name": "seq-increment",
+      "oracle": "busybox",
+      "script": "seq 1 3 10",
+      "stdout": "1\n4\n7\n10\n",
+      "exitCode": 0
+    },
+    {
+      "name": "base64-encode",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "cf-vfs applet fixtures\n"
+      },
+      "script": "base64 in.txt",
+      "stdout": "Y2YtdmZzIGFwcGxldCBmaXh0dXJlcwo=\n",
+      "exitCode": 0
+    },
+    {
+      "name": "base64-no-wrap",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "0123456789012345678901234567890123456789012345678901234567890\n"
+      },
+      "script": "base64 -w 0 in.txt",
+      "stdout": "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MAo=",
+      "exitCode": 0
+    },
+    {
+      "name": "base64-decode",
+      "oracle": "coreutils",
+      "files": {
+        "in.b64": "Y2YtdmZzCg==\n"
+      },
+      "script": "base64 -d in.b64",
+      "stdout": "cf-vfs\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sha256sum-file",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "digest me\n"
+      },
+      "script": "sha256sum in.txt",
+      "stdout": "d9a84c53949e4ee500bb3ccf6e91cf52d02124d0d488cbf358ea3e4df6366ae3  in.txt\n",
+      "exitCode": 0
+    },
+    {
+      "name": "basename-and-dirname",
+      "oracle": "coreutils",
+      "script": "basename /a/b/c.txt; dirname /a/b/c.txt",
+      "stdout": "c.txt\n/a/b\n",
+      "exitCode": 0
+    },
+    {
+      "name": "printf-conversions",
+      "oracle": "coreutils",
+      "script": "printf '%s|%d|%s\\n' alpha 42 omega",
+      "stdout": "alpha|42|omega\n",
+      "exitCode": 0
+    },
+    {
+      "name": "printf-reuses-format",
+      "oracle": "coreutils",
+      "script": "printf '<%s>' a b c; printf '\\n'",
+      "stdout": "<a><b><c>\n",
+      "exitCode": 0
+    },
+    {
+      "name": "echo-no-newline",
+      "oracle": "busybox",
+      "script": "echo -n first; echo second",
+      "stdout": "firstsecond\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-substitute-global",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "aaa\nbab\n"
+      },
+      "script": "sed 's/a/X/g' in.txt",
+      "stdout": "XXX\nbXb\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-substitute-first",
+      "oracle": "busybox",
+      "files": {
+        "in.txt": "aaa\nbab\n"
+      },
+      "script": "sed 's/a/X/' in.txt",
+      "stdout": "Xaa\nbXb\n",
+      "exitCode": 0
+    },
+    {
+      "name": "cmp-identical-files",
+      "oracle": "coreutils",
+      "files": {
+        "left.txt": "same\n",
+        "right.txt": "same\n"
+      },
+      "script": "cmp left.txt right.txt; printf 'status=%s\\n' \"$?\"",
+      "stdout": "status=0\n",
+      "exitCode": 0
+    },
+    {
+      "name": "cat-concatenates",
+      "oracle": "coreutils",
+      "files": {
+        "a.txt": "first\n",
+        "b.txt": "second\n"
+      },
+      "script": "cat a.txt b.txt",
+      "stdout": "first\nsecond\n",
+      "exitCode": 0
+    },
+    {
+      "name": "cat-stdin-dash",
+      "oracle": "busybox",
+      "files": {
+        "a.txt": "file\n"
+      },
+      "stdin": "piped\n",
+      "script": "cat a.txt -",
+      "stdout": "file\npiped\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sort-then-uniq-pipeline",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "b\na\nb\nc\na\n"
+      },
+      "script": "sort in.txt | uniq -c",
+      "stdout": "      2 a\n      2 b\n      1 c\n",
+      "exitCode": 0
+    }
+  ]
+}

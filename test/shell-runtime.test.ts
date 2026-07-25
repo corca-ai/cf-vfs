@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
-import { defineCommand, writeText } from "../src/shell/commands/helpers.js";
+import { writeText } from "../src/shell/commands/helpers.js";
 import type { ShellEvent } from "../src/shell/events.js";
 import { Shell } from "../src/shell/shell.js";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import { putOpaque } from "../src/vfs/opaque.js";
 import { readAllBytes, streamFromChunks } from "../src/vfs/streams.js";
+import { defineTestApplet } from "./helpers/applet.js";
 import { createBashHarness } from "./helpers/bash.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 
@@ -34,7 +35,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("keeps ! inside command words and follows Bash positional expansion rules", async () => {
-    const bang = defineCommand("!echo", async (_context, argv, fds) => {
+    const bang = defineTestApplet("!echo", async (_context, argv, fds) => {
       await writeText(fds[1], `${argv.join("|")}\n`);
       return 0;
     });
@@ -297,7 +298,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("honors left-to-right fd duplication", async () => {
-    const emit = defineCommand("emit", async (_context, _argv, fds) => {
+    const emit = defineTestApplet("emit", async (_context, _argv, fds) => {
       await Promise.all([writeText(fds[1], "out\n"), writeText(fds[2], "err\n")]);
       return 0;
     });
@@ -358,7 +359,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("reports an atomic redirection close failure instead of discarding it", async () => {
-    const mutateTarget = defineCommand("mutate-target", async (context, _argv, fds) => {
+    const mutateTarget = defineTestApplet("mutate-target", async (context, _argv, fds) => {
       await writeText(fds[1], "new");
       await context.fileSystem.touch("/target");
       return 0;
@@ -634,7 +635,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("drains stdout and stderr concurrently in executeText", async () => {
-    const noisy = defineCommand("noisy", async (_context, _argv, fds) => {
+    const noisy = defineTestApplet("noisy", async (_context, _argv, fds) => {
       const block = "x".repeat(128 * 1024);
       for (let index = 0; index < 16; index += 1) {
         await Promise.all([writeText(fds[1], block), writeText(fds[2], block)]);
@@ -680,7 +681,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("does not complete a producer until its consumer relieves backpressure", async () => {
-    const produce = defineCommand("produce", async (_context, _argv, fds) => {
+    const produce = defineTestApplet("produce", async (_context, _argv, fds) => {
       await fds[1].write(new Uint8Array(128 * 1024));
       return 0;
     });
@@ -704,7 +705,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("settles both backpressured outputs before resolving an errexit status", async () => {
-    const failAfterOutput = defineCommand("fail-after-output", async (_context, _argv, fds) => {
+    const failAfterOutput = defineTestApplet("fail-after-output", async (_context, _argv, fds) => {
       const chunk = new Uint8Array(128 * 1024);
       await Promise.all([fds[1].write(chunk), fds[2].write(chunk)]);
       return 7;
@@ -745,7 +746,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("rolls back an atomic redirection when its byte limit is exceeded", async () => {
-    const spam = defineCommand("spam", async (_context, _argv, fds) => {
+    const spam = defineTestApplet("spam", async (_context, _argv, fds) => {
       const chunk = new Uint8Array(1024 * 1024);
       for (let index = 0; index < 9; index += 1) await fds[1].write(chunk);
       return 0;
@@ -769,7 +770,7 @@ describe("stream-first shell runtime", () => {
     const started = new Promise<void>((resolve) => {
       signalStarted = resolve;
     });
-    const waiting = defineCommand("waiting", async (context, _argv, fds) => {
+    const waiting = defineTestApplet("waiting", async (context, _argv, fds) => {
       await writeText(fds[1], "new");
       signalStarted?.();
       await new Promise<never>((_resolve, reject) => {
@@ -799,7 +800,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("wakes a backpressured producer when the execution deadline expires", async () => {
-    const produce = defineCommand("produce", async (_context, _argv, fds) => {
+    const produce = defineTestApplet("produce", async (_context, _argv, fds) => {
       while (true) await fds[1].write(new Uint8Array(128 * 1024));
     });
     const fileSystem = createTestFileSystem();
@@ -839,7 +840,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("cancels execution when the caller cancels a root output stream", async () => {
-    const waitForCancel = defineCommand("wait-for-cancel", async (context, _argv, fds) => {
+    const waitForCancel = defineTestApplet("wait-for-cancel", async (context, _argv, fds) => {
       await writeText(fds[1], "x");
       await new Promise<void>((_resolve, reject) => {
         const abort = () => reject(context.signal.reason);
@@ -858,7 +859,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("enforces an output idle timeout independently of the execution deadline", async () => {
-    const produce = defineCommand("produce", async (_context, _argv, fds) => {
+    const produce = defineTestApplet("produce", async (_context, _argv, fds) => {
       while (true) await fds[1].write(new Uint8Array(128 * 1024));
     });
     const fileSystem = createTestFileSystem();
@@ -880,7 +881,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("rejects completed for a command invariant failure", async () => {
-    const broken = defineCommand("broken", () => {
+    const broken = defineTestApplet("broken", () => {
       throw new Error("command invariant failed");
     });
     const { shell } = createBashHarness({ extraCommands: [broken] });
@@ -891,7 +892,7 @@ describe("stream-first shell runtime", () => {
   });
 
   it("returns a failure without a valid truncated prefix when root output overflows", async () => {
-    const produce = defineCommand("produce", async (_context, _argv, fds) => {
+    const produce = defineTestApplet("produce", async (_context, _argv, fds) => {
       await fds[1].write(new Uint8Array(1024));
       return 0;
     });
@@ -927,7 +928,7 @@ describe("stream-first shell runtime", () => {
       ]),
     ).resolves.toMatchObject({ exitCode: 1 });
 
-    const invalid = defineCommand("invalid", () => Number.NaN);
+    const invalid = defineTestApplet("invalid", () => Number.NaN);
     const { shell } = createBashHarness({ extraCommands: [invalid] });
     await expect(shell.executeStream({ script: "invalid" }).completed).rejects.toThrow(
       "invalid exit status",
@@ -937,7 +938,7 @@ describe("stream-first shell runtime", () => {
   it("does not expose mutable policy or the wrapped filesystem to commands", async () => {
     const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/secret", "secret");
-    const probe = defineCommand("probe-policy", async (context) => {
+    const probe = defineTestApplet("probe-policy", async (context) => {
       try {
         (context.policy as { readRoots?: string[] }).readRoots = ["/"];
       } catch {

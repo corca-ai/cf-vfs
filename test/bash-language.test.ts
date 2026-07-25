@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { defineCommand } from "../src/shell/commands/helpers.js";
 import { parseShellScript } from "../src/shell/parser.js";
+import { defineTestApplet } from "./helpers/applet.js";
 import { type BashCase, bashCases, createBashHarness } from "./helpers/bash.js";
 
 describe("Bash v2 words, assignments, and statuses", () => {
@@ -1580,7 +1580,7 @@ describe("Bash v2 command substitution", () => {
   ]);
 
   it("rejects invalid UTF-8 captured from a byte command", async () => {
-    const invalidUtf8 = defineCommand("invalid-utf8", async (_context, _argv, fds) => {
+    const invalidUtf8 = defineTestApplet("invalid-utf8", async (_context, _argv, fds) => {
       await fds[1].write(new Uint8Array([0xff]));
       return 0;
     });
@@ -1592,7 +1592,7 @@ describe("Bash v2 command substitution", () => {
   });
 
   it("rejects NUL bytes captured from a byte command", async () => {
-    const nul = defineCommand("nul", async (_context, _argv, fds) => {
+    const nul = defineTestApplet("nul", async (_context, _argv, fds) => {
       await fds[1].write(new Uint8Array([0]));
       return 0;
     });
@@ -1967,7 +1967,7 @@ describe("Bash v3 input and positional built-ins", () => {
     const commandStarted = new Promise<void>((resolve) => {
       waiting = resolve;
     });
-    const waitForAbort = defineCommand(
+    const waitForAbort = defineTestApplet(
       "wait-for-abort",
       (context) =>
         new Promise<number>((_resolve, reject) => {
@@ -2338,9 +2338,9 @@ describe("argument, sequence, encoding, and environment utilities", () => {
       stdout: "",
     },
     {
-      name: "seq honors an explicit separator and equal-width padding",
+      name: "seq joins values with an explicit separator and pads equal widths",
       script: "seq -s , -w 8 11",
-      stdout: "08,09,10,11,",
+      stdout: "08,09,10,11\n",
     },
     {
       name: "seq rejects a zero increment as a usage error",
@@ -2367,10 +2367,10 @@ describe("argument, sequence, encoding, and environment utilities", () => {
         "YWFhYWFhYWFhYWFhYWFh\nYWFhYWFhYWFhYWFhYWFh\nYWFhYWFhYWFhYWFhYWFh\nYWFhYWFhYWFhYWFhYWFh\n",
     },
     {
-      name: "base64 encodes a named file without wrapping when -w 0 is given",
+      name: "base64 -w 0 omits both wrapping and the trailing newline",
       files: { "/data": "hi" },
       script: "base64 -w 0 /data",
-      stdout: "aGk=\n",
+      stdout: "aGk=",
     },
     {
       name: "base64 -d rejects invalid input instead of guessing",
@@ -2407,7 +2407,7 @@ describe("argument, sequence, encoding, and environment utilities", () => {
   });
 
   it("runs a command with env-scoped assignments and restores the prior value", async () => {
-    const probe = defineCommand("probe", async (context, _argv, fds) => {
+    const probe = defineTestApplet("probe", async (context, _argv, fds) => {
       await fds[1].write(new TextEncoder().encode(`${context.session.env.get("X") ?? ""}\n`));
       return 0;
     });

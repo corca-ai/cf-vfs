@@ -51,6 +51,9 @@ npm run bench:all
 npm run bench:check
 npm run bench:remote
 npm run bench:remote:check
+npm run test:bash-fixtures:regenerate
+npm run test:utility-fixtures:regenerate
+npm run test:bundle-budgets:record
 ```
 
 Performance runs are deliberately separate from `npm test` and `npm run
@@ -200,11 +203,29 @@ budget in `finally` paths.
 
 ## Adding a utility
 
-A command is a `ShellCommand` taking argv and virtual descriptors. Put shared
-category implementations under `src/shell/commands`; use a dedicated module
-when consumers should import one command without pulling siblings. Export the
-command from `shell/commands`, and add it to `defaultShellCommands` only when it
-belongs in the convenience preset.
+A command is a `ShellCommand` taking argv and virtual descriptors. Build it with
+`defineApplet` from `src/shell/commands/applet.ts`, which pairs a runner with a
+declarative `AppletSpec`: canonical name, optional aliases, operand syntax,
+one-line summary, and the option table. Declare the specification as a
+module-level constant and pass it to `parseAppletOptions` and `appletUsageError`
+so the command name appears exactly once. Put shared category implementations
+under `src/shell/commands`; use a dedicated module when consumers should import
+one command without pulling siblings. Export the command from `shell/commands`,
+and add it to `defaultShellCommands` only when it belongs in the convenience
+preset.
+
+`applet.ts` is a shared module and must never import a concrete applet. It also
+owns `createAppletRegistry`, the multicall resolver `Shell` uses: canonical
+names, declared aliases, and the virtual `/bin` and `/usr/bin` spellings all
+resolve to one object. Keep the bare-name path allocation-free — the applet-path
+branch is guarded by a single character comparison — and resolve before checking
+`allowedCommands` so a policy decision always names the canonical applet.
+
+A summary is a lowercase fragment without a trailing period; `test/applet.test.ts`
+enforces that shape and rejects a duplicate name or alias across the default
+registry. Metadata is not free: it added about 300 bytes to the single-applet
+`ls` Worker bundle and about 1 KiB to the shell bundle. Record new sizes with
+`npm run test:bundle-budgets:record` and justify the change in review.
 
 A utility that invokes another command must use
 `ShellCommandContext.executeCommand(argv, fds)`, never a generated source
@@ -219,10 +240,38 @@ limits. Perform all filesystem access through the scoped command context so
 read/write roots and mutation budgets cannot be bypassed. Unsupported options
 must be usage errors.
 
-Update the package and Wrangler fixtures when adding a new subpath. The
-`ls`-only and ordinary command-import fixtures must remain free of unrelated
-utilities, parser code, and opaque lifecycle code; the VFS-only fixture must
-remain free of all shell code.
+Update the package and Wrangler fixtures when adding a new subpath.
+
+## Compatibility, bundle, and performance gates
+
+`test/check-tree-shaking.mjs` builds seven representative Worker bundles — one
+applet, a small explicit registry, VFS-only, shell-only, interactive, the full
+default registry, and the R2 opaque adapter. Each preset declares markers that
+must and must not be reachable *and* a recorded byte budget in
+`test/fixtures/bundle-budgets.json`. Size alone is insufficient, so an applet
+marker is its declared summary, which shares an object literal with its runner
+and therefore survives exactly when the applet does. A bundle far below its
+budget fails too, so a stale budget can never quietly stop protecting anything;
+record new sizes with `npm run test:bundle-budgets:record` and explain the diff
+in review.
+
+`test/fixtures/utility-compat.json` pins utility behavior against BusyBox and
+Debian's GNU tools by image digest and exact tool version, and carries the
+registry of deliberate divergences described in
+[the compatibility profile](posix-compatibility.md). Every case must produce
+empty stderr on the oracle; the generator refuses one that does not, because
+diagnostics are outside the declared profile and a case with them would weaken
+rather than prove the claim. Every declared divergence needs a declarative
+demonstration in `test/utility-differential.test.ts`, which fails when the two
+lists drift apart.
+
+`test/performance-guards.test.ts` asserts counted work rather than elapsed time:
+output slab batching, SQL statement and row counts for the common no-opaque
+path, and the fact that command resolution touches storage zero times. It uses
+the `onStatement` observer on `NodeSqlFileSystem`, which exists for tests only.
+Adding an optional filesystem feature must not add statements to those paths;
+extend the guards rather than relaxing them. Wall-clock scenarios stay in
+`bench/`.
 
 ## Packaging and release
 

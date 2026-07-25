@@ -1,18 +1,23 @@
+import { type AppletSpecWithOptions, defineApplet, parseAppletOptions } from "./applet.js";
 import { modeString } from "./format.js";
-import { BufferedTextWriter, commandPath, defineCommand } from "./helpers.js";
-import { parseUtilityOptions } from "./options.js";
+import { BufferedTextWriter, commandPath } from "./helpers.js";
 
-const LS_OPTIONS = {
-  short: {
-    l: { name: "long" },
-    d: { name: "directory" },
-    a: { name: "all" },
-    A: { name: "all" },
+const LS = {
+  name: "ls",
+  usage: "[-adlA] [PATH...]",
+  summary: "lists directory entries or a single path",
+  options: {
+    short: {
+      l: { name: "long" },
+      d: { name: "directory" },
+      a: { name: "all" },
+      A: { name: "all" },
+    },
   },
-} as const;
+} as const satisfies AppletSpecWithOptions<"long" | "directory" | "all">;
 
-export const lsCommand = /* @__PURE__ */ defineCommand("ls", async (context, argv, fds) => {
-  const parsed = parseUtilityOptions("ls", argv, LS_OPTIONS);
+export const lsCommand = /* @__PURE__ */ defineApplet(LS, async (context, argv, fds) => {
+  const parsed = parseAppletOptions(LS, argv);
   const long = parsed.options.some((option) => option.name === "long");
   const directory = parsed.options.some((option) => option.name === "directory");
   const paths = parsed.operands.length === 0 ? ["."] : parsed.operands;

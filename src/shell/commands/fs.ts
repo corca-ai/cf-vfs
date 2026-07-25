@@ -1,62 +1,159 @@
 import { VfsError } from "../../core/errors.js";
 import { basename, dirname, normalizePath } from "../../core/path.js";
 import type { VfsStat } from "../../vfs/types.js";
-import { modeString } from "./format.js";
 import {
-  BufferedTextWriter,
-  commandPath,
-  defineCommand,
-  pipeToSink,
-  writeText,
-} from "./helpers.js";
-import { parseUtilityOptions } from "./options.js";
+  type AppletSpec,
+  type AppletSpecWithOptions,
+  appletUsageError,
+  defineApplet,
+  parseAppletOptions,
+} from "./applet.js";
+import { modeString } from "./format.js";
+import { BufferedTextWriter, commandPath, pipeToSink, writeText } from "./helpers.js";
 
-const MKDIR_OPTIONS = {
-  short: {
-    p: { name: "parents" },
-    m: { name: "mode", argument: true },
-  },
-  long: {
-    parents: { name: "parents" },
-    mode: { name: "mode", argument: true },
-  },
-} as const;
+const CAT = {
+  name: "cat",
+  usage: "[FILE...]",
+  summary: "concatenates files, or standard input, to standard output",
+} as const satisfies AppletSpec;
 
-const TOUCH_OPTIONS = {
-  short: { c: { name: "no-create" } },
-  long: { "no-create": { name: "no-create" } },
-} as const;
-
-const RM_OPTIONS = {
-  short: {
-    r: { name: "recursive" },
-    R: { name: "recursive" },
-    f: { name: "force" },
+const MKDIR = {
+  name: "mkdir",
+  usage: "[-p] [-m MODE] DIRECTORY...",
+  summary: "creates directories",
+  options: {
+    short: {
+      p: { name: "parents" },
+      m: { name: "mode", argument: true },
+    },
+    long: {
+      parents: { name: "parents" },
+      mode: { name: "mode", argument: true },
+    },
   },
-  long: {
-    recursive: { name: "recursive" },
-    force: { name: "force" },
-  },
-} as const;
+} as const satisfies AppletSpecWithOptions<"parents" | "mode">;
 
-const MV_OPTIONS = {
-  short: { f: { name: "force" } },
-  long: { force: { name: "force" } },
-} as const;
-
-const CP_OPTIONS = {
-  short: {
-    f: { name: "force" },
-    r: { name: "recursive" },
-    R: { name: "recursive" },
+const TOUCH = {
+  name: "touch",
+  usage: "[-c] FILE...",
+  summary: "updates modification times and creates missing files",
+  options: {
+    short: { c: { name: "no-create" } },
+    long: { "no-create": { name: "no-create" } },
   },
-  long: {
-    force: { name: "force" },
-    recursive: { name: "recursive" },
-  },
-} as const;
+} as const satisfies AppletSpecWithOptions<"no-create">;
 
-export const catCommand = /* @__PURE__ */ defineCommand("cat", async (context, argv, fds) => {
+const RM = {
+  name: "rm",
+  usage: "[-rRf] PATH...",
+  summary: "removes files and, with -r, directory subtrees",
+  options: {
+    short: {
+      r: { name: "recursive" },
+      R: { name: "recursive" },
+      f: { name: "force" },
+    },
+    long: {
+      recursive: { name: "recursive" },
+      force: { name: "force" },
+    },
+  },
+} as const satisfies AppletSpecWithOptions<"recursive" | "force">;
+
+const RMDIR = {
+  name: "rmdir",
+  usage: "DIRECTORY...",
+  summary: "removes empty directories",
+} as const satisfies AppletSpec;
+
+const MV = {
+  name: "mv",
+  usage: "[-f] SOURCE DESTINATION",
+  summary: "renames a path, replacing the destination only with -f",
+  options: {
+    short: { f: { name: "force" } },
+    long: { force: { name: "force" } },
+  },
+} as const satisfies AppletSpecWithOptions<"force">;
+
+const CP = {
+  name: "cp",
+  usage: "[-rRf] SOURCE DESTINATION",
+  summary: "copies a file or, with -r, a directory subtree",
+  options: {
+    short: {
+      f: { name: "force" },
+      r: { name: "recursive" },
+      R: { name: "recursive" },
+    },
+    long: {
+      force: { name: "force" },
+      recursive: { name: "recursive" },
+    },
+  },
+} as const satisfies AppletSpecWithOptions<"force" | "recursive">;
+
+const FIND = {
+  name: "find",
+  usage: "[PATH...] [-name PATTERN] [-type f|d] [-maxdepth N] [-print]",
+  summary: "walks a subtree and prints matching paths",
+} as const satisfies AppletSpec;
+
+const STAT = {
+  name: "stat",
+  usage: "PATH...",
+  summary: "prints size, kind, mode, revision, and mutation token",
+} as const satisfies AppletSpec;
+
+const CHMOD = {
+  name: "chmod",
+  usage: "OCTAL-MODE PATH...",
+  summary: "sets the compatibility mode bits of a path",
+} as const satisfies AppletSpec;
+
+const DU = {
+  name: "du",
+  usage: "[PATH...]",
+  summary: "reports subtree size in kibibytes",
+} as const satisfies AppletSpec;
+
+const TREE = {
+  name: "tree",
+  usage: "[PATH]",
+  summary: "prints an indented subtree listing",
+} as const satisfies AppletSpec;
+
+const BASENAME = {
+  name: "basename",
+  usage: "PATH",
+  summary: "prints the final component of a path",
+} as const satisfies AppletSpec;
+
+const DIRNAME = {
+  name: "dirname",
+  usage: "PATH",
+  summary: "prints the directory component of a path",
+} as const satisfies AppletSpec;
+
+const REALPATH = {
+  name: "realpath",
+  usage: "PATH...",
+  summary: "prints the normalized absolute path of an existing entry",
+} as const satisfies AppletSpec;
+
+const MKTEMP = {
+  name: "mktemp",
+  usage: "[TEMPLATE]",
+  summary: "creates a uniquely named empty file",
+} as const satisfies AppletSpec;
+
+const FILE = {
+  name: "file",
+  usage: "PATH...",
+  summary: "classifies a path as directory, inline data, or opaque content",
+} as const satisfies AppletSpec;
+
+export const catCommand = /* @__PURE__ */ defineApplet(CAT, async (context, argv, fds) => {
   if (argv.length === 0) {
     await pipeToSink(context, fds[0], fds[1]);
     return 0;
@@ -73,29 +170,29 @@ export const catCommand = /* @__PURE__ */ defineCommand("cat", async (context, a
   return 0;
 });
 
-export const mkdirCommand = /* @__PURE__ */ defineCommand("mkdir", async (context, argv) => {
-  const parsed = parseUtilityOptions("mkdir", argv, MKDIR_OPTIONS);
+export const mkdirCommand = /* @__PURE__ */ defineApplet(MKDIR, async (context, argv) => {
+  const parsed = parseAppletOptions(MKDIR, argv);
   const recursive = parsed.options.some((option) => option.name === "parents");
   let mode: number | undefined;
   for (const option of parsed.options) {
     if (option.name === "mode" && "argument" in option) {
       if (!/^[0-7]{3,4}$/u.test(option.argument)) {
-        throw new VfsError("EINVAL", "mkdir: mode must be octal");
+        throw appletUsageError(MKDIR, "mode must be octal");
       }
       mode = 0o040000 | Number.parseInt(option.argument, 8);
     }
   }
-  if (parsed.operands.length === 0) throw new VfsError("EINVAL", "mkdir: missing operand");
+  if (parsed.operands.length === 0) throw appletUsageError(MKDIR, "missing operand");
   for (const path of parsed.operands) {
     context.fileSystem.mkdir(commandPath(context, path), recursive, mode);
   }
   return 0;
 });
 
-export const touchCommand = /* @__PURE__ */ defineCommand("touch", async (context, argv) => {
-  const parsed = parseUtilityOptions("touch", argv, TOUCH_OPTIONS);
+export const touchCommand = /* @__PURE__ */ defineApplet(TOUCH, async (context, argv) => {
+  const parsed = parseAppletOptions(TOUCH, argv);
   const create = !parsed.options.some((option) => option.name === "no-create");
-  if (parsed.operands.length === 0) throw new VfsError("EINVAL", "touch: missing operand");
+  if (parsed.operands.length === 0) throw appletUsageError(TOUCH, "missing operand");
   for (const path of parsed.operands) {
     try {
       context.fileSystem.touch(commandPath(context, path), { create });
@@ -106,11 +203,11 @@ export const touchCommand = /* @__PURE__ */ defineCommand("touch", async (contex
   return 0;
 });
 
-export const rmCommand = /* @__PURE__ */ defineCommand("rm", async (context, argv) => {
-  const parsed = parseUtilityOptions("rm", argv, RM_OPTIONS);
+export const rmCommand = /* @__PURE__ */ defineApplet(RM, async (context, argv) => {
+  const parsed = parseAppletOptions(RM, argv);
   const recursive = parsed.options.some((option) => option.name === "recursive");
   const force = parsed.options.some((option) => option.name === "force");
-  if (parsed.operands.length === 0 && !force) throw new VfsError("EINVAL", "rm: missing operand");
+  if (parsed.operands.length === 0 && !force) throw appletUsageError(RM, "missing operand");
   for (const path of parsed.operands) {
     try {
       await context.fileSystem.remove(commandPath(context, path), { recursive });
@@ -121,8 +218,8 @@ export const rmCommand = /* @__PURE__ */ defineCommand("rm", async (context, arg
   return 0;
 });
 
-export const rmdirCommand = /* @__PURE__ */ defineCommand("rmdir", async (context, argv) => {
-  if (argv.length === 0) throw new VfsError("EINVAL", "rmdir: missing operand");
+export const rmdirCommand = /* @__PURE__ */ defineApplet(RMDIR, async (context, argv) => {
+  if (argv.length === 0) throw appletUsageError(RMDIR, "missing operand");
   for (const path of argv) {
     const normalized = commandPath(context, path);
     const stat = context.fileSystem.stat(normalized);
@@ -143,30 +240,30 @@ function destinationPath(
   return stat.kind === "directory" ? `${target === "/" ? "" : target}/${basename(source)}` : target;
 }
 
-export const mvCommand = /* @__PURE__ */ defineCommand("mv", async (context, argv) => {
-  const parsed = parseUtilityOptions("mv", argv, MV_OPTIONS);
+export const mvCommand = /* @__PURE__ */ defineApplet(MV, async (context, argv) => {
+  const parsed = parseAppletOptions(MV, argv);
   const replace = parsed.options.some((option) => option.name === "force");
   const values = parsed.operands;
-  if (values.length !== 2) throw new VfsError("EINVAL", "mv: requires source and destination");
+  if (values.length !== 2) throw appletUsageError(MV, "requires source and destination");
   const source = commandPath(context, values[0]);
   const target = destinationPath(context, source, values[1] ?? "");
   await context.fileSystem.move(source, target, { replace });
   return 0;
 });
 
-export const cpCommand = /* @__PURE__ */ defineCommand("cp", async (context, argv) => {
-  const parsed = parseUtilityOptions("cp", argv, CP_OPTIONS);
+export const cpCommand = /* @__PURE__ */ defineApplet(CP, async (context, argv) => {
+  const parsed = parseAppletOptions(CP, argv);
   const replace = parsed.options.some((option) => option.name === "force");
   const recursive = parsed.options.some((option) => option.name === "recursive");
   const values = parsed.operands;
-  if (values.length !== 2) throw new VfsError("EINVAL", "cp: requires source and destination");
+  if (values.length !== 2) throw appletUsageError(CP, "requires source and destination");
   const source = commandPath(context, values[0]);
   const target = destinationPath(context, source, values[1] ?? "");
   await context.fileSystem.copy(source, target, { replace, recursive });
   return 0;
 });
 
-export const findCommand = /* @__PURE__ */ defineCommand("find", async (context, argv, fds) => {
+export const findCommand = /* @__PURE__ */ defineApplet(FIND, async (context, argv, fds) => {
   const roots: string[] = [];
   let name: string | undefined;
   let type: "file" | "directory" | undefined;
@@ -179,20 +276,20 @@ export const findCommand = /* @__PURE__ */ defineCommand("find", async (context,
     const option = argv[index++];
     if (option === "-name") {
       name = argv[index++];
-      if (name === undefined) throw new VfsError("EINVAL", "find: -name requires a pattern");
+      if (name === undefined) throw appletUsageError(FIND, "-name requires a pattern");
     } else if (option === "-type") {
       const value = argv[index++];
       if (value === "f") type = "file";
       else if (value === "d") type = "directory";
-      else throw new VfsError("EINVAL", "find: -type must be f or d");
+      else throw appletUsageError(FIND, "-type must be f or d");
     } else if (option === "-maxdepth") {
       const value = argv[index++];
       if (value === undefined || !/^[0-9]+$/u.test(value)) {
-        throw new VfsError("EINVAL", "find: -maxdepth requires a non-negative integer");
+        throw appletUsageError(FIND, "-maxdepth requires a non-negative integer");
       }
       maxDepth = Number(value);
     } else if (option === "-print") continue;
-    else throw new VfsError("EINVAL", `find: unsupported expression ${option ?? ""}`);
+    else throw appletUsageError(FIND, `unsupported expression ${option ?? ""}`);
   }
   const output = new BufferedTextWriter(context, fds[1]);
   try {
@@ -226,18 +323,18 @@ function statText(stat: VfsStat): string {
   ].join("\n")}\n`;
 }
 
-export const statCommand = /* @__PURE__ */ defineCommand("stat", async (context, argv, fds) => {
-  if (argv.length === 0) throw new VfsError("EINVAL", "stat: missing operand");
+export const statCommand = /* @__PURE__ */ defineApplet(STAT, async (context, argv, fds) => {
+  if (argv.length === 0) throw appletUsageError(STAT, "missing operand");
   for (const path of argv) {
     await writeText(fds[1], statText(context.fileSystem.stat(commandPath(context, path))));
   }
   return 0;
 });
 
-export const chmodCommand = /* @__PURE__ */ defineCommand("chmod", async (context, argv) => {
+export const chmodCommand = /* @__PURE__ */ defineApplet(CHMOD, async (context, argv) => {
   const [modeValue, ...paths] = argv;
   if (modeValue === undefined || paths.length === 0 || !/^[0-7]{3,4}$/u.test(modeValue)) {
-    throw new VfsError("EINVAL", "chmod: requires an octal mode and paths");
+    throw appletUsageError(CHMOD, "requires an octal mode and paths");
   }
   const permission = Number.parseInt(modeValue, 8);
   for (const path of paths) {
@@ -250,7 +347,7 @@ export const chmodCommand = /* @__PURE__ */ defineCommand("chmod", async (contex
   return 0;
 });
 
-export const duCommand = /* @__PURE__ */ defineCommand("du", async (context, argv, fds) => {
+export const duCommand = /* @__PURE__ */ defineApplet(DU, async (context, argv, fds) => {
   const paths = argv.length === 0 ? ["."] : [...argv];
   for (const path of paths) {
     const normalized = commandPath(context, path);
@@ -264,7 +361,7 @@ export const duCommand = /* @__PURE__ */ defineCommand("du", async (context, arg
   return 0;
 });
 
-export const treeCommand = /* @__PURE__ */ defineCommand("tree", async (context, argv, fds) => {
+export const treeCommand = /* @__PURE__ */ defineApplet(TREE, async (context, argv, fds) => {
   const rootValue = argv[0] ?? ".";
   const root = commandPath(context, rootValue);
   const entries = context.fileSystem.find({ path: root, includeRoot: true });
@@ -283,28 +380,25 @@ export const treeCommand = /* @__PURE__ */ defineCommand("tree", async (context,
   return 0;
 });
 
-export const basenameCommand = /* @__PURE__ */ defineCommand(
-  "basename",
+export const basenameCommand = /* @__PURE__ */ defineApplet(
+  BASENAME,
   async (_context, argv, fds) => {
-    if (argv.length !== 1) throw new VfsError("EINVAL", "basename: requires one path");
+    if (argv.length !== 1) throw appletUsageError(BASENAME, "requires one path");
     await writeText(fds[1], `${basename(argv[0] ?? "")}\n`);
     return 0;
   },
 );
 
-export const dirnameCommand = /* @__PURE__ */ defineCommand(
-  "dirname",
-  async (_context, argv, fds) => {
-    if (argv.length !== 1) throw new VfsError("EINVAL", "dirname: requires one path");
-    await writeText(fds[1], `${dirname(argv[0] ?? "")}\n`);
-    return 0;
-  },
-);
+export const dirnameCommand = /* @__PURE__ */ defineApplet(DIRNAME, async (_context, argv, fds) => {
+  if (argv.length !== 1) throw appletUsageError(DIRNAME, "requires one path");
+  await writeText(fds[1], `${dirname(argv[0] ?? "")}\n`);
+  return 0;
+});
 
-export const realpathCommand = /* @__PURE__ */ defineCommand(
-  "realpath",
+export const realpathCommand = /* @__PURE__ */ defineApplet(
+  REALPATH,
   async (context, argv, fds) => {
-    if (argv.length === 0) throw new VfsError("EINVAL", "realpath: missing operand");
+    if (argv.length === 0) throw appletUsageError(REALPATH, "missing operand");
     for (const path of argv) {
       const normalized = normalizePath(path, context.session.cwd);
       context.fileSystem.stat(normalized);
@@ -314,13 +408,11 @@ export const realpathCommand = /* @__PURE__ */ defineCommand(
   },
 );
 
-export const mktempCommand = /* @__PURE__ */ defineCommand("mktemp", async (context, argv, fds) => {
-  if (argv.length > 1) throw new VfsError("EINVAL", "mktemp: accepts at most one template");
+export const mktempCommand = /* @__PURE__ */ defineApplet(MKTEMP, async (context, argv, fds) => {
+  if (argv.length > 1) throw appletUsageError(MKTEMP, "accepts at most one template");
   const template = argv[0] ?? "tmp.XXXXXX";
-  if (template.startsWith("-"))
-    throw new VfsError("EINVAL", `mktemp: unsupported option ${template}`);
-  if (!template.includes("XXXXXX"))
-    throw new VfsError("EINVAL", "mktemp: template must contain XXXXXX");
+  if (template.startsWith("-")) throw appletUsageError(MKTEMP, `unsupported option ${template}`);
+  if (!template.includes("XXXXXX")) throw appletUsageError(MKTEMP, "template must contain XXXXXX");
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const suffix = crypto.randomUUID().replaceAll("-", "").slice(0, 6);
     const path = commandPath(context, template.replace("XXXXXX", suffix));
@@ -335,8 +427,8 @@ export const mktempCommand = /* @__PURE__ */ defineCommand("mktemp", async (cont
   throw new VfsError("EEXIST", "mktemp: could not create a unique file");
 });
 
-export const fileCommand = /* @__PURE__ */ defineCommand("file", async (context, argv, fds) => {
-  if (argv.length === 0) throw new VfsError("EINVAL", "file: missing operand");
+export const fileCommand = /* @__PURE__ */ defineApplet(FILE, async (context, argv, fds) => {
+  if (argv.length === 0) throw appletUsageError(FILE, "missing operand");
   for (const path of argv) {
     const stat = context.fileSystem.stat(commandPath(context, path));
     const description =

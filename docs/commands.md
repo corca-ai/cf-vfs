@@ -348,6 +348,28 @@ the smallest registry they need. The dedicated `ls` subpath and ordinary
 `cat`/`grep` barrel imports are covered by bundle tests proving unrelated
 command implementations are absent; the default preset is covered separately.
 
+### Applet specifications and the multicall resolver
+
+Every shipped command is an *applet*: one implementation described by a
+declarative `AppletSpec` that carries the canonical name, any extra spellings,
+the operand syntax used in a usage diagnostic, a one-line summary, and the
+option table the applet scans. `@corca-ai/cf-vfs/shell/commands/applet` publishes
+that contract — `defineApplet`, `parseAppletOptions`, `appletUsageError`,
+`formatAppletUsage`, and `createAppletRegistry` — and imports no applet, so a
+consumer can build its own registry without pulling the utility set.
+
+`Shell` resolves a command name through that registry. A BusyBox-style multicall
+lookup accepts the canonical name, any declared alias, and the virtual applet
+directories `/bin` and `/usr/bin`, so `cat`, `/bin/cat`, and `/usr/bin/cat` are
+the same implementation. Resolution is a literal directory-prefix match, never a
+namespace lookup: no SQLite row or R2 object backs those spellings, a VFS file
+written at `/bin/cat` does not shadow the applet, and an applet path performs no
+storage work. Diagnostics always name the canonical applet, and
+`ShellPolicy.allowedCommands` is matched against that canonical name, so an
+allowlist entry covers every spelling of the same implementation. A shell
+function still takes precedence over any applet spelling. Any other absolute
+path remains `command not found` with status 127.
+
 | Registry group | Available commands and principal options |
 | --- | --- |
 | shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (`-e/+e`, `-o/+o errexit`, `-u/+u`, `-o/+o nounset`, `-o/+o pipefail`), `test`, `[` |
@@ -383,8 +405,11 @@ atomic VFS commits buffer only at their semantic barriers.
 
 `seq` operands are strict decimal integers, so a leading `-` before digits is
 an operand rather than an option cluster. Bash arithmetic expressions, floating
-point, and format strings are outside the profile. `base64` uses the standard
-alphabet; decoding rejects invalid input instead of guessing. `env` prints only
+point, and format strings are outside the profile. `-s` joins values and the
+sequence still ends with exactly one newline, so the default separator yields
+one record per value and an empty range prints nothing. `base64` uses the
+standard alphabet; decoding rejects invalid input instead of guessing. `-w 0`
+disables wrapping entirely, including the trailing newline. `env` prints only
 names matching `[A-Za-z_][A-Za-z0-9_]*` in UTF-8 byte order, so positional
 parameters such as `0` are absent; `-i`, `-u`, `-0`, and the bare `-` form are
 outside the profile.
