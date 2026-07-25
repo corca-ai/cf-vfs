@@ -114,7 +114,7 @@ describe("opaque content", () => {
     expect(refused.stderr).toContain("opaque R2 content is not available");
     // The entry is still named and described, which is what `metadata` means.
     expect((await plain.executeText({ script: "ls /" })).stdout).toBe(
-      "blob.txt\ndev\ninline.txt\n",
+      "bin\nblob.txt\ndev\ninline.txt\nusr\n",
     );
     expect((await plain.executeText({ script: "stat -c '%s %F' /blob.txt" })).stdout).toBe(
       "17 regular file\n",

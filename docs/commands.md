@@ -677,6 +677,26 @@ descend into it: what is inside are descriptor paths a recursive reader cannot
 open, so `grep -r /` would collect errors instead of results. Naming `/dev`
 directly still lists everything in it.
 
+### The applet directories
+
+`/bin` and `/usr/bin` are reserved the same way. They resolve commands without
+namespace rows — that is what makes `/bin/cat` run whether or not PATH lookup
+is enabled — and they are listable, so `which cat` answering `/bin/cat` and
+`ls /bin` showing it are the same fact rather than two that disagree.
+
+They hold no rows, which is the point: a row could be removed while `/bin/cat`
+kept working. Reservation gives the same guarantee without the invisibility —
+`rm -r /bin`, `mkdir /bin/x`, and `touch /usr/bin/y` are refused.
+
+An applet path reports as a regular file with mode `755` and size zero, so
+`test -x /bin/cat` is true and `test -f` is too. Reading one is refused: there
+is no file behind it, and answering with nothing would read as an empty file.
+
+Only names that resolve as a path are listed. A session built-in such as `cd`
+has no program form, so it is absent rather than advertised as a `/bin/cd`
+that would exit 127. `.` is a real applet whose path spelling collapses onto
+the directory itself, so it cannot be an entry in it.
+
 `/dev/null` discards what is written to it and reads as empty. Nothing is
 buffered and nothing extra is charged: the bytes were already metered when
 whatever produced them ran, so `cmd > /dev/null` costs exactly what

@@ -50,13 +50,28 @@ const DEVICE_MODE = 0o020000 | 0o666;
 const DEVICE_DIRECTORY_MODE = 0o040755;
 
 /** `/dev` and `/dev/fd`, which exist so the paths under them have a parent. */
-/** The reserved root, which is a child of `/` that no row holds. */
-const DEVICE_ROOT = "/dev";
-
 const DEVICE_DIRECTORIES: Readonly<Record<string, readonly string[]>> = {
   "/dev": ["fd", "null", "stderr", "stdin", "stdout"],
   "/dev/fd": ["0", "1", "2"],
 };
+
+/** The mode an applet path reports: a regular file anyone may execute. */
+const APPLET_MODE = 0o100755;
+
+export interface ReservedPathOptions {
+  /**
+   * Applet directories and the command names they resolve.
+   *
+   * Supplied rather than discovered, because which names a session may run is
+   * a policy question the shell has already answered. Listing one that would
+   * be refused would advertise a command that cannot run — the same mistake
+   * discovery makes when it reads the registry instead of the resolution.
+   */
+  readonly applets?: {
+    readonly directories: readonly string[];
+    readonly names: readonly string[];
+  };
+}
 
 /**
  * Names the device at a path, if the path is one.
@@ -67,11 +82,6 @@ const DEVICE_DIRECTORIES: Readonly<Record<string, readonly string[]>> = {
  */
 export function shellDevice(path: string): ShellDevice | undefined {
   return Object.hasOwn(DEVICES, path) ? DEVICES[path as keyof typeof DEVICES] : undefined;
-}
-
-/** Whether a path is inside the reserved device namespace at all. */
-function reserved(path: string): boolean {
-  return path === "/dev" || path.startsWith("/dev/");
 }
 
 function deviceStat(path: string, device: ShellDevice): VfsStat {
@@ -90,6 +100,22 @@ function deviceStat(path: string, device: ShellDevice): VfsStat {
     // looked usable would invite a caller to guard on nothing.
     mutationToken: `vfs:device:${device}`,
   };
+}
+
+/**
+ * What an applet path reports.
+ *
+ * A regular file anyone may execute, with no content: `test -x /bin/cat` is
+ * true because running it is exactly what the path is for, and its size is
+ * zero because there is no file behind it to have a size.
+ */
+function appletStat(path: string): VfsStat {
+  return {
+    ...directoryStat(path),
+    kind: "file",
+    contentClass: "inline",
+    mode: APPLET_MODE,
+  } as VfsStat;
 }
 
 function directoryStat(path: string): VfsStat {
@@ -127,7 +153,7 @@ async function drain(body: ByteBody): Promise<void> {
 }
 
 /**
- * The filesystem view a shell sees, with the device paths answered in front.
+ * The filesystem view a shell sees, with the reserved paths answered in front.
  *
  * A decorator rather than a branch inside the policy wrapper, because the two
  * views must not be able to disagree. When only some operations knew about
@@ -136,17 +162,58 @@ async function drain(body: ByteBody): Promise<void> {
  * `mkdir -p /dev/null` produced something `rmdir` could never remove. Here
  * every method that could reach `/dev` goes through one place.
  *
- * The whole of `/dev` is reserved: it is not a directory anything can create
- * entries in, and the seven names in it cannot be created, moved, or removed.
- * Reads and writes are answered; everything that would change the namespace is
- * refused. That is the rule, and it is the same rule for every method.
+ * Two kinds of path are reserved, under one rule. `/dev` holds the devices.
+ * `/bin` and `/usr/bin` hold the applets — they resolve commands without
+ * namespace rows, and listing them is what makes `which cat` answering
+ * `/bin/cat` and `ls /bin` showing it the same fact. Neither is a directory
+ * anything can create entries in, and nothing in either can be created, moved,
+ * or removed. Reads and writes are answered; everything that would change the
+ * namespace is refused. That is the rule, and it is the same rule for every
+ * method.
  */
-export class DeviceFileSystem implements ShellFileSystem {
+export class ReservedPathFileSystem implements ShellFileSystem {
   readonly #inner: ShellFileSystem;
+  /** Reserved directory to the names it holds, including implied parents. */
+  readonly #directories: ReadonlyMap<string, readonly string[]>;
+  /** Reserved paths that are applets rather than devices or directories. */
+  readonly #applets: ReadonlySet<string>;
 
-  constructor(inner: ShellFileSystem) {
+  constructor(inner: ShellFileSystem, options: ReservedPathOptions = {}) {
     this.#inner = inner;
+    const directories = new Map<string, string[]>();
+    const add = (parent: string, name: string): void => {
+      const existing = directories.get(parent);
+      if (existing === undefined) directories.set(parent, [name]);
+      else if (!existing.includes(name)) existing.push(name);
+    };
+    for (const [path, names] of Object.entries(DEVICE_DIRECTORIES)) {
+      directories.set(path, [...names]);
+    }
+    const applets = new Set<string>();
+    for (const directory of options.applets?.directories ?? []) {
+      // A nested applet directory implies its parents: `/usr/bin` cannot be
+      // listable while `/usr` reports nothing.
+      const segments = directory.split("/").filter((segment) => segment.length > 0);
+      for (let depth = 0; depth < segments.length; depth += 1) {
+        const parent = depth === 0 ? "/" : `/${segments.slice(0, depth).join("/")}`;
+        add(parent, segments[depth] ?? "");
+        if (!directories.has(parent) && parent !== "/") directories.set(parent, []);
+      }
+      directories.set(directory, [...(options.applets?.names ?? [])]);
+      for (const name of options.applets?.names ?? []) applets.add(`${directory}/${name}`);
+    }
+    // The root's own children are implied, never stored: `/` is a real
+    // directory and its rows come from the namespace.
+    add("/", "dev");
+    this.#rootNames = directories.get("/") ?? ["dev"];
+    directories.delete("/");
+    for (const names of directories.values()) names.sort();
+    this.#directories = directories;
+    this.#applets = applets;
   }
+
+  /** Reserved names that are children of the root. */
+  readonly #rootNames: readonly string[];
 
   inspectWriteTarget(path: string): VfsStat | null {
     const at = this.#statAt(path);
@@ -166,17 +233,21 @@ export class DeviceFileSystem implements ShellFileSystem {
   }
 
   /** The device or reserved directory a path names literally, if any. */
-  #at(path: string): { path: string; device?: ShellDevice; directory?: true } | undefined {
+  #at(
+    path: string,
+  ): { path: string; device?: ShellDevice; applet?: true; directory?: true } | undefined {
     const normalized = normalizePath(path);
     const device = shellDevice(normalized);
-    if (device !== undefined) {
-      // A trailing slash asserts a directory, and a device is not one.
+    if (device !== undefined || this.#applets.has(normalized)) {
+      // A trailing slash asserts a directory, and neither of these is one.
       if (pathRequiresDirectory(path)) {
         throw new VfsError("ENOTDIR", "not a directory", normalized);
       }
-      return { path: normalized, device };
+      return device === undefined
+        ? { path: normalized, applet: true }
+        : { path: normalized, device };
     }
-    if (Object.hasOwn(DEVICE_DIRECTORIES, normalized)) return { path: normalized, directory: true };
+    if (this.#directories.has(normalized)) return { path: normalized, directory: true };
     return undefined;
   }
 
@@ -188,7 +259,9 @@ export class DeviceFileSystem implements ShellFileSystem {
    * Only the operations that follow links ask this — `rm` and `mv` name the
    * link itself and use the literal check above.
    */
-  #reached(path: string): { path: string; device?: ShellDevice; directory?: true } | undefined {
+  #reached(
+    path: string,
+  ): { path: string; device?: ShellDevice; applet?: true; directory?: true } | undefined {
     const direct = this.#at(path);
     if (direct !== undefined) return direct;
     let resolved: string;
@@ -205,14 +278,18 @@ export class DeviceFileSystem implements ShellFileSystem {
   /** Refuses a namespace change anywhere in the reserved device paths. */
   #refuseMutation(path: string): void {
     const normalized = normalizePath(path);
-    if (!reserved(normalized)) return;
-    throw new VfsError("EACCES", "the device namespace cannot be changed", normalized);
+    const root = this.#rootNames.find(
+      (name) => normalized === `/${name}` || normalized.startsWith(`/${name}/`),
+    );
+    if (root === undefined) return;
+    throw new VfsError("EACCES", `/${root} is reserved and cannot be changed`, normalized);
   }
 
   #statAt(path: string, follow = true): VfsStat | undefined {
     const at = follow ? this.#reached(path) : this.#at(path);
     if (at === undefined) return undefined;
-    return at.device === undefined ? directoryStat(at.path) : deviceStat(at.path, at.device);
+    if (at.device !== undefined) return deviceStat(at.path, at.device);
+    return at.applet === true ? appletStat(at.path) : directoryStat(at.path);
   }
 
   stat(path: string): VfsStat {
@@ -245,6 +322,10 @@ export class DeviceFileSystem implements ShellFileSystem {
   readFile(path: string): InlineReadResult {
     const at = this.#reached(path);
     if (at === undefined) return this.#inner.readFile(path);
+    if (at.applet === true) {
+      // The path exists and runs; it is not a file with bytes behind it.
+      throw new VfsError("ENOTSUP", "an applet has no file content to read", at.path);
+    }
     if (at.device === undefined) throw new VfsError("EISDIR", "is a directory", at.path);
     if (at.device !== "null") {
       // A descriptor has no file behind it to read back, and this layer does
@@ -302,7 +383,7 @@ export class DeviceFileSystem implements ShellFileSystem {
     const at = this.#at(path);
     if (at !== undefined) {
       if (at.device !== undefined) throw new VfsError("ENOTDIR", "not a directory", at.path);
-      const names = DEVICE_DIRECTORIES[at.path] ?? [];
+      const names = this.#directories.get(at.path) ?? [];
       return names.map((name) => {
         const child = at.path === "/" ? `/${name}` : `${at.path}/${name}`;
         return this.#statAt(child) ?? directoryStat(child);
@@ -310,13 +391,18 @@ export class DeviceFileSystem implements ShellFileSystem {
     }
     const entries = this.#inner.list(path);
     if (normalizePath(path) !== "/") return entries;
-    // `/dev` is a child of the root that no row holds. Leaving it out here
-    // while answering for it everywhere else is exactly the disagreement the
-    // reservation exists to prevent: it would be a directory you can enter,
+    // The reserved children of the root hold no rows. Leaving them out here
+    // while answering for them everywhere else is exactly the disagreement the
+    // reservation exists to prevent: they would be directories you can enter,
     // stat, and read, but never see.
-    return [...entries, directoryStat(DEVICE_ROOT)].sort((left, right) =>
+    return [...entries, ...this.#rootEntries()].sort((left, right) =>
       left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
     );
+  }
+
+  /** The reserved directories that are children of the root. */
+  #rootEntries(): VfsStat[] {
+    return this.#rootNames.map((name) => directoryStat(`/${name}`));
   }
 
   listPage(path: string, options?: PageOptions): EntryPage {
@@ -326,13 +412,15 @@ export class DeviceFileSystem implements ShellFileSystem {
     }
     const page = this.#inner.listPage(path, options);
     const cursor = options?.cursor ?? "";
-    // The cursor is the last path returned and the order is by path, so the
-    // synthetic entry belongs in exactly one page: the first one that has not
-    // already passed it. Injecting it anywhere else would return it twice or
+    // The cursor is the last path returned and the order is by path, so each
+    // synthetic entry belongs in exactly one page: the first that has not
+    // already passed it. Injecting one anywhere else would return it twice or
     // not at all.
-    if (normalizePath(path) !== "/" || cursor >= DEVICE_ROOT) return page;
-    const limit = options?.limit ?? page.entries.length + 1;
-    const merged = [...page.entries, directoryStat(DEVICE_ROOT)].sort((left, right) =>
+    if (normalizePath(path) !== "/") return page;
+    const pending = this.#rootEntries().filter((entry) => entry.path > cursor);
+    if (pending.length === 0) return page;
+    const limit = options?.limit ?? page.entries.length + pending.length;
+    const merged = [...page.entries, ...pending].sort((left, right) =>
       left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
     );
     const kept = merged.slice(0, limit);
@@ -349,10 +437,10 @@ export class DeviceFileSystem implements ShellFileSystem {
   find(options: FindOptions): VfsStat[] {
     if (this.#at(options.path) !== undefined) return this.#findHere(options);
     const entries = this.#inner.find(options);
-    const root = this.#deviceRootFor(options);
-    return root === undefined
+    const roots = this.#reservedRootsFor(options);
+    return roots.length === 0
       ? entries
-      : [...entries, root].sort((left, right) =>
+      : [...entries, ...roots].sort((left, right) =>
           left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
         );
   }
@@ -362,11 +450,11 @@ export class DeviceFileSystem implements ShellFileSystem {
       return { entries: this.#findHere(options), nextCursor: null, scanned: 0 };
     }
     const page = this.#inner.findPage(options);
-    const root = this.#deviceRootFor(options);
     const cursor = options.cursor ?? "";
-    if (root === undefined || cursor >= DEVICE_ROOT) return page;
-    const limit = options.limit ?? page.entries.length + 1;
-    const merged = [...page.entries, root].sort((left, right) =>
+    const pending = this.#reservedRootsFor(options).filter((entry) => entry.path > cursor);
+    if (pending.length === 0) return page;
+    const limit = options.limit ?? page.entries.length + pending.length;
+    const merged = [...page.entries, ...pending].sort((left, right) =>
       left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
     );
     const kept = merged.slice(0, limit);
@@ -386,15 +474,14 @@ export class DeviceFileSystem implements ShellFileSystem {
    * so `grep -r /` would collect errors rather than results. Naming `/dev`
    * directly still lists them.
    */
-  #deviceRootFor(options: FindOptions): VfsStat | undefined {
-    if (normalizePath(options.path) !== "/") return undefined;
-    if ((options.maxDepth ?? Number.POSITIVE_INFINITY) < 1) return undefined;
-    if (options.type !== undefined && options.type !== "directory") return undefined;
-    if (options.name !== undefined && !matchesGlob("dev", options.name)) return undefined;
-    if (options.pathGlob !== undefined && !matchesGlob(DEVICE_ROOT, options.pathGlob)) {
-      return undefined;
-    }
-    return directoryStat(DEVICE_ROOT);
+  #reservedRootsFor(options: FindOptions): VfsStat[] {
+    if (normalizePath(options.path) !== "/") return [];
+    if ((options.maxDepth ?? Number.POSITIVE_INFINITY) < 1) return [];
+    if (options.type !== undefined && options.type !== "directory") return [];
+    return this.#rootNames
+      .filter((name) => options.name === undefined || matchesGlob(name, options.name))
+      .filter((name) => options.pathGlob === undefined || matchesGlob(`/${name}`, options.pathGlob))
+      .map((name) => directoryStat(`/${name}`));
   }
 
   #findHere(options: FindOptions): VfsStat[] {

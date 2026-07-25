@@ -2313,8 +2313,9 @@ describe("argument, sequence, encoding, and environment utilities", () => {
     {
       name: "xargs charges the shared mutation budget through the invoked command",
       script: "printf '/a\\n/b\\n' | xargs -n 1 touch; ls /",
-      // `dev` is the reserved device directory, which every root listing shows.
-      stdout: "a\nb\ndev\n",
+      // The reserved directories — the devices and the applet paths — are in
+      // every root listing, because they answer everywhere else.
+      stdout: "a\nb\nbin\ndev\nusr\n",
     },
     {
       name: "seq counts from one when given a single operand",
