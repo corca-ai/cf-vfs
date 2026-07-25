@@ -1,4 +1,9 @@
 export * from "./budget.js";
+export type {
+  ContentBody,
+  OpaqueContentAccess,
+  ShellContentReader,
+} from "./content.js";
 export * from "./events.js";
 export * from "./parser.js";
 export * from "./shell.js";

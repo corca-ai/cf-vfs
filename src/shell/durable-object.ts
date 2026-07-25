@@ -1,8 +1,9 @@
 import { VfsError } from "../core/errors.js";
-import type { DurableObjectFileSystemOptions } from "../vfs/do-sql.js";
+import type { DurableObjectFileSystem, DurableObjectFileSystemOptions } from "../vfs/do-sql.js";
 import { VfsDurableObject } from "../vfs/durable-object.js";
 import type { VfsEvent } from "../vfs/events.js";
 import { rpcByteBody, rpcString } from "../vfs/rpc-validation.js";
+import type { ShellContentReader } from "./content.js";
 import type { ShellEvent } from "./events.js";
 import { Shell } from "./shell.js";
 import type {
@@ -16,6 +17,15 @@ import type {
 
 export interface ShellDurableObjectOptions extends Omit<DurableObjectFileSystemOptions, "onEvent"> {
   commands: readonly ShellCommand[];
+  /**
+   * Lets streaming commands read opaque R2 bodies.
+   *
+   * Supplied as a factory because the reader needs the filesystem this object
+   * owns, which does not exist until the constructor has run. Handing one in
+   * is only half the opt-in; `policy.opaqueContent` decides whether a session
+   * may use it.
+   */
+  content?: (fileSystem: DurableObjectFileSystem) => ShellContentReader;
   policy?: ShellPolicy;
   limits?: Partial<ShellLimits>;
   /** Observes storage and execution events from this object's single hook. */
@@ -107,6 +117,7 @@ export abstract class ShellDurableObject<Environment> extends VfsDurableObject<E
     this.shell = new Shell({
       fileSystem: this.fileSystem,
       commands: options.commands,
+      ...(options.content === undefined ? {} : { content: options.content(this.fileSystem) }),
       ...(options.policy === undefined ? {} : { policy: options.policy }),
       ...(options.limits === undefined ? {} : { limits: options.limits }),
       ...(options.onEvent === undefined ? {} : { onEvent: options.onEvent }),

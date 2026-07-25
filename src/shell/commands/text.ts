@@ -3,6 +3,7 @@ import { createLineDiff, renderLineDiff } from "../../core/line-diff.js";
 import { compareUtf8 } from "../../core/path.js";
 import { compilePosixRegex } from "../../core/posix-regex.js";
 import { applyUnifiedPatch } from "../../core/unified-patch.js";
+import type { ByteRange } from "../../vfs/types.js";
 import {
   type AppletSpec,
   type AppletSpecWithOptions,
@@ -562,7 +563,13 @@ export const headCommand = /* @__PURE__ */ defineApplet(HEAD, async (context, ar
       reader.releaseLock();
     }
   };
-  for await (const input of inputStreams(context, options.paths, fds[0])) {
+  // `head -c N` needs only the first N bytes, and a store that can serve a
+  // range should not be asked to send more. The request is advisory: a body
+  // that arrives whole is still truncated below, so a store that ignores
+  // ranges gives the same answer for more bytes.
+  const wanted: ByteRange | undefined =
+    options.bytes && options.count > 0 ? { offset: 0, length: options.count } : undefined;
+  for await (const input of inputStreams(context, options.paths, fds[0], wanted)) {
     if (options.bytes) {
       await headBytes(input.stream);
       continue;
