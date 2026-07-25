@@ -17,7 +17,8 @@ import {
  * Resolution is a literal directory-prefix match, not a namespace lookup: no
  * SQLite row, R2 object, or `PATH` search backs these spellings. A script that
  * writes a file at `/bin/cat` does not shadow the applet, and removing one
- * cannot break command resolution.
+ * cannot break command resolution. The match is deliberately literal, so a
+ * duplicated separator such as `/bin//cat` or `//bin/cat` does not resolve.
  */
 export const APPLET_DIRECTORIES: readonly string[] = ["/bin", "/usr/bin"];
 
@@ -47,6 +48,15 @@ export interface AppletSpec<Name extends string = string> {
   readonly usage: string;
   /** One-line description for command discovery and help output. */
   readonly summary: string;
+  /**
+   * Marks a shell built-in, which no virtual applet directory exposes.
+   *
+   * Linux has no `/bin/cd` or `/bin/export`, and an applet that changes the
+   * calling session cannot be a separate program. Keeping those out of
+   * `/bin` and `/usr/bin` means a later filesystem profile can list those
+   * directories without inventing entries resolution would not accept.
+   */
+  readonly builtin?: true;
   /** Option table, when the applet uses the shared scanner. */
   readonly options?: UtilityOptionParserConfig<Name>;
 }
@@ -83,15 +93,20 @@ export function parseAppletOptions<Name extends string>(
   spec: AppletSpecWithOptions<Name>,
   argv: readonly string[],
 ): ParsedUtilityOptions<Name> {
-  return parseUtilityOptions(spec.name, argv, spec.options);
+  return parseUtilityOptions(spec.name, argv, spec.options, formatAppletUsage(spec));
 }
 
-/** Builds the standard `name: message` usage failure, which exits with 2. */
+/**
+ * Builds the standard usage failure, which exits with status 2.
+ *
+ * The diagnostic names the applet, states what was wrong, and ends with the
+ * declared synopsis, so a caller never has to guess the accepted spelling.
+ */
 export function appletUsageError(spec: AppletSpec, message: string): VfsError {
-  return new VfsError("EINVAL", `${spec.name}: ${message}`);
+  return new VfsError("EINVAL", `${spec.name}: ${message}\n${formatAppletUsage(spec)}`);
 }
 
-/** Renders the one-line usage synopsis used by help and usage diagnostics. */
+/** Renders the one-line synopsis appended to a usage diagnostic. */
 export function formatAppletUsage(spec: AppletSpec): string {
   return spec.usage === "" ? `usage: ${spec.name}` : `usage: ${spec.name} ${spec.usage}`;
 }
@@ -127,21 +142,26 @@ export interface AppletRegistry {
 }
 
 export function createAppletRegistry(commands: readonly ShellCommand[]): AppletRegistry {
+  // Snapshot the caller's array so `commands` and `lookup` can never disagree.
+  const registered = [...commands];
   const byName = new Map<string, ShellCommand>();
-  for (const command of commands) {
+  const byPath = new Map<string, ShellCommand>();
+  for (const command of registered) {
     const spec = (command as Partial<ShellApplet>).spec;
-    for (const name of [command.name, ...(spec?.aliases ?? [])]) {
+    const aliases = spec?.aliases ?? [];
+    for (const name of [command.name, ...aliases]) {
       if (byName.has(name)) throw new VfsError("EINVAL", `duplicate command: ${name}`);
       byName.set(name, command);
+      if (spec?.builtin !== true) byPath.set(name, command);
     }
   }
   return {
-    commands,
+    commands: registered,
     lookup(name: string): ShellCommand | undefined {
       const direct = byName.get(name);
       if (direct !== undefined) return direct;
       const base = appletPathName(name);
-      return base === undefined ? undefined : byName.get(base);
+      return base === undefined ? undefined : byPath.get(base);
     },
   };
 }

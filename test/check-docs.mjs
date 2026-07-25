@@ -47,7 +47,23 @@ assert(combined.includes("BASH_COMPATIBILITY_VERSION"));
 assert(combined.toLowerCase().includes("atomic redirection divergence"));
 assert(combined.includes("opaque-gc-batch") || combined.includes("64-object GC batch"));
 
+// Every applet in the convenience preset must appear in the command reference.
+// The registry is now self-describing, so an undocumented addition is a
+// failure rather than something a reader discovers at runtime.
+const { defaultShellCommands } = await import(
+  new URL("../dist/shell/commands/default.js", import.meta.url).href
+);
+const commandReference = await readFile(resolve(root.pathname, "docs/commands.md"), "utf8");
+const documented = new Set(
+  [...commandReference.matchAll(/`([^`\s]+)[^`]*`/g)].map((match) => match[1]),
+);
+for (const { name } of defaultShellCommands) {
+  assert(documented.has(name), `docs/commands.md does not document the ${name} applet`);
+}
+
 const claude = await lstat(new URL("../CLAUDE.md", import.meta.url));
 assert(claude.isSymbolicLink());
 assert.equal(await readlink(new URL("../CLAUDE.md", import.meta.url)), "AGENTS.md");
-console.log("documentation links and CLAUDE.md symlink verified");
+console.log(
+  `documentation links, ${defaultShellCommands.length} documented applets, and the CLAUDE.md symlink verified`,
+);

@@ -52,6 +52,20 @@
       "oracle": "coreutils",
       "summary": "diff always emits the unified format used by patch, with no context or ed output modes",
       "reason": "GNU diff defaults to the normal format and selects others by option. cf-vfs documents one format so `diff | patch` composes deterministically."
+    },
+    {
+      "id": "regexp-dialect-is-javascript",
+      "command": "grep, sed",
+      "oracle": "coreutils",
+      "summary": "patterns use JavaScript regular-expression syntax under the Unicode flag, not POSIX basic or extended regular expressions",
+      "reason": "The runtime compiles a pattern with the Workers RegExp engine rather than shipping a POSIX matcher. Literals, `.`, `*`, `^`, `$`, and bracket expressions agree with BRE and are pinned by fixtures, but every other metacharacter differs: `a+` repeats in cf-vfs and is literal in BRE, while `a\\|x` alternates in BRE and is literal here. `grep -E` and a declared BRE translation are follow-up work in #49."
+    },
+    {
+      "id": "sed-replacement-is-literal-text",
+      "command": "sed",
+      "oracle": "coreutils",
+      "summary": "the replacement is literal text with no match reference",
+      "reason": "GNU sed expands `&` to the match and `\\1` to a capture group. This profile writes both literally and escapes JavaScript's `$&`, `$\\`` , `$'`, and `$n` forms so replacement text taken from data can never splice another part of the record into the output. Capture groups and match references are follow-up work in #49."
     }
   ],
   "cases": [
@@ -543,6 +557,76 @@
       },
       "script": "sort in.txt | uniq -c",
       "stdout": "      2 a\n      2 b\n      1 c\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-no-match-exit-status",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "alpha\n"
+      },
+      "script": "grep zzz in.txt",
+      "stdout": "",
+      "exitCode": 1
+    },
+    {
+      "name": "grep-anchored-and-dot",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "abc\nxbc\nabcd\n"
+      },
+      "script": "grep '^a.c$' in.txt",
+      "stdout": "abc\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-bracket-expression",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "ax\nbx\ncx\ndx\n"
+      },
+      "script": "grep '[abc]x' in.txt",
+      "stdout": "ax\nbx\ncx\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-star-repetition",
+      "oracle": "busybox",
+      "files": {
+        "in.txt": "ac\nabc\nabbc\naxc\n"
+      },
+      "script": "grep '^ab*c$' in.txt",
+      "stdout": "ac\nabc\nabbc\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-star-repetition",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "aaa\nbbb\n"
+      },
+      "script": "sed 's/a*/X/' in.txt",
+      "stdout": "X\nXbbb\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-bracket-expression-global",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "abcabc\n"
+      },
+      "script": "sed 's/[ac]/X/g' in.txt",
+      "stdout": "XbXXbX\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-dollar-in-replacement-is-literal",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "secret-token\n"
+      },
+      "script": "sed 's/token/$X/' in.txt",
+      "stdout": "secret-$X\n",
       "exitCode": 0
     }
   ]

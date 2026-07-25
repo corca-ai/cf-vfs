@@ -39,7 +39,7 @@ export const xargsCommand = /* @__PURE__ */ defineApplet(XARGS, async (context, 
   let verbose = false;
   for (const option of parsed.options) {
     if (option.name === "max-args" && "argument" in option) {
-      maxArgs = parseInteger(option.argument, "xargs: -n", 1);
+      maxArgs = parseInteger(option.argument, `${XARGS.name}: -n`, 1);
     }
     if (option.name === "null") nullSeparated = true;
     if (option.name === "no-run-if-empty") skipWhenEmpty = true;

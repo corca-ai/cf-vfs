@@ -114,11 +114,13 @@ Deliberate deterministic choices include:
   syntax. `seq` operands are strict decimal integers rather than Bash
   arithmetic or floating point, and `env` reports only valid variable names in
   UTF-8 byte order;
-- registered applets also answer to `/bin/NAME` and `/usr/bin/NAME`. Those are
-  virtual spellings of one implementation, not namespace entries: they perform
-  no storage work, cannot be created or removed, and are not shadowed by a VFS
-  file at the same path. Diagnostics and `allowedCommands` use the canonical
-  applet name;
+- registered applets, except shell built-ins that change the calling session,
+  also answer to `/bin/NAME` and `/usr/bin/NAME`. Those are virtual spellings of
+  one implementation, not namespace entries: they perform no storage work,
+  cannot be created or removed, and are not shadowed by a VFS file at the same
+  path. The directory match is literal, so `/bin//cat` does not resolve.
+  Diagnostics and `allowedCommands` use the canonical applet name, and a usage
+  diagnostic ends with the applet's declared synopsis;
 - status 2 is syntax/usage, 126 is policy denial, and 127 is command-not-found.
 
 Differential fixtures are pinned against `bash:5.3.3` with the same locale and
@@ -151,6 +153,8 @@ Currently declared divergences:
 | `cut` | `-f` and `-c` accept a comma-separated list of positive integers. A range such as `-c2-4` is a usage error with status 2 rather than an approximation. |
 | `wc` | Multi-field output is single-space separated. GNU right-aligns each count in a width derived from the largest input, which the streaming profile never buffers. Single-field forms such as `wc -l` match exactly. |
 | `diff` | Output is always the unified format `patch` consumes; the normal, context, and `ed` formats are outside the profile. |
+| `grep`, `sed` | Patterns use JavaScript regular-expression syntax under the Unicode flag, not POSIX basic or extended regular expressions. Literals, `.`, `*`, `^`, `$`, and bracket expressions agree with both and are pinned by fixtures; every other metacharacter differs. `a+` repeats here and is a literal plus under POSIX, while `a\|x` alternates under POSIX and is a literal here. |
+| `sed` | The replacement is literal text. GNU expands `&` to the match and `\1` to a capture group; both are written literally here, and JavaScript's `$&`, ``$` ``, `$'`, and `$n` forms are escaped so replacement text taken from data can never splice another part of the record into the output. |
 
 Regenerate with `npm run test:utility-fixtures:regenerate` and review the diff;
 Docker is required only for regeneration.

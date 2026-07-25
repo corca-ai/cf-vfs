@@ -11,6 +11,10 @@ import { createTestFileSystem } from "./helpers/node-sql.js";
  * — rather than elapsed time, so a regression is a deterministic failure in
  * `npm run check` instead of a noisy number in a benchmark report. Wall-clock
  * scenarios stay in `bench/`.
+ *
+ * Every upper bound is paired with a lower bound. An assertion that only caps
+ * counted work is satisfied by zero, so a meter that silently stopped observing
+ * would leave the whole gate green while measuring nothing.
  */
 
 interface SqlMeter {
@@ -76,6 +80,7 @@ describe("output slab batching", () => {
     // handful of slabs. One chunk per record would be three orders of magnitude
     // more and is the regression this guard exists to catch.
     expect(result.bytes).toBeGreaterThan(256 * 1024);
+    expect(result.chunks).toBeGreaterThan(0);
     expect(result.chunks).toBeLessThanOrEqual(Math.ceil(result.bytes / (64 * 1024)) + 1);
   });
 
@@ -86,6 +91,7 @@ describe("output slab batching", () => {
     expect(result.bytes).toBe(200 * 1024);
     // `cat` streams the inline snapshot, so chunk count tracks storage chunking
     // rather than record count.
+    expect(result.chunks).toBeGreaterThan(0);
     expect(result.chunks).toBeLessThanOrEqual(8);
   });
 });
@@ -104,25 +110,41 @@ describe("common-path SQL cost", () => {
     expect(result.stdout).toBe("200\n");
     // One stat for the operand plus one listing query. Anything proportional to
     // the entry count means a per-entry lookup crept back in.
+    expect(meter.statements).toBeGreaterThan(0);
     expect(meter.statements).toBeLessThanOrEqual(6);
+    expect(meter.rows).toBeGreaterThanOrEqual(200);
     expect(meter.rows).toBeLessThanOrEqual(210);
   });
 
-  it("charges no storage work to command resolution", async () => {
+  it("charges no storage work to applet resolution", async () => {
     const { fileSystem, meter } = meteredFileSystem();
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });
+    // Prove the meter observes this filesystem before asserting a zero.
+    await fileSystem.writeFile("/probe", "x");
+    meter.reset();
+    await shell.executeText({ script: "cat /probe" });
+    expect(meter.statements).toBeGreaterThan(0);
+
     meter.reset();
     const result = await shell.executeText({
       script: "index=0; while [ $index -lt 200 ]; do true; index=$((index + 1)); done; echo done",
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe("done\n");
+    // Resolving a registered applet is a JavaScript map lookup. A PATH search
+    // over real namespace entries is a separate, budgeted concern; this guard
+    // covers applet resolution and must keep covering it.
     expect(meter.statements).toBe(0);
   });
 
   it("resolves a virtual applet path with the same storage cost as a bare name", async () => {
     const { fileSystem, meter } = meteredFileSystem();
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });
+    await fileSystem.writeFile("/probe", "x");
+    meter.reset();
+    await shell.executeText({ script: "cat /probe" });
+    expect(meter.statements).toBeGreaterThan(0);
+
     meter.reset();
     await shell.executeText({ script: "echo bare" });
     const bare = meter.statements;
@@ -143,6 +165,7 @@ describe("common-path SQL cost", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe("20\n");
     // A JavaScript directory walk would issue one query per directory.
+    expect(meter.statements).toBeGreaterThan(0);
     expect(meter.statements).toBeLessThanOrEqual(4);
   });
 });

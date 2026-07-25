@@ -26,7 +26,84 @@ function marker(name: string, aliases?: readonly string[]): ShellApplet {
   });
 }
 
+/**
+ * The exact convenience preset. A command silently dropped from
+ * `defaultShellCommands` would otherwise pass every other gate: bundle presets
+ * name only a sample of applets as markers, and the byte budget has slack.
+ */
+const DEFAULT_REGISTRY = [
+  ".",
+  ":",
+  "[",
+  "base64",
+  "basename",
+  "break",
+  "cat",
+  "cd",
+  "chmod",
+  "cmp",
+  "comm",
+  "continue",
+  "cp",
+  "cut",
+  "diff",
+  "dirname",
+  "du",
+  "echo",
+  "env",
+  "exit",
+  "export",
+  "false",
+  "file",
+  "find",
+  "fold",
+  "getopts",
+  "grep",
+  "head",
+  "join",
+  "local",
+  "ls",
+  "mkdir",
+  "mktemp",
+  "mv",
+  "nl",
+  "paste",
+  "patch",
+  "printf",
+  "pwd",
+  "read",
+  "realpath",
+  "return",
+  "rm",
+  "rmdir",
+  "sed",
+  "seq",
+  "set",
+  "sha256sum",
+  "shift",
+  "sort",
+  "source",
+  "stat",
+  "tail",
+  "tee",
+  "test",
+  "touch",
+  "tr",
+  "tree",
+  "true",
+  "uniq",
+  "unset",
+  "wc",
+  "xargs",
+] as const;
+
 describe("applet specifications", () => {
+  it("registers exactly the documented convenience preset", () => {
+    expect(defaultShellCommands.map((command) => command.name).sort()).toEqual([
+      ...DEFAULT_REGISTRY,
+    ]);
+  });
+
   it("publishes a unique, non-empty specification for every default applet", () => {
     const seen = new Set<string>();
     for (const command of defaultShellCommands) {
@@ -38,6 +115,7 @@ describe("applet specifications", () => {
       // A summary is a fragment inside a help table, not a sentence.
       expect(spec.summary).toBe(spec.summary.trim());
       expect(spec.summary.endsWith(".")).toBe(false);
+      expect(spec.summary[0]).toBe(spec.summary[0]?.toLowerCase());
       expect(spec.usage).toBe(spec.usage.trim());
       for (const name of [spec.name, ...(spec.aliases ?? [])]) {
         expect(seen.has(name), name).toBe(false);
@@ -55,10 +133,11 @@ describe("applet specifications", () => {
     );
   });
 
-  it("prefixes a usage diagnostic with the canonical name", () => {
-    const error = appletUsageError({ name: "mkdir", usage: "", summary: "creates" }, "missing");
+  it("names the applet and ends a usage diagnostic with its synopsis", () => {
+    const spec: AppletSpec = { name: "mkdir", usage: "[-p] DIRECTORY...", summary: "creates" };
+    const error = appletUsageError(spec, "missing operand");
     expect(error.code).toBe("EINVAL");
-    expect(error.message).toBe("mkdir: missing");
+    expect(error.message).toBe("mkdir: missing operand\nusage: mkdir [-p] DIRECTORY...");
   });
 });
 
@@ -74,6 +153,8 @@ describe("virtual applet paths", () => {
       "/sbin/cat",
       "/usr/local/bin/cat",
       "/bin/nested/cat",
+      "/bin//cat",
+      "//bin/cat",
       "/bin/",
       "/bin/.",
       "/bin/..",
@@ -94,6 +175,8 @@ describe("applet registry", () => {
     }
     expect(registry.lookup("/sbin/hello")).toBeUndefined();
     expect(registry.lookup("missing")).toBeUndefined();
+    // The directory match is literal, so a duplicated separator fails closed.
+    expect(registry.lookup("/bin//hello")).toBeUndefined();
     expect(registry.commands).toEqual([applet]);
   });
 
@@ -116,6 +199,26 @@ describe("applet registry", () => {
     }
   });
 
+  it("keeps a shell built-in out of the virtual applet directories", () => {
+    const registry = createAppletRegistry(defaultShellCommands);
+    for (const builtin of ["cd", "export", "set", "source", "local", "exit"]) {
+      expect(registry.lookup(builtin), builtin).toBeDefined();
+      expect(registry.lookup(`/bin/${builtin}`), builtin).toBeUndefined();
+      expect(registry.lookup(`/usr/bin/${builtin}`), builtin).toBeUndefined();
+    }
+    for (const program of ["cat", "ls", "grep", "printf", "echo", "test", "env"]) {
+      expect(registry.lookup(`/bin/${program}`), program).toBe(registry.lookup(program));
+    }
+  });
+
+  it("snapshots the registered commands so later mutation cannot desynchronize lookup", () => {
+    const commands = [marker("first")];
+    const registry = createAppletRegistry(commands);
+    commands.push(marker("second"));
+    expect(registry.commands).toHaveLength(1);
+    expect(registry.lookup("second")).toBeUndefined();
+  });
+
   it("accepts a plain ShellCommand without a specification", () => {
     const plain = { name: "plain", run: () => ({ completed: Promise.resolve({ exitCode: 0 }) }) };
     expect(createAppletRegistry([plain]).lookup("/bin/plain")).toBe(plain);
@@ -135,10 +238,10 @@ describe("multicall dispatch in the shell", () => {
       stdout: "body",
     },
     {
-      name: "reports the canonical name in a usage diagnostic",
+      name: "reports the canonical name and synopsis in a usage diagnostic",
       script: "/usr/bin/mkdir",
       exitCode: 2,
-      stderr: "mkdir: missing operand\n",
+      stderr: "mkdir: missing operand\nusage: mkdir [-p] [-m MODE] DIRECTORY...\n",
     },
     {
       name: "leaves other absolute paths not found",

@@ -14,119 +14,93 @@ const { toleranceRatio, budgets } = budgetFile;
 // change lands as a reviewable diff rather than an edited constant.
 const record = process.argv.includes("--record");
 
-// Semantic markers. A byte budget alone cannot tell an unrelated applet from a
-// slightly larger one, so every preset also states what must and must not be
-// reachable.
-//
-// An applet marker is its declared summary, which lives in the same object
-// literal as its runner: the summary survives exactly when the applet does.
-// Diagnostics are no longer usable as markers because a usage message is now
-// assembled from the specification name at runtime.
-const APPLET_MARKERS = {
-  ls: "lists directory entries or a single path",
-  cat: "concatenates files, or standard input, to standard output",
-  mkdir: "creates directories",
-  find: "walks a subtree and prints matching paths",
-  mktemp: "creates a uniquely named empty file",
-  xargs: "runs a command once per batch of arguments read from standard input",
-  seq: "prints an integer sequence",
-  diff: "prints a unified difference between two files",
-  patch: "applies a unified difference to a file",
-  join: "joins two sorted files on a common field",
-  grep: "prints records matching a pattern",
-  file: "classifies a path as directory, inline data, or opaque content",
+// Every preset states which library modules must and must not be reachable.
+// The assertion runs against the bundle's source map, whose `sources` array is
+// the exact module list esbuild kept — a claim no string search can defeat and
+// that reworded comments or diagnostics cannot weaken.
+const M = {
+  applet: "shell/commands/applet",
+  options: "shell/commands/options",
+  helpers: "shell/commands/helpers",
+  ls: "shell/commands/ls",
+  core: "shell/commands/core",
+  fs: "shell/commands/fs",
+  text: "shell/commands/text",
+  xargs: "shell/commands/xargs",
+  registry: "shell/commands/default",
+  parser: "shell/parser",
+  shell: "shell/shell",
+  interactive: "shell/interactive",
+  sql: "vfs/sql",
+  doSql: "vfs/do-sql",
+  r2: "storage/r2",
 };
-const PARSER = "shell AST node limit exceeded";
-const REGISTRY = "command not found";
-const OPAQUE_NAMESPACE = "opaque R2 content is not available to shell commands";
-const R2_ADAPTER = "byte range must use offset/length or suffix";
-const INTERACTIVE = "interactive shell is closed";
-const NODE_SQLITE = "node:sqlite";
+
+/**
+ * Maps a source-map entry to a library module id, or `undefined` for the
+ * fixture entry point. Every fixture imports through a package subpath, so all
+ * library modules arrive as compiled `dist/` paths and every preset measures
+ * the same compiler output.
+ */
+function moduleId(path) {
+  const match = /(?:^|\/)dist\/(.+)\.js$/u.exec(path);
+  return match === null ? undefined : match[1];
+}
 
 const PRESETS = [
   {
     name: "ls",
     config: "wrangler.tree-shake.jsonc",
     describe: "one applet imported from its own subpath",
-    include: [APPLET_MARKERS.ls],
-    exclude: [
-      APPLET_MARKERS.mkdir,
-      APPLET_MARKERS.find,
-      APPLET_MARKERS.mktemp,
-      APPLET_MARKERS.xargs,
-      APPLET_MARKERS.seq,
-      APPLET_MARKERS.grep,
-      APPLET_MARKERS.file,
-      PARSER,
-      REGISTRY,
-      OPAQUE_NAMESPACE,
-      INTERACTIVE,
-    ],
+    include: [M.ls, M.applet, M.options],
+    exclude: [M.core, M.fs, M.text, M.xargs, M.registry, M.parser, M.shell, M.interactive, M.sql],
   },
   {
     name: "commands",
     config: "wrangler.commands-tree-shake.jsonc",
     describe: "a small explicit registry of two applets",
-    include: [APPLET_MARKERS.cat, APPLET_MARKERS.grep],
-    exclude: [
-      APPLET_MARKERS.mkdir,
-      APPLET_MARKERS.mktemp,
-      APPLET_MARKERS.diff,
-      APPLET_MARKERS.patch,
-      APPLET_MARKERS.join,
-      APPLET_MARKERS.xargs,
-      APPLET_MARKERS.seq,
-      OPAQUE_NAMESPACE,
-      INTERACTIVE,
-    ],
+    include: [M.fs, M.text, M.applet],
+    exclude: [M.ls, M.core, M.xargs, M.registry, M.parser, M.shell, M.interactive, M.sql, M.r2],
   },
   {
     name: "vfs",
     config: "wrangler.vfs-tree-shake.jsonc",
-    describe: "the VFS contract with no shell code",
-    include: [],
-    exclude: [PARSER, REGISTRY, APPLET_MARKERS.mkdir, OPAQUE_NAMESPACE, INTERACTIVE],
+    describe: "the SQLite filesystem with no shell and no R2",
+    include: [M.sql, M.doSql],
+    exclude: [M.applet, M.helpers, M.core, M.fs, M.ls, M.text, M.parser, M.shell, M.r2],
   },
   {
     name: "shell",
     config: "wrangler.shell-tree-shake.jsonc",
     describe: "the non-interactive shell with one applet",
-    include: [PARSER, REGISTRY],
-    exclude: [INTERACTIVE, APPLET_MARKERS.mkdir, APPLET_MARKERS.grep, OPAQUE_NAMESPACE],
+    include: [M.shell, M.parser, M.applet, M.core],
+    exclude: [M.interactive, M.fs, M.ls, M.text, M.xargs, M.registry, M.sql, M.r2],
   },
   {
     name: "interactive",
     config: "wrangler.interactive-tree-shake.jsonc",
     describe: "the interactive session adapter",
-    include: [PARSER, REGISTRY, INTERACTIVE],
-    exclude: [APPLET_MARKERS.mkdir, APPLET_MARKERS.grep, OPAQUE_NAMESPACE],
+    include: [M.shell, M.parser, M.interactive, M.core],
+    exclude: [M.fs, M.ls, M.text, M.xargs, M.registry, M.sql, M.r2],
   },
   {
     name: "default-registry",
     config: "wrangler.default-registry-tree-shake.jsonc",
     describe: "the convenience preset with every applet",
-    include: [
-      PARSER,
-      REGISTRY,
-      APPLET_MARKERS.mkdir,
-      APPLET_MARKERS.find,
-      APPLET_MARKERS.mktemp,
-      APPLET_MARKERS.xargs,
-      APPLET_MARKERS.seq,
-      APPLET_MARKERS.grep,
-      APPLET_MARKERS.join,
-      APPLET_MARKERS.file,
-    ],
-    exclude: [INTERACTIVE, R2_ADAPTER],
+    include: [M.registry, M.core, M.fs, M.ls, M.text, M.xargs, M.shell, M.parser],
+    exclude: [M.interactive, M.sql, M.doSql, M.r2],
   },
   {
     name: "r2-opaque",
     config: "wrangler.r2-opaque-tree-shake.jsonc",
-    describe: "the SQL filesystem with the R2 opaque adapter",
-    include: [R2_ADAPTER],
-    exclude: [PARSER, REGISTRY, APPLET_MARKERS.mkdir, INTERACTIVE],
+    describe: "the SQLite filesystem with the R2 opaque adapter",
+    include: [M.sql, M.doSql, M.r2],
+    exclude: [M.applet, M.core, M.fs, M.ls, M.text, M.parser, M.shell, M.interactive],
   },
 ];
+
+// Artifacts rather than library modules, so these stay raw-text checks.
+const FORBIDDEN_TEXT = ["node:sqlite", "dist/testing/"];
 
 async function bundle(config) {
   const outputDirectory = await mkdtemp(join(tmpdir(), "cloudflare-vfs-tree-shake-"));
@@ -139,7 +113,17 @@ async function bundle(config) {
     const files = await readdir(outputDirectory);
     const workerFile = files.find((file) => file.endsWith(".js"));
     if (!workerFile) throw new Error("Wrangler did not emit a JavaScript worker bundle");
-    return await readFile(join(outputDirectory, workerFile), "utf8");
+    const mapFile = files.find((file) => file.endsWith(".js.map"));
+    if (!mapFile) throw new Error("Wrangler did not emit a source map");
+    const source = await readFile(join(outputDirectory, workerFile), "utf8");
+    const { sources } = JSON.parse(await readFile(join(outputDirectory, mapFile), "utf8"));
+    const modules = sources.map(moduleId).filter((id) => id !== undefined);
+    if (modules.length === 0) {
+      throw new Error(
+        `${config} produced no library modules; the source map may have changed shape`,
+      );
+    }
+    return { source, modules };
   } finally {
     await rm(outputDirectory, { recursive: true, force: true });
   }
@@ -148,17 +132,17 @@ async function bundle(config) {
 const measured = [];
 const failures = [];
 for (const preset of PRESETS) {
-  const source = await bundle(preset.config);
-  for (const marker of preset.include) {
-    assert(source.includes(marker), `${preset.name} bundle is missing ${JSON.stringify(marker)}`);
+  const { source, modules } = await bundle(preset.config);
+  const reachable = new Set(modules);
+  for (const module of preset.include) {
+    assert(reachable.has(module), `${preset.name} bundle is missing ${module}`);
   }
-  for (const marker of preset.exclude) {
-    assert(!source.includes(marker), `${preset.name} bundle contains ${JSON.stringify(marker)}`);
+  for (const module of preset.exclude) {
+    assert(!reachable.has(module), `${preset.name} bundle reaches ${module}`);
   }
-  assert(
-    !source.includes(NODE_SQLITE),
-    `${preset.name} Worker bundle contains the Node SQLite adapter`,
-  );
+  for (const text of FORBIDDEN_TEXT) {
+    assert(!source.includes(text), `${preset.name} bundle contains ${text}`);
+  }
 
   const bytes = Buffer.byteLength(source);
   if (record) {
@@ -180,6 +164,9 @@ for (const preset of PRESETS) {
 
 console.log(measured.map((line) => `  ${line}`).join("\n"));
 if (record) {
+  for (const name of Object.keys(budgets)) {
+    if (!PRESETS.some((preset) => preset.name === name)) delete budgets[name];
+  }
   await writeFile(budgetUrl, `${JSON.stringify(budgetFile, null, 2)}\n`);
   console.log(`recorded ${PRESETS.length} bundle budgets`);
 } else {

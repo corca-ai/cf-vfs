@@ -10,7 +10,9 @@ import { readFile, writeFile as writeHostFile } from "node:fs/promises";
 // would silently weaken the claim the fixtures make; the generator refuses it
 // and the difference belongs in the `divergences` registry instead.
 
-const WORKDIR = "/tmp/cf-vfs-fixture";
+// Must match `WORKDIR` in test/utility-differential.test.ts: a case that
+// observes the working directory has to see the same path on both sides.
+const WORKDIR = "/work";
 const fixtureUrl = new URL("../test/fixtures/utility-compat.json", import.meta.url);
 const fixtures = JSON.parse(await readFile(fixtureUrl, "utf8"));
 
@@ -53,6 +55,15 @@ async function dockerRun(image, argv, input) {
   return { stdout, stderr, exitCode };
 }
 
+async function pullImage(reference) {
+  const child = spawn("docker", ["pull", "--quiet", reference], { stdio: ["ignore", "ignore", "inherit"] });
+  const code = await new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", resolve);
+  });
+  if (code !== 0) throw new Error(`could not pull ${reference}`);
+}
+
 async function imageDigest(image) {
   const child = spawn("docker", ["image", "inspect", "--format", "{{index .RepoDigests 0}}", image]);
   let stdout = "";
@@ -67,25 +78,34 @@ async function imageDigest(image) {
   return stdout.trim();
 }
 
+// `--repin` accepts whatever the tag resolves to today. Without it, the
+// recorded digest is the reference every container runs from, so a re-pushed
+// tag cannot silently change what "BusyBox 1.37.0" means.
+const repin = process.argv.includes("--repin");
 for (const [name, oracle] of Object.entries(fixtures.oracles)) {
-  await dockerRun(oracle.image, [oracle.shell, "-c", "true"], "");
-  oracle.digest = await imageDigest(oracle.image);
+  if (repin || oracle.digest === undefined) {
+    await dockerRun(oracle.image, [oracle.shell, "-c", "true"], "");
+    oracle.digest = await imageDigest(oracle.image);
+  } else {
+    await pullImage(oracle.digest);
+  }
+  oracle.reference = oracle.digest;
   const versions = {};
   for (const [label, command] of Object.entries(oracle.probe)) {
-    const probe = await dockerRun(oracle.image, [oracle.shell, "-c", command], "");
+    const probe = await dockerRun(oracle.reference, [oracle.shell, "-c", command], "");
     const line = probe.stdout.split("\n", 1)[0]?.trim() ?? "";
     if (line === "") throw new Error(`${label} version probe produced no output`);
     versions[label] = line;
   }
   oracle.versions = versions;
-  console.log(`${name}: ${oracle.image} ${oracle.digest}`);
+  console.log(`${name}: ${oracle.image} -> ${oracle.digest}${repin ? " (repinned)" : ""}`);
 }
 
 const regenerated = [];
 for (const fixture of fixtures.cases) {
   const oracle = fixtures.oracles[fixture.oracle];
   if (oracle === undefined) throw new Error(`${fixture.name} names unknown oracle ${fixture.oracle}`);
-  const result = await dockerRun(oracle.image, [oracle.shell, "-s"], program(fixture));
+  const result = await dockerRun(oracle.reference, [oracle.shell, "-s"], program(fixture));
   if (result.stderr !== "") {
     throw new Error(`${fixture.name} wrote to stderr on the oracle:\n${result.stderr}`);
   }
@@ -93,6 +113,8 @@ for (const fixture of fixtures.cases) {
   regenerated.push({ ...authored, stdout: result.stdout, exitCode: result.exitCode });
 }
 fixtures.cases = regenerated;
+// `reference` is derived from `digest` on every run; keep it out of the file.
+for (const oracle of Object.values(fixtures.oracles)) delete oracle.reference;
 
 await writeHostFile(fixtureUrl, `${JSON.stringify(fixtures, null, 2)}\n`);
 console.log(`regenerated ${fixtures.cases.length} utility fixtures`);

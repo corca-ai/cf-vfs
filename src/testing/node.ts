@@ -79,24 +79,28 @@ class NodeSqlFileSystemStorage implements SqlFileSystemStorage {
   private alarm: number | null = null;
   private transactionOpen = false;
 
+  private readonly observe: SqlStatementObserver | undefined;
+
   constructor(observe: SqlStatementObserver | undefined) {
+    this.observe = observe;
     this.sql = new NodeSqlStorage(this.database, observe);
   }
 
   execBatch(query: string): void {
     this.database.exec(query);
+    this.observe?.(query, 0);
   }
 
   transactionSync<Result>(callback: () => Result): Result {
     if (this.transactionOpen) return callback();
     this.transactionOpen = true;
-    this.database.exec("BEGIN");
+    this.execBatch("BEGIN");
     try {
       const result = callback();
-      this.database.exec("COMMIT");
+      this.execBatch("COMMIT");
       return result;
     } catch (error) {
-      this.database.exec("ROLLBACK");
+      this.execBatch("ROLLBACK");
       throw error;
     } finally {
       this.transactionOpen = false;
@@ -127,7 +131,9 @@ class NodeSqlFileSystemStorage implements SqlFileSystemStorage {
  *
  * Structural performance guards use this to assert statement and row counts
  * instead of wall-clock time, so an added query is a reviewable failure rather
- * than benchmark noise. It exists for tests; production adapters do not have it.
+ * than benchmark noise. Batched statements and transaction control are observed
+ * too, so wrapping a read path in a transaction cannot hide from a guard. It
+ * exists for tests; production adapters do not have it.
  */
 export type SqlStatementObserver = (query: string, rows: number) => void;
 

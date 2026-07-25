@@ -296,8 +296,8 @@ describe("Bash v2 functions", () => {
         'status() { return "$1"; }; status invalid 2> /return-error; printf \'%s|\' "$?"; (exit invalid) 2> /exit-error; printf \'%s\' "$?"',
       stdout: "2|2",
       expectedFiles: {
-        "/return-error": "return status must be an integer\n",
-        "/exit-error": "exit status must be an integer\n",
+        "/return-error": "return: status must be an integer\n",
+        "/exit-error": "exit: status must be an integer\n",
       },
     },
     {
@@ -1874,7 +1874,7 @@ describe("Bash v3 input and positional built-ins", () => {
       script: 'shift invalid || printf \'%s|\' "$?"; printf \'%s:%s\' "$1" "$#"',
       args: ["one", "two"],
       stdout: "2|one:2",
-      stderrIncludes: "shift count must be an integer",
+      stderrIncludes: "shift: count must be an integer",
     },
     {
       name: "isolates function arguments while allowing shifts in the function frame",

@@ -214,18 +214,30 @@ one command without pulling siblings. Export the command from `shell/commands`,
 and add it to `defaultShellCommands` only when it belongs in the convenience
 preset.
 
-`applet.ts` is a shared module and must never import a concrete applet. It also
-owns `createAppletRegistry`, the multicall resolver `Shell` uses: canonical
-names, declared aliases, and the virtual `/bin` and `/usr/bin` spellings all
-resolve to one object. Keep the bare-name path allocation-free — the applet-path
-branch is guarded by a single character comparison — and resolve before checking
-`allowedCommands` so a policy decision always names the canonical applet.
+`applet.ts` sits with the other shared command primitives — `options.ts`,
+`helpers.ts`, `format.ts` — and must never import a concrete applet. `shell.ts`
+imports it for `createAppletRegistry`, the multicall resolver: canonical names,
+declared aliases, and the virtual `/bin` and `/usr/bin` spellings all resolve to
+one object. That is the only direction the dependency may run; nothing under
+`commands/` may import the shell core. Keep the bare-name path allocation-free —
+the applet-path branch is guarded by a single character comparison — and resolve
+before checking `allowedCommands` so a policy decision always names the
+canonical applet.
 
-A summary is a lowercase fragment without a trailing period; `test/applet.test.ts`
-enforces that shape and rejects a duplicate name or alias across the default
-registry. Metadata is not free: it added about 300 bytes to the single-applet
-`ls` Worker bundle and about 1 KiB to the shell bundle. Record new sizes with
-`npm run test:bundle-budgets:record` and justify the change in review.
+Mark an applet `builtin: true` when it changes the calling session. Those stay
+reachable only by bare name, because Linux has no `/bin/cd`, and a later
+filesystem profile must be able to list `/bin` without inventing entries
+resolution would refuse.
+
+A summary is a lowercase fragment without a trailing period, and a usage
+diagnostic ends with the declared synopsis, so `usage` is rendered rather than
+carried. `test/applet.test.ts` enforces that shape, pins the exact contents of
+`defaultShellCommands`, and rejects a duplicate name or alias;
+`test/check-docs.mjs` requires every registered applet to appear in
+[the command reference](commands.md). Metadata and the resolver together added
+about 640 bytes to the single-applet `ls` Worker bundle and about 1 KiB to the
+shell bundle, most of it the resolver rather than the strings. Record new sizes
+with `npm run test:bundle-budgets:record` and justify the change in review.
 
 A utility that invokes another command must use
 `ShellCommandContext.executeCommand(argv, fds)`, never a generated source
@@ -245,12 +257,14 @@ Update the package and Wrangler fixtures when adding a new subpath.
 ## Compatibility, bundle, and performance gates
 
 `test/check-tree-shaking.mjs` builds seven representative Worker bundles — one
-applet, a small explicit registry, VFS-only, shell-only, interactive, the full
-default registry, and the R2 opaque adapter. Each preset declares markers that
-must and must not be reachable *and* a recorded byte budget in
-`test/fixtures/bundle-budgets.json`. Size alone is insufficient, so an applet
-marker is its declared summary, which shares an object literal with its runner
-and therefore survives exactly when the applet does. A bundle far below its
+applet, a small explicit registry, the SQLite filesystem alone, shell-only,
+interactive, the full default registry, and the R2 opaque adapter. Each preset
+declares the library modules that must and must not be reachable *and* a
+recorded byte budget in `test/fixtures/bundle-budgets.json`. Size alone is
+insufficient, so the inclusion check reads the emitted source map, whose
+`sources` array is exactly the module list esbuild kept: renaming a diagnostic
+or rewording a comment cannot weaken it. Every fixture imports through a package
+subpath so all seven measure the same compiled output. A bundle far below its
 budget fails too, so a stale budget can never quietly stop protecting anything;
 record new sizes with `npm run test:bundle-budgets:record` and explain the diff
 in review.
@@ -267,11 +281,20 @@ lists drift apart.
 
 `test/performance-guards.test.ts` asserts counted work rather than elapsed time:
 output slab batching, SQL statement and row counts for the common no-opaque
-path, and the fact that command resolution touches storage zero times. It uses
-the `onStatement` observer on `NodeSqlFileSystem`, which exists for tests only.
-Adding an optional filesystem feature must not add statements to those paths;
-extend the guards rather than relaxing them. Wall-clock scenarios stay in
-`bench/`.
+path, set-based traversal, and the fact that resolving a registered applet
+touches storage zero times. It uses the `onStatement` observer on
+`NodeSqlFileSystem`, which exists for tests only and also sees batched
+statements and transaction control, so wrapping a read path in a transaction
+cannot hide from a guard. Every upper bound is paired with a lower bound,
+because an assertion that only caps counted work is satisfied by a meter that
+stopped observing. Adding an optional filesystem feature must not add statements
+to those paths; extend the guards rather than relaxing them. A `PATH` search
+over real namespace entries is a separate, budgeted concern and does not belong
+under the applet-resolution guard.
+
+Cancellation, concurrent shells, R2 byte and range behavior, and memory remain
+wall-clock scenarios in `bench/`; there is no structural proxy for JavaScript
+allocation.
 
 ## Packaging and release
 

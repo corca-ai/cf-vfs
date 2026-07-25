@@ -19,6 +19,7 @@ const COLON = {
   name: ":",
   usage: "",
   summary: "does nothing and succeeds",
+  builtin: true,
 } as const satisfies AppletSpec;
 
 const TRUE = { name: "true", usage: "", summary: "succeeds" } as const satisfies AppletSpec;
@@ -50,12 +51,14 @@ const CD = {
   name: "cd",
   usage: "[DIRECTORY]",
   summary: "changes the working directory",
+  builtin: true,
 } as const satisfies AppletSpec;
 
 const EXPORT = {
   name: "export",
   usage: "[NAME[=VALUE]...]",
   summary: "marks variables for the session environment",
+  builtin: true,
 } as const satisfies AppletSpec;
 
 const ENV = {
@@ -68,60 +71,70 @@ const UNSET = {
   name: "unset",
   usage: "[NAME...]",
   summary: "removes variables",
+  builtin: true,
 } as const satisfies AppletSpec;
 
 const READ = {
   name: "read",
   usage: "-r [NAME...]",
   summary: "reads one record from standard input",
+  builtin: true,
 } as const satisfies AppletSpec;
 
 const SHIFT = {
   name: "shift",
   usage: "[COUNT]",
   summary: "drops leading positional parameters",
+  builtin: true,
 } as const satisfies AppletSpec;
 
 const GETOPTS = {
   name: "getopts",
   usage: "OPTSTRING NAME [ARGUMENT...]",
   summary: "parses one option from the positional parameters",
+  builtin: true,
 } as const satisfies AppletSpec;
 
 const LOCAL = {
   name: "local",
   usage: "NAME[=VALUE]...",
   summary: "declares function-scoped variables",
+  builtin: true,
 } as const satisfies AppletSpec;
 
 const RETURN = {
   name: "return",
   usage: "[STATUS]",
   summary: "returns from a function or sourced file",
+  builtin: true,
 } as const satisfies AppletSpec;
 
 const BREAK = {
   name: "break",
   usage: "[LEVELS]",
   summary: "exits enclosing loops",
+  builtin: true,
 } as const satisfies AppletSpec;
 
 const CONTINUE = {
   name: "continue",
   usage: "[LEVELS]",
   summary: "resumes the next iteration of an enclosing loop",
+  builtin: true,
 } as const satisfies AppletSpec;
 
 const EXIT = {
   name: "exit",
   usage: "[STATUS]",
   summary: "ends the execution unit",
+  builtin: true,
 } as const satisfies AppletSpec;
 
 const SET = {
   name: "set",
   usage: "[-e|+e] [-u|+u] [-o|+o OPTION]",
   summary: "sets supported shell options",
+  builtin: true,
 } as const satisfies AppletSpec;
 
 const TEST = {
@@ -444,7 +457,7 @@ export const readCommand = /* @__PURE__ */ defineApplet(READ, async (context, ar
 
 export const shiftCommand = /* @__PURE__ */ defineApplet(SHIFT, (context, argv) => {
   if (argv.length > 1) throw appletUsageError(SHIFT, "too many arguments");
-  const count = argv[0] === undefined ? 1 : parseInteger(argv[0], "shift count");
+  const count = argv[0] === undefined ? 1 : parseInteger(argv[0], `${SHIFT.name}: count`);
   if (count > context.session.args.length) return 1;
   context.session.args.splice(0, count);
   return 0;
@@ -471,7 +484,11 @@ export const getoptsCommand = /* @__PURE__ */ defineApplet(GETOPTS, async (conte
   const [optstring = "", name = "", ...explicitArgs] = argv;
   validateGetoptsSpec(optstring, name);
   const args = explicitArgs.length === 0 ? context.session.args : explicitArgs;
-  const optind = parseInteger(context.session.env.get("OPTIND") ?? "1", "getopts: OPTIND", 1);
+  const optind = parseInteger(
+    context.session.env.get("OPTIND") ?? "1",
+    `${GETOPTS.name}: OPTIND`,
+    1,
+  );
   const previous = context.session.getopts;
   let argumentIndex = optind - 1;
   let characterIndex =
@@ -569,10 +586,14 @@ export const getoptsCommand = /* @__PURE__ */ defineApplet(GETOPTS, async (conte
 });
 
 function defineSourceCommand(name: "source" | ".") {
+  // `source` and `.` share one runner but keep separate specifications so a
+  // diagnostic names the spelling the script actually used, exactly as Bash
+  // does. They are built-ins: the file runs in the calling shell scope.
   const spec = {
     name,
     usage: "FILE [ARGUMENT...]",
     summary: "runs a bounded VFS file in the current shell scope",
+    builtin: true,
   } as const satisfies AppletSpec;
   return defineApplet(spec, async (context, argv, fds) => {
     const [path, ...args] = argv;
@@ -632,7 +653,7 @@ export const returnCommand = /* @__PURE__ */ defineApplet(RETURN, (context, argv
   const status =
     argv[0] === undefined
       ? context.session.lastExitCode
-      : parseInteger(argv[0], "return status", Number.MIN_SAFE_INTEGER) & 0xff;
+      : parseInteger(argv[0], `${RETURN.name}: status`, Number.MIN_SAFE_INTEGER) & 0xff;
   context.session.flow = { type: "return", status };
   return status;
 });
@@ -646,7 +667,7 @@ function loopControl(
     throw appletUsageError(spec, "only meaningful in a loop");
   }
   if (argv.length > 1) throw appletUsageError(spec, "too many arguments");
-  const requested = argv[0] === undefined ? 1 : parseInteger(argv[0], `${spec.name} level`);
+  const requested = argv[0] === undefined ? 1 : parseInteger(argv[0], `${spec.name}: level`);
   if (requested <= 0) throw appletUsageError(spec, "level must be positive");
   context.session.flow = {
     type: spec.name,
@@ -668,7 +689,7 @@ export const exitCommand = /* @__PURE__ */ defineApplet(EXIT, (context, argv) =>
   const code =
     argv[0] === undefined
       ? context.session.lastExitCode
-      : parseInteger(argv[0], "exit status", Number.MIN_SAFE_INTEGER);
+      : parseInteger(argv[0], `${EXIT.name}: status`, Number.MIN_SAFE_INTEGER);
   context.session.exitRequested = true;
   context.session.requestedExitCode = code & 0xff;
   return context.session.requestedExitCode;

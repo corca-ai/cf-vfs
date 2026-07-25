@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import fixtures from "./fixtures/utility-compat.json" with { type: "json" };
 import { createBashHarness } from "./helpers/bash.js";
 
+// Must match `WORKDIR` in scripts/regenerate-utility-fixtures.mjs.
 const WORKDIR = "/work";
 
 interface UtilityFixture {
@@ -30,13 +31,35 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     const result = await harness.run("printf 'abcdef\\n' | cut -c2-4");
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("must be an integer");
+    expect(result.stderr).toBe("cut: character must be an integer\n");
   },
   "wc-multi-field-padding": async () => {
     const harness = createBashHarness();
     const result = await harness.run("printf 'one two\\nthree\\n' | wc");
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe("2 3 14\n");
+  },
+  "regexp-dialect-is-javascript": async () => {
+    const harness = createBashHarness();
+    // `a+` repeats here and is a literal plus under POSIX basic expressions.
+    const repetition = await harness.run("printf 'a+b\\naab\\n' | grep 'a+'");
+    expect(repetition.exitCode).toBe(0);
+    expect(repetition.stdout).toBe("a+b\naab\n");
+    // `\|` is an escaped literal here and alternation under POSIX.
+    const alternation = await harness.run("printf 'a\\nb\\n' | grep 'a\\|x'");
+    expect(alternation.exitCode).toBe(1);
+    expect(alternation.stdout).toBe("");
+  },
+  "sed-replacement-is-literal-text": async () => {
+    const harness = createBashHarness();
+    // GNU expands `&` to the match; this profile writes it literally.
+    const ampersand = await harness.run("printf 'a+b\\n' | sed 's/a/[&]/'");
+    expect(ampersand.exitCode).toBe(0);
+    expect(ampersand.stdout).toBe("[&]+b\n");
+    // JavaScript substitution syntax must not splice the record into itself.
+    const splice = await harness.run("printf 'secret-token\\n' | sed 's/token/$`/'");
+    expect(splice.exitCode).toBe(0);
+    expect(splice.stdout).toBe("secret-$`\n");
   },
   "diff-output-format": async () => {
     const harness = createBashHarness();

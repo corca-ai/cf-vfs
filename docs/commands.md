@@ -364,11 +364,22 @@ directories `/bin` and `/usr/bin`, so `cat`, `/bin/cat`, and `/usr/bin/cat` are
 the same implementation. Resolution is a literal directory-prefix match, never a
 namespace lookup: no SQLite row or R2 object backs those spellings, a VFS file
 written at `/bin/cat` does not shadow the applet, and an applet path performs no
-storage work. Diagnostics always name the canonical applet, and
-`ShellPolicy.allowedCommands` is matched against that canonical name, so an
-allowlist entry covers every spelling of the same implementation. A shell
-function still takes precedence over any applet spelling. Any other absolute
-path remains `command not found` with status 127.
+storage work. Because the match is literal, a duplicated separator such as
+`/bin//cat` does not resolve, and neither does any other absolute path: both
+remain `command not found` with status 127.
+
+An applet that changes the calling session — `cd`, `export`, `unset`, `read`,
+`shift`, `getopts`, `local`, `set`, `source`, `.`, `exit`, `return`, `break`,
+`continue`, and `:` — is a shell built-in and is reachable only by its bare
+name, because Linux has no `/bin/cd` either.
+
+A shell function takes precedence over an applet with the same bare name. As in
+Bash, an applet path such as `/bin/echo` bypasses the function.
+
+Diagnostics always name the canonical applet and end with its declared synopsis.
+`ShellPolicy.allowedCommands` is matched against the canonical name, so one
+allowlist entry covers every spelling of that implementation; entries must be
+canonical applet names, since an alias in the list matches nothing.
 
 | Registry group | Available commands and principal options |
 | --- | --- |
@@ -389,7 +400,7 @@ the historical `-10` line-count form.
 
 This syntax does not add options beyond the table. An unsupported member of a
 cluster is a usage error naming that member; for example, `ls -als` reports
-unsupported `-s`. `ls -a` and `ls -A` are accepted compatibility no-ops because
+unsupported `-s` and then prints the `ls` synopsis. `ls -a` and `ls -A` are accepted compatibility no-ops because
 directory listings already include stored dot-prefixed names and never
 synthesize `.` or `..`. `find` expressions and the `set` and `getopts` built-ins
 keep their separately documented grammars.

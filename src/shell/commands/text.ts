@@ -453,10 +453,10 @@ function sliceCount(
   for (const option of parsed.options) {
     if (option.name === "lines" && "argument" in option) {
       bytes = false;
-      count = parseInteger(option.argument, "line count");
+      count = parseInteger(option.argument, `${spec.name}: line count`);
     } else if (option.name === "bytes" && "argument" in option) {
       bytes = true;
-      count = parseInteger(option.argument, "byte count");
+      count = parseInteger(option.argument, `${spec.name}: byte count`);
     }
   }
   return { count, bytes, paths: parsed.operands };
@@ -740,9 +740,13 @@ export const cutCommand = /* @__PURE__ */ defineApplet(CUT, async (context, argv
     if (!("argument" in option)) continue;
     if (option.name === "delimiter") delimiter = option.argument;
     else if (option.name === "fields") {
-      fields = option.argument.split(",").map((part) => parseInteger(part, "field", 1));
+      fields = option.argument
+        .split(",")
+        .map((part) => parseInteger(part, `${CUT.name}: field`, 1));
     } else if (option.name === "characters") {
-      characters = option.argument.split(",").map((part) => parseInteger(part, "character", 1));
+      characters = option.argument
+        .split(",")
+        .map((part) => parseInteger(part, `${CUT.name}: character`, 1));
     }
   }
   if ((fields === undefined) === (characters === undefined)) {
@@ -863,7 +867,7 @@ export const foldCommand = /* @__PURE__ */ defineApplet(FOLD, async (context, ar
   let width = 80;
   for (const option of parsed.options) {
     if (option.name === "width" && "argument" in option) {
-      width = parseInteger(option.argument, "width", 1);
+      width = parseInteger(option.argument, `${FOLD.name}: width`, 1);
     }
   }
   const output = new BufferedTextWriter(context, fds[1]);
@@ -987,12 +991,16 @@ export const sedCommand = /* @__PURE__ */ defineApplet(SED, async (context, argv
   } catch {
     throw appletUsageError(SED, "invalid regular expression");
   }
+  // The replacement is literal text in this profile. Escaping `$` keeps
+  // JavaScript's `$&`, `$\``, `$'`, and `$1` substitution syntax from leaking
+  // through and splicing other parts of the record into the output.
+  const literalReplacement = replacement.replaceAll("$", "$$$$");
   const output = new BufferedTextWriter(context, fds[1]);
   try {
     for await (const input of inputStreams(context, argv.slice(1), fds[0])) {
       for await (const line of readTextLines(context, input.stream, input.name)) {
         regular.lastIndex = 0;
-        await output.write(line.replace(regular, replacement));
+        await output.write(line.replace(regular, literalReplacement));
       }
     }
     await output.flush();
@@ -1093,11 +1101,11 @@ export const joinCommand = /* @__PURE__ */ defineApplet(JOIN, async (context, ar
     if (!("argument" in option)) continue;
     if (option.name === "delimiter") delimiter = option.argument;
     else if (option.name === "left-field") {
-      leftField = parseInteger(option.argument, "left join field", 1);
+      leftField = parseInteger(option.argument, `${JOIN.name}: -1 field`, 1);
     } else if (option.name === "right-field") {
-      rightField = parseInteger(option.argument, "right join field", 1);
+      rightField = parseInteger(option.argument, `${JOIN.name}: -2 field`, 1);
     } else if (option.name === "include-unpaired") {
-      const side = parseInteger(option.argument, "unpaired file", 1);
+      const side = parseInteger(option.argument, `${JOIN.name}: -a file`, 1);
       if (side !== 1 && side !== 2) throw appletUsageError(JOIN, "-a must be 1 or 2");
       includeUnpaired.add(side);
     }
@@ -1316,7 +1324,7 @@ export const base64Command = /* @__PURE__ */ defineApplet(BASE64, async (context
   for (const option of parsed.options) {
     if (option.name === "decode") decode = true;
     if (option.name === "wrap" && "argument" in option) {
-      wrap = parseInteger(option.argument, "base64: -w", 0);
+      wrap = parseInteger(option.argument, `${BASE64.name}: -w`, 0);
     }
   }
   if (parsed.operands.length > 1) throw appletUsageError(BASE64, "accepts at most one file");
