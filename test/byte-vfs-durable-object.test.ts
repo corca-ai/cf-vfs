@@ -1,6 +1,7 @@
 import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { isVfsError, type VfsError } from "../src/core/errors.js";
 import { R2OpaqueStore } from "../src/storage/r2.js";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
@@ -48,6 +49,56 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(first.done).toBe(false);
     expect([...(first.value ?? new Uint8Array())]).toEqual([1, 2, 3]);
     await reader.cancel();
+  });
+
+  it("preserves VfsError discrimination across the RPC boundary", async () => {
+    const stub = workspace("rpc-error-shape");
+
+    // Workers RPC rebuilds a thrown error as a plain Error: the own properties
+    // survive but the prototype does not. `runInDurableObject` never crosses
+    // that boundary, so this must call the stub directly.
+    let synchronous: unknown;
+    try {
+      await stub.stat("/definitely-missing");
+    } catch (error) {
+      synchronous = error;
+    }
+    expect(isVfsError(synchronous)).toBe(true);
+    expect(synchronous).toMatchObject({
+      name: "VfsError",
+      code: "ENOENT",
+      path: "/definitely-missing",
+    });
+
+    await stub.writeFile("/taken", "body");
+    let asynchronous: unknown;
+    try {
+      await stub.writeFile("/taken", "other", { disposition: "create" });
+    } catch (error) {
+      asynchronous = error;
+    }
+    expect(isVfsError(asynchronous)).toBe(true);
+    expect((asynchronous as VfsError).code).toBe("EEXIST");
+
+    let shellError: unknown;
+    try {
+      await stub.executeText({ script: "echo hi", cwd: 42 as unknown as string });
+    } catch (error) {
+      shellError = error;
+    }
+    expect(isVfsError(shellError)).toBe(true);
+    expect((shellError as VfsError).code).toBe("EINVAL");
+
+    expect(isVfsError(new Error("plain"))).toBe(false);
+    expect(isVfsError({ name: "VfsError", code: "ENOENT" })).toBe(false);
+    expect(
+      isVfsError(
+        Object.assign(new Error("spoofed"), {
+          name: "VfsError",
+          code: "ENOTACODE",
+        }),
+      ),
+    ).toBe(false);
   });
 
   it("rejects self-copy and a stale empty append atomically inside the object", async () => {

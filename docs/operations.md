@@ -131,6 +131,35 @@ bytes without duplicating them as strings. Prefer
 `executeStream()` in-process or `executeTo()` across RPC when the consumer can
 stream.
 
+## Errors and the RPC boundary
+
+Every failure this package raises is a `VfsError` carrying a `code` from
+`VFS_ERROR_CODES` and, where a path is meaningful, a normalized `path`.
+Discriminate with the exported `isVfsError()` rather than `instanceof`:
+
+```ts
+import { isVfsError } from "@corca-ai/cf-vfs";
+
+try {
+  await workspace.stat(path);
+} catch (error) {
+  if (isVfsError(error) && error.code === "ENOENT") return null;
+  throw error;
+}
+```
+
+Workers RPC rebuilds a thrown error at the caller as a plain `Error`. The own
+properties — `name`, `code`, `path`, `message` — survive, but the prototype does
+not, so `error instanceof VfsError` is `false` for every failure observed
+through a `VfsDurableObject` or `ShellDurableObject` stub. `isVfsError()` matches
+the tagged name and a recognized code, so it holds on both sides of that
+boundary; a bare `Error`, a plain object, and an unrecognized code are all
+rejected. Never branch on `error.message`: message text is not a contract.
+
+A non-zero shell exit status is not an error. `executeText()`, `executeBytes()`,
+and `executeTo()` resolve with the status; they reject only for a limit,
+deadline, cancellation, invalid RPC argument, or runtime invariant failure.
+
 ## Inline storage controls
 
 Inline bodies are arbitrary bytes with an absolute 8 MiB per-file ceiling.
