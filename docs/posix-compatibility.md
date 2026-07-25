@@ -29,7 +29,8 @@ because a device can name nothing the roots protect. No other device exists.
 
 Virtual descriptors `0`, `1`, and `2` exist only for one submitted source
 unit, including in an interactive session. Pipelines connect them with byte
-streams and left-to-right `2>&1` duplication; they are not Durable Object state
+streams and left-to-right `2>&1` / `>&2` duplication; they are not Durable
+Object state
 and have no shared seek offset.
 
 ## Shell language

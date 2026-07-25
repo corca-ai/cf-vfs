@@ -1,4 +1,7 @@
+import { R2ContentReader } from "../src/shell/opaque.js";
+import { R2OpaqueStore } from "../src/storage/r2.js";
 import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
+import type { OpaqueStore } from "../src/vfs/types.js";
 import { meterSqlStorage, type SqlMeter } from "./metered-sql.js";
 
 const MIB = 1024 * 1024;
@@ -31,8 +34,29 @@ interface PointCosts {
   statQueryPlan: string[];
 }
 
+/**
+ * What one opaque body read cost, measured inside the Durable Object.
+ *
+ * The local tests prove the shape of the streaming — bounded memory, early
+ * cancellation, one GET. These are the numbers that need a real bucket: how
+ * long the first byte takes over the network, how long the object holds the
+ * DO, and how many R2 operations one read actually performs.
+ */
+export interface OpaqueReadCost {
+  /** From asking for the body to the first chunk arriving. */
+  firstByteMs: number;
+  /** Wall time inside the DO for the whole read, including the first byte. */
+  durationMs: number;
+  bytes: number;
+  chunks: number;
+  /** The largest single chunk, which is the read's memory high-water mark. */
+  maxChunkBytes: number;
+  r2Gets: number;
+  sql: SqlCost;
+}
+
 export interface RemoteBenchmarkResult {
-  schemaVersion: 2;
+  schemaVersion: 3;
   profile: RemoteBenchmarkProfile;
   timing: "caller-observed-rpc";
   startedAt: string;
@@ -56,6 +80,21 @@ export interface RemoteBenchmarkResult {
       maxRowsWritten: number;
     }
   >;
+  /**
+   * Opaque body reads, when the deployment has a bucket bound.
+   *
+   * Absent rather than zeroed when it does not: a missing measurement and a
+   * measurement of nothing are different things, and a baseline that reported
+   * zeros would look like a regression the day a bucket appears.
+   */
+  opaque?: {
+    "1MiB": OpaqueReadCost;
+    "8MiB": OpaqueReadCost;
+    /** `head -c`: the same body, asked for 16 bytes of it. */
+    range16B: OpaqueReadCost;
+    /** Stopped after the first chunk, to show the read stops with it. */
+    cancelled: OpaqueReadCost;
+  };
   subtree: Record<
     "100" | "1000",
     {
@@ -104,6 +143,8 @@ const PROFILE_SETTINGS: Readonly<Record<RemoteBenchmarkProfile, ProfileSettings>
 
 export interface RemoteBenchmarkRpc {
   ping(): Promise<void>;
+  hasBucket(): Promise<boolean>;
+  opaqueRead(sizeBytes: number, mode: "full" | "range" | "cancel"): Promise<OpaqueReadCost>;
   preparePoint(): Promise<PointCosts>;
   statBatch(iterations: number): Promise<number>;
   overwriteBatch(iterations: number): Promise<number>;
@@ -169,13 +210,102 @@ async function measureRpc(
 export class RemoteBenchmarkHarness {
   private readonly storage: DurableObjectStorage;
   private readonly fileSystem: DurableObjectFileSystem;
+  private readonly bucket: R2Bucket | undefined;
 
-  constructor(storage: DurableObjectStorage) {
+  constructor(storage: DurableObjectStorage, bucket?: R2Bucket) {
     this.storage = storage;
+    this.bucket = bucket;
     this.fileSystem = new DurableObjectFileSystem(storage);
   }
 
   ping(): void {}
+
+  hasBucket(): boolean {
+    return this.bucket !== undefined;
+  }
+
+  /**
+   * Drains the garbage queue, for the object's alarm handler.
+   *
+   * Committing an opaque generation schedules one, and a Durable Object that
+   * calls `setAlarm` without an `alarm()` handler fails the call outright —
+   * which is how the first run of this benchmark discovered it needed one.
+   */
+  async drainGarbage(): Promise<void> {
+    await this.fileSystem.drainGarbage();
+  }
+
+  /**
+   * Measures one opaque body read against a real bucket.
+   *
+   * The order under test is the one the design turns on: metadata and the
+   * retention lease commit in a short SQL transaction, and the R2 GET happens
+   * after. So the SQL cost here is the lease, and everything after the first
+   * byte is transfer the DO is relaying rather than storing.
+   *
+   * `mode` picks what the caller does with the body: read all of it, ask for a
+   * range of it, or stop after the first chunk — the three shapes a shell
+   * command actually produces.
+   */
+  async opaqueRead(sizeBytes: number, mode: "full" | "range" | "cancel"): Promise<OpaqueReadCost> {
+    const bucket = this.bucket;
+    if (bucket === undefined) throw new Error("no R2 bucket is bound");
+
+    let gets = 0;
+    const store: OpaqueStore = {
+      putIfAbsent: (key, body, metadata) =>
+        new R2OpaqueStore(bucket).putIfAbsent(key, body, metadata),
+      head: (key) => new R2OpaqueStore(bucket).head(key),
+      getStream: (key, range) => {
+        gets += 1;
+        return new R2OpaqueStore(bucket).getStream(key, range);
+      },
+      delete: (keys) => new R2OpaqueStore(bucket).delete(keys),
+    };
+
+    const path = `/opaque-${sizeBytes}-${mode}`;
+    const meter = meterSqlStorage(this.storage);
+    const fileSystem = new DurableObjectFileSystem(meter.storage, { opaqueStore: store });
+    // A fresh generation per run, so a measurement never reads a body a
+    // previous run left warm in some cache.
+    await fileSystem.remove(path, { recursive: true }).catch(() => undefined);
+    const upload = await fileSystem.beginOpaqueUpload(path);
+    await store.putIfAbsent(upload.objectKey, new Uint8Array(sizeBytes).fill(120));
+    await fileSystem.commitOpaqueUpload(upload.uploadId);
+
+    gets = 0;
+    meter.reset();
+    const reader = new R2ContentReader(fileSystem, store);
+    const started = Date.now();
+    const body = await reader.open(path, mode === "range" ? { offset: 0, length: 16 } : undefined);
+    const stream = body.stream.getReader();
+    let firstByteMs = 0;
+    let bytes = 0;
+    let chunks = 0;
+    let maxChunkBytes = 0;
+    for (;;) {
+      const next = await stream.read();
+      if (next.done) break;
+      if (chunks === 0) firstByteMs = Date.now() - started;
+      chunks += 1;
+      bytes += next.value.byteLength;
+      maxChunkBytes = Math.max(maxChunkBytes, next.value.byteLength);
+      if (mode === "cancel") {
+        await stream.cancel();
+        break;
+      }
+    }
+    const durationMs = Date.now() - started;
+    return {
+      firstByteMs,
+      durationMs,
+      bytes,
+      chunks,
+      maxChunkBytes,
+      r2Gets: gets,
+      sql: sqlCost(meter),
+    };
+  }
 
   async preparePoint(): Promise<PointCosts> {
     const meter = meterSqlStorage(this.storage);
@@ -411,6 +541,16 @@ export async function runRemoteBenchmark(
 ): Promise<RemoteBenchmarkResult> {
   const startedAt = new Date().toISOString();
   const settings = PROFILE_SETTINGS[profile];
+  // Omitted rather than zeroed when no bucket is bound: a missing measurement
+  // and a measurement of nothing are different things.
+  const opaque = (await stub.hasBucket())
+    ? {
+        "1MiB": await stub.opaqueRead(MIB, "full"),
+        "8MiB": await stub.opaqueRead(8 * MIB, "full"),
+        range16B: await stub.opaqueRead(8 * MIB, "range"),
+        cancelled: await stub.opaqueRead(8 * MIB, "cancel"),
+      }
+    : undefined;
   const rpcOverhead = await measureRpc(settings.pointSamples, 1, () => stub.ping());
   const pointCosts = await stub.preparePoint();
   const point = {
@@ -431,7 +571,8 @@ export async function runRemoteBenchmark(
   const subtree = await benchmarkSubtrees(stub, settings);
   const append = await benchmarkAppend(stub, settings);
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
+    ...(opaque === undefined ? {} : { opaque }),
     profile,
     timing: "caller-observed-rpc",
     startedAt,

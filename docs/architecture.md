@@ -249,11 +249,15 @@ outlive it in both designs — but renewal is a local call in one and a round
 trip in the other. A read that outlasts its lease fails with `EIO` rather than
 returning short data.
 
-And the cost it avoids is smaller than it looks. The DO does not buffer: the
-bucket's stream is handed straight to the command with the byte count charged
-as it passes, at most one chunk in flight. What crosses the DO is what the
-command was going to consume anyway, and a command that stops early — `head`,
-`grep -q` — stops the read with it.
+And the cost it avoids is smaller than it looks, which is now measured rather
+than argued. Against a real bucket (`bench/remote-baseline-2026-07-26.md`), an
+8 MiB read costs one R2 GET, five SQL statements, and about 190 ms of Durable
+Object time after the first byte — the DO holds one 4 KiB chunk at a time
+whatever the body's size, so what crosses it is what the command was going to
+consume anyway. A command that stops early — `head`, `grep -q` — stops the read
+with it: cancelling after the first chunk transfers 4 KiB of an 8 MiB object.
+Moving the body to a caller Worker would save that ~190 ms and cost a second
+shell authority.
 
 The ordering that makes this safe is the one `readOpaque()` already uses:
 metadata and the retention lease are taken in one short SQL transaction, and
@@ -261,7 +265,9 @@ the R2 GET happens after it commits. A bucket round trip inside a transaction
 would hold the storage lock for the length of a network call. The ordering is
 close to structural — `transactionSync` returns before the `await` that issues
 the GET — and a test guards it against a refactor that made the transaction
-asynchronous.
+asynchronous. The deployed measurement shows the same thing from outside: the
+SQL cost is five statements whether the body is 16 bytes or 8 MiB, because it
+is the lease and nothing else.
 
 ### What streams and what does not
 
