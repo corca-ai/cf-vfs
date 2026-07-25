@@ -26,6 +26,15 @@ export type ShellFileSystem = Pick<
   | "realpath"
 > & {
   inspectWriteTarget(path: string): VfsStat | null;
+  /**
+   * Enforces the declared roots without reading or writing anything.
+   *
+   * A path that is answered outside this interface — a virtual device — still
+   * has to pass the same check, and saying so outright beats calling a reading
+   * method for its side effect.
+   */
+  assertReadable(path: string): void;
+  assertWritable(path: string): void;
 };
 
 export interface ShellSink {

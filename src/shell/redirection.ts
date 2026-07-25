@@ -2,6 +2,7 @@ import { VfsError } from "../core/errors.js";
 import { normalizePath } from "../core/path.js";
 import { bodyToStream } from "../vfs/streams.js";
 import type { ByteBody } from "../vfs/types.js";
+import { deviceInput, deviceSink, shellDevice } from "./devices.js";
 import { type ExpansionRuntime, expandScalarWord, expandWord } from "./expand.js";
 import { shellInput } from "./input.js";
 import type { Redirection } from "./parser.js";
@@ -147,8 +148,21 @@ export async function applyRedirections(
         continue;
       }
       const path = await targetPath(redirection.target, session, fileSystem, budget, runtime);
+      const device = shellDevice(path);
+      // A device is a path like any other as far as the declared roots are
+      // concerned, so the roots are checked before the descriptor layer
+      // answers. Going straight to the device would be the accidental bypass.
+      if (device !== undefined) {
+        if (redirection.operator === "<") fileSystem.assertReadable(path);
+        else fileSystem.assertWritable(path);
+      }
       if (redirection.operator === "<") {
-        const replacement = fileSystem.readFile(path).stream;
+        // `< /dev/stdin` names the input it would replace, so it changes
+        // nothing. Going through the motions would cancel the stream first and
+        // then hand back what was just cancelled.
+        if (device === "stdin") continue;
+        const replacement =
+          device === undefined ? fileSystem.readFile(path).stream : deviceInput(device, fds, path);
         if (cancelReplacedInput || inputRedirected) {
           await fds[0].cancel(new VfsError("EPIPE", "pipeline input was replaced by redirection"));
         }
@@ -157,13 +171,20 @@ export async function applyRedirections(
         continue;
       }
       const descriptor = redirection.operator.startsWith("2") ? 2 : 1;
-      const replacement = atomicFileSink(
-        fileSystem,
-        path,
-        redirection.operator.endsWith(">>"),
-        budget.limits.maxPipelineBytes,
-        budget,
-      );
+      // The sink is built before the descriptor it replaces is closed, so a
+      // constructor that throws leaves the current descriptor intact. A device
+      // alias needs the same ordering for its own reason: `> /dev/stdout`
+      // takes its reference while the original is still open.
+      const replacement =
+        device === undefined
+          ? atomicFileSink(
+              fileSystem,
+              path,
+              redirection.operator.endsWith(">>"),
+              budget.limits.maxPipelineBytes,
+              budget,
+            )
+          : deviceSink(device, fds, path);
       try {
         await fds[descriptor].close();
       } catch (error) {

@@ -13,6 +13,7 @@ import { optindGeneration, setOptindFromGetopts } from "../environment.js";
 import { readInputRecord } from "../input.js";
 import type { ShellCommandContext } from "../types.js";
 import { type AppletSpec, appletUsageError, defineApplet } from "./applet.js";
+import { isCharacterDevice, isRegularFile } from "./format.js";
 import { type BufferLease, commandPath, parseInteger, readFileText, writeText } from "./helpers.js";
 
 const COLON = {
@@ -778,7 +779,7 @@ export const setCommand = /* @__PURE__ */ defineApplet(SET, (context, argv) => {
 });
 
 /** Unary predicates that consult namespace metadata. */
-const FILE_PREDICATES = ["-e", "-f", "-d", "-s", "-r", "-w", "-x", "-L", "-h"] as const;
+const FILE_PREDICATES = ["-e", "-f", "-d", "-s", "-r", "-w", "-x", "-L", "-h", "-c"] as const;
 type FilePredicate = (typeof FILE_PREDICATES)[number];
 type PermissionPredicate = "-r" | "-w" | "-x";
 
@@ -821,8 +822,12 @@ async function evaluateTest(
         const asks = unary === "-L" || unary === "-h";
         const stat = asks ? context.fileSystem.lstat(path) : context.fileSystem.stat(path);
         if (asks) return stat.kind === "symlink";
+        if (unary === "-c") return isCharacterDevice(stat);
         if (unary === "-e") return true;
-        if (unary === "-f") return stat.kind === "file";
+        // A regular file, which a character device is not.
+        if (unary === "-f") {
+          return stat.kind === "file" && isRegularFile(stat);
+        }
         if (unary === "-d") return stat.kind === "directory";
         if (unary === "-s") return stat.sizeBytes > 0;
         // Compatibility mode bits only. There is no user or group here, so a

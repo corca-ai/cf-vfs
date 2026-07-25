@@ -110,6 +110,28 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     expect(harness.fileSystem.realpath("/x/y/l/..")).toBe("/x/y");
     expect((await harness.run("cat /x/y/l/../here.txt")).stdout).toBe("near\n");
   },
+  "devices-are-read-and-written-but-never-created-or-removed": async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/f.txt", "body\n");
+    // Reads and writes are answered.
+    expect((await harness.run("echo x > /dev/null; cat /dev/null; echo ok")).stdout).toBe("ok\n");
+    // Everything that would change the namespace is refused, so the device
+    // view and the entry view can never disagree.
+    for (const script of ["cp /dev/null /empty.txt", "touch /dev/null", "rm /dev/null"]) {
+      expect((await harness.run(script)).exitCode, script).not.toBe(0);
+    }
+    expect((await harness.run("cat /f.txt")).stdout).toBe("body\n");
+  },
+  "descriptor-paths-are-redirection-targets-not-operands": async () => {
+    const harness = createBashHarness();
+    // Redirection works in both directions.
+    expect((await harness.run("printf 'x\\n' | cat < /dev/stdin")).stdout).toBe("x\n");
+    expect((await harness.run("echo shown > /dev/stdout")).stdout).toBe("shown\n");
+    // As an operand it is a usage error rather than a silently empty read.
+    const operand = await harness.run("printf 'x\\n' | cat /dev/stdin");
+    expect(operand.exitCode).toBe(2);
+    expect(operand.stderr).toContain("device is not readable");
+  },
   "hard-links-are-not-supported": async () => {
     const harness = createBashHarness();
     await harness.fileSystem.writeFile("/real.txt", "x\n");

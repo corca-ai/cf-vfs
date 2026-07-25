@@ -174,6 +174,14 @@ export class ScopedFileSystem implements ShellFileSystem {
     return this.#inner.symlink(path, target, options);
   }
 
+  assertReadable(path: string): void {
+    this.read(path);
+  }
+
+  assertWritable(path: string): void {
+    this.write(path);
+  }
+
   inspectWriteTarget(path: string): VfsStat | null {
     const normalized = normalizePath(path);
     this.write(normalized);

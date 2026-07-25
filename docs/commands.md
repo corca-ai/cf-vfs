@@ -600,6 +600,48 @@ abort signal or the execution deadline, so one short pattern from a caller would
 burn the whole CPU limit. Patterns that would still be large after expansion
 (`(x{50}){50}`) are refused with status 2 rather than compiled.
 
+### Virtual devices
+
+`/dev/null`, `/dev/stdin`, `/dev/stdout`, and `/dev/stderr` exist during a
+shell execution, along with the `/dev/fd/0`, `/dev/fd/1`, and `/dev/fd/2`
+spellings of the last three, under a `/dev` that reads as a directory holding
+exactly them.
+
+The whole of `/dev` is reserved. Reads and writes are answered; every
+namespace change is refused, so `mkdir /dev`, `rm /dev/null`, `touch
+/dev/null`, and `cp /dev/null f` are errors. That single rule is what keeps
+the device view and the entry view from disagreeing — without it a real
+`/dev/null` would be read as the device but listed, moved, and removed as a
+file, and a write to it would be silently discarded.
+
+`/dev/null` discards what is written to it and reads as empty. Nothing is
+buffered and nothing extra is charged: the bytes were already metered when
+whatever produced them ran, so `cmd > /dev/null` costs exactly what
+`cmd > file` costs and never exhausts a budget sooner.
+
+The other three are aliases for this execution's descriptors, taken through
+the same reference counting `2>&1` uses. An alias can release its own
+reference but never destroy what it duplicates, so a later redirection that
+fails does not discard output already written. An alias names where the
+descriptor points at the moment it is opened, which is why
+`> /dev/null > /dev/stdout` discards, as it does in Bash. They are redirection
+sources and targets only — as a command operand a descriptor path is a usage
+error, because there is no file behind a descriptor for one to name. A link
+to a device is followed like any other link, so `ln -s /dev/null quiet` makes
+`> quiet` discard.
+
+They report as character devices: `test -e`, `-r`, `-w`, and `-c` succeed,
+`test -f` fails because a device is not a regular file, and `stat`, `file`,
+and `ls -l` say so. Any other `/dev` path is `ENOENT`; `/dev/zero`, terminals,
+and the rest would each need a model this runtime cannot make true.
+
+The declared roots do not govern devices, and that is deliberate rather than
+an oversight. A device names nothing in the namespace: `/dev/null` discards,
+and the descriptor paths duplicate streams the caller already handed this
+execution. Requiring `/dev` in a session's roots would break `> /dev/null` for
+every scoped caller while preventing nothing. Everything the roots do name is
+still governed, including a path that tries to leave through `/dev/..`.
+
 ### Symbolic links
 
 `ln -s` creates a link and stores the target exactly as written. The target is

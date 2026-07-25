@@ -162,7 +162,8 @@ export type ConditionalUnaryOperator =
   | "-w"
   | "-x"
   | "-L"
-  | "-h";
+  | "-h"
+  | "-c";
 export type ConditionalBinaryOperator =
   | "=="
   | "!="
@@ -293,7 +294,6 @@ const UNSUPPORTED_RESERVED = new Set([
 const UNSUPPORTED_CONDITIONAL_UNARY = new Set([
   "-a",
   "-b",
-  "-c",
   "-g",
   "-k",
   "-N",
@@ -322,6 +322,7 @@ const CONDITIONAL_UNARY_OPERATORS: readonly ConditionalUnaryOperator[] = [
   "-x",
   "-L",
   "-h",
+  "-c",
 ];
 
 function conditionalUnaryOperator(value: string | undefined): ConditionalUnaryOperator | undefined {

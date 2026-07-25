@@ -186,6 +186,20 @@
       "oracle": "coreutils",
       "summary": "`link/..` names the directory holding the link, not the parent of what it points at",
       "reason": "Paths are normalized once, at the boundary, before anything is looked up \u2014 that is what makes `..` mean the same thing to every utility and keeps path handling out of each one. Resolving `..` against the target instead would mean interleaving normalization with lookups, so a path's meaning would depend on what happened to exist while it was being read. Bash's own `cd -L` behaves this way for the same reason."
+    },
+    {
+      "id": "devices-are-read-and-written-but-never-created-or-removed",
+      "command": "cp, mv, rm, touch, mkdir, ln",
+      "oracle": "coreutils",
+      "summary": "`/dev` and the names in it accept reads and writes but refuse every namespace change, so `cp /dev/null f`, `touch /dev/null`, and `rm /dev/null` are errors",
+      "reason": "A device is a name the shell knows, not an entry. The alternative was letting the two views disagree \u2014 a real `/dev/null` would then be read as the device but listed, removed, and moved as a file, and a write to it would be silently discarded. One rule for every operation is worth losing the `cp /dev/null f` truncation idiom, which `> f` already spells."
+    },
+    {
+      "id": "descriptor-paths-are-redirection-targets-not-operands",
+      "command": "cat, tee, head",
+      "oracle": "bash",
+      "summary": "`/dev/stdin`, `/dev/stdout`, and `/dev/stderr` work as redirection sources and targets; as command operands they are a usage error",
+      "reason": "A descriptor alias is a capability of the redirection layer, which holds this execution's streams. A command operand is a path, and this runtime has no file behind a descriptor for one to name. `< /dev/stdin` and `> /dev/stderr` are the supported spellings, and they compose the same way. `/dev/null` has no such restriction because it is not an alias."
     }
   ],
   "cases": [

@@ -9,7 +9,7 @@ import {
   defineApplet,
   parseAppletOptions,
 } from "./applet.js";
-import { modeString } from "./format.js";
+import { CHARACTER_DEVICE_TYPE, FILE_TYPE_MASK, isRegularFile, modeString } from "./format.js";
 import {
   BufferedTextWriter,
   commandPath,
@@ -469,11 +469,11 @@ function statText(stat: VfsStat): string {
     `  File: ${stat.path}`,
     `  Size: ${stat.sizeBytes}`,
     `  Type: ${
-      stat.kind === "directory"
-        ? "directory"
-        : stat.kind === "symlink"
-          ? `symbolic link -> ${stat.linkTarget}`
-          : `${stat.contentClass} file`
+      stat.kind === "symlink"
+        ? `symbolic link -> ${stat.linkTarget}`
+        : stat.kind === "file" && isRegularFile(stat)
+          ? `${stat.contentClass} file`
+          : describeKind(stat)
     }`,
     `  Mode: ${stat.mode.toString(8)} (${modeString(stat.mode)})`,
     `Revision: ${stat.revision}`,
@@ -512,6 +512,15 @@ export const statCommand = /* @__PURE__ */ defineApplet(STAT, async (context, ar
   return 0;
 });
 
+/** What `stat -c %F` and `file` call an entry, from the mode's type field. */
+function describeKind(stat: VfsStat): string {
+  if (stat.kind === "directory") return "directory";
+  if (stat.kind === "symlink") return "symbolic link";
+  return (stat.mode & FILE_TYPE_MASK) === CHARACTER_DEVICE_TYPE
+    ? "character special file"
+    : "regular file";
+}
+
 /** Expands the `-c` conversions this namespace can answer. */
 function statFormat(format: string, stat: VfsStat, operand: string): string {
   let output = "";
@@ -534,14 +543,8 @@ function statFormat(format: string, stat: VfsStat, operand: string): string {
     else if (conversion === "f") output += stat.mode.toString(16);
     else if (conversion === "a") output += (stat.mode & 0o7777).toString(8);
     else if (conversion === "A") output += modeString(stat.mode);
-    else if (conversion === "F") {
-      output +=
-        stat.kind === "directory"
-          ? "directory"
-          : stat.kind === "symlink"
-            ? "symbolic link"
-            : "regular file";
-    } else if (conversion === "%") output += "%";
+    else if (conversion === "F") output += describeKind(stat);
+    else if (conversion === "%") output += "%";
     else throw appletUsageError(STAT, `unsupported conversion %${conversion ?? ""}`);
   }
   return output;
@@ -656,13 +659,13 @@ export const fileCommand = /* @__PURE__ */ defineApplet(FILE, async (context, ar
     // `lstat`, so a link is described as a link rather than as its target.
     const stat = context.fileSystem.lstat(commandPath(context, path));
     const description =
-      stat.kind === "directory"
-        ? "directory"
-        : stat.kind === "symlink"
-          ? `symbolic link to ${stat.linkTarget}`
-          : stat.contentClass === "opaque"
-            ? "opaque R2 content"
-            : "inline data";
+      stat.kind === "symlink"
+        ? `symbolic link to ${stat.linkTarget}`
+        : stat.kind === "file" && stat.contentClass === "opaque"
+          ? "opaque R2 content"
+          : stat.kind === "file" && isRegularFile(stat)
+            ? "inline data"
+            : describeKind(stat);
     await writeText(fds[1], `${path}: ${description}\n`);
   }
   return 0;
