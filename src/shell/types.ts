@@ -50,6 +50,7 @@ export interface ShellSession {
   functions: Map<string, FunctionDefinitionNode>;
   functionDepth: number;
   sourceDepth: number;
+  scriptDepth: number;
   loopDepth: number;
   localFrames: Array<Map<string, string | undefined>>;
   localGetoptsFrames: ShellLocalGetoptsFrame[];
@@ -99,6 +100,7 @@ export interface ShellLimits {
   maxLoopIterations: number;
   maxFunctionDepth: number;
   maxSourceDepth: number;
+  maxScriptDepth: number;
   maxCommandSubstitutionBytes: number;
   maxPipelineBytes: number;
   maxStdoutBytes: number;
@@ -148,8 +150,44 @@ export interface ShellCommandContext {
    *
    * Discovery utilities use this so they can never disagree with execution and
    * so they do not need to import the registry or the applet table themselves.
+   * It is asynchronous because resolution may consult the namespace for an
+   * executable file, and it classifies without reading one.
    */
-  resolveCommand(name: string): ShellCommandResolution | undefined;
+  resolveCommand(name: string): Promise<ShellCommandResolution | undefined>;
+  /**
+   * Runs a bounded source unit in an isolated child scope.
+   *
+   * The child inherits the environment, working directory, shell options,
+   * policy, cancellation, and the execution-wide budget, and receives its own
+   * positional parameters. Variables, functions, and working-directory changes
+   * it makes do not reach the caller, and `exit` ends the child rather than the
+   * caller. This is what running an executable script means; `executeSource`
+   * remains the same-scope form `source` and `.` need.
+   *
+   * `name` becomes `$0`. It is the spelling the caller used, not a resolved
+   * path, so a script sees what Bash would hand it.
+   */
+  executeScript(
+    source: string,
+    name: string,
+    args: readonly string[],
+    fds: ShellFileDescriptors,
+  ): Promise<number>;
+  /**
+   * Runs a bounded VFS file as a script in an isolated child scope.
+   *
+   * Returns `undefined` when nothing is at that path, so the caller decides the
+   * diagnostic and reports 127; a file that exists but cannot run raises the
+   * same `ENOEXEC` or `EACCES` failure an executable file would, which is
+   * status 126. The executable mode bit is not required: naming the interpreter
+   * is the authorization.
+   */
+  executeScriptFile(
+    path: string,
+    args: readonly string[],
+    fds: ShellFileDescriptors,
+    invokedAs?: string,
+  ): Promise<number | undefined>;
 }
 
 export interface ExecuteCommandOptions {

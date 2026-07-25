@@ -215,16 +215,15 @@ describe("command discovery", () => {
 });
 
 describe("Linux filesystem profile", () => {
-  it("declares the shell profile as a name that resolves but does not run", async () => {
+  it("declares the shell profile as a name that resolves and runs", async () => {
     const harness = pathHarness();
     const named = await harness.run(`PATH=${PATH}; command -v sh; type bash`);
     expect(named.exitCode).toBe(0);
     // An alias reports the spelling that was asked for, as Linux would.
     expect(named.stdout).toBe("/bin/sh\nbash is /bin/bash\n");
-    // Found but not executable is 126, not 127: the profile exists.
-    const run = await harness.run(`PATH=${PATH}; /bin/sh -c 'true'`);
-    expect(run.exitCode).toBe(126);
-    expect(run.stderr).toBe("sh: executing the cf-vfs shell profile is not supported yet\n");
+    const run = await harness.run(`PATH=${PATH}; /bin/sh -c 'printf %s ran'`);
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout).toBe("ran");
   });
 
   it("publishes environment defaults naming the applet directories", () => {

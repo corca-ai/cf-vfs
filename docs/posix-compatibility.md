@@ -16,8 +16,9 @@ host filesystem access.
 | Modes | A default `022`-like result (`0755` directories and `0644` files) and explicit mode updates are metadata only. They do not enforce access. |
 | Concurrency | Whole-file publication and namespace changes are atomic within one DO. Revision and mutation-token guards reject stale work, including absent-path ABA. |
 | Links and special files | Symbolic links, hard links, devices, sockets, FIFOs, sparse files, xattrs, and `mmap` are unsupported. |
+| Execution | An inline file with an executable mode bit runs as a shell script in an isolated child scope. There are no processes, `fork`, `execve`, signals, job control, or native binaries, and no interpreter other than this shell profile. |
 | Locks and open handles | There is no persistent descriptor lifecycle or advisory/mandatory locking. Returned inline streams are bounded snapshots; guards provide optimistic concurrency. |
-| Errors | Familiar codes include `ENOENT`, `EEXIST`, `ENOTDIR`, `EISDIR`, `ENOTEMPTY`, `EFBIG`, `ENOSPC`, `EPIPE`, and `ENOTSUP`. `EREVISION` denotes a stale guard. This is not the complete POSIX errno set. |
+| Errors | Familiar codes include `ENOENT`, `ENOEXEC`, `EEXIST`, `ENOTDIR`, `EISDIR`, `ENOTEMPTY`, `EFBIG`, `ENOSPC`, `EPIPE`, and `ENOTSUP`. `EREVISION` denotes a stale guard. This is not the complete POSIX errno set. |
 
 Virtual descriptors `0`, `1`, and `2` exist only for one submitted source
 unit, including in an interactive session. Pipelines connect them with byte
@@ -132,8 +133,13 @@ Deliberate deterministic choices include:
   Standard. It provides `/etc`, `/home`, `/tmp`, `/var/tmp`, and `/workspace` as
   ordinary directories, resolves `/bin` and `/usr/bin` virtually, and adds no
   user database, package manager, writable `/bin`, or host process. `/bin/sh`
-  names the profile and resolves, but running it is status 126 until executable
-  files are supported;
+  and `/bin/bash` name this shell profile and run it, never host Bash;
+- an inline file with an executable mode bit runs as a shell script in an
+  isolated child scope. Mode bits remain compatibility metadata: the executable
+  bit gates script execution and enforces nothing else, and there is no user,
+  group, or access control behind it. Whatever a shebang names, the only
+  interpreter that can exist is this shell profile, so an unsupported one is
+  refused with status 126 rather than approximated;
 - status 2 is syntax/usage, 126 is policy denial, and 127 is command-not-found.
 
 Differential fixtures are pinned against `bash:5.3.3` with the same locale and
@@ -168,6 +174,7 @@ Currently declared divergences:
 | `wc` | Multi-field output is single-space separated. GNU right-aligns each count in a width derived from the largest input, which the streaming profile never buffers. Single-field forms such as `wc -l` match exactly. |
 | `diff` | Output is always the unified format `patch` consumes; the normal, context, and `ed` formats are outside the profile. |
 | `grep`, `sed` | Patterns use JavaScript regular-expression syntax under the Unicode flag, not POSIX basic or extended regular expressions. Literals, `.`, `*`, `^`, `$`, and bracket expressions agree with both and are pinned by fixtures; every other metacharacter differs. `a+` repeats here and is a literal plus under POSIX, while `a\|x` alternates under POSIX and is a literal here. |
+| script execution | An executable file runs only as the cf-vfs shell profile, whatever its shebang names. There is no process runtime to hand a file to, so an unsupported interpreter — including an interpreter argument such as `#!/bin/sh -e` — is status 126 rather than something the file did not ask for. |
 | `type` | Reports that a name is a function without printing its definition. Bash re-renders the parsed body, which would make the output depend on the formatter rather than on the profile. |
 | `sed` | The replacement is literal text. GNU expands `&` to the match and `\1` to a capture group; both are written literally here, and JavaScript's `$&`, ``$` ``, `$'`, and `$n` forms are escaped so replacement text taken from data can never splice another part of the record into the output. |
 

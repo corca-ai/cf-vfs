@@ -14,6 +14,7 @@ export const DEFAULT_SHELL_LIMITS: ShellLimits = {
   maxLoopIterations: 10_000,
   maxFunctionDepth: 64,
   maxSourceDepth: 16,
+  maxScriptDepth: 8,
   maxCommandSubstitutionBytes: 1024 * 1024,
   maxPipelineBytes: 8 * 1024 * 1024,
   maxStdoutBytes: 8 * 1024 * 1024,

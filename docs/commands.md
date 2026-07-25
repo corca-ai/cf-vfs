@@ -389,15 +389,14 @@ cannot lose commands, and `type cat` reports an applet rather than inventing a
 location. Set `commandResolution: "path"`, or spread `LINUX_SHELL_OPTIONS`, to
 get the search.
 
-Under the search, components are looked at left to right and the first applet
-directory decides. A duplicated component is harmless. A component naming
-anything else contributes nothing — including the empty component POSIX gives to
-the working directory, and including `/bin/`, since a component must be spelled
-exactly `/bin` or `/usr/bin` and no namespace directory can supply a command
-until executing a stored file is supported. A prefix assignment applies before
-the search, so `PATH=/opt/tools cat file` reports `cat: command not found`
-exactly as in Bash. An absolute applet path bypasses the search entirely, under
-either setting.
+Under the search, components are looked at left to right and the first match
+decides. A component is normalized before it is classified, so `/bin/`, `//bin`,
+and `/bin/.` are the applet directory they name and no stored file can answer in
+their place. A duplicated component is harmless, and an empty component means
+the working directory, as in POSIX. A prefix assignment applies before the
+search, so `PATH=/opt/tools cat file` reports `cat: command not found` exactly as
+in Bash. An absolute applet path bypasses the search entirely, under either
+setting.
 
 A name the command policy denies is reported as unresolved by `command -v`,
 `type`, and `which`, so discovery never advertises something that would
@@ -412,20 +411,76 @@ Diagnostics always name the canonical applet and end with its declared synopsis.
 allowlist entry covers every spelling of that implementation; entries must be
 canonical applet names, since an alias in the list matches nothing.
 
-### The Linux profile
-
 `@corca-ai/cf-vfs/shell/linux` is an opt-in module supplying the locations and
 variables ordinary scripts assume. It is a cf-vfs profile, not Linux and not the
 Filesystem Hierarchy Standard: there is no user database, no package manager, no
 writable `/bin`, and no host process.
 
+### Executable scripts
+
+An inline VFS file whose compatibility mode bits include an executable bit runs
+as a shell script. `chmod +x script.sh` followed by `./script.sh` behaves the
+way it does on Linux, and `sh script.sh` runs a file without requiring the bit.
+`chmod` accepts an octal mode or comma-separated symbolic clauses matching
+`[ugoa]*[-+=][rwx]*`; `s`, `t`, `X`, and numeric copies such as `u=g` are
+outside the profile and are usage errors.
+
+A pathname — anything containing `/` — names the file directly and is never
+searched. A bare name is searched only under `commandResolution: "path"`, and
+only through `PATH` components that are not applet directories: those already
+answered, and no file can shadow an applet however the component is spelled.
+
+A search skips a candidate that exists but cannot run and keeps looking, exactly
+as Bash does, so one non-executable entry cannot mask a command a later
+component provides; the refusal is reported only when nothing runs. A component
+outside the readable roots supplies nothing at all, so it cannot turn an unknown
+command into 126. An explicit pathname fails immediately, because there is
+nothing else to try.
+
+The interpreter line is read from a bounded 256-byte prefix before the file is
+decoded. `#!/bin/sh`, `#!/bin/bash`, `#!/usr/bin/sh`, `#!/usr/bin/bash`,
+`#!/usr/bin/env sh`, and `#!/usr/bin/env bash` all select this shell profile,
+and a file with no interpreter line gets it too. Every other interpreter — and
+any interpreter argument, such as `#!/bin/sh -e` — is refused, because there is
+no process runtime to hand the file to and running it as something it did not
+ask for would be worse than declining.
+
+Statuses are Linux-shaped. A path that does not exist is 127. Everything else
+that cannot run is 126: a directory or other non-regular entry, a file without
+an executable bit, opaque R2 content, a file that is not valid UTF-8 or contains
+a NUL byte, a file past the script byte limit, and an unsupported or malformed
+interpreter line.
+
+Execution creates an isolated child scope. It inherits the environment, working
+directory, shell options, policy, cancellation, and the execution-wide budget,
+and receives its own positional parameters with `$0` set to the spelling used to
+invoke it, as Bash does.
+
+The isolation is outbound only. Because there is no process boundary and one
+variable map, a script also sees the caller's *unexported* variables, its shell
+functions, and its options — a declared divergence from Bash, which inherits
+only exported variables. Nothing the script defines, and no working-directory
+change or `exit` it performs, reaches the caller, and `exit` ends the script
+rather than the caller — an interactive session survives
+a script that exits. Each script is parsed completely before it can mutate
+anything, and nesting is bounded by `maxScriptDepth` independently of `source`.
+
+When `ShellPolicy.allowedCommands` is set, one `sh` entry authorizes running
+executable files, rather than requiring every script path an application might
+store. `sh` and its `bash` alias run a bounded unit in that same isolated child
+scope: `sh -c COMMAND [NAME [ARGUMENT...]]` or `sh FILE [ARGUMENT...]`. A named
+file does not need the executable bit — naming the interpreter is the
+authorization — and reports the same statuses an executable file does.
+Interactive invocation, `-s`, `-l`, reading a script from standard input, and
+job control are outside the profile.
+
+### The Linux profile
+
 `linuxShellEnvironment(options)` returns `PATH`, `HOME`, `USER`, `LOGNAME`,
 `SHELL`, `TMPDIR`, `LANG`, `LC_ALL`, and `TZ`; pass it as `env`, and spread
 `LINUX_SHELL_OPTIONS` into the `Shell` options to enable the search. `SHELL`
-names `/bin/sh`, the canonical spelling of this shell profile. That name
-resolves — `command -v sh` and `type bash` report it — but running it exits 126,
-found but not executable, because only its execution is missing. It claims no
-host Bash: the declared language is `BASH_COMPATIBILITY_VERSION`.
+names `/bin/sh`, the canonical spelling of this shell profile. It claims no host
+Bash: the declared language is `BASH_COMPATIBILITY_VERSION`.
 
 `provisionLinuxFilesystem(fileSystem, options)` creates `/etc`, `/home`,
 `/home/<user>`, `/tmp`, `/var`, `/var/tmp`, and `/workspace`, and returns what
@@ -444,6 +499,7 @@ decides which directory is provisioned; pass the same path as the execution
 | --- | --- |
 | shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (`-e/+e`, `-o/+o errexit`, `-u/+u`, `-o/+o nounset`, `-o/+o pipefail`), `test`, `[` |
 | discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
+| shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
 | namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f`, `ls -l -d -a -A`, `find -name -type -maxdepth`, `stat`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | streaming text/bytes | `cat`, `grep -i -v -n -F -c`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed s/old/new/[g]`, `seq -s -w` |
 | bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |

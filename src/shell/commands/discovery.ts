@@ -30,13 +30,6 @@ const WHICH = {
   summary: "prints the applet path each name resolves to",
 } as const satisfies AppletSpec;
 
-const SH = {
-  name: "sh",
-  aliases: ["bash"],
-  usage: "[-c COMMAND]",
-  summary: "names the cf-vfs shell profile, which is not yet executable",
-} as const satisfies AppletSpec;
-
 const PRINTENV = {
   name: "printenv",
   usage: "[NAME...]",
@@ -74,7 +67,7 @@ export const commandCommand = /* @__PURE__ */ defineApplet(COMMAND, async (conte
   if (name === undefined) throw appletUsageError(COMMAND, "missing command name");
   if (!verify) return await context.executeCommand([name, ...rest], fds, { bypassFunctions: true });
   if (rest.length > 0) throw appletUsageError(COMMAND, "-v accepts one name");
-  const resolution = context.resolveCommand(name);
+  const resolution = await context.resolveCommand(name);
   if (resolution === undefined) return 1;
   // `command -v` prints something a script can run: a bare name for a function,
   // a built-in, or an applet reached without a searched path, and the applet
@@ -91,7 +84,7 @@ export const typeCommand = /* @__PURE__ */ defineApplet(TYPE, async (context, ar
   let status = 0;
   try {
     for (const name of argv) {
-      const resolution = context.resolveCommand(name);
+      const resolution = await context.resolveCommand(name);
       if (resolution === undefined) {
         await writeText(fds[2], `type: ${name}: not found\n`);
         status = 1;
@@ -122,7 +115,7 @@ export const whichCommand = /* @__PURE__ */ defineApplet(WHICH, async (context, 
   let status = 0;
   try {
     for (const name of argv) {
-      const resolution = context.resolveCommand(name);
+      const resolution = await context.resolveCommand(name);
       const path = resolution?.kind === "function" ? undefined : resolution?.path;
       if (path === undefined) {
         status = 1;
@@ -181,28 +174,10 @@ export const printenvCommand = /* @__PURE__ */ defineApplet(
   },
 );
 
-/**
- * Declares `/bin/sh` and `/bin/bash` as the cf-vfs shell profile.
- *
- * The name resolves, so `command -v sh` and `type sh` report it and `SHELL`
- * names something that exists. Running it exits 126 — found but not
- * executable — rather than 127, because the profile is real and only its
- * execution is missing. Running a shell script needs an isolated child scope,
- * which is tracked separately; this applet becomes runnable there.
- *
- * It claims no host Bash. The declared language is the cf-vfs profile exported
- * as `BASH_COMPATIBILITY_VERSION`.
- */
-export const shCommand = /* @__PURE__ */ defineApplet(SH, async (_context, _argv, fds) => {
-  await writeText(fds[2], `${SH.name}: executing the cf-vfs shell profile is not supported yet\n`);
-  return 126;
-});
-
 /** Every command-discovery applet, for a registry that wants all of them. */
 export const discoveryShellCommands = [
   commandCommand,
   typeCommand,
   whichCommand,
   printenvCommand,
-  shCommand,
 ] as const;

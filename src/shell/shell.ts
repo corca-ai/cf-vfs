@@ -6,6 +6,7 @@ import {
 import { isVfsError, VfsError, type VfsErrorCode } from "../core/errors.js";
 import { compareUtf8, normalizePath, normalizePathPreservingTrailingSlash } from "../core/path.js";
 import { bodyToStream, readAllBytes } from "../vfs/streams.js";
+import type { VfsStat } from "../vfs/types.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 import { ExecutionBudget, resolveShellLimits } from "./budget.js";
 import { type AppletRegistry, createAppletRegistry, splitSearchPath } from "./commands/applet.js";
@@ -35,7 +36,13 @@ import {
 import { createBytePipe, isDownstreamClosedError } from "./pipe.js";
 import { ScopedFileSystem } from "./policy.js";
 import { type AppliedRedirections, applyRedirections } from "./redirection.js";
-import { cloneShellSession, createShellSession } from "./session.js";
+import {
+  isExecutableMode,
+  readShebangLine,
+  SHELL_PROFILE_COMMAND,
+  selectsShellProfile,
+} from "./script.js";
+import { cloneShellSession, createShellSession, prepareShellSessionUnit } from "./session.js";
 import type {
   ExecuteBytesResult,
   ExecuteStreamOptions,
@@ -67,7 +74,7 @@ function statusFor(error: VfsError): number {
     ? 1
     : error.code === "EINVAL"
       ? 2
-      : error.code === "EACCES"
+      : error.code === "EACCES" || error.code === "ENOEXEC"
         ? 126
         : 1;
 }
@@ -345,8 +352,11 @@ function resolveApplet(
   let found: string | undefined;
   if (searchPath !== undefined && hasProgramForm) {
     // Left to right, first match wins, so a duplicated component is harmless
-    // and the reported path is the one that would run.
-    for (const directory of splitSearchPath(searchPath)) {
+    // and the reported path is the one that would run. Components are
+    // normalized first, so `/bin/` and `//bin` are the applet directory they
+    // name rather than somewhere a stored file could answer instead.
+    for (const component of splitSearchPath(searchPath)) {
+      const directory = normalizePath(component === "" ? "/" : component);
       if (registry.isAppletDirectory(directory)) {
         found = `${directory}/${name}`;
         break;
@@ -363,23 +373,234 @@ function resolveApplet(
 }
 
 /**
- * Reports how a name would resolve, using exactly the order execution uses:
- * shell function, then the applet resolver, then the command policy.
+ * Candidate paths an executable VFS file could satisfy `name` from.
  *
- * A name the policy denies is reported as unresolved, so discovery can never
- * advertise a command that would immediately fail with 126.
+ * A name containing a separator is a pathname and never searched, exactly as in
+ * Bash. A bare name is searched only under the opt-in `PATH` mode, and only
+ * through components that are not virtual applet directories: those already
+ * answered, and no stored file may shadow them. Each component is normalized
+ * before that comparison.
  */
-function resolveShellCommand(
+function executableCandidates(name: string, session: ShellSession, runtime: Runtime): string[] {
+  if (name.includes("/")) return [normalizePath(name, session.cwd)];
+  if (!runtime.pathLookup) return [];
+  const searchPath = session.env.get("PATH");
+  if (searchPath === undefined) return [];
+  const candidates: string[] = [];
+  for (const component of splitSearchPath(searchPath)) {
+    // An empty component means the working directory in POSIX. Normalizing
+    // before the applet-directory check stops `/bin/`, `//bin`, and `/bin/.`
+    // from smuggling a stored file into an applet directory.
+    const directory = component === "" ? session.cwd : normalizePath(component);
+    if (runtime.commands.isAppletDirectory(directory)) continue;
+    candidates.push(normalizePath(name, directory));
+  }
+  return candidates;
+}
+
+/**
+ * The outcome of probing one candidate path.
+ *
+ * A search needs all three apart: `absent` and `denied` contribute nothing and
+ * the search continues, while `unusable` is a real refusal worth reporting when
+ * nothing else runs.
+ */
+type ScriptProbe =
+  | { readonly kind: "loaded"; readonly source: string; readonly release: () => void }
+  | { readonly kind: "absent" }
+  | { readonly kind: "denied"; readonly error: VfsError }
+  | { readonly kind: "unusable"; readonly error: VfsError };
+
+function unusable(code: "ENOEXEC" | "EACCES", message: string, path: string): ScriptProbe {
+  return { kind: "unusable", error: new VfsError(code, message, path) };
+}
+
+/** Stats a candidate, mapping "nothing there" and "not readable" to a probe. */
+function classifyCandidate(
+  path: string,
+  runtime: Runtime,
+): { stat: VfsStat } | { probe: ScriptProbe } {
+  try {
+    return { stat: runtime.fileSystem.stat(path) };
+  } catch (error) {
+    if (!isVfsError(error)) throw error;
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") return { probe: { kind: "absent" } };
+    // A path outside the readable roots supplies nothing to a search, and is
+    // worth reporting when it was named explicitly.
+    if (error.code === "EACCES") return { probe: { kind: "denied", error } };
+    throw error;
+  }
+}
+
+/** Probes one path for an executable VFS script. */
+async function probeExecutableScript(path: string, runtime: Runtime): Promise<ScriptProbe> {
+  const classified = classifyCandidate(path, runtime);
+  if ("probe" in classified) return classified.probe;
+  const stat = classified.stat;
+  if (stat.kind !== "file") return unusable("ENOEXEC", "is not a regular file", path);
+  if (!isExecutableMode(stat.mode)) return unusable("EACCES", "is not executable", path);
+  return await loadScriptSource(path, stat, runtime);
+}
+
+/**
+ * Probes one path for a script `sh FILE` may run.
+ *
+ * Identical to an executable file except that the mode bit is not required:
+ * naming the interpreter explicitly is the authorization.
+ */
+async function probeShellOperand(path: string, runtime: Runtime): Promise<ScriptProbe> {
+  const classified = classifyCandidate(path, runtime);
+  return "probe" in classified
+    ? classified.probe
+    : await loadScriptSource(path, classified.stat, runtime);
+}
+
+/**
+ * Reads a bounded inline script and applies the interpreter policy.
+ *
+ * Shared by an executable file and by `sh FILE`, which differ only in whether
+ * the executable mode bit is required, so both report the same statuses.
+ */
+async function loadScriptSource(
+  path: string,
+  stat: VfsStat,
+  runtime: Runtime,
+): Promise<ScriptProbe> {
+  if (stat.kind !== "file") return unusable("ENOEXEC", "is not a regular file", path);
+  if (stat.contentClass === "opaque") {
+    return unusable("ENOEXEC", "opaque content cannot be executed", path);
+  }
+  const read = runtime.fileSystem.readFile(path);
+  let bytes: Uint8Array;
+  try {
+    bytes = await readAllBytes(read.stream, runtime.limits.maxScriptBytes);
+  } catch (error) {
+    // The stream limit reports EFBIG, which is otherwise fatal to the whole
+    // execution; an oversized script is an ordinary refusal instead.
+    if (isVfsError(error) && (error.code === "EFBIG" || error.code === "E2BIG")) {
+      return unusable("ENOEXEC", "exceeds the script byte limit", path);
+    }
+    throw error;
+  }
+  let line: string | undefined;
+  try {
+    line = readShebangLine(bytes).line;
+  } catch (error) {
+    if (!isVfsError(error)) throw error;
+    return unusable("ENOEXEC", error.message, path);
+  }
+  if (line !== undefined && !selectsShellProfile(line)) {
+    const spelling = line.trim();
+    return unusable(
+      "ENOEXEC",
+      spelling === "" ? "interpreter line is empty" : `unsupported interpreter: ${spelling}`,
+      path,
+    );
+  }
+  const release = runtime.budget.buffered(bytes.byteLength);
+  let retained = false;
+  try {
+    runtime.budget.io(bytes.byteLength);
+    let source: string;
+    try {
+      source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      return unusable("ENOEXEC", "is not valid UTF-8", path);
+    }
+    if (source.includes("\0")) return unusable("ENOEXEC", "contains a NUL byte", path);
+    retained = true;
+    return { kind: "loaded", source, release };
+  } finally {
+    // A refusal keeps nothing, so it must not keep the lease either.
+    if (!retained) release();
+  }
+}
+
+/**
+ * Finds the executable VFS script a name selects, if any.
+ *
+ * An explicit pathname fails immediately when it exists but cannot run, because
+ * there is nothing else to try. A `PATH` search skips such a candidate and
+ * keeps looking, exactly as Bash does, and reports the first refusal only when
+ * no component supplied anything runnable — so one non-executable entry cannot
+ * mask a command a later component provides. A component outside the readable
+ * roots supplies nothing at all, so it cannot turn an unknown command into 126.
+ */
+async function resolveExecutableScript(
   name: string,
   session: ShellSession,
   runtime: Runtime,
-): ShellCommandResolution | undefined {
+): Promise<{ source: string; path: string; release: () => void } | undefined> {
+  if (name === "") return undefined;
+  const explicit = name.includes("/");
+  let refusal: VfsError | undefined;
+  for (const candidate of executableCandidates(name, session, runtime)) {
+    // A script-controlled PATH decides how many probes happen, so each one
+    // charges a step, which also checks the deadline.
+    runtime.budget.step();
+    const probe = await probeExecutableScript(candidate, runtime);
+    if (probe.kind === "loaded") {
+      return { source: probe.source, release: probe.release, path: candidate };
+    }
+    if (probe.kind === "absent") continue;
+    if (explicit) throw probe.error;
+    if (probe.kind === "unusable") refusal ??= probe.error;
+  }
+  if (refusal !== undefined) throw refusal;
+  return undefined;
+}
+
+/**
+ * Finds an executable VFS file a name selects, without reading it.
+ *
+ * Discovery classifies rather than runs, so it stops at the mode bit: a file
+ * whose interpreter line is unsupported is still what `type` reports, exactly
+ * as in Bash, and no content is read to answer a question about a name.
+ */
+async function findExecutablePath(
+  name: string,
+  session: ShellSession,
+  runtime: Runtime,
+): Promise<string | undefined> {
+  if (name === "") return undefined;
+  for (const candidate of executableCandidates(name, session, runtime)) {
+    runtime.budget.step();
+    const classified = classifyCandidate(candidate, runtime);
+    if ("probe" in classified) continue;
+    const stat = classified.stat;
+    if (stat.kind === "file" && isExecutableMode(stat.mode)) return candidate;
+  }
+  return undefined;
+}
+
+/**
+ * Reports how a name would resolve, using exactly the order execution uses:
+ * shell function, then the applet resolver, then an executable VFS file, then
+ * the command policy.
+ *
+ * A name the policy denies is reported as unresolved, so discovery can never
+ * advertise a command that would immediately fail with 126, and a name that
+ * resolves to a file is reported so it can never fail to advertise one that
+ * would run.
+ */
+async function resolveShellCommand(
+  name: string,
+  session: ShellSession,
+  runtime: Runtime,
+): Promise<ShellCommandResolution | undefined> {
   if (session.functions.has(name)) return { kind: "function", name };
-  const resolved = resolveApplet(name, session, runtime);
-  if (resolved === undefined) return undefined;
   const allowed = runtime.policy.allowedCommands;
-  if (allowed !== undefined && !allowed.includes(resolved.command.name)) return undefined;
-  return { kind: resolved.kind, name: resolved.command.name, path: resolved.path };
+  const resolved = resolveApplet(name, session, runtime);
+  if (resolved !== undefined) {
+    if (allowed !== undefined && !allowed.includes(resolved.command.name)) return undefined;
+    return { kind: resolved.kind, name: resolved.command.name, path: resolved.path };
+  }
+  if (allowed !== undefined && !allowed.includes(SHELL_PROFILE_COMMAND)) return undefined;
+  const path = await findExecutablePath(name, session, runtime);
+  if (path === undefined) return undefined;
+  // An explicit pathname reports the spelling that was given, which is what a
+  // caller can run; a searched name reports where the search found it.
+  return { kind: "program", name, path: name.includes("/") ? name : path };
 }
 
 async function prepareSimpleCommand(
@@ -526,6 +747,49 @@ async function runSourcedUnit(
   }
 }
 
+/**
+ * Runs a bounded source unit in an isolated child scope.
+ *
+ * The child clones the caller's session, so it inherits the environment,
+ * working directory, and shell options while its own variables, functions,
+ * working directory, and `exit` stay inside it. Depth is counted separately
+ * from `source`, so a script that sources a file that runs a script is still
+ * bounded, and every other budget remains the caller's.
+ */
+async function runScriptUnit(
+  source: string,
+  name: string,
+  args: readonly string[],
+  session: ShellSession,
+  fds: ShellFileDescriptors,
+  runtime: Runtime,
+): Promise<number> {
+  if (session.scriptDepth >= runtime.limits.maxScriptDepth) {
+    throw new VfsError("E2BIG", "shell script nesting limit exceeded", name);
+  }
+  // Parse the complete unit before it can mutate anything.
+  const parsed = parseScriptUnit(
+    source,
+    runtime.limits,
+    runtime.parserBudget,
+    runtime.budget,
+    name,
+  );
+  const child = cloneShellSession(session);
+  prepareShellSessionUnit(child);
+  child.scriptDepth = session.scriptDepth + 1;
+  child.args = [...args];
+  // `$0` is the spelling the caller used, which is what Bash hands a script.
+  child.env.set("0", name);
+  const result = await runIsolatedShellScope(
+    async () => await runScript(parsed, child, fds, runtime, ACTIVE_EVALUATION_CONTEXT),
+    fds[2],
+  );
+  // `exit` ends the script, not the caller: a submitted unit and an interactive
+  // session both survive a script that exits.
+  return child.exitRequested ? child.requestedExitCode : result.status;
+}
+
 async function executeSimpleCommand(
   prepared: PreparedSimpleCommand,
   session: ShellSession,
@@ -555,18 +819,38 @@ async function executeSimpleCommand(
     const command =
       definition === undefined ? resolveApplet(name, session, runtime)?.command : undefined;
     canonicalName = command?.name ?? name;
-    if (
-      definition === undefined &&
-      runtime.policy.allowedCommands !== undefined &&
-      !runtime.policy.allowedCommands.includes(canonicalName)
-    ) {
-      throw new VfsError("EACCES", `command is not allowed: ${canonicalName}`);
+    const allowed = runtime.policy.allowedCommands;
+    if (definition === undefined && allowed !== undefined) {
+      // An applet is authorized by its canonical name. A name no applet claims
+      // may still be an executable file, which one `sh` entry authorizes rather
+      // than every script path an application might ever store.
+      const permitted =
+        command === undefined
+          ? allowed.includes(SHELL_PROFILE_COMMAND)
+          : allowed.includes(canonicalName);
+      if (!permitted) throw new VfsError("EACCES", `command is not allowed: ${canonicalName}`);
     }
     let exitCode: number;
     if (definition !== undefined) {
       exitCode = await runFunction(definition, argv, session, fds, runtime, context);
     } else {
       if (command === undefined) {
+        // No applet answered. An executable VFS file may still: a pathname
+        // names one directly, and under the PATH search a component that is
+        // not an applet directory may hold one.
+        const script = await resolveExecutableScript(name, session, runtime);
+        if (script !== undefined) {
+          runtime.budget.command();
+          try {
+            // `$0` is the spelling that was typed; the resolved path names the
+            // file in diagnostics and in the observed event.
+            exitCode = await runScriptUnit(script.source, name, argv, session, fds, runtime);
+          } finally {
+            script.release();
+          }
+          emitShellEvent(runtime.onEvent, { type: "shell.command", name: script.path, exitCode });
+          return exitCode;
+        }
         await fds[2].write(new TextEncoder().encode(`${name}: command not found\n`));
         emitShellEvent(runtime.onEvent, { type: "shell.command", name, exitCode: 127 });
         return 127;
@@ -601,7 +885,34 @@ async function executeSimpleCommand(
                 SUPPRESSED_EVALUATION_CONTEXT,
               );
             },
-            resolveCommand: (candidate) => resolveShellCommand(candidate, session, runtime),
+            resolveCommand: async (candidate) =>
+              await resolveShellCommand(candidate, session, runtime),
+            executeScript: async (scriptSource, scriptName, scriptArgs, scriptFds) =>
+              await runScriptUnit(
+                scriptSource,
+                scriptName,
+                scriptArgs,
+                session,
+                scriptFds,
+                runtime,
+              ),
+            executeScriptFile: async (scriptPath, scriptArgs, scriptFds, invokedAs) => {
+              const probe = await probeShellOperand(scriptPath, runtime);
+              if (probe.kind === "absent") return undefined;
+              if (probe.kind !== "loaded") throw probe.error;
+              try {
+                return await runScriptUnit(
+                  probe.source,
+                  invokedAs ?? scriptPath,
+                  scriptArgs,
+                  session,
+                  scriptFds,
+                  runtime,
+                );
+              } finally {
+                probe.release();
+              }
+            },
           },
           argv,
           fds,

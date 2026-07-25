@@ -95,6 +95,20 @@
       "oracle": "coreutils",
       "summary": "printenv reports any set variable, not only exported ones",
       "reason": "A cf-vfs shell has one variable map and no separate process environment to hand a child, so `export` records intent rather than moving a value between scopes. `printenv NAME` therefore prints a variable a POSIX shell would keep to itself. Scripts that test for an inherited variable must not rely on the distinction."
+    },
+    {
+      "id": "script-interpreter-profile-is-bounded",
+      "command": "script execution",
+      "oracle": "bash",
+      "summary": "an executable file runs only as the cf-vfs shell profile, whatever its shebang names",
+      "reason": "There is no process runtime to hand a file to, so the only interpreter that can exist is this shell. `/bin/sh`, `/bin/bash`, and `/usr/bin/env sh|bash` select it, a file with no shebang gets it, and every other interpreter is refused with status 126 rather than run by something it did not ask for. Interpreter arguments such as `#!/bin/sh -e` are refused for the same reason."
+    },
+    {
+      "id": "script-child-inherits-the-whole-session",
+      "command": "script execution",
+      "oracle": "bash",
+      "summary": "a script sees every variable, function, and shell option of its caller, not only the exported ones",
+      "reason": "A Bash script runs in a separate process and inherits only exported variables and no functions. There is no process boundary here and one variable map, so `export` records intent rather than moving a value; a child therefore sees unexported variables, the caller's functions, and options such as `set -e`. The isolation that does hold is outbound: nothing the child defines, and no working-directory change or `exit` it performs, reaches the caller. Do not rely on `export` to keep a value from a script."
     }
   ],
   "cases": [
@@ -722,6 +736,127 @@
       "oracle": "coreutils",
       "script": "printenv NOT_SET_ANYWHERE; printf 'status=%s\\n' \"$?\"",
       "stdout": "status=1\n",
+      "exitCode": 0
+    },
+    {
+      "name": "script-shebang-and-arguments",
+      "oracle": "bash",
+      "files": {
+        "hello.sh": "#!/bin/sh\nprintf 'hello %s\\n' \"$1\"\n"
+      },
+      "script": "chmod 755 hello.sh\n./hello.sh world",
+      "stdout": "hello world\n",
+      "exitCode": 0
+    },
+    {
+      "name": "script-without-a-shebang",
+      "oracle": "bash",
+      "files": {
+        "plain.sh": "printf 'plain\\n'\n"
+      },
+      "script": "chmod 755 plain.sh\n./plain.sh",
+      "stdout": "plain\n",
+      "exitCode": 0
+    },
+    {
+      "name": "script-env-interpreter",
+      "oracle": "bash",
+      "files": {
+        "env.sh": "#!/usr/bin/env sh\nprintf 'env\\n'\n"
+      },
+      "script": "chmod 755 env.sh\n./env.sh",
+      "stdout": "env\n",
+      "exitCode": 0
+    },
+    {
+      "name": "script-not-executable-status",
+      "oracle": "bash",
+      "files": {
+        "plain.sh": "printf 'plain\\n'\n"
+      },
+      "script": "chmod 644 plain.sh\n./plain.sh 2>diagnostic.txt; printf 'status=%s\\n' \"$?\"",
+      "stdout": "status=126\n",
+      "exitCode": 0
+    },
+    {
+      "name": "script-missing-status",
+      "oracle": "bash",
+      "script": "./absent.sh 2>diagnostic.txt; printf 'status=%s\\n' \"$?\"",
+      "stdout": "status=127\n",
+      "exitCode": 0
+    },
+    {
+      "name": "script-exit-status-propagates",
+      "oracle": "bash",
+      "files": {
+        "fail.sh": "#!/bin/sh\nexit 7\n"
+      },
+      "script": "chmod 755 fail.sh\n./fail.sh; printf 'status=%s\\n' \"$?\"",
+      "stdout": "status=7\n",
+      "exitCode": 0
+    },
+    {
+      "name": "script-exit-does-not-end-the-caller",
+      "oracle": "bash",
+      "files": {
+        "exits.sh": "#!/bin/sh\nexit 3\n"
+      },
+      "script": "chmod 755 exits.sh\n./exits.sh\nprintf 'still-here\\n'",
+      "stdout": "still-here\n",
+      "exitCode": 0
+    },
+    {
+      "name": "script-scope-is-isolated",
+      "oracle": "bash",
+      "files": {
+        "scope.sh": "#!/bin/sh\nV=child\ncd /\nprintf '%s\\n' \"$V\"\n"
+      },
+      "script": "chmod 755 scope.sh\nV=parent\n./scope.sh\nprintf '%s\\n' \"$V\"\ntest \"$PWD\" = /work && printf 'cwd-kept\\n'",
+      "stdout": "child\nparent\ncwd-kept\n",
+      "exitCode": 0
+    },
+    {
+      "name": "script-inherits-the-environment",
+      "oracle": "bash",
+      "files": {
+        "inherit.sh": "#!/bin/sh\nprintf '%s\\n' \"$SHARED\"\n"
+      },
+      "script": "chmod 755 inherit.sh\nSHARED=value\nexport SHARED\n./inherit.sh",
+      "stdout": "value\n",
+      "exitCode": 0
+    },
+    {
+      "name": "script-positional-parameters",
+      "oracle": "bash",
+      "files": {
+        "args.sh": "#!/bin/sh\nprintf '%s|%s\\n' \"$#\" \"$2\"\n"
+      },
+      "script": "chmod 755 args.sh\n./args.sh one two",
+      "stdout": "2|two\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sh-c-command-string",
+      "oracle": "bash",
+      "script": "PATH=/bin:/usr/bin; sh -c 'printf \"%s\\n\" ok'",
+      "stdout": "ok\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sh-c-positional-parameters",
+      "oracle": "bash",
+      "script": "PATH=/bin:/usr/bin; sh -c 'printf \"%s:%s\\n\" \"$0\" \"$1\"' label first",
+      "stdout": "label:first\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sh-file-operand",
+      "oracle": "bash",
+      "files": {
+        "lib.sh": "printf 'lib %s\\n' \"$1\"\n"
+      },
+      "script": "PATH=/bin:/usr/bin; sh lib.sh arg",
+      "stdout": "lib arg\n",
       "exitCode": 0
     }
   ]

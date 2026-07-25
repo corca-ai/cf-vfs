@@ -12,6 +12,7 @@ export const VFS_ERROR_CODES = [
   "ENOTDIR",
   "ENOTEMPTY",
   "ENOENT",
+  "ENOEXEC",
   "ENOSPC",
   "ENOSYS",
   "ENOTSUP",
