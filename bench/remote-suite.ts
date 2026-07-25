@@ -49,20 +49,26 @@ export interface RemoteBenchmarkResult {
     populatedStatCost: SqlCost;
     statQueryPlan: string[];
   };
-  append: Record<"1MiB" | "8MiB", {
-    duration: DurationSummary;
-    maxRowsWritten: number;
-  }>;
-  subtree: Record<"100" | "1000", {
-    copy: DurationSummary;
-    move: DurationSummary;
-    remove: DurationSummary;
-    statements: {
-      copy: number;
-      move: number;
-      remove: number;
-    };
-  }>;
+  append: Record<
+    "1MiB" | "8MiB",
+    {
+      duration: DurationSummary;
+      maxRowsWritten: number;
+    }
+  >;
+  subtree: Record<
+    "100" | "1000",
+    {
+      copy: DurationSummary;
+      move: DurationSummary;
+      remove: DurationSummary;
+      statements: {
+        copy: number;
+        move: number;
+        remove: number;
+      };
+    }
+  >;
 }
 
 interface ProfileSettings {
@@ -196,8 +202,9 @@ export class RemoteBenchmarkHarness {
     meter.reset();
     measured.stat("/point");
     const populatedStatCost = sqlCost(meter);
-    const statQueryPlan = this.storage.sql.exec<{ detail: string }>(
-      `EXPLAIN QUERY PLAN
+    const statQueryPlan = this.storage.sql
+      .exec<{ detail: string }>(
+        `EXPLAIN QUERY PLAN
        SELECT
          e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,
          e.opaque_object_id, e.size_bytes, e.mode, e.created_at_ms,
@@ -205,8 +212,10 @@ export class RemoteBenchmarkHarness {
        FROM vfs_entries e INDEXED BY vfs_entries_path
        CROSS JOIN vfs_path_versions p
        WHERE e.path = ? AND p.path = e.path`,
-      "/point",
-    ).toArray().map((row) => row.detail);
+        "/point",
+      )
+      .toArray()
+      .map((row) => row.detail);
 
     return { statCost, overwriteCost, populatedStatCost, statQueryPlan };
   }
@@ -278,11 +287,7 @@ export class RemoteBenchmarkHarness {
   }
 
   async copySubtree(label: "100" | "1000"): Promise<void> {
-    await this.fileSystem.copy(
-      `/tree-${label}/source`,
-      `/tree-${label}/copy`,
-      { recursive: true },
-    );
+    await this.fileSystem.copy(`/tree-${label}/source`, `/tree-${label}/copy`, { recursive: true });
   }
 
   async moveSubtree(label: "100" | "1000"): Promise<void> {
@@ -337,7 +342,10 @@ async function benchmarkSubtrees(
   settings: ProfileSettings,
 ): Promise<RemoteBenchmarkResult["subtree"]> {
   const results = {} as RemoteBenchmarkResult["subtree"];
-  for (const [label, files] of [["100", 100], ["1000", 1_000]] as const) {
+  for (const [label, files] of [
+    ["100", 100],
+    ["1000", 1_000],
+  ] as const) {
     await stub.prepareSubtree(label, files);
     await stub.copySubtree(label);
     await stub.moveSubtree(label);
@@ -403,32 +411,20 @@ export async function runRemoteBenchmark(
 ): Promise<RemoteBenchmarkResult> {
   const startedAt = new Date().toISOString();
   const settings = PROFILE_SETTINGS[profile];
-  const rpcOverhead = await measureRpc(
-    settings.pointSamples,
-    1,
-    () => stub.ping(),
-  );
+  const rpcOverhead = await measureRpc(settings.pointSamples, 1, () => stub.ping());
   const pointCosts = await stub.preparePoint();
   const point = {
-    stat: await measureRpc(
-      settings.pointSamples,
-      settings.statIterations,
-      () => stub.statBatch(settings.statIterations),
+    stat: await measureRpc(settings.pointSamples, settings.statIterations, () =>
+      stub.statBatch(settings.statIterations),
     ),
-    overwrite: await measureRpc(
-      settings.pointSamples,
-      settings.overwriteIterations,
-      () => stub.overwriteBatch(settings.overwriteIterations),
+    overwrite: await measureRpc(settings.pointSamples, settings.overwriteIterations, () =>
+      stub.overwriteBatch(settings.overwriteIterations),
     ),
-    findPage: await measureRpc(
-      settings.pointSamples,
-      settings.findIterations,
-      () => stub.findPageBatch(settings.findIterations),
+    findPage: await measureRpc(settings.pointSamples, settings.findIterations, () =>
+      stub.findPageBatch(settings.findIterations),
     ),
-    warmInitialize: await measureRpc(
-      settings.pointSamples,
-      settings.initializeIterations,
-      () => stub.warmInitializeBatch(settings.initializeIterations),
+    warmInitialize: await measureRpc(settings.pointSamples, settings.initializeIterations, () =>
+      stub.warmInitializeBatch(settings.initializeIterations),
     ),
     ...pointCosts,
   };

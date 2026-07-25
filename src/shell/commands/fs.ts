@@ -2,7 +2,13 @@ import { VfsError } from "../../core/errors.js";
 import { basename, dirname, normalizePath } from "../../core/path.js";
 import type { VfsStat } from "../../vfs/types.js";
 import { modeString } from "./format.js";
-import { BufferedTextWriter, defineCommand, commandPath, pipeToSink, writeText } from "./helpers.js";
+import {
+  BufferedTextWriter,
+  commandPath,
+  defineCommand,
+  pipeToSink,
+  writeText,
+} from "./helpers.js";
 import { parseUtilityOptions } from "./options.js";
 
 const MKDIR_OPTIONS = {
@@ -57,7 +63,12 @@ export const catCommand = /* @__PURE__ */ defineCommand("cat", async (context, a
   }
   for (const path of argv) {
     if (path === "-") await pipeToSink(context, fds[0], fds[1]);
-    else await pipeToSink(context, context.fileSystem.readFile(commandPath(context, path)).stream, fds[1]);
+    else
+      await pipeToSink(
+        context,
+        context.fileSystem.readFile(commandPath(context, path)).stream,
+        fds[1],
+      );
   }
   return 0;
 });
@@ -161,7 +172,8 @@ export const findCommand = /* @__PURE__ */ defineCommand("find", async (context,
   let type: "file" | "directory" | undefined;
   let maxDepth: number | undefined;
   let index = 0;
-  while (index < argv.length && !(argv[index] ?? "").startsWith("-")) roots.push(argv[index++] ?? ".");
+  while (index < argv.length && !(argv[index] ?? "").startsWith("-"))
+    roots.push(argv[index++] ?? ".");
   if (roots.length === 0) roots.push(".");
   while (index < argv.length) {
     const option = argv[index++];
@@ -204,14 +216,14 @@ export const findCommand = /* @__PURE__ */ defineCommand("find", async (context,
 });
 
 function statText(stat: VfsStat): string {
-  return [
+  return `${[
     `  File: ${stat.path}`,
     `  Size: ${stat.sizeBytes}`,
     `  Type: ${stat.kind === "directory" ? "directory" : `${stat.contentClass} file`}`,
     `  Mode: ${stat.mode.toString(8)} (${modeString(stat.mode)})`,
     `Revision: ${stat.revision}`,
     `Mutation: ${stat.mutationToken}`,
-  ].join("\n") + "\n";
+  ].join("\n")}\n`;
 }
 
 export const statCommand = /* @__PURE__ */ defineCommand("stat", async (context, argv, fds) => {
@@ -243,7 +255,10 @@ export const duCommand = /* @__PURE__ */ defineCommand("du", async (context, arg
   for (const path of paths) {
     const normalized = commandPath(context, path);
     const entries = context.fileSystem.find({ path: normalized, includeRoot: true });
-    const size = entries.reduce((total, stat) => total + (stat.kind === "file" ? stat.sizeBytes : 0), 0);
+    const size = entries.reduce(
+      (total, stat) => total + (stat.kind === "file" ? stat.sizeBytes : 0),
+      0,
+    );
     await writeText(fds[1], `${Math.ceil(size / 1024)}\t${path}\n`);
   }
   return 0;
@@ -256,7 +271,8 @@ export const treeCommand = /* @__PURE__ */ defineCommand("tree", async (context,
   const output = new BufferedTextWriter(context, fds[1]);
   try {
     for (const entry of entries) {
-      const relative = entry.path === root ? "." : entry.path.slice(root === "/" ? 1 : root.length + 1);
+      const relative =
+        entry.path === root ? "." : entry.path.slice(root === "/" ? 1 : root.length + 1);
       const depth = relative === "." ? 0 : relative.split("/").length;
       await output.write(`${"  ".repeat(Math.max(0, depth - 1))}${entry.name}\n`);
     }
@@ -267,33 +283,44 @@ export const treeCommand = /* @__PURE__ */ defineCommand("tree", async (context,
   return 0;
 });
 
-export const basenameCommand = /* @__PURE__ */ defineCommand("basename", async (_context, argv, fds) => {
-  if (argv.length !== 1) throw new VfsError("EINVAL", "basename: requires one path");
-  await writeText(fds[1], `${basename(argv[0] ?? "")}\n`);
-  return 0;
-});
+export const basenameCommand = /* @__PURE__ */ defineCommand(
+  "basename",
+  async (_context, argv, fds) => {
+    if (argv.length !== 1) throw new VfsError("EINVAL", "basename: requires one path");
+    await writeText(fds[1], `${basename(argv[0] ?? "")}\n`);
+    return 0;
+  },
+);
 
-export const dirnameCommand = /* @__PURE__ */ defineCommand("dirname", async (_context, argv, fds) => {
-  if (argv.length !== 1) throw new VfsError("EINVAL", "dirname: requires one path");
-  await writeText(fds[1], `${dirname(argv[0] ?? "")}\n`);
-  return 0;
-});
+export const dirnameCommand = /* @__PURE__ */ defineCommand(
+  "dirname",
+  async (_context, argv, fds) => {
+    if (argv.length !== 1) throw new VfsError("EINVAL", "dirname: requires one path");
+    await writeText(fds[1], `${dirname(argv[0] ?? "")}\n`);
+    return 0;
+  },
+);
 
-export const realpathCommand = /* @__PURE__ */ defineCommand("realpath", async (context, argv, fds) => {
-  if (argv.length === 0) throw new VfsError("EINVAL", "realpath: missing operand");
-  for (const path of argv) {
-    const normalized = normalizePath(path, context.session.cwd);
-    context.fileSystem.stat(normalized);
-    await writeText(fds[1], `${normalized}\n`);
-  }
-  return 0;
-});
+export const realpathCommand = /* @__PURE__ */ defineCommand(
+  "realpath",
+  async (context, argv, fds) => {
+    if (argv.length === 0) throw new VfsError("EINVAL", "realpath: missing operand");
+    for (const path of argv) {
+      const normalized = normalizePath(path, context.session.cwd);
+      context.fileSystem.stat(normalized);
+      await writeText(fds[1], `${normalized}\n`);
+    }
+    return 0;
+  },
+);
 
 export const mktempCommand = /* @__PURE__ */ defineCommand("mktemp", async (context, argv, fds) => {
   if (argv.length > 1) throw new VfsError("EINVAL", "mktemp: accepts at most one template");
   const template = argv[0] ?? "tmp.XXXXXX";
-  if (template.startsWith("-")) throw new VfsError("EINVAL", `mktemp: unsupported option ${template}`);
-  if (!template.includes("XXXXXX")) throw new VfsError("EINVAL", "mktemp: template must contain XXXXXX");
+  if (template.startsWith("-"))
+    throw new VfsError("EINVAL", `mktemp: unsupported option ${template}`);
+  if (!template.includes("XXXXXX"))
+    throw new VfsError("EINVAL", "mktemp: template must contain XXXXXX");
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const suffix = crypto.randomUUID().replaceAll("-", "").slice(0, 6);
     const path = commandPath(context, template.replace("XXXXXX", suffix));
@@ -312,9 +339,12 @@ export const fileCommand = /* @__PURE__ */ defineCommand("file", async (context,
   if (argv.length === 0) throw new VfsError("EINVAL", "file: missing operand");
   for (const path of argv) {
     const stat = context.fileSystem.stat(commandPath(context, path));
-    const description = stat.kind === "directory"
-      ? "directory"
-      : stat.contentClass === "opaque" ? "opaque R2 content" : "inline data";
+    const description =
+      stat.kind === "directory"
+        ? "directory"
+        : stat.contentClass === "opaque"
+          ? "opaque R2 content"
+          : "inline data";
     await writeText(fds[1], `${path}: ${description}\n`);
   }
   return 0;

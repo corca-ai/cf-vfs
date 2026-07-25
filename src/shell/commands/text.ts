@@ -2,7 +2,24 @@ import { VfsError } from "../../core/errors.js";
 import { createLineDiff, renderLineDiff } from "../../core/line-diff.js";
 import { compareUtf8 } from "../../core/path.js";
 import { applyUnifiedPatch } from "../../core/unified-patch.js";
-import { BufferedTextWriter, commandPath, collectStream, collectText, defineCommand, inputStreams, inputTexts, parseInteger, readFileBytes, readFileText, readTextLines, readWithAbort, splitLines, writeBytes, writeText } from "./helpers.js";
+import {
+  BufferedTextWriter,
+  type BufferLease,
+  collectStream,
+  collectText,
+  commandPath,
+  defineCommand,
+  inputStreams,
+  inputTexts,
+  parseInteger,
+  readFileBytes,
+  readFileText,
+  readTextLines,
+  readWithAbort,
+  splitLines,
+  writeBytes,
+  writeText,
+} from "./helpers.js";
 import { parseUtilityOptions } from "./options.js";
 
 const SORT_OPTIONS = {
@@ -84,11 +101,7 @@ const JOIN_OPTIONS = {
   },
 } as const;
 
-function checkedLines(
-  text: string,
-  maximumRecords: number,
-  maximumLineBytes: number,
-): string[] {
+function checkedLines(text: string, maximumRecords: number, maximumLineBytes: number): string[] {
   const lines = splitLines(text);
   if (lines.length > maximumRecords) throw new VfsError("E2BIG", "buffered record limit exceeded");
   const encoder = new TextEncoder();
@@ -155,20 +168,25 @@ export const sortCommand = /* @__PURE__ */ defineCommand("sort", async (context,
       const value = line.endsWith("\n") ? line.slice(0, -1) : line;
       return { value, ...(numeric ? { numericKey: numericSortKey(value) } : {}) };
     });
-    const compareKeys = (left: typeof records[number], right: typeof records[number]): number => numeric
-      ? compareNumericSortKeys(
-        left.numericKey ?? ZERO_NUMERIC_SORT_KEY,
-        right.numericKey ?? ZERO_NUMERIC_SORT_KEY,
-      )
-      : compareUtf8(left.value, right.value);
+    const compareKeys = (
+      left: (typeof records)[number],
+      right: (typeof records)[number],
+    ): number =>
+      numeric
+        ? compareNumericSortKeys(
+            left.numericKey ?? ZERO_NUMERIC_SORT_KEY,
+            right.numericKey ?? ZERO_NUMERIC_SORT_KEY,
+          )
+        : compareUtf8(left.value, right.value);
     records.sort((left, right) => {
       let order = compareKeys(left, right);
       if (order === 0) order = compareUtf8(left.value, right.value);
       return reverse ? -order : order;
     });
     if (unique) {
-      records = records.filter((record, index) =>
-        index === 0 || compareKeys(record, records[index - 1] ?? record) !== 0);
+      records = records.filter(
+        (record, index) => index === 0 || compareKeys(record, records[index - 1] ?? record) !== 0,
+      );
     }
     await writeText(fds[1], records.map((record) => `${record.value}\n`).join(""));
     return 0;
@@ -185,7 +203,7 @@ const C_WHITESPACE = " \t\n\v\f\r";
 
 function asciiCaseInsensitiveRegexSource(source: string): string {
   let output = "";
-  for (let index = 0; index < source.length;) {
+  for (let index = 0; index < source.length; ) {
     const character = source[index] ?? "";
     if (character !== "\\") {
       if (source.startsWith("(?<", index) && !["=", "!"].includes(source[index + 3] ?? "")) {
@@ -281,15 +299,17 @@ export const grepCommand = /* @__PURE__ */ defineCommand("grep", async (context,
       let index = 0;
       for await (const line of readTextLines(context, input.stream, input.name)) {
         index += 1;
-      const candidate = line.endsWith("\n") ? line.slice(0, -1) : line;
-      const found = fixed
-        ? (ignoreCase ? asciiLower(candidate).includes(asciiLower(pattern)) : candidate.includes(pattern))
-        : regular?.test(ignoreCase ? asciiLower(candidate) : candidate) ?? false;
-      regular && (regular.lastIndex = 0);
-      if (found === invert) continue;
-      matches += 1;
+        const candidate = line.endsWith("\n") ? line.slice(0, -1) : line;
+        const found = fixed
+          ? ignoreCase
+            ? asciiLower(candidate).includes(asciiLower(pattern))
+            : candidate.includes(pattern)
+          : (regular?.test(ignoreCase ? asciiLower(candidate) : candidate) ?? false);
+        if (regular !== undefined) regular.lastIndex = 0;
+        if (found === invert) continue;
+        matches += 1;
         inputMatches += 1;
-      if (!count) {
+        if (!count) {
           const prefix = `${multipleInputs ? `${input.name}:` : ""}${lineNumbers ? `${index}:` : ""}`;
           await output.write(`${prefix}${line}${line.endsWith("\n") ? "" : "\n"}`);
         }
@@ -303,7 +323,11 @@ export const grepCommand = /* @__PURE__ */ defineCommand("grep", async (context,
   return matches > 0 ? 0 : 1;
 });
 
-function sliceCount(command: "head" | "tail", argv: readonly string[], defaultCount: number): {
+function sliceCount(
+  command: "head" | "tail",
+  argv: readonly string[],
+  defaultCount: number,
+): {
   count: number;
   bytes: boolean;
   paths: readonly string[];
@@ -351,7 +375,9 @@ export const headCommand = /* @__PURE__ */ defineCommand("head", async (context,
       }
     } finally {
       if (!finished && remaining > 0) {
-        await reader.cancel(new VfsError("EPIPE", "head stopped reading input")).catch(() => undefined);
+        await reader
+          .cancel(new VfsError("EPIPE", "head stopped reading input"))
+          .catch(() => undefined);
       }
       reader.releaseLock();
     }
@@ -426,7 +452,9 @@ export const headCommand = /* @__PURE__ */ defineCommand("head", async (context,
       throw error;
     } finally {
       if (!finished && remaining > 0) {
-        await reader.cancel(new VfsError("EPIPE", "head stopped reading input")).catch(() => undefined);
+        await reader
+          .cancel(new VfsError("EPIPE", "head stopped reading input"))
+          .catch(() => undefined);
       }
       reader.releaseLock();
     }
@@ -526,10 +554,14 @@ export const wcCommand = /* @__PURE__ */ defineCommand("wc", async (context, arg
     } finally {
       reader.releaseLock();
     }
-    const fields = linesOnly || wordsOnly || bytesOnly
-      ? [linesOnly ? lineCount : undefined, wordsOnly ? wordCount : undefined, bytesOnly ? byteCount : undefined]
-        .filter((value) => value !== undefined)
-      : [lineCount, wordCount, byteCount];
+    const fields =
+      linesOnly || wordsOnly || bytesOnly
+        ? [
+            linesOnly ? lineCount : undefined,
+            wordsOnly ? wordCount : undefined,
+            bytesOnly ? byteCount : undefined,
+          ].filter((value) => value !== undefined)
+        : [lineCount, wordCount, byteCount];
     await writeText(fds[1], `${fields.join(" ")}${input.name === "-" ? "" : ` ${input.name}`}\n`);
   }
   return 0;
@@ -610,11 +642,17 @@ export const cutCommand = /* @__PURE__ */ defineCommand("cut", async (context, a
       for await (const line of readTextLines(context, input.stream, input.name)) {
         const newline = line.endsWith("\n") ? "\n" : "";
         const content = newline ? line.slice(0, -1) : line;
-        await output.write(fields === undefined
-          ? [...content].filter((_character, index) => characters?.includes(index + 1)).join("") + newline
-          : (content.includes(delimiter)
-            ? content.split(delimiter).filter((_field, index) => fields?.includes(index + 1)).join(delimiter)
-            : content) + newline);
+        await output.write(
+          fields === undefined
+            ? [...content].filter((_character, index) => characters?.includes(index + 1)).join("") +
+                newline
+            : (content.includes(delimiter)
+                ? content
+                    .split(delimiter)
+                    .filter((_field, index) => fields?.includes(index + 1))
+                    .join(delimiter)
+                : content) + newline,
+        );
       }
     }
     await output.flush();
@@ -629,7 +667,9 @@ function characterSet(value: string): string[] {
   if (match?.[1] !== undefined && match[2] !== undefined) {
     const start = match[1].codePointAt(0) ?? 0;
     const end = match[2].codePointAt(0) ?? 0;
-    return Array.from({ length: Math.max(0, end - start + 1) }, (_unused, index) => String.fromCodePoint(start + index));
+    return Array.from({ length: Math.max(0, end - start + 1) }, (_unused, index) =>
+      String.fromCodePoint(start + index),
+    );
   }
   return [...value];
 }
@@ -641,10 +681,13 @@ export const trCommand = /* @__PURE__ */ defineCommand("tr", async (context, arg
   const reader = fds[0].getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const output = new BufferedTextWriter(context, fds[1]);
-  const translate = (input: string): string => [...input].map((character) => {
-    const index = from.indexOf(character);
-    return index < 0 ? character : to[Math.min(index, to.length - 1)] ?? "";
-  }).join("");
+  const translate = (input: string): string =>
+    [...input]
+      .map((character) => {
+        const index = from.indexOf(character);
+        return index < 0 ? character : (to[Math.min(index, to.length - 1)] ?? "");
+      })
+      .join("");
   try {
     while (true) {
       const read = await readWithAbort(reader, context.signal);
@@ -731,7 +774,8 @@ export const pasteCommand = /* @__PURE__ */ defineCommand("paste", async (contex
   const inputs = await inputTexts(context, argv, fds[0]);
   try {
     const columns = inputs.value.map((input) =>
-      splitLines(input.text).map((line) => line.replace(/\n$/u, "")));
+      splitLines(input.text).map((line) => line.replace(/\n$/u, "")),
+    );
     const rows = Math.max(0, ...columns.map((column) => column.length));
     let output = "";
     for (let row = 0; row < rows; row += 1) {
@@ -747,7 +791,7 @@ export const pasteCommand = /* @__PURE__ */ defineCommand("paste", async (contex
 export const cmpCommand = /* @__PURE__ */ defineCommand("cmp", async (context, argv, fds) => {
   if (argv.length !== 2) throw new VfsError("EINVAL", "cmp: requires two files");
   const left = await readFileBytes(context, argv[0] ?? "");
-  let right;
+  let right: BufferLease<Uint8Array>;
   try {
     right = await readFileBytes(context, argv[1] ?? "");
   } catch (error) {
@@ -786,30 +830,35 @@ export const diffCommand = /* @__PURE__ */ defineCommand("diff", async (context,
   }
 });
 
-export const sha256sumCommand = /* @__PURE__ */ defineCommand("sha256sum", async (context, argv, fds) => {
-  if (argv.length === 0) throw new VfsError("EINVAL", "sha256sum: missing operand");
-  for (const path of argv) {
-    const stat = context.fileSystem.stat(commandPath(context, path));
-    if (stat.kind !== "file") throw new VfsError("EISDIR", "is a directory", stat.path);
-    if (stat.contentClass === "opaque") {
-      if (stat.verifiedSha256 === undefined) {
-        throw new VfsError("ENOTSUP", "opaque digest is not verified", stat.path);
+export const sha256sumCommand = /* @__PURE__ */ defineCommand(
+  "sha256sum",
+  async (context, argv, fds) => {
+    if (argv.length === 0) throw new VfsError("EINVAL", "sha256sum: missing operand");
+    for (const path of argv) {
+      const stat = context.fileSystem.stat(commandPath(context, path));
+      if (stat.kind !== "file") throw new VfsError("EISDIR", "is a directory", stat.path);
+      if (stat.contentClass === "opaque") {
+        if (stat.verifiedSha256 === undefined) {
+          throw new VfsError("ENOTSUP", "opaque digest is not verified", stat.path);
+        }
+        await writeText(fds[1], `${stat.verifiedSha256}  ${path}\n`);
+        continue;
       }
-      await writeText(fds[1], `${stat.verifiedSha256}  ${path}\n`);
-      continue;
+      const input = await readFileBytes(context, path);
+      try {
+        const digestInput = Uint8Array.from(input.value).buffer;
+        const digest = await crypto.subtle.digest("SHA-256", digestInput);
+        const hex = [...new Uint8Array(digest)]
+          .map((byte) => byte.toString(16).padStart(2, "0"))
+          .join("");
+        await writeText(fds[1], `${hex}  ${path}\n`);
+      } finally {
+        input.release();
+      }
     }
-    const input = await readFileBytes(context, path);
-    try {
-      const digestInput = Uint8Array.from(input.value).buffer;
-      const digest = await crypto.subtle.digest("SHA-256", digestInput);
-      const hex = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-      await writeText(fds[1], `${hex}  ${path}\n`);
-    } finally {
-      input.release();
-    }
-  }
-  return 0;
-});
+    return 0;
+  },
+);
 
 export const sedCommand = /* @__PURE__ */ defineCommand("sed", async (context, argv, fds) => {
   const expression = argv[0];
@@ -856,52 +905,58 @@ export const commCommand = /* @__PURE__ */ defineCommand("comm", async (context,
   if (paths.length !== 2) throw new VfsError("EINVAL", "comm: requires two files");
   const collected = await inputTexts(context, paths, fds[0]);
   try {
-  const inputs = collected.value;
-  const left = checkedLines(inputs[0]?.text ?? "", context.budget.limits.maxBufferedRecords, context.budget.limits.maxLineBytes)
-    .map((line) => line.replace(/\n$/u, ""));
-  const right = checkedLines(inputs[1]?.text ?? "", context.budget.limits.maxBufferedRecords, context.budget.limits.maxLineBytes)
-    .map((line) => line.replace(/\n$/u, ""));
-  if (checkOrder) {
-    requireSorted(left, paths[0] ?? "left input");
-    requireSorted(right, paths[1] ?? "right input");
-  }
-  const visible = [!suppressLeft, !suppressRight, !suppressCommon];
-  let leftIndex = 0;
-  let rightIndex = 0;
-  const output = new BufferedTextWriter(context, fds[1]);
-  try {
-    while (leftIndex < left.length || rightIndex < right.length) {
-      const leftLine = left[leftIndex];
-      const rightLine = right[rightIndex];
-      let column: 0 | 1 | 2;
-      let line: string;
-      if (leftLine !== undefined && leftLine === rightLine) {
-        column = 2;
-        line = leftLine;
-        leftIndex += 1;
-        rightIndex += 1;
-      } else if (
-        rightLine === undefined ||
-        (leftLine !== undefined && compareUtf8(leftLine, rightLine) < 0)
-      ) {
-        column = 0;
-        line = leftLine ?? "";
-        leftIndex += 1;
-      } else {
-        column = 1;
-        line = rightLine;
-        rightIndex += 1;
-      }
-      if (visible[column]) {
-        const prefix = visible.slice(0, column).filter(Boolean).length;
-        await output.write(`${"\t".repeat(prefix)}${line}\n`);
-      }
+    const inputs = collected.value;
+    const left = checkedLines(
+      inputs[0]?.text ?? "",
+      context.budget.limits.maxBufferedRecords,
+      context.budget.limits.maxLineBytes,
+    ).map((line) => line.replace(/\n$/u, ""));
+    const right = checkedLines(
+      inputs[1]?.text ?? "",
+      context.budget.limits.maxBufferedRecords,
+      context.budget.limits.maxLineBytes,
+    ).map((line) => line.replace(/\n$/u, ""));
+    if (checkOrder) {
+      requireSorted(left, paths[0] ?? "left input");
+      requireSorted(right, paths[1] ?? "right input");
     }
-    await output.flush();
-  } finally {
-    output.abort();
-  }
-  return 0;
+    const visible = [!suppressLeft, !suppressRight, !suppressCommon];
+    let leftIndex = 0;
+    let rightIndex = 0;
+    const output = new BufferedTextWriter(context, fds[1]);
+    try {
+      while (leftIndex < left.length || rightIndex < right.length) {
+        const leftLine = left[leftIndex];
+        const rightLine = right[rightIndex];
+        let column: 0 | 1 | 2;
+        let line: string;
+        if (leftLine !== undefined && leftLine === rightLine) {
+          column = 2;
+          line = leftLine;
+          leftIndex += 1;
+          rightIndex += 1;
+        } else if (
+          rightLine === undefined ||
+          (leftLine !== undefined && compareUtf8(leftLine, rightLine) < 0)
+        ) {
+          column = 0;
+          line = leftLine ?? "";
+          leftIndex += 1;
+        } else {
+          column = 1;
+          line = rightLine;
+          rightIndex += 1;
+        }
+        if (visible[column]) {
+          const prefix = visible.slice(0, column).filter(Boolean).length;
+          await output.write(`${"\t".repeat(prefix)}${line}\n`);
+        }
+      }
+      await output.flush();
+    } finally {
+      output.abort();
+    }
+    return 0;
   } finally {
     collected.release();
   }
@@ -976,9 +1031,12 @@ export const joinCommand = /* @__PURE__ */ defineCommand("join", async (context,
       while (leftIndex < left.length || rightIndex < right.length) {
         const leftLine = left[leftIndex];
         const rightLine = right[rightIndex];
-        const order = leftLine === undefined ? 1
-          : rightLine === undefined ? -1
-          : compareUtf8(leftLine.key, rightLine.key);
+        const order =
+          leftLine === undefined
+            ? 1
+            : rightLine === undefined
+              ? -1
+              : compareUtf8(leftLine.key, rightLine.key);
         if (order < 0) {
           if (includeUnpaired.has(1)) await emit(leftLine?.text ?? "");
           leftIndex += 1;
@@ -1000,11 +1058,13 @@ export const joinCommand = /* @__PURE__ */ defineCommand("join", async (context,
             const leftRecord = left[leftMatch];
             const rightRecord = right[rightMatch];
             if (leftRecord === undefined || rightRecord === undefined) continue;
-            await emit([
-              key,
-              ...leftRecord.fields.filter((_field, index) => index !== leftField - 1),
-              ...rightRecord.fields.filter((_field, index) => index !== rightField - 1),
-            ].join(delimiter));
+            await emit(
+              [
+                key,
+                ...leftRecord.fields.filter((_field, index) => index !== leftField - 1),
+                ...rightRecord.fields.filter((_field, index) => index !== rightField - 1),
+              ].join(delimiter),
+            );
           }
         }
         leftIndex = leftEnd;
@@ -1029,9 +1089,10 @@ export const patchCommand = /* @__PURE__ */ defineCommand("patch", async (contex
   const current = context.fileSystem.readFile(path);
   const source = await collectText(context, current.stream, path);
   try {
-    const patch = argv[1] === undefined
-      ? await collectText(context, fds[0])
-      : await readFileText(context, argv[1]);
+    const patch =
+      argv[1] === undefined
+        ? await collectText(context, fds[0])
+        : await readFileText(context, argv[1]);
     try {
       const applied = applyUnifiedPatch(source.value, patch.value);
       await context.fileSystem.writeFile(path, applied.text, {
@@ -1045,5 +1106,139 @@ export const patchCommand = /* @__PURE__ */ defineCommand("patch", async (contex
     }
   } finally {
     source.release();
+  }
+});
+
+const SEQ_OPTIONS = {
+  short: {
+    s: { name: "separator", argument: true },
+    w: { name: "equal-width" },
+  },
+  negativeNumberOperands: true,
+} as const;
+
+function seqOperand(value: string, name: string): number {
+  if (!/^-?[0-9]+$/u.test(value)) {
+    throw new VfsError("EINVAL", `seq: ${name} must be a decimal integer`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new VfsError("EINVAL", `seq: ${name} exceeds the safe integer range`);
+  }
+  return parsed;
+}
+
+/**
+ * Prints an integer sequence. Operands are strict decimal integers rather than
+ * Bash arithmetic or floating point, matching the project's deterministic
+ * integer profile; the produced count charges the shared expansion budget.
+ */
+export const seqCommand = /* @__PURE__ */ defineCommand("seq", async (context, argv, fds) => {
+  const parsed = parseUtilityOptions("seq", argv, SEQ_OPTIONS);
+  let separator = "\n";
+  let equalWidth = false;
+  for (const option of parsed.options) {
+    if (option.name === "separator" && "argument" in option) separator = option.argument;
+    if (option.name === "equal-width") equalWidth = true;
+  }
+  if (parsed.operands.length === 0 || parsed.operands.length > 3) {
+    throw new VfsError("EINVAL", "seq: requires one to three integer operands");
+  }
+  const [one = "", two, three] = parsed.operands;
+  const first = two === undefined ? 1 : seqOperand(one, "FIRST");
+  const increment = three === undefined ? 1 : seqOperand(two ?? "", "INCREMENT");
+  const last = seqOperand(three ?? two ?? one, "LAST");
+  if (increment === 0) throw new VfsError("EINVAL", "seq: INCREMENT must not be zero");
+
+  const values: number[] = [];
+  for (let value = first; increment > 0 ? value <= last : value >= last; value += increment) {
+    context.budget.step();
+    context.budget.expansionOutput(String(value).length, 1);
+    values.push(value);
+  }
+  const width = equalWidth ? Math.max(0, ...values.map((value) => String(value).length)) : 0;
+  const output = new BufferedTextWriter(context, fds[1]);
+  try {
+    for (const value of values) {
+      await output.write(`${String(value).padStart(width, "0")}${separator}`);
+    }
+    await output.flush();
+  } finally {
+    output.abort();
+  }
+  return 0;
+});
+
+const BASE64_OPTIONS = {
+  short: {
+    d: { name: "decode" },
+    w: { name: "wrap", argument: true },
+  },
+  long: {
+    decode: { name: "decode" },
+    wrap: { name: "wrap", argument: true },
+  },
+} as const;
+
+/** Encodes or decodes standard base64. Decoding rejects invalid input. */
+export const base64Command = /* @__PURE__ */ defineCommand("base64", async (context, argv, fds) => {
+  const parsed = parseUtilityOptions("base64", argv, BASE64_OPTIONS);
+  let decode = false;
+  let wrap = 76;
+  for (const option of parsed.options) {
+    if (option.name === "decode") decode = true;
+    if (option.name === "wrap" && "argument" in option) {
+      wrap = parseInteger(option.argument, "base64: -w", 0);
+    }
+  }
+  if (parsed.operands.length > 1) throw new VfsError("EINVAL", "base64: accepts at most one file");
+
+  const [path] = parsed.operands;
+  if (decode) {
+    const input =
+      path === undefined || path === "-"
+        ? await collectText(context, fds[0])
+        : await readFileText(context, path);
+    try {
+      const compact = input.value.replace(/[\n\r]/gu, "");
+      if (!/^[A-Za-z0-9+/]*={0,2}$/u.test(compact) || compact.length % 4 !== 0) {
+        throw new VfsError("EINVAL", "base64: invalid input");
+      }
+      const binary = atob(compact);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+      }
+      await writeBytes(fds[1], bytes);
+      return 0;
+    } finally {
+      input.release();
+    }
+  }
+
+  const input =
+    path === undefined || path === "-"
+      ? await collectStream(context, fds[0])
+      : await readFileBytes(context, path);
+  try {
+    let binary = "";
+    for (const byte of input.value) binary += String.fromCharCode(byte);
+    const encoded = btoa(binary);
+    if (wrap === 0) {
+      await writeText(fds[1], encoded.length === 0 ? "" : `${encoded}\n`);
+      return 0;
+    }
+    const output = new BufferedTextWriter(context, fds[1]);
+    try {
+      for (let index = 0; index < encoded.length; index += wrap) {
+        await output.write(`${encoded.slice(index, index + wrap)}\n`);
+      }
+      await output.flush();
+    } finally {
+      output.abort();
+    }
+    return 0;
+  } finally {
+    input.release();
   }
 });

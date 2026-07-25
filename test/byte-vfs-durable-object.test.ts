@@ -1,14 +1,12 @@
-import { env } from "cloudflare:workers";
 import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { isVfsError, type VfsError } from "../src/core/errors.js";
 import { R2OpaqueStore } from "../src/storage/r2.js";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
 import { readAllBytes, streamFromChunks } from "../src/vfs/streams.js";
-import {
-  runVfsConformance,
-  streamThatFailsAfter,
-} from "./helpers/vfs-conformance.js";
+import { runVfsConformance, streamThatFailsAfter } from "./helpers/vfs-conformance.js";
 import type { TestWorkspaceVfs } from "./worker.js";
 
 function workspace(name: string): DurableObjectStub<TestWorkspaceVfs> {
@@ -18,10 +16,10 @@ function workspace(name: string): DurableObjectStub<TestWorkspaceVfs> {
 describe("byte-oriented Durable Object filesystem", () => {
   describe("shared VFS conformance", () => {
     let conformanceId = 0;
-    runVfsConformance(
-      () => workspace(`conformance-${conformanceId++}`),
-      { negativeMutationRaces: false, failedInputStreams: false },
-    );
+    runVfsConformance(() => workspace(`conformance-${conformanceId++}`), {
+      negativeMutationRaces: false,
+      failedInputStreams: false,
+    });
   });
 
   it("stores arbitrary chunked bytes and returns a stable stream snapshot", async () => {
@@ -33,12 +31,12 @@ describe("byte-oriented Durable Object filesystem", () => {
     const snapshot = await stub.readFile("/data");
     await stub.writeFile("/data", new Uint8Array([9]));
 
-    expect([...await readAllBytes(snapshot.stream, 4096)]).toEqual([...original]);
-    expect([...await readAllBytes((await stub.readFile("/data")).stream, 16)]).toEqual([9]);
+    expect([...(await readAllBytes(snapshot.stream, 4096))]).toEqual([...original]);
+    expect([...(await readAllBytes((await stub.readFile("/data")).stream, 16))]).toEqual([9]);
     await runInDurableObject(stub, (_instance, state) => {
-      const chunks = state.storage.sql.exec<{ count: number }>(
-        "SELECT COUNT(*) AS count FROM vfs_inline_chunks",
-      ).one().count;
+      const chunks = state.storage.sql
+        .exec<{ count: number }>("SELECT COUNT(*) AS count FROM vfs_inline_chunks")
+        .one().count;
       expect(chunks).toBe(1);
     });
   });
@@ -51,6 +49,56 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(first.done).toBe(false);
     expect([...(first.value ?? new Uint8Array())]).toEqual([1, 2, 3]);
     await reader.cancel();
+  });
+
+  it("preserves VfsError discrimination across the RPC boundary", async () => {
+    const stub = workspace("rpc-error-shape");
+
+    // Workers RPC rebuilds a thrown error as a plain Error: the own properties
+    // survive but the prototype does not. `runInDurableObject` never crosses
+    // that boundary, so this must call the stub directly.
+    let synchronous: unknown;
+    try {
+      await stub.stat("/definitely-missing");
+    } catch (error) {
+      synchronous = error;
+    }
+    expect(isVfsError(synchronous)).toBe(true);
+    expect(synchronous).toMatchObject({
+      name: "VfsError",
+      code: "ENOENT",
+      path: "/definitely-missing",
+    });
+
+    await stub.writeFile("/taken", "body");
+    let asynchronous: unknown;
+    try {
+      await stub.writeFile("/taken", "other", { disposition: "create" });
+    } catch (error) {
+      asynchronous = error;
+    }
+    expect(isVfsError(asynchronous)).toBe(true);
+    expect((asynchronous as VfsError).code).toBe("EEXIST");
+
+    let shellError: unknown;
+    try {
+      await stub.executeText({ script: "echo hi", cwd: 42 as unknown as string });
+    } catch (error) {
+      shellError = error;
+    }
+    expect(isVfsError(shellError)).toBe(true);
+    expect((shellError as VfsError).code).toBe("EINVAL");
+
+    expect(isVfsError(new Error("plain"))).toBe(false);
+    expect(isVfsError({ name: "VfsError", code: "ENOENT" })).toBe(false);
+    expect(
+      isVfsError(
+        Object.assign(new Error("spoofed"), {
+          name: "VfsError",
+          code: "ENOTACODE",
+        }),
+      ),
+    ).toBe(false);
   });
 
   it("rejects self-copy and a stale empty append atomically inside the object", async () => {
@@ -71,7 +119,10 @@ describe("byte-oriented Durable Object filesystem", () => {
         },
       });
       const appending = instance.appendFile("/same", body);
-      const observed = appending.then(() => null, (error: unknown) => error);
+      const observed = appending.then(
+        () => null,
+        (error: unknown) => error,
+      );
       await Promise.resolve();
       instance.touch("/same");
       finish?.();
@@ -118,15 +169,17 @@ describe("byte-oriented Durable Object filesystem", () => {
   it("enforces schema combinations with CHECK constraints", async () => {
     const stub = workspace("schema-checks");
     await stub.writeFile("/initialize", "x");
-    await expect(runInDurableObject(stub, (_instance, state) => {
-      state.storage.sql.exec(
-        `INSERT INTO vfs_entries (
+    await expect(
+      runInDurableObject(stub, (_instance, state) => {
+        state.storage.sql.exec(
+          `INSERT INTO vfs_entries (
            path, parent_path, name, kind, content_class, opaque_object_id,
            size_bytes, mode, created_at_ms, modified_at_ms, revision
          ) VALUES ('/bad', '/', 'bad', 'directory', 'inline', NULL,
                    0, 16877, 1, 1, 1)`,
-      );
-    })).rejects.toThrow();
+        );
+      }),
+    ).rejects.toThrow();
   });
 
   it("skips schema initialization after migration version 1 is present", async () => {
@@ -146,26 +199,26 @@ describe("byte-oriented Durable Object filesystem", () => {
     const stub = workspace("compact-schema-identities");
     await stub.writeFile("/file", "body");
     const result = await runInDurableObject(stub, (instance, state) => {
-      const row = state.storage.sql.exec<{
-        id: number;
-        id_type: string;
-        mutation_epoch: string;
-        version: number;
-      }>(
-        `SELECT e.id, typeof(e.id) AS id_type, s.mutation_epoch, p.version
+      const row = state.storage.sql
+        .exec<{
+          id: number;
+          id_type: string;
+          mutation_epoch: string;
+          version: number;
+        }>(
+          `SELECT e.id, typeof(e.id) AS id_type, s.mutation_epoch, p.version
          FROM vfs_entries e
          JOIN vfs_path_versions p ON p.path = e.path
          JOIN vfs_state s ON s.singleton = 1
          WHERE e.path = '/file'`,
-      ).one();
+        )
+        .one();
       return { row, stat: instance.stat("/file") };
     });
 
     expect(result.row.id).toBeGreaterThan(0);
     expect(result.row.id_type).toBe("integer");
-    expect(result.stat.mutationToken).toBe(
-      `${result.row.mutation_epoch}:${result.row.version}`,
-    );
+    expect(result.stat.mutationToken).toBe(`${result.row.mutation_epoch}:${result.row.version}`);
   });
 
   it("rejects malformed RPC booleans before destructive operations", async () => {
@@ -245,14 +298,14 @@ describe("byte-oriented Durable Object filesystem", () => {
   it("does not create persistent path-version rows for absent token reads", async () => {
     const stub = workspace("absent-token-read");
     const result = await runInDurableObject(stub, (instance, state) => {
-      const before = state.storage.sql.exec<{ count: number }>(
-        "SELECT COUNT(*) AS count FROM vfs_path_versions",
-      ).one().count;
+      const before = state.storage.sql
+        .exec<{ count: number }>("SELECT COUNT(*) AS count FROM vfs_path_versions")
+        .one().count;
       const first = instance.getMutationToken("/never-created");
       const second = instance.getMutationToken("/another-absent");
-      const after = state.storage.sql.exec<{ count: number }>(
-        "SELECT COUNT(*) AS count FROM vfs_path_versions",
-      ).one().count;
+      const after = state.storage.sql
+        .exec<{ count: number }>("SELECT COUNT(*) AS count FROM vfs_path_versions")
+        .one().count;
       return { before, after, first, second };
     });
     expect(result.after).toBe(result.before);
@@ -323,17 +376,19 @@ describe("byte-oriented Durable Object filesystem", () => {
       } catch (error) {
         message = error instanceof Error ? error.message : String(error);
       }
-      const afterFailure = state.storage.sql.exec<{
-        state: string;
-        verification_token: string | null;
-        verification_lease_until_ms: number | null;
-        queued: number;
-      }>(
-        `SELECT state, verification_token, verification_lease_until_ms,
+      const afterFailure = state.storage.sql
+        .exec<{
+          state: string;
+          verification_token: string | null;
+          verification_lease_until_ms: number | null;
+          queued: number;
+        }>(
+          `SELECT state, verification_token, verification_lease_until_ms,
                 (SELECT COUNT(*) FROM vfs_gc_queue WHERE r2_key = s.r2_key) AS queued
          FROM vfs_upload_sessions s WHERE id = ?`,
-        upload.uploadId,
-      ).one();
+          upload.uploadId,
+        )
+        .one();
       const pathsAfterFailure = fileSystem.list("/").map((entry) => entry.path);
       const committed = await fileSystem.commitOpaqueUpload(upload.uploadId);
       return { message, afterFailure, pathsAfterFailure, committed };
@@ -354,8 +409,12 @@ describe("byte-oriented Durable Object filesystem", () => {
     const result = await runInDurableObject(stub, async (_instance, state) => {
       let markHeadStarted: (() => void) | undefined;
       let releaseHead: (() => void) | undefined;
-      const headStarted = new Promise<void>((resolve) => { markHeadStarted = resolve; });
-      const headGate = new Promise<void>((resolve) => { releaseHead = resolve; });
+      const headStarted = new Promise<void>((resolve) => {
+        markHeadStarted = resolve;
+      });
+      const headGate = new Promise<void>((resolve) => {
+        releaseHead = resolve;
+      });
       const backing = new MemoryOpaqueStore();
       const fileSystem = new DurableObjectFileSystem(state.storage, {
         workspaceId: "opaque-publication",
@@ -438,10 +497,14 @@ describe("byte-oriented Durable Object filesystem", () => {
         expired = caught;
       }
       expect(expired).toMatchObject({ code: "ENOENT" });
-      expect(state.storage.sql.exec<{ count: number }>(
-        "SELECT COUNT(*) AS count FROM vfs_upload_sessions WHERE id = ?",
-        upload.uploadId,
-      ).one().count).toBe(0);
+      expect(
+        state.storage.sql
+          .exec<{ count: number }>(
+            "SELECT COUNT(*) AS count FROM vfs_upload_sessions WHERE id = ?",
+            upload.uploadId,
+          )
+          .one().count,
+      ).toBe(0);
       expect(instance.stat("/asset")).toMatchObject({ contentClass: "opaque", sizeBytes: 4 });
     });
   });
@@ -560,18 +623,22 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(await runDurableObjectAlarm(stub)).toBe(true);
     expect(await env.VFS_TEST_BUCKET.head(upload.objectKey)).toBeNull();
     await runInDurableObject(stub, async (_instance, state) => {
-      expect(state.storage.sql.exec<{ count: number }>(
-        "SELECT COUNT(*) AS count FROM vfs_gc_queue",
-      ).one().count).toBe(0);
+      expect(
+        state.storage.sql
+          .exec<{ count: number }>("SELECT COUNT(*) AS count FROM vfs_gc_queue")
+          .one().count,
+      ).toBe(0);
       await state.storage.setAlarm(Date.now() + 60_000);
     });
     await evictDurableObject(stub);
     expect(await runDurableObjectAlarm(stub)).toBe(true);
     expect(await env.VFS_TEST_BUCKET.head(upload.objectKey)).toBeNull();
     await runInDurableObject(stub, (_instance, state) => {
-      expect(state.storage.sql.exec<{ count: number }>(
-        "SELECT COUNT(*) AS count FROM vfs_gc_queue",
-      ).one().count).toBe(0);
+      expect(
+        state.storage.sql
+          .exec<{ count: number }>("SELECT COUNT(*) AS count FROM vfs_gc_queue")
+          .one().count,
+      ).toBe(0);
     });
   });
 
@@ -605,14 +672,16 @@ describe("byte-oriented Durable Object filesystem", () => {
       } catch (error) {
         message = error instanceof Error ? error.message : String(error);
       }
-      const row = state.storage.sql.exec<{
-        attempts: number;
-        last_error: string;
-        next_attempt_at_ms: number;
-      }>(
-        "SELECT attempts, last_error, next_attempt_at_ms FROM vfs_gc_queue WHERE r2_key = ?",
-        upload.objectKey,
-      ).one();
+      const row = state.storage.sql
+        .exec<{
+          attempts: number;
+          last_error: string;
+          next_attempt_at_ms: number;
+        }>(
+          "SELECT attempts, last_error, next_attempt_at_ms FROM vfs_gc_queue WHERE r2_key = ?",
+          upload.objectKey,
+        )
+        .one();
       state.storage.sql.exec(
         "UPDATE vfs_gc_queue SET next_attempt_at_ms = 0 WHERE r2_key = ?",
         upload.objectKey,
@@ -627,9 +696,11 @@ describe("byte-oriented Durable Object filesystem", () => {
 
     expect(await runDurableObjectAlarm(stub)).toBe(true);
     await runInDurableObject(stub, (_instance, state) => {
-      expect(state.storage.sql.exec<{ count: number }>(
-        "SELECT COUNT(*) AS count FROM vfs_gc_queue",
-      ).one().count).toBe(0);
+      expect(
+        state.storage.sql
+          .exec<{ count: number }>("SELECT COUNT(*) AS count FROM vfs_gc_queue")
+          .one().count,
+      ).toBe(0);
     });
   });
 
@@ -663,23 +734,24 @@ describe("byte-oriented Durable Object filesystem", () => {
       } catch (error) {
         message = error instanceof Error ? error.message : String(error);
       }
-      const failed = state.storage.sql.exec<{
-        attempts: number;
-        last_error: string;
-      }>(
-        "SELECT attempts, last_error FROM vfs_gc_queue WHERE r2_key = ?",
-        upload.objectKey,
-      ).one();
+      const failed = state.storage.sql
+        .exec<{
+          attempts: number;
+          last_error: string;
+        }>("SELECT attempts, last_error FROM vfs_gc_queue WHERE r2_key = ?", upload.objectKey)
+        .one();
       const objectExistsAfterFailure = backing.has(upload.objectKey);
       state.storage.sql.exec(
         "UPDATE vfs_gc_queue SET next_attempt_at_ms = 0 WHERE r2_key = ?",
         upload.objectKey,
       );
       const retried = await fileSystem.drainGarbage();
-      const queued = state.storage.sql.exec<{ count: number }>(
-        "SELECT COUNT(*) AS count FROM vfs_gc_queue WHERE r2_key = ?",
-        upload.objectKey,
-      ).one().count;
+      const queued = state.storage.sql
+        .exec<{ count: number }>(
+          "SELECT COUNT(*) AS count FROM vfs_gc_queue WHERE r2_key = ?",
+          upload.objectKey,
+        )
+        .one().count;
       return { message, failed, objectExistsAfterFailure, retried, queued };
     });
     expect(result).toMatchObject({
@@ -696,8 +768,12 @@ describe("byte-oriented Durable Object filesystem", () => {
     const result = await runInDurableObject(stub, async (_instance, state) => {
       let headStarted: (() => void) | undefined;
       let releaseHead: (() => void) | undefined;
-      const started = new Promise<void>((resolve) => { headStarted = resolve; });
-      const gate = new Promise<void>((resolve) => { releaseHead = resolve; });
+      const started = new Promise<void>((resolve) => {
+        headStarted = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        releaseHead = resolve;
+      });
       const backing = new MemoryOpaqueStore();
       const fileSystem = new DurableObjectFileSystem(state.storage, {
         workspaceId: "abort-verifier-race",
@@ -716,7 +792,10 @@ describe("byte-oriented Durable Object filesystem", () => {
       const upload = await fileSystem.beginOpaqueUpload("/asset", { expiresInMs: 60_000 });
       await backing.putIfAbsent(upload.objectKey, "body");
       const committing = fileSystem.commitOpaqueUpload(upload.uploadId);
-      const observed = committing.then(() => null, (error: unknown) => error);
+      const observed = committing.then(
+        () => null,
+        (error: unknown) => error,
+      );
       await started;
       await fileSystem.abortOpaqueUpload(upload.uploadId);
       releaseHead?.();
@@ -727,12 +806,14 @@ describe("byte-oriented Durable Object filesystem", () => {
       } catch (error) {
         statError = error;
       }
-      const garbage = state.storage.sql.exec<{ state: string; queued: number }>(
-        `SELECT state,
+      const garbage = state.storage.sql
+        .exec<{ state: string; queued: number }>(
+          `SELECT state,
                 (SELECT COUNT(*) FROM vfs_gc_queue WHERE r2_key = s.r2_key) AS queued
          FROM vfs_upload_sessions s WHERE id = ?`,
-        upload.uploadId,
-      ).one();
+          upload.uploadId,
+        )
+        .one();
       state.storage.sql.exec(
         `UPDATE vfs_gc_queue SET not_before_ms = 0, next_attempt_at_ms = 0
          WHERE r2_key = ?`,
@@ -762,10 +843,18 @@ describe("byte-oriented Durable Object filesystem", () => {
       let secondHeadStarted: (() => void) | undefined;
       let releaseFirst: (() => void) | undefined;
       let releaseSecond: (() => void) | undefined;
-      const firstStarted = new Promise<void>((resolve) => { firstHeadStarted = resolve; });
-      const secondStarted = new Promise<void>((resolve) => { secondHeadStarted = resolve; });
-      const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
-      const secondGate = new Promise<void>((resolve) => { releaseSecond = resolve; });
+      const firstStarted = new Promise<void>((resolve) => {
+        firstHeadStarted = resolve;
+      });
+      const secondStarted = new Promise<void>((resolve) => {
+        secondHeadStarted = resolve;
+      });
+      const firstGate = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      const secondGate = new Promise<void>((resolve) => {
+        releaseSecond = resolve;
+      });
       const backing = new MemoryOpaqueStore();
       let heads = 0;
       const fileSystem = new DurableObjectFileSystem(state.storage, {
@@ -791,19 +880,24 @@ describe("byte-oriented Durable Object filesystem", () => {
       const upload = await fileSystem.beginOpaqueUpload("/asset", { expiresInMs: 120_000 });
       await backing.putIfAbsent(upload.objectKey, "body");
       const first = fileSystem.commitOpaqueUpload(upload.uploadId);
-      const firstObserved = first.then(() => null, (error: unknown) => error);
+      const firstObserved = first.then(
+        () => null,
+        (error: unknown) => error,
+      );
       await firstStarted;
       now = 61_000;
       const second = fileSystem.commitOpaqueUpload(upload.uploadId);
       await secondStarted;
       releaseFirst?.();
       const firstError = await firstObserved;
-      const verifying = state.storage.sql.exec<{ state: string; queued: number }>(
-        `SELECT state,
+      const verifying = state.storage.sql
+        .exec<{ state: string; queued: number }>(
+          `SELECT state,
                 (SELECT COUNT(*) FROM vfs_gc_queue WHERE r2_key = s.r2_key) AS queued
          FROM vfs_upload_sessions s WHERE id = ?`,
-        upload.uploadId,
-      ).one();
+          upload.uploadId,
+        )
+        .one();
       releaseSecond?.();
       const committed = await second;
       return { firstError, verifying, committed };
@@ -823,12 +917,12 @@ describe("byte-oriented Durable Object filesystem", () => {
 
   it("preserves an interactive session over the SQLite-backed VFS", async () => {
     const stub = workspace("interactive-shell-rpc");
-    await expect(stub.executeInteractiveText(
-      "mkdir -p /repo; cd /repo; NAME=sqlite; printf body > file",
-    )).resolves.toMatchObject({ exitCode: 0, stderr: "" });
-    await expect(stub.executeInteractiveText(
-      "printf '%s:%s:' \"$PWD\" \"$NAME\"; cat file",
-    )).resolves.toEqual({
+    await expect(
+      stub.executeInteractiveText("mkdir -p /repo; cd /repo; NAME=sqlite; printf body > file"),
+    ).resolves.toMatchObject({ exitCode: 0, stderr: "" });
+    await expect(
+      stub.executeInteractiveText('printf \'%s:%s:\' "$PWD" "$NAME"; cat file'),
+    ).resolves.toEqual({
       exitCode: 0,
       stdout: "/repo:sqlite:body",
       stderr: "",
@@ -869,8 +963,8 @@ describe("byte-oriented Durable Object filesystem", () => {
         "read -r FIRST",
         "read -r SECOND",
         "getopts 'a:' OPT",
-        "shift \"$((OPTIND - 1))\"",
-        "printf '%s:%s|%s:%s' \"$FIRST\" \"$SECOND\" \"$OPTARG\" \"$1\"",
+        'shift "$((OPTIND - 1))"',
+        'printf \'%s:%s|%s:%s\' "$FIRST" "$SECOND" "$OPTARG" "$1"',
       ].join("\n"),
       args: ["-a", "value", "tail"],
       stdin: streamFromChunks([
@@ -892,7 +986,7 @@ describe("byte-oriented Durable Object filesystem", () => {
         "VALUE=src/components/button.ts",
         "BASE=${VALUE##*/}",
         "STEM=${BASE%.ts}",
-        "printf '%s|%s|%s' \"${STEM//t/T}\" \"${VALUE:4:10}\" \"${VALUE: -2}\"",
+        'printf \'%s|%s|%s\' "${STEM//t/T}" "${VALUE:4:10}" "${VALUE: -2}"',
       ].join("\n"),
     });
     expect(result).toMatchObject({
@@ -947,9 +1041,11 @@ describe("byte-oriented Durable Object filesystem", () => {
     await expect(stub.executeText({ script: "[[ ! -e /after ]]" })).resolves.toMatchObject({
       exitCode: 0,
     });
-    await expect(stub.executeText({
-      script: "set -e; fail() { return 7; }; fail; printf no",
-    })).resolves.toEqual({ exitCode: 7, stdout: "", stderr: "" });
+    await expect(
+      stub.executeText({
+        script: "set -e; fail() { return 7; }; fail; printf no",
+      }),
+    ).resolves.toEqual({ exitCode: 7, stdout: "", stderr: "" });
   });
 
   it("exposes opaque files to double-bracket metadata predicates without reading R2", async () => {

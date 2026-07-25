@@ -22,14 +22,15 @@ export const lsCommand = /* @__PURE__ */ defineCommand("ls", async (context, arg
     for (const [index, path] of paths.entries()) {
       const normalized = commandPath(context, path);
       const stat = context.fileSystem.stat(normalized);
-      const entries = stat.kind === "directory" && !directory
-        ? context.fileSystem.list(normalized)
-        : [stat];
+      const entries =
+        stat.kind === "directory" && !directory ? context.fileSystem.list(normalized) : [stat];
       if (multiple) await output.write(`${index === 0 ? "" : "\n"}${path}:\n`);
       for (const entry of entries) {
-        await output.write(long
-          ? `${modeString(entry.mode)} ${entry.sizeBytes.toString().padStart(8)} ${entry.name}\n`
-          : `${entry.name}\n`);
+        await output.write(
+          long
+            ? `${modeString(entry.mode)} ${entry.sizeBytes.toString().padStart(8)} ${entry.name}\n`
+            : `${entry.name}\n`,
+        );
       }
     }
     await output.flush();

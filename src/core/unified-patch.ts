@@ -66,7 +66,7 @@ function parseHunks(patch: string): PatchHunk[] {
       if (line === undefined) break;
       if (line === "\\ No newline at end of file\n") {
         const previous = hunk.lines.at(-1);
-        if (!previous || !previous.text.endsWith("\n")) {
+        if (!previous?.text.endsWith("\n")) {
           throw new VfsError("EINVAL", `misplaced no-newline marker at line ${index + 1}`);
         }
         previous.text = previous.text.slice(0, -1);
@@ -74,15 +74,16 @@ function parseHunks(patch: string): PatchHunk[] {
         continue;
       }
       const prefix = line[0];
-      const kind: PatchLineKind = prefix === " "
-        ? "context"
-        : prefix === "-"
-          ? "delete"
-          : prefix === "+"
-            ? "insert"
-            : (() => {
-                throw new VfsError("EINVAL", `invalid patch line at line ${index + 1}`);
-              })();
+      const kind: PatchLineKind =
+        prefix === " "
+          ? "context"
+          : prefix === "-"
+            ? "delete"
+            : prefix === "+"
+              ? "insert"
+              : (() => {
+                  throw new VfsError("EINVAL", `invalid patch line at line ${index + 1}`);
+                })();
       hunk.lines.push({ kind, text: line.slice(1) });
       index += 1;
     }

@@ -1,10 +1,5 @@
 import { VfsError } from "../core/errors.js";
-import type {
-  ByteBody,
-  ByteRange,
-  OpaqueObjectMetadata,
-  OpaqueStore,
-} from "../vfs/types.js";
+import type { ByteBody, ByteRange, OpaqueObjectMetadata, OpaqueStore } from "../vfs/types.js";
 
 function isRangeRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -19,10 +14,10 @@ function validateRange(key: string, range: unknown): asserts range is ByteRange 
       throw new VfsError("EINVAL", `unknown byte range field: ${name}`, key);
     }
     if (
-      typeof value !== "number"
-      || !Number.isSafeInteger(value)
-      || value < 0
-      || (name !== "offset" && value === 0)
+      typeof value !== "number" ||
+      !Number.isSafeInteger(value) ||
+      value < 0 ||
+      (name !== "offset" && value === 0)
     ) {
       throw new VfsError(
         "EINVAL",
@@ -83,10 +78,7 @@ export class R2OpaqueStore implements OpaqueStore {
     return object === null ? null : opaqueMetadata(object);
   }
 
-  async getStream(
-    key: string,
-    range?: ByteRange,
-  ): Promise<ReadableStream<Uint8Array> | null> {
+  async getStream(key: string, range?: ByteRange): Promise<ReadableStream<Uint8Array> | null> {
     validateRange(key, range);
     const object = await this.bucket.get(key, range === undefined ? undefined : { range });
     return object?.body ?? null;

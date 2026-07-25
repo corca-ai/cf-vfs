@@ -55,30 +55,31 @@ function meteredCursor<T extends Record<string, SqlStorageValue>>(
   sample();
   return new Proxy(cursor, {
     get(target, property) {
-      if (property === "next") return () => {
-        observe("next");
-        const result = target.next();
-        sample();
-        return result;
-      };
-      if (property === "toArray") return () => {
-        observe("toArray");
-        const result = target.toArray();
-        sample();
-        return result;
-      };
-      if (property === "one") return () => {
-        observe("one");
-        const result = target.one();
-        sample();
-        return result;
-      };
-      if (property === "raw") return <U extends SqlStorageValue[]>() => (
-        meteredIterator(target.raw<U>(), sample)
-      );
-      if (property === Symbol.iterator) return () => (
-        meteredIterator(target[Symbol.iterator](), sample)
-      );
+      if (property === "next")
+        return () => {
+          observe("next");
+          const result = target.next();
+          sample();
+          return result;
+        };
+      if (property === "toArray")
+        return () => {
+          observe("toArray");
+          const result = target.toArray();
+          sample();
+          return result;
+        };
+      if (property === "one")
+        return () => {
+          observe("one");
+          const result = target.one();
+          sample();
+          return result;
+        };
+      if (property === "raw")
+        return <U extends SqlStorageValue[]>() => meteredIterator(target.raw<U>(), sample);
+      if (property === Symbol.iterator)
+        return () => meteredIterator(target[Symbol.iterator](), sample);
       return Reflect.get(target, property, target) as unknown;
     },
   });
@@ -94,15 +95,22 @@ export function meterSqlStorage(original: DurableObjectStorage): SqlMeter {
   const sql: SqlStorage = {
     exec<T extends Record<string, SqlStorageValue>>(query: string, ...bindings: unknown[]) {
       statements += 1;
-      const cursor = Reflect.apply(original.sql.exec, original.sql, [query, ...bindings]) as SqlStorageCursor<T>;
-      return meteredCursor(cursor, (read, written) => {
-        rowsRead += read;
-        rowsWritten += written;
-      }, (method) => {
-        if (method === "next") cursorNextCalls += 1;
-        else if (method === "toArray") cursorToArrayCalls += 1;
-        else cursorOneCalls += 1;
-      });
+      const cursor = Reflect.apply(original.sql.exec, original.sql, [
+        query,
+        ...bindings,
+      ]) as SqlStorageCursor<T>;
+      return meteredCursor(
+        cursor,
+        (read, written) => {
+          rowsRead += read;
+          rowsWritten += written;
+        },
+        (method) => {
+          if (method === "next") cursorNextCalls += 1;
+          else if (method === "toArray") cursorToArrayCalls += 1;
+          else cursorOneCalls += 1;
+        },
+      );
     },
     get databaseSize() {
       return original.sql.databaseSize;
@@ -119,12 +127,24 @@ export function meterSqlStorage(original: DurableObjectStorage): SqlMeter {
   });
   return {
     storage,
-    get rowsRead() { return rowsRead; },
-    get rowsWritten() { return rowsWritten; },
-    get statements() { return statements; },
-    get cursorNextCalls() { return cursorNextCalls; },
-    get cursorToArrayCalls() { return cursorToArrayCalls; },
-    get cursorOneCalls() { return cursorOneCalls; },
+    get rowsRead() {
+      return rowsRead;
+    },
+    get rowsWritten() {
+      return rowsWritten;
+    },
+    get statements() {
+      return statements;
+    },
+    get cursorNextCalls() {
+      return cursorNextCalls;
+    },
+    get cursorToArrayCalls() {
+      return cursorToArrayCalls;
+    },
+    get cursorOneCalls() {
+      return cursorOneCalls;
+    },
     reset() {
       rowsRead = 0;
       rowsWritten = 0;

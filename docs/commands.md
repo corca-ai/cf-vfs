@@ -350,10 +350,11 @@ command implementations are absent; the default preset is covered separately.
 
 | Registry group | Available commands and principal options |
 | --- | --- |
-| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (`-e/+e`, `-o/+o errexit`, `-u/+u`, `-o/+o nounset`, `-o/+o pipefail`), `test`, `[` |
+| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (`-e/+e`, `-o/+o errexit`, `-u/+u`, `-o/+o nounset`, `-o/+o pipefail`), `test`, `[` |
 | namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f`, `ls -l -d -a -A`, `find -name -type -maxdepth`, `stat`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
-| streaming text/bytes | `cat`, `grep -i -v -n -F -c`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed s/old/new/[g]` |
-| bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch` |
+| streaming text/bytes | `cat`, `grep -i -v -n -F -c`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed s/old/new/[g]`, `seq -s -w` |
+| bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
+| argument dispatch | `xargs -n -0 -r -t`, from the dedicated `/shell/commands/xargs` subpath |
 
 General utilities share a deterministic option syntax. Supported short flags
 may be clustered (`rm -rf`, `grep -inF`, `wc -lwc`, `comm -123`), and a short
@@ -380,6 +381,24 @@ Commands batch small output into roughly 64 KiB
 slabs. `sort`, `tail`, `paste`, `diff`, `comm`, `join`, `patch`, hashing, and
 atomic VFS commits buffer only at their semantic barriers.
 
+`seq` operands are strict decimal integers, so a leading `-` before digits is
+an operand rather than an option cluster. Bash arithmetic expressions, floating
+point, and format strings are outside the profile. `base64` uses the standard
+alphabet; decoding rejects invalid input instead of guessing. `env` prints only
+names matching `[A-Za-z_][A-Za-z0-9_]*` in UTF-8 byte order, so positional
+parameters such as `0` are absent; `-i`, `-u`, `-0`, and the bare `-` form are
+outside the profile.
+
+`xargs` reads standard input as data, never as source. Arguments split on the
+fixed whitespace profile, or on NUL under `-0`, and reach the command registry
+already expanded through `ShellCommandContext.executeCommand()`, so input can
+never introduce shell syntax, quoting, or an `eval`. Invocations share the
+caller's command, step, mutation, and I/O budgets. A non-zero invocation yields
+status 123, an unrunnable or missing command yields 126 or 127, and status 255
+aborts the run; a bounded-execution failure raised by an invoked command
+propagates rather than being converted to 123. Bash's quote-aware splitting and
+the `-I`, `-L`, and `-P` options are outside the profile.
+
 Named utilities implement the documented subset, not every GNU/BSD option.
 Unsupported options are usage errors rather than silently ignored behavior.
 
@@ -394,7 +413,7 @@ their bodies are absent from the shell capability object.
 | `touch`, `chmod`, `mv` | SQLite metadata/namespace only |
 | `cp` | creates another metadata reference; no R2 body transfer |
 | `rm` | unlinks and durably queues the last unreachable generation |
-| `cat`, text `head`/`tail`, `grep`, `sort`, `sed`, `cut`, `tr`, `nl`, `fold` | `ENOTSUP` before R2 read |
+| `cat`, text `head`/`tail`, `grep`, `sort`, `sed`, `cut`, `tr`, `nl`, `fold`, `base64` | `ENOTSUP` before R2 read |
 | `cmp`, `diff`, `patch`, `join`, `comm` | `ENOTSUP` if an opaque body is required |
 | `sha256sum` | emits a trusted verified digest; otherwise `ENOTSUP` |
 | `>>` and append `tee` | `ENOTSUP` |
@@ -407,7 +426,7 @@ they are not present on `ShellCommandContext.fileSystem`.
 
 `VirtualFileSystem` operates on bytes and canonical paths:
 
-- `stat`, `list`/`listPage`, and `find`/`findPage`;
+- `stat`, `list`/`listPage`, `find`/`findPage`, and `countSubtree`;
 - `readFile`, `writeFile`, `appendFile`, `touch`, and `setMetadata`;
 - `mkdir`, `remove`, `move`, and `copy`;
 - `getMutationToken` and optional revision/token guards;
@@ -427,3 +446,10 @@ Pagination cursors are keyset positions, not durable snapshots. Continue
 through empty filtered pages until `nextCursor` is null. A concurrent mutation
 before the cursor can be missed; restart when a fresh complete traversal is
 required.
+
+`find()` materializes a `VfsStat` per match and stops at its 10,000 default
+limit. When only the size of a subtree matters — charging a budget, deciding
+whether a recursive removal is worth confirming — use `countSubtree()`, which
+answers with one indexed range query, allocates nothing per entry, and has no
+result ceiling. It counts the root itself and raises `ENOENT` for an absent
+path.

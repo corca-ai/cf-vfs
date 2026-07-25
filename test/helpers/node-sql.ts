@@ -1,8 +1,5 @@
 import { afterEach } from "vitest";
-import {
-  NodeSqlFileSystem,
-  type NodeSqlFileSystemOptions,
-} from "../../src/testing/node.js";
+import { NodeSqlFileSystem, type NodeSqlFileSystemOptions } from "../../src/testing/node.js";
 
 const openFileSystems = new Set<NodeSqlFileSystem>();
 
@@ -11,9 +8,7 @@ afterEach(() => {
   openFileSystems.clear();
 });
 
-export function createTestFileSystem(
-  options: NodeSqlFileSystemOptions = {},
-): NodeSqlFileSystem {
+export function createTestFileSystem(options: NodeSqlFileSystemOptions = {}): NodeSqlFileSystem {
   const fileSystem = new NodeSqlFileSystem(options);
   openFileSystems.add(fileSystem);
   return fileSystem;

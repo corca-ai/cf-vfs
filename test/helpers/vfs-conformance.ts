@@ -1,22 +1,21 @@
 import { expect, it } from "vitest";
-import type { VirtualFileSystem } from "../../src/vfs/types.js";
 import { readAllBytes } from "../../src/vfs/streams.js";
+import type { VirtualFileSystem } from "../../src/vfs/types.js";
 
 // Durable Object RPC turns synchronous server results into promises at the caller boundary.
 type RpcCompatibleVirtualFileSystem = {
-  [Method in keyof VirtualFileSystem]:
-    VirtualFileSystem[Method] extends (...args: infer Args) => infer Result
-      ? (...args: Args) => Result | Promise<Awaited<Result>>
-      : never;
+  [Method in keyof VirtualFileSystem]: VirtualFileSystem[Method] extends (
+    ...args: infer Args
+  ) => infer Result
+    ? (...args: Args) => Result | Promise<Awaited<Result>>
+    : never;
 };
 
-export type VfsFactory =
-  () => RpcCompatibleVirtualFileSystem | Promise<RpcCompatibleVirtualFileSystem>;
+export type VfsFactory = () =>
+  | RpcCompatibleVirtualFileSystem
+  | Promise<RpcCompatibleVirtualFileSystem>;
 
-async function readText(
-  fileSystem: RpcCompatibleVirtualFileSystem,
-  path: string,
-): Promise<string> {
+async function readText(fileSystem: RpcCompatibleVirtualFileSystem, path: string): Promise<string> {
   return new TextDecoder().decode(
     await readAllBytes((await fileSystem.readFile(path)).stream, 1024),
   );
@@ -29,8 +28,12 @@ function gatedBody(value: string): {
 } {
   let release: (() => void) | undefined;
   let markPulled: (() => void) | undefined;
-  const closed = new Promise<void>((resolve) => { release = resolve; });
-  const pulled = new Promise<void>((resolve) => { markPulled = resolve; });
+  const closed = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const pulled = new Promise<void>((resolve) => {
+    markPulled = resolve;
+  });
   let sent = false;
   return {
     stream: new ReadableStream<Uint8Array>({
@@ -75,18 +78,22 @@ export function runVfsConformance(
   it("conforms: preserves arbitrary bytes through streamed snapshots", async () => {
     const fileSystem = await factory();
     const original = Uint8Array.of(0, 0xff, 0x80, 0x0a, 0);
-    await fileSystem.writeFile("/bytes", new ReadableStream<Uint8Array>({
-      start(controller) {
-        for (const byte of original) controller.enqueue(Uint8Array.of(byte));
-        controller.close();
-      },
-    }));
+    await fileSystem.writeFile(
+      "/bytes",
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const byte of original) controller.enqueue(Uint8Array.of(byte));
+          controller.close();
+        },
+      }),
+    );
     const snapshot = await fileSystem.readFile("/bytes");
     await fileSystem.writeFile("/bytes", Uint8Array.of(9));
 
-    expect([...await readAllBytes(snapshot.stream, 16)]).toEqual([...original]);
-    expect([...await readAllBytes((await fileSystem.readFile("/bytes")).stream, 16)])
-      .toEqual([9]);
+    expect([...(await readAllBytes(snapshot.stream, 16))]).toEqual([...original]);
+    expect([...(await readAllBytes((await fileSystem.readFile("/bytes")).stream, 16))]).toEqual([
+      9,
+    ]);
   });
 
   it("conforms: keeps a streamed create absent until the complete body is published", async () => {
@@ -96,8 +103,9 @@ export function runVfsConformance(
     await body.pulled;
 
     try {
-      expect((await fileSystem.list("/")).map((entry) => entry.path))
-        .not.toContain("/streamed-create");
+      expect((await fileSystem.list("/")).map((entry) => entry.path)).not.toContain(
+        "/streamed-create",
+      );
     } finally {
       body.close();
       await writing;
@@ -121,22 +129,22 @@ export function runVfsConformance(
     expect(await readText(fileSystem, "/streamed-replace")).toBe("new");
   });
 
-  if (options.failedInputStreams !== false) it("conforms: publishes no partial generation when an input stream fails", async () => {
-    const fileSystem = await factory();
-    await expect(fileSystem.writeFile(
-      "/failed-create",
-      streamThatFailsAfter("partial"),
-    )).rejects.toThrow("source failed");
-    expect((await fileSystem.list("/")).map((entry) => entry.path))
-      .not.toContain("/failed-create");
+  if (options.failedInputStreams !== false)
+    it("conforms: publishes no partial generation when an input stream fails", async () => {
+      const fileSystem = await factory();
+      await expect(
+        fileSystem.writeFile("/failed-create", streamThatFailsAfter("partial")),
+      ).rejects.toThrow("source failed");
+      expect((await fileSystem.list("/")).map((entry) => entry.path)).not.toContain(
+        "/failed-create",
+      );
 
-    await fileSystem.writeFile("/failed-replace", "old");
-    await expect(fileSystem.writeFile(
-      "/failed-replace",
-      streamThatFailsAfter("partial"),
-    )).rejects.toThrow("source failed");
-    expect(await readText(fileSystem, "/failed-replace")).toBe("old");
-  });
+      await fileSystem.writeFile("/failed-replace", "old");
+      await expect(
+        fileSystem.writeFile("/failed-replace", streamThatFailsAfter("partial")),
+      ).rejects.toThrow("source failed");
+      expect(await readText(fileSystem, "/failed-replace")).toBe("old");
+    });
 
   it("conforms: accepts the current mutation token and publishes a new one", async () => {
     const fileSystem = await factory();
@@ -144,45 +152,57 @@ export function runVfsConformance(
     const token = await fileSystem.getMutationToken("/guarded");
     const result = await fileSystem.writeFile("/guarded", "new", { ifMutationToken: token });
     expect(result.mutationToken).not.toBe(token);
-    expect(new TextDecoder().decode(
-      await readAllBytes((await fileSystem.readFile("/guarded")).stream, 16),
-    )).toBe("new");
+    expect(
+      new TextDecoder().decode(
+        await readAllBytes((await fileSystem.readFile("/guarded")).stream, 16),
+      ),
+    ).toBe("new");
   });
 
-  if (options.negativeMutationRaces !== false) it("conforms: rejects copying a path onto itself without changing its contents", async () => {
-    const fileSystem = await factory();
-    await fileSystem.writeFile("/same", "body");
-    const before = await fileSystem.stat("/same");
+  if (options.negativeMutationRaces !== false)
+    it("conforms: rejects copying a path onto itself without changing its contents", async () => {
+      const fileSystem = await factory();
+      await fileSystem.writeFile("/same", "body");
+      const before = await fileSystem.stat("/same");
 
-    const copyError = await Promise.resolve()
-      .then(() => fileSystem.copy("/same", "/same", { replace: true }))
-      .then(() => null, (error: unknown) => error);
-    expect(copyError).toMatchObject({ code: "EINVAL", path: "/same" });
+      const copyError = await Promise.resolve()
+        .then(() => fileSystem.copy("/same", "/same", { replace: true }))
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
+      expect(copyError).toMatchObject({ code: "EINVAL", path: "/same" });
 
-    expect(await fileSystem.stat("/same")).toEqual(before);
-    expect(new TextDecoder().decode(
-      await readAllBytes((await fileSystem.readFile("/same")).stream, 16),
-    )).toBe("body");
-  });
-
-  if (options.negativeMutationRaces !== false) it("conforms: rechecks the path token after collecting an empty append", async () => {
-    const fileSystem = await factory();
-    await fileSystem.writeFile("/append-race", "old");
-    let finish: (() => void) | undefined;
-    const body = new ReadableStream<Uint8Array>({
-      start(controller) {
-        finish = () => controller.close();
-      },
+      expect(await fileSystem.stat("/same")).toEqual(before);
+      expect(
+        new TextDecoder().decode(
+          await readAllBytes((await fileSystem.readFile("/same")).stream, 16),
+        ),
+      ).toBe("body");
     });
 
-    const appending = fileSystem.appendFile("/append-race", body);
-    const observed = appending.then(() => null, (error: unknown) => error);
-    await Promise.resolve();
-    await fileSystem.touch("/append-race");
-    finish?.();
+  if (options.negativeMutationRaces !== false)
+    it("conforms: rechecks the path token after collecting an empty append", async () => {
+      const fileSystem = await factory();
+      await fileSystem.writeFile("/append-race", "old");
+      let finish: (() => void) | undefined;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          finish = () => controller.close();
+        },
+      });
 
-    expect(await observed).toMatchObject({ code: "EREVISION", path: "/append-race" });
-  });
+      const appending = fileSystem.appendFile("/append-race", body);
+      const observed = appending.then(
+        () => null,
+        (error: unknown) => error,
+      );
+      await Promise.resolve();
+      await fileSystem.touch("/append-race");
+      finish?.();
+
+      expect(await observed).toMatchObject({ code: "EREVISION", path: "/append-race" });
+    });
 
   it("conforms: publishes subtree tokens for copy, move, and remove", async () => {
     const fileSystem = await factory();
@@ -206,6 +226,26 @@ export function runVfsConformance(
     expect(await fileSystem.getMutationToken("/moved/file")).not.toBe(movedToken);
   });
 
+  it("conforms: counts a subtree without a result ceiling", async () => {
+    const fileSystem = await factory();
+    await fileSystem.mkdir("/counted/nested", true);
+    await fileSystem.writeFile("/counted/file", "body");
+    await fileSystem.writeFile("/counted/nested/leaf", "body");
+
+    // /counted, /counted/file, /counted/nested, /counted/nested/leaf
+    expect(await fileSystem.countSubtree("/counted")).toBe(4);
+    expect(await fileSystem.countSubtree("/counted/nested")).toBe(2);
+    expect(await fileSystem.countSubtree("/counted/file")).toBe(1);
+    expect(await fileSystem.countSubtree("/")).toBe(
+      (await fileSystem.find({ path: "/", includeRoot: true })).length,
+    );
+
+    // A local backend throws synchronously; RPC rejects. Normalize both.
+    await expect((async () => fileSystem.countSubtree("/counted/absent"))()).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
   it("conforms: applies namespace operations and paginated traversal consistently", async () => {
     const fileSystem = await factory();
     await fileSystem.mkdir("/tree", true);
@@ -221,8 +261,10 @@ export function runVfsConformance(
       cursor: first.nextCursor,
       limit: 1,
     });
-    expect([...first.entries, ...second.entries].map((entry) => entry.path))
-      .toEqual(["/tree/a", "/tree/c"]);
+    expect([...first.entries, ...second.entries].map((entry) => entry.path)).toEqual([
+      "/tree/a",
+      "/tree/c",
+    ]);
 
     expect(await fileSystem.remove("/tree", { recursive: true })).toMatchObject({ removed: 3 });
     expect((await fileSystem.list("/")).map((entry) => entry.path)).not.toContain("/tree");

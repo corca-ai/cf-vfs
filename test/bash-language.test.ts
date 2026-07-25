@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defineCommand } from "../src/shell/commands/helpers.js";
 import { parseShellScript } from "../src/shell/parser.js";
-import { bashCases, createBashHarness, type BashCase } from "./helpers/bash.js";
+import { type BashCase, bashCases, createBashHarness } from "./helpers/bash.js";
 
 describe("Bash v2 words, assignments, and statuses", () => {
   bashCases([
@@ -95,10 +95,12 @@ describe("Bash v2 words, assignments, and statuses", () => {
     },
     {
       name: "formats exact Bash integer arguments and reports invalid suffixes",
-      script: "printf '[%d]|[%d]|[%d]|[%d]|[%d]|[%d]|[%d]' 9007199254740993 010 0x10 nope 08 +10 '2#10' 2> /errors; printf '|status=%s' \"$?\"",
+      script:
+        "printf '[%d]|[%d]|[%d]|[%d]|[%d]|[%d]|[%d]' 9007199254740993 010 0x10 nope 08 +10 '2#10' 2> /errors; printf '|status=%s' \"$?\"",
       stdout: "[9007199254740993]|[8]|[16]|[0]|[0]|[10]|[2]|status=1",
       expectedFiles: {
-        "/errors": "printf: nope: invalid number\nprintf: 08: invalid octal number\nprintf: 2#10: invalid number\n",
+        "/errors":
+          "printf: nope: invalid number\nprintf: 08: invalid octal number\nprintf: 2#10: invalid number\n",
       },
     },
     {
@@ -108,13 +110,15 @@ describe("Bash v2 words, assignments, and statuses", () => {
     },
     {
       name: "compares large test integers without precision loss",
-      script: "test 9007199254740992 -ne 9007199254740993 && test 9007199254740992 -lt 9007199254740993 && [ -9007199254740993 -lt -9007199254740992 ] && [[ 9007199254740993 -gt 9007199254740992 ]] && printf yes",
+      script:
+        "test 9007199254740992 -ne 9007199254740993 && test 9007199254740992 -lt 9007199254740993 && [ -9007199254740993 -lt -9007199254740992 ] && [[ 9007199254740993 -gt 9007199254740992 ]] && printf yes",
       stdout: "yes",
     },
     {
       name: "preserves trailing-slash directory requirements in test and bracket",
       files: { "/plain": "body", "/tree/file": "body" },
-      script: "test '!' -e /plain/ && test '!' -f /plain/ && [ '!' -s /plain/ ] && test -e /tree/ && [ -d /tree/ ] && [[ ! -e /plain/ && -d /tree/ ]] && printf yes",
+      script:
+        "test '!' -e /plain/ && test '!' -f /plain/ && [ '!' -s /plain/ ] && test -e /tree/ && [ -d /tree/ ] && [[ ! -e /plain/ && -d /tree/ ]] && printf yes",
       stdout: "yes",
     },
     {
@@ -216,17 +220,20 @@ describe("Bash v2 control flow and scopes", () => {
     },
     {
       name: "applies continue and break to the current loop",
-      script: "for item in a b c d; do test \"$item\" = b && continue; printf '%s' \"$item\"; test \"$item\" = c && break; done",
+      script:
+        'for item in a b c d; do test "$item" = b && continue; printf \'%s\' "$item"; test "$item" = c && break; done',
       stdout: "ac",
     },
     {
       name: "propagates break levels through nested loops",
-      script: "for outer in 1 2; do for inner in a b; do printf '%s%s|' \"$outer\" \"$inner\"; break 2; done; printf no; done; printf done",
+      script:
+        'for outer in 1 2; do for inner in a b; do printf \'%s%s|\' "$outer" "$inner"; break 2; done; printf no; done; printf done',
       stdout: "1a|done",
     },
     {
       name: "propagates continue levels through nested loops",
-      script: "for outer in 1 2; do for inner in a b; do test \"$inner\" = a && continue 2; printf no; done; printf no; done; printf done",
+      script:
+        'for outer in 1 2; do for inner in a b; do test "$inner" = a && continue 2; printf no; done; printf no; done; printf done',
       stdout: "done",
     },
     {
@@ -246,12 +253,14 @@ describe("Bash v2 control flow and scopes", () => {
     },
     {
       name: "matches leading closing brackets and negated bracket classes",
-      script: "case ']' in []a]) printf leading;; *) printf no;; esac; case a in [!]]) printf '|negated';; *) printf no;; esac",
+      script:
+        "case ']' in []a]) printf leading;; *) printf no;; esac; case a in [!]]) printf '|negated';; *) printf no;; esac",
       stdout: "leading|negated",
     },
     {
       name: "ignores descending ranges without discarding later class literals",
-      script: "case a in [z-a]) printf no;; *) printf descending;; esac; case c in [z-ac]) printf '|tail';; *) printf no;; esac",
+      script:
+        "case a in [z-a]) printf no;; *) printf descending;; esac; case c in [z-ac]) printf '|tail';; *) printf no;; esac",
       stdout: "descending|tail",
     },
   ]);
@@ -277,12 +286,14 @@ describe("Bash v2 functions", () => {
     },
     {
       name: "wraps signed return and exit statuses to eight bits",
-      script: "status() { return \"$1\"; }; status -1; printf '%s|' \"$?\"; status -257; printf '%s|' \"$?\"; status 0; printf '%s|' \"$?\"; status 255; printf '%s|' \"$?\"; status 256; printf '%s|' \"$?\"; (exit -1); printf '%s' \"$?\"",
+      script:
+        'status() { return "$1"; }; status -1; printf \'%s|\' "$?"; status -257; printf \'%s|\' "$?"; status 0; printf \'%s|\' "$?"; status 255; printf \'%s|\' "$?"; status 256; printf \'%s|\' "$?"; (exit -1); printf \'%s\' "$?"',
       stdout: "255|255|0|255|0|255",
     },
     {
       name: "rejects non-numeric signed return and exit statuses",
-      script: "status() { return \"$1\"; }; status invalid 2> /return-error; printf '%s|' \"$?\"; (exit invalid) 2> /exit-error; printf '%s' \"$?\"",
+      script:
+        'status() { return "$1"; }; status invalid 2> /return-error; printf \'%s|\' "$?"; (exit invalid) 2> /exit-error; printf \'%s\' "$?"',
       stdout: "2|2",
       expectedFiles: {
         "/return-error": "return status must be an integer\n",
@@ -414,17 +425,17 @@ describe("Bash v3 bounded parameter patterns and substrings", () => {
   bashCases([
     {
       name: "removes the shortest and longest matching prefixes",
-      script: "X=abcabc; printf '<%s>|<%s>' \"${X#a*c}\" \"${X##a*c}\"",
+      script: 'X=abcabc; printf \'<%s>|<%s>\' "${X#a*c}" "${X##a*c}"',
       stdout: "<abc>|<>",
     },
     {
       name: "removes the shortest and longest matching suffixes",
-      script: "X=abcabc; printf '<%s>|<%s>' \"${X%a*}\" \"${X%%a*}\"",
+      script: 'X=abcabc; printf \'<%s>|<%s>\' "${X%a*}" "${X%%a*}"',
       stdout: "<abc>|<>",
     },
     {
       name: "leaves values unchanged for missing and empty patterns",
-      script: "X=abc; printf '<%s>|<%s>|<%s>' \"${X#z*}\" \"${X#}\" \"${X//}\"",
+      script: 'X=abc; printf \'<%s>|<%s>|<%s>\' "${X#z*}" "${X#}" "${X//}"',
       stdout: "<abc>|<abc>|<abc>",
     },
     {
@@ -434,7 +445,7 @@ describe("Bash v3 bounded parameter patterns and substrings", () => {
     },
     {
       name: "supports bracket ranges and negated classes without pathname rules",
-      script: "X='a/b2'; printf '<%s>|<%s>|<%s>' \"${X#[a-z]}\" \"${X#?[/]}\" \"${X##[!z]*}\"",
+      script: 'X=\'a/b2\'; printf \'<%s>|<%s>|<%s>\' "${X#[a-z]}" "${X#?[/]}" "${X##[!z]*}"',
       stdout: "</b2>|<b2>|<>",
     },
     {
@@ -444,12 +455,12 @@ describe("Bash v3 bounded parameter patterns and substrings", () => {
     },
     {
       name: "replaces the first longest match and every non-overlapping match",
-      script: "X=abcabc; printf '<%s>|<%s>|<%s>' \"${X/a*c/R}\" \"${X//a?/R}\" \"${X//?/R}\"",
+      script: 'X=abcabc; printf \'<%s>|<%s>|<%s>\' "${X/a*c/R}" "${X//a?/R}" "${X//?/R}"',
       stdout: "<R>|<RcRc>|<RRRRRR>",
     },
     {
       name: "supports deletion, nested replacement expansion, and no-match replacement",
-      script: "X=abcabc; R=Z; printf '<%s>|<%s>|<%s>' \"${X//a}\" \"${X//a/${R:-x}}\" \"${X//z*/R}\"",
+      script: 'X=abcabc; R=Z; printf \'<%s>|<%s>|<%s>\' "${X//a}" "${X//a/${R:-x}}" "${X//z*/R}"',
       stdout: "<bcbc>|<ZbcZbc>|<abcabc>",
     },
     {
@@ -464,17 +475,18 @@ describe("Bash v3 bounded parameter patterns and substrings", () => {
     },
     {
       name: "slices by code point with positive, negative, and nested offsets",
-      script: "X='가나다라마바사'; OFFSET=2; printf '<%s>|<%s>|<%s>|<%s>' \"${X:1}\" \"${X:1:3}\" \"${X: -2}\" \"${X:${OFFSET}:2}\"",
+      script:
+        'X=\'가나다라마바사\'; OFFSET=2; printf \'<%s>|<%s>|<%s>|<%s>\' "${X:1}" "${X:1:3}" "${X: -2}" "${X:${OFFSET}:2}"',
       stdout: "<나다라마바사>|<나다라>|<바사>|<다라>",
     },
     {
       name: "clamps substring offsets and accepts zero length",
-      script: "X=abc; printf '<%s>|<%s>|<%s>' \"${X:99}\" \"${X: -99}\" \"${X:1:0}\"",
+      script: 'X=abc; printf \'<%s>|<%s>|<%s>\' "${X:99}" "${X: -99}" "${X:1:0}"',
       stdout: "<>|<abc>|<>",
     },
     {
       name: "treats unset and empty scalar values as empty",
-      script: "unset X; EMPTY=; printf '<%s>|<%s>|<%s>' \"${X##*}\" \"${EMPTY//a/b}\" \"${X:0:2}\"",
+      script: 'unset X; EMPTY=; printf \'<%s>|<%s>|<%s>\' "${X##*}" "${EMPTY//a/b}" "${X:0:2}"',
       stdout: "<>|<>|<>",
     },
     {
@@ -490,7 +502,8 @@ describe("Bash v3 bounded parameter patterns and substrings", () => {
     },
     {
       name: "rejects negative and non-integer substring lengths deterministically",
-      script: "X=abc; printf '%s' \"${X:0:-1}\" || printf '%s|' \"$?\"; LENGTH=x; printf '%s' \"${X:0:${LENGTH}}\"",
+      script:
+        "X=abc; printf '%s' \"${X:0:-1}\" || printf '%s|' \"$?\"; LENGTH=x; printf '%s' \"${X:0:${LENGTH}}\"",
       exitCode: 2,
       stdout: "2|",
       stderrIncludes: ["must not be negative", "must expand to an integer"],
@@ -498,17 +511,19 @@ describe("Bash v3 bounded parameter patterns and substrings", () => {
     {
       name: "keeps Version 2 default operators on the at parameter",
       args: ["argument"],
-      script: "printf '<%s>|<%s>' \"${@:-fallback}\" \"${@+set}\"",
+      script: 'printf \'<%s>|<%s>\' "${@:-fallback}" "${@+set}"',
       stdout: "<argument>|<set>",
     },
   ]);
 
   it("bounds pattern work, produced characters, and produced fields", async () => {
     const work = createBashHarness({ limits: { maxExpansionWork: 20 } });
-    await expect(work.run("X=aaaaaaaa; printf '%s' \"${X##*a*a*a*a*a*b}\"")).resolves.toMatchObject({
-      exitCode: 1,
-      stderr: expect.stringContaining("shell expansion work limit exceeded"),
-    });
+    await expect(work.run("X=aaaaaaaa; printf '%s' \"${X##*a*a*a*a*a*b}\"")).resolves.toMatchObject(
+      {
+        exitCode: 1,
+        stderr: expect.stringContaining("shell expansion work limit exceeded"),
+      },
+    );
 
     const characters = createBashHarness({ limits: { maxExpansionChars: 20 } });
     await expect(characters.run("X=aaaa; printf '%s' \"${X//a/xxx}\"")).resolves.toMatchObject({
@@ -517,31 +532,39 @@ describe("Bash v3 bounded parameter patterns and substrings", () => {
     });
 
     const fields = createBashHarness({ limits: { maxExpansionFields: 4 } });
-    await expect(fields.run("printf '%s' \"$@\"", { args: ["a", "b", "c"] })).resolves.toMatchObject({
+    await expect(
+      fields.run("printf '%s' \"$@\"", { args: ["a", "b", "c"] }),
+    ).resolves.toMatchObject({
       exitCode: 1,
       stderr: expect.stringContaining("shell expansion field limit exceeded"),
     });
 
     const splitFields = createBashHarness({ limits: { maxExpansionFields: 4 } });
-    await expect(splitFields.run(": $X", {
-      env: { X: Array.from({ length: 100 }, (_, index) => String(index)).join(" ") },
-    })).resolves.toMatchObject({
+    await expect(
+      splitFields.run(": $X", {
+        env: { X: Array.from({ length: 100 }, (_, index) => String(index)).join(" ") },
+      }),
+    ).resolves.toMatchObject({
       exitCode: 1,
       stderr: expect.stringContaining("shell expansion field limit exceeded"),
     });
 
     const bracketWork = createBashHarness({ limits: { maxExpansionWork: 500 } });
-    await expect(bracketWork.run(`printf '%s' \"${"${X//["}${"a".repeat(200)}${"]/x}"}\"`, {
-      env: { X: "b".repeat(20) },
-    })).resolves.toMatchObject({
+    await expect(
+      bracketWork.run(`printf '%s' "${"${X//["}${"a".repeat(200)}${"]/x}"}"`, {
+        env: { X: "b".repeat(20) },
+      }),
+    ).resolves.toMatchObject({
       exitCode: 1,
       stderr: expect.stringContaining("shell expansion work limit exceeded"),
     });
 
     const substringWork = createBashHarness({ limits: { maxExpansionWork: 100 } });
-    await expect(substringWork.run("printf '%s' \"${X:99:1}\"", {
-      env: { X: "a".repeat(1_000) },
-    })).resolves.toMatchObject({
+    await expect(
+      substringWork.run("printf '%s' \"${X:99:1}\"", {
+        env: { X: "a".repeat(1_000) },
+      }),
+    ).resolves.toMatchObject({
       exitCode: 1,
       stderr: expect.stringContaining("shell expansion work limit exceeded"),
     });
@@ -600,36 +623,53 @@ describe("Bash v3 bounded parameter patterns and substrings", () => {
 });
 
 describe("Bash v2 arithmetic", () => {
-  const operatorCases: ReadonlyArray<readonly [name: string, expression: string, output: string]> = [
-    ["associates exponentiation from the right", "2 ** 3 ** 2", "512"],
-    ["shifts left", "8 << 2", "32"],
-    ["shifts signed values right", "-8 >> 1", "-4"],
-    ["evaluates bitwise and", "6 & 3", "2"],
-    ["evaluates bitwise xor", "6 ^ 3", "5"],
-    ["evaluates bitwise or", "6 | 3", "7"],
-    ["evaluates remainder", "5 % 2", "1"],
-    ["divides signed integers toward zero", "-5 / 2", "-2"],
-    ["normalizes true comparisons to one", "3 < 4", "1"],
-    ["normalizes false comparisons to zero", "3 >= 4", "0"],
-    ["applies compound assignment inside comma expressions", "N=1, N<<=3, N", "8"],
-  ];
+  const operatorCases: ReadonlyArray<readonly [name: string, expression: string, output: string]> =
+    [
+      ["associates exponentiation from the right", "2 ** 3 ** 2", "512"],
+      ["shifts left", "8 << 2", "32"],
+      ["shifts signed values right", "-8 >> 1", "-4"],
+      ["evaluates bitwise and", "6 & 3", "2"],
+      ["evaluates bitwise xor", "6 ^ 3", "5"],
+      ["evaluates bitwise or", "6 | 3", "7"],
+      ["evaluates remainder", "5 % 2", "1"],
+      ["divides signed integers toward zero", "-5 / 2", "-2"],
+      ["normalizes true comparisons to one", "3 < 4", "1"],
+      ["normalizes false comparisons to zero", "3 >= 4", "0"],
+      ["applies compound assignment inside comma expressions", "N=1, N<<=3, N", "8"],
+    ];
 
-  bashCases(operatorCases.map(([name, expression, output]): BashCase => ({
-    name,
-    script: `printf '%s' "$(( ${expression} ))"`,
-    stdout: output,
-  })));
+  bashCases(
+    operatorCases.map(
+      ([name, expression, output]): BashCase => ({
+        name,
+        script: `printf '%s' "$(( ${expression} ))"`,
+        stdout: output,
+      }),
+    ),
+  );
 
   bashCases([
-    { name: "applies multiplication before addition", script: `printf '%s' "$((2 + 3 * 4))"`, stdout: "14" },
-    { name: "honors arithmetic parentheses", script: `printf '%s' "$(((2 + 3) * 4))"`, stdout: "20" },
+    {
+      name: "applies multiplication before addition",
+      script: `printf '%s' "$((2 + 3 * 4))"`,
+      stdout: "14",
+    },
+    {
+      name: "honors arithmetic parentheses",
+      script: `printf '%s' "$(((2 + 3) * 4))"`,
+      stdout: "20",
+    },
     { name: "accepts hexadecimal literals", script: `printf '%s' "$((0x10 + 1))"`, stdout: "17" },
     {
       name: "interprets leading-zero literals and variable values as octal",
       script: `VALUE=010; printf '%s|%s' "$((010))" "$((VALUE))"`,
       stdout: "8|8",
     },
-    { name: "supports logical and bitwise unary operators", script: `printf '%s|%s' "$((!0))" "$((~0))"`, stdout: "1|-1" },
+    {
+      name: "supports logical and bitwise unary operators",
+      script: `printf '%s|%s' "$((!0))" "$((~0))"`,
+      stdout: "1|-1",
+    },
     {
       name: "persists assignment and prefix update side effects",
       script: `N=2; printf '%s|' "$((N *= 3))"; printf '%s|' "$((++N))"; printf '%s' "$N"`,
@@ -650,13 +690,21 @@ describe("Bash v2 arithmetic", () => {
       script: `printf '%s|%s' "$((1 ? 7 : 1 / 0))" "$((0 ? 1 / 0 : 8))"`,
       stdout: "7|8",
     },
-    { name: "returns the last comma expression", script: `printf '%s' "$((1, 2, 3))"`, stdout: "3" },
+    {
+      name: "returns the last comma expression",
+      script: `printf '%s' "$((1, 2, 3))"`,
+      stdout: "3",
+    },
     {
       name: "wraps deterministically at signed 64 bits",
       script: `printf '%s' "$((9223372036854775807 + 1))"`,
       stdout: "-9223372036854775808",
     },
-    { name: "reads non-numeric variable text as zero", script: `X=text; printf '%s' "$((X + 2))"`, stdout: "2" },
+    {
+      name: "reads non-numeric variable text as zero",
+      script: `X=text; printf '%s' "$((X + 2))"`,
+      stdout: "2",
+    },
     {
       name: "maps arithmetic command truth to shell status",
       script: `((0)) || printf zero; ((1)) && printf one`,
@@ -725,7 +773,8 @@ describe("Bash v3 nounset", () => {
     },
     {
       name: "does not let if conditions suppress nounset",
-      script: "set -u; if printf '%s' \"$MISSING\"; then printf yes; else printf no; fi; printf after",
+      script:
+        "set -u; if printf '%s' \"$MISSING\"; then printf yes; else printf no; fi; printf after",
       exitCode: 1,
       stderrIncludes: "MISSING: unbound variable",
     },
@@ -739,7 +788,7 @@ describe("Bash v3 nounset", () => {
       name: "preserves default and null-sensitive operators under nounset",
       script: [
         "set -u; unset A B; EMPTY=",
-        "printf '<%s>|<%s>|<%s>|<%s>' \"${A-default}\" \"${EMPTY-default}\" \"${B:-default}\" \"${EMPTY:-default}\"",
+        'printf \'<%s>|<%s>|<%s>|<%s>\' "${A-default}" "${EMPTY-default}" "${B:-default}" "${EMPTY:-default}"',
       ],
       stdout: "<default>|<>|<default>|<default>",
     },
@@ -747,8 +796,8 @@ describe("Bash v3 nounset", () => {
       name: "preserves assignment operators under nounset",
       script: [
         "set -u; unset A B; EMPTY=",
-        "printf '<%s>|<%s>|<%s>|' \"${A=one}\" \"${B:=two}\" \"${EMPTY=ignored}\"",
-        "printf '%s:%s:%s' \"$A\" \"$B\" \"$EMPTY\"",
+        'printf \'<%s>|<%s>|<%s>|\' "${A=one}" "${B:=two}" "${EMPTY=ignored}"',
+        'printf \'%s:%s:%s\' "$A" "$B" "$EMPTY"',
       ],
       stdout: "<one>|<two>|<>|one:two:",
     },
@@ -756,7 +805,7 @@ describe("Bash v3 nounset", () => {
       name: "preserves alternate-value operators under nounset",
       script: [
         "set -u; unset A; EMPTY=; VALUE=x",
-        "printf '<%s>|<%s>|<%s>|<%s>' \"${A+alt}\" \"${EMPTY+alt}\" \"${EMPTY:+alt}\" \"${VALUE:+alt}\"",
+        'printf \'<%s>|<%s>|<%s>|<%s>\' "${A+alt}" "${EMPTY+alt}" "${EMPTY:+alt}" "${VALUE:+alt}"',
       ],
       stdout: "<>|<alt>|<>|<alt>",
     },
@@ -790,13 +839,14 @@ describe("Bash v3 nounset", () => {
     },
     {
       name: "treats braced at as unset while preserving its zero-argument length",
-      script: "set -u; printf '<%s>|<%s>|<%s>' \"${#@}\" \"${@-default}\" \"${@+alternate}\"",
+      script: 'set -u; printf \'<%s>|<%s>|<%s>\' "${#@}" "${@-default}" "${@+alternate}"',
       stdout: "<0>|<default>|<>",
     },
     {
       name: "preserves braced at fields and alternate semantics with arguments",
       args: ["one", "two words"],
-      script: "set -u; printf '%s|' \"${#@}\"; printf '<%s>' \"${@-default}\"; printf '|<%s>' \"${@+alternate}\"",
+      script:
+        "set -u; printf '%s|' \"${#@}\"; printf '<%s>' \"${@-default}\"; printf '|<%s>' \"${@+alternate}\"",
       stdout: "2|<one><two words>|<alternate>",
     },
     {
@@ -814,7 +864,8 @@ describe("Bash v3 nounset", () => {
       name: "uses function and sourced-unit argument frames under nounset",
       args: ["outer"],
       files: { "/argument.sh": "printf '%s|' \"$1\"\n" },
-      script: "set -u; show() { printf '%s|' \"$1\"; }; show function; source /argument.sh source; printf '%s' \"$1\"",
+      script:
+        "set -u; show() { printf '%s|' \"$1\"; }; show function; source /argument.sh source; printf '%s' \"$1\"",
       stdout: "function|source|outer",
     },
     {
@@ -877,7 +928,8 @@ describe("Bash v3 nounset", () => {
     },
     {
       name: "terminates the current scope for nounset inside a function",
-      script: "set -u; fail() { printf '%s' \"$MISSING\"; printf function-after; }; fail || printf caught; printf after",
+      script:
+        "set -u; fail() { printf '%s' \"$MISSING\"; printf function-after; }; fail || printf caught; printf after",
       exitCode: 1,
       stderrIncludes: "MISSING: unbound variable",
     },
@@ -911,7 +963,8 @@ describe("Bash v3 nounset", () => {
     {
       name: "discards an atomic subshell redirection on nounset termination",
       files: { "/result": "old" },
-      script: "set -u; (printf before; printf '%s' \"$MISSING\") > /result || printf caught; cat /result",
+      script:
+        "set -u; (printf before; printf '%s' \"$MISSING\") > /result || printf caught; cat /result",
       stdout: "caughtold",
       expectedFiles: { "/result": "old" },
       stderrIncludes: "MISSING: unbound variable",
@@ -942,13 +995,14 @@ describe("Bash v3 nounset", () => {
     },
     {
       name: "contains nounset termination in command substitution",
-      script: "set -u; VALUE=$(printf '%s' \"$MISSING\"); printf 'after:%s:<%s>' \"$?\" \"$VALUE\"",
+      script: 'set -u; VALUE=$(printf \'%s\' "$MISSING"); printf \'after:%s:<%s>\' "$?" "$VALUE"',
       stdout: "after:1:<>",
       stderr: "MISSING: unbound variable\n",
     },
     {
       name: "isolates nounset disabling in command substitution",
-      script: "set -u; VALUE=$(set +u; printf '<%s>' \"$MISSING\"); printf '%s|' \"$VALUE\"; printf '%s' \"$MISSING\"",
+      script:
+        "set -u; VALUE=$(set +u; printf '<%s>' \"$MISSING\"); printf '%s|' \"$VALUE\"; printf '%s' \"$MISSING\"",
       exitCode: 1,
       stdout: "<>|",
       stderrIncludes: "MISSING: unbound variable",
@@ -1011,7 +1065,8 @@ describe("Bash v4 deterministic errexit", () => {
     },
     {
       name: "propagates an if-condition context through a function body",
-      script: "set -e; check() { false; printf condition; }; if check; then printf branch; fi; printf after",
+      script:
+        "set -e; check() { false; printf condition; }; if check; then printf branch; fi; printf after",
       stdout: "conditionbranchafter",
     },
     {
@@ -1108,7 +1163,8 @@ describe("Bash v4 deterministic errexit", () => {
     },
     {
       name: "delays errexit enabled inside a guarded function until the call completes",
-      script: "set +e; enable() { set -e; false; printf body; }; enable || printf fallback; printf '|'; false; printf no",
+      script:
+        "set +e; enable() { set -e; false; printf body; }; enable || printf fallback; printf '|'; false; printf no",
       exitCode: 1,
       stdout: "body|",
     },
@@ -1126,7 +1182,8 @@ describe("Bash v4 deterministic errexit", () => {
     {
       name: "propagates active and guarded contexts through sourced units",
       files: { "/failure.sh": "false\nprintf sourced" },
-      script: "set -e; source /failure.sh || printf fallback; printf '|'; source /failure.sh; printf no",
+      script:
+        "set -e; source /failure.sh || printf fallback; printf '|'; source /failure.sh; printf no",
       exitCode: 1,
       stdout: "sourced|",
     },
@@ -1195,7 +1252,8 @@ describe("Bash v4 deterministic errexit", () => {
     },
     {
       name: "lets a guarded caller handle an explicit function return",
-      script: "set -e; fail() { return 7; printf no; }; fail || printf 'caught:%s|' \"$?\"; printf after",
+      script:
+        "set -e; fail() { return 7; printf no; }; fail || printf 'caught:%s|' \"$?\"; printf after",
       stdout: "caught:7|after",
     },
     {
@@ -1205,7 +1263,8 @@ describe("Bash v4 deterministic errexit", () => {
     },
     {
       name: "preserves loop control while guarding its predicate",
-      script: "set -e; for item in a b; do test \"$item\" = a && continue; printf b; break; done; printf after",
+      script:
+        'set -e; for item in a b; do test "$item" = a && continue; printf b; break; done; printf after',
       stdout: "bafter",
     },
     {
@@ -1236,13 +1295,15 @@ describe("Bash v4 deterministic errexit", () => {
   it("shares command budgets across guarded functions and sourced units", async () => {
     const harness = createBashHarness({ limits: { maxCommands: 8 } });
     await harness.fileSystem.writeFile("/guarded.sh", "false; true");
-    await expect(harness.run([
-      "set -e",
-      "run() { false; true; }",
-      "run || :",
-      "source /guarded.sh || :",
-      "printf no",
-    ])).resolves.toMatchObject({
+    await expect(
+      harness.run([
+        "set -e",
+        "run() { false; true; }",
+        "run || :",
+        "source /guarded.sh || :",
+        "printf no",
+      ]),
+    ).resolves.toMatchObject({
       exitCode: 1,
       stdout: "",
       stderr: expect.stringContaining("shell command limit exceeded"),
@@ -1316,7 +1377,8 @@ describe("Bash v3 bounded double-bracket conditionals", () => {
     {
       name: "uses canonical VFS metadata for files and directories",
       files: { "/tree/file": "body" },
-      script: "cd /tree; [[ -e ./file && -f ../tree/file && -d . && ! -e missing && ! -e '' ]] && printf yes",
+      script:
+        "cd /tree; [[ -e ./file && -f ../tree/file && -d . && ! -e missing && ! -e '' ]] && printf yes",
       stdout: "yes",
     },
     {
@@ -1327,7 +1389,8 @@ describe("Bash v3 bounded double-bracket conditionals", () => {
     },
     {
       name: "works as an if condition and returns ordinary status",
-      script: "if [[ value == v* ]]; then printf yes; else printf no; fi; [[ no == yes ]] || printf ':false'",
+      script:
+        "if [[ value == v* ]]; then printf yes; else printf no; fi; [[ no == yes ]] || printf ':false'",
       stdout: "yes:false",
     },
     {
@@ -1366,13 +1429,17 @@ describe("Bash v3 bounded double-bracket conditionals", () => {
     ["an unterminated expression", "[[ x == x", "unterminated [["],
   ];
 
-  bashCases(rejectedConditionals.map(([name, syntax, diagnostic]): BashCase => ({
-    name: `rejects ${name} before an earlier mutation`,
-    script: `printf changed > /side; ${syntax}`,
-    exitCode: 2,
-    stderrIncludes: diagnostic,
-    missingFiles: ["/side"],
-  })));
+  bashCases(
+    rejectedConditionals.map(
+      ([name, syntax, diagnostic]): BashCase => ({
+        name: `rejects ${name} before an earlier mutation`,
+        script: `printf changed > /side; ${syntax}`,
+        exitCode: 2,
+        stderrIncludes: diagnostic,
+        missingFiles: ["/side"],
+      }),
+    ),
+  );
 
   it("preserves right-operand quote provenance in the public conditional AST", () => {
     const parsed = parseShellScript(`[[ value == "a"* ]]`, 100);
@@ -1406,7 +1473,9 @@ describe("Bash v3 bounded double-bracket conditionals", () => {
       exitCode: 1,
       stderr: expect.stringContaining("shell AST node limit exceeded"),
     });
-    expect(() => fileSystem.stat("/side")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
+    expect(() => fileSystem.stat("/side")).toThrowError(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
   });
 
   it("charges nested conditional groups to the shared nesting limit", async () => {
@@ -1437,7 +1506,9 @@ describe("Bash v3 bounded double-bracket conditionals", () => {
       script: `printf changed > /side; [[ ${"x".repeat(20_000)} ]]`,
     });
     expect(result.exitCode).toBe(1);
-    expect(() => fileSystem.stat("/side")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
+    expect(() => fileSystem.stat("/side")).toThrowError(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
   });
 });
 
@@ -1547,7 +1618,7 @@ describe("Bash v2 here-documents and here-strings", () => {
     },
     {
       name: "disables expansion when any delimiter character is quoted",
-      script: "NAME=world\ncat <<E\"OF\"\nhello $NAME\nEOF",
+      script: 'NAME=world\ncat <<E"OF"\nhello $NAME\nEOF',
       stdout: "hello $NAME\n",
     },
     {
@@ -1728,13 +1799,14 @@ describe("Bash v3 input and positional built-ins", () => {
   bashCases([
     {
       name: "reads consecutive records without losing a shared input chunk",
-      script: "read -r FIRST; read -r SECOND; printf '<%s>|<%s>' \"$FIRST\" \"$SECOND\"",
+      script: 'read -r FIRST; read -r SECOND; printf \'<%s>|<%s>\' "$FIRST" "$SECOND"',
       stdin: "first line\nsecond line\n",
       stdout: "<first line>|<second line>",
     },
     {
       name: "assigns fixed whitespace fields and preserves the final remainder",
-      script: "read -r FIRST SECOND THIRD FOURTH; printf '<%s>|<%s>|<%s>|<%s>' \"$FIRST\" \"$SECOND\" \"$THIRD\" \"$FOURTH\"",
+      script:
+        'read -r FIRST SECOND THIRD FOURTH; printf \'<%s>|<%s>|<%s>|<%s>\' "$FIRST" "$SECOND" "$THIRD" "$FOURTH"',
       stdin: "  alpha   beta gamma   \n",
       stdout: "<alpha>|<beta>|<gamma>|<>",
     },
@@ -1746,13 +1818,13 @@ describe("Bash v3 input and positional built-ins", () => {
     },
     {
       name: "assigns an EOF partial record and returns failure",
-      script: "read -r VALUE || printf '%s:<%s>' \"$?\" \"$VALUE\"",
+      script: 'read -r VALUE || printf \'%s:<%s>\' "$?" "$VALUE"',
       stdin: "partial",
       stdout: "1:<partial>",
     },
     {
       name: "clears named variables when EOF arrives before any bytes",
-      script: "VALUE=old; read -r VALUE || printf '%s:<%s>' \"$?\" \"$VALUE\"",
+      script: 'VALUE=old; read -r VALUE || printf \'%s:<%s>\' "$?" "$VALUE"',
       stdout: "1:<>",
     },
     {
@@ -1787,46 +1859,48 @@ describe("Bash v3 input and positional built-ins", () => {
     },
     {
       name: "shifts root positional parameters by the default and explicit counts",
-      script: "shift; printf '%s:%s|' \"$1\" \"$#\"; shift 2; printf '%s:%s' \"$1\" \"$#\"",
+      script: 'shift; printf \'%s:%s|\' "$1" "$#"; shift 2; printf \'%s:%s\' "$1" "$#"',
       args: ["one", "two", "three", "four"],
       stdout: "two:3|four:1",
     },
     {
       name: "leaves positional parameters unchanged after an excessive shift",
-      script: "shift 3 || printf '%s|' \"$?\"; printf '%s:%s' \"$1\" \"$#\"",
+      script: 'shift 3 || printf \'%s|\' "$?"; printf \'%s:%s\' "$1" "$#"',
       args: ["one", "two"],
       stdout: "1|one:2",
     },
     {
       name: "rejects invalid shifts without partially mutating arguments",
-      script: "shift invalid || printf '%s|' \"$?\"; printf '%s:%s' \"$1\" \"$#\"",
+      script: 'shift invalid || printf \'%s|\' "$?"; printf \'%s:%s\' "$1" "$#"',
       args: ["one", "two"],
       stdout: "2|one:2",
       stderrIncludes: "shift count must be an integer",
     },
     {
       name: "isolates function arguments while allowing shifts in the function frame",
-      script: "consume() { shift; printf '%s:%s|' \"$1\" \"$#\"; }; consume inner next; printf '%s:%s' \"$1\" \"$#\"",
+      script:
+        'consume() { shift; printf \'%s:%s|\' "$1" "$#"; }; consume inner next; printf \'%s:%s\' "$1" "$#"',
       args: ["outer"],
       stdout: "next:1|outer:1",
     },
     {
       name: "restores supplied source arguments after a sourced shift",
-      files: { "/shift.sh": "shift; printf '%s:%s|' \"$1\" \"$#\"" },
-      script: "source /shift.sh inner next; printf '%s:%s' \"$1\" \"$#\"",
+      files: { "/shift.sh": 'shift; printf \'%s:%s|\' "$1" "$#"' },
+      script: 'source /shift.sh inner next; printf \'%s:%s\' "$1" "$#"',
       args: ["outer"],
       stdout: "next:1|outer:1",
     },
     {
       name: "persists a sourced shift when the source inherits caller arguments",
       files: { "/shift.sh": "shift" },
-      script: "source /shift.sh; printf '%s:%s' \"$1\" \"$#\"",
+      script: 'source /shift.sh; printf \'%s:%s\' "$1" "$#"',
       args: ["one", "two"],
       stdout: "two:1",
     },
     {
       name: "isolates shifts in subshells and command substitutions",
-      script: "(shift; printf '%s|' \"$1\"); printf '%s|' \"$(shift; printf '%s' \"$1\")\"; printf '%s' \"$1\"",
+      script:
+        "(shift; printf '%s|' \"$1\"); printf '%s|' \"$(shift; printf '%s' \"$1\")\"; printf '%s' \"$1\"",
       args: ["one", "two"],
       stdout: "two|two|one",
     },
@@ -1842,7 +1916,7 @@ describe("Bash v3 input and positional built-ins", () => {
       },
     });
     const result = await createBashHarness().run(
-      "read -r FIRST; read -r SECOND; printf '<%s>|<%s>' \"$FIRST\" \"$SECOND\"",
+      'read -r FIRST; read -r SECOND; printf \'<%s>|<%s>\' "$FIRST" "$SECOND"',
       { stdin: input },
     );
     expect(result).toEqual({ exitCode: 0, stdout: "<€ value>|<next>", stderr: "" });
@@ -1873,7 +1947,9 @@ describe("Bash v3 input and positional built-ins", () => {
   it("cancels an in-flight read with the shared execution signal", async () => {
     let cancelled = false;
     const input = new ReadableStream<Uint8Array>({
-      cancel() { cancelled = true; },
+      cancel() {
+        cancelled = true;
+      },
     });
     const controller = new AbortController();
     const execution = createBashHarness().run("read -r VALUE", {
@@ -1888,18 +1964,27 @@ describe("Bash v3 input and positional built-ins", () => {
 
   it("releases an unread suffix and cancels its producer when execution aborts", async () => {
     let waiting: (() => void) | undefined;
-    const commandStarted = new Promise<void>((resolve) => { waiting = resolve; });
-    const waitForAbort = defineCommand("wait-for-abort", (context) =>
-      new Promise<number>((_resolve, reject) => {
-        waiting?.();
-        const abort = (): void => reject(context.signal.reason);
-        if (context.signal.aborted) abort();
-        else context.signal.addEventListener("abort", abort, { once: true });
-      }));
+    const commandStarted = new Promise<void>((resolve) => {
+      waiting = resolve;
+    });
+    const waitForAbort = defineCommand(
+      "wait-for-abort",
+      (context) =>
+        new Promise<number>((_resolve, reject) => {
+          waiting?.();
+          const abort = (): void => reject(context.signal.reason);
+          if (context.signal.aborted) abort();
+          else context.signal.addEventListener("abort", abort, { once: true });
+        }),
+    );
     let cancelled = false;
     const input = new ReadableStream<Uint8Array>({
-      start(controller) { controller.enqueue(new TextEncoder().encode("first\nsecond\n")); },
-      cancel() { cancelled = true; },
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("first\nsecond\n"));
+      },
+      cancel() {
+        cancelled = true;
+      },
     });
     const controller = new AbortController();
     const execution = createBashHarness({ extraCommands: [waitForAbort] }).run(
@@ -1917,85 +2002,97 @@ describe("Bash v3 getopts", () => {
   bashCases([
     {
       name: "scans clustered flags and attached or separate option arguments",
-      script: "while getopts 'abcd:' OPT; do printf '%s:<%s>:%s|' \"$OPT\" \"$OPTARG\" \"$OPTIND\"; done; printf 'end:%s:%s' \"$OPT\" \"$OPTIND\"",
+      script:
+        'while getopts \'abcd:\' OPT; do printf \'%s:<%s>:%s|\' "$OPT" "$OPTARG" "$OPTIND"; done; printf \'end:%s:%s\' "$OPT" "$OPTIND"',
       args: ["-abc", "-dvalue", "tail"],
       stdout: "a:<>:1|b:<>:1|c:<>:2|d:<value>:3|end:?:3",
     },
     {
       name: "consumes a separate required argument and stops at double dash",
-      script: "while getopts 'ab:' OPT; do printf '%s:<%s>|' \"$OPT\" \"$OPTARG\"; done; printf '%s' \"$OPTIND\"",
+      script:
+        "while getopts 'ab:' OPT; do printf '%s:<%s>|' \"$OPT\" \"$OPTARG\"; done; printf '%s' \"$OPTIND\"",
       args: ["-a", "-b", "value", "--", "tail"],
       stdout: "a:<>|b:<value>|5",
     },
     {
       name: "uses leading-colon silent results for unknown and missing arguments",
-      script: "while getopts ':ab:' OPT; do printf '%s:<%s>:%s|' \"$OPT\" \"$OPTARG\" \"$OPTIND\"; done",
+      script:
+        'while getopts \':ab:\' OPT; do printf \'%s:<%s>:%s|\' "$OPT" "$OPTARG" "$OPTIND"; done',
       args: ["-x", "-b"],
       stdout: "?:<x>:2|::<b>:3|",
     },
     {
       name: "emits deterministic diagnostics in normal mode",
-      script: "getopts 'ab:' OPT; printf '%s:<%s>:%s' \"$OPT\" \"$OPTARG\" \"$OPTIND\"",
+      script: 'getopts \'ab:\' OPT; printf \'%s:<%s>:%s\' "$OPT" "$OPTARG" "$OPTIND"',
       args: ["-x"],
       stdout: "?:<>:2",
       stderr: "getopts: illegal option -- x\n",
     },
     {
       name: "rescans after OPTIND is reset to one",
-      script: "while getopts 'ab:' OPT; do printf '%s%s|' \"$OPT\" \"$OPTARG\"; done; OPTIND=1; while getopts 'ab:' OPT; do printf '%s%s|' \"$OPT\" \"$OPTARG\"; done",
+      script:
+        "while getopts 'ab:' OPT; do printf '%s%s|' \"$OPT\" \"$OPTARG\"; done; OPTIND=1; while getopts 'ab:' OPT; do printf '%s%s|' \"$OPT\" \"$OPTARG\"; done",
       args: ["-a", "-b", "value"],
       stdout: "a|bvalue|a|bvalue|",
     },
     {
       name: "resets a cluster when OPTIND is reassigned to its current value",
-      script: "getopts abc OPT; printf '%s|' \"$OPT\"; OPTIND=1; getopts abc OPT; printf '%s' \"$OPT\"",
+      script:
+        "getopts abc OPT; printf '%s|' \"$OPT\"; OPTIND=1; getopts abc OPT; printf '%s' \"$OPT\"",
       args: ["-abc"],
       stdout: "a|a",
     },
     {
       name: "carries the hidden cluster cursor across explicit argument vectors",
-      script: "getopts abc OPT -abc; printf '%s|' \"$OPT\"; getopts xyz OPT -xyz; printf '%s' \"$OPT\"",
+      script:
+        "getopts abc OPT -abc; printf '%s|' \"$OPT\"; getopts xyz OPT -xyz; printf '%s' \"$OPT\"",
       stdout: "a|y",
     },
     {
       name: "scans an explicit argument vector without replacing shell positionals",
-      script: "while getopts 'ab:' OPT -a -b explicit tail; do printf '%s:%s|' \"$OPT\" \"$OPTARG\"; done; printf '%s:%s' \"$1\" \"$#\"",
+      script:
+        'while getopts \'ab:\' OPT -a -b explicit tail; do printf \'%s:%s|\' "$OPT" "$OPTARG"; done; printf \'%s:%s\' "$1" "$#"',
       args: ["outer"],
       stdout: "a:|b:explicit|outer:1",
     },
     {
       name: "uses function positional arguments and restores a local OPTIND",
-      script: "parse() { local OPTIND=1; while getopts 'ab:' OPT; do printf '%s:%s|' \"$OPT\" \"$OPTARG\"; done; shift \"$((OPTIND - 1))\"; printf 'tail:%s|' \"$1\"; }; parse -a -b value tail; printf 'outer:%s:%s' \"$1\" \"$OPTIND\"",
+      script:
+        'parse() { local OPTIND=1; while getopts \'ab:\' OPT; do printf \'%s:%s|\' "$OPT" "$OPTARG"; done; shift "$((OPTIND - 1))"; printf \'tail:%s|\' "$1"; }; parse -a -b value tail; printf \'outer:%s:%s\' "$1" "$OPTIND"',
       args: ["caller"],
       stdout: "a:|b:value|tail:tail|outer:caller:1",
     },
     {
       name: "resets repeated function scans with local OPTIND",
-      script: "parse() { local OPTIND=1; getopts abc OPT; printf '%s|' \"$OPT\"; }; parse -abc; parse -abc",
+      script:
+        "parse() { local OPTIND=1; getopts abc OPT; printf '%s|' \"$OPT\"; }; parse -abc; parse -abc",
       stdout: "a|a|",
     },
     {
       name: "restores an outer cluster cursor after a local OPTIND frame",
-      script: "getopts abc OPT; printf 'outer:%s|' \"$OPT\"; parse() { local OPTIND=1; getopts abc OPT -abc; printf 'inner:%s|' \"$OPT\"; }; parse; getopts abc OPT; printf 'outer:%s' \"$OPT\"",
+      script:
+        "getopts abc OPT; printf 'outer:%s|' \"$OPT\"; parse() { local OPTIND=1; getopts abc OPT -abc; printf 'inner:%s|' \"$OPT\"; }; parse; getopts abc OPT; printf 'outer:%s' \"$OPT\"",
       args: ["-abc"],
       stdout: "outer:a|inner:a|outer:b",
     },
     {
       name: "runs getopts against supplied source arguments in the current session",
-      files: { "/opts.sh": "getopts a OPT; printf 'source:%s:%s|' \"$OPT\" \"$OPTIND\"" },
-      script: "source /opts.sh -a; printf 'outer:%s:%s' \"$1\" \"$OPTIND\"",
+      files: { "/opts.sh": 'getopts a OPT; printf \'source:%s:%s|\' "$OPT" "$OPTIND"' },
+      script: 'source /opts.sh -a; printf \'outer:%s:%s\' "$1" "$OPTIND"',
       args: ["caller"],
       stdout: "source:a:2|outer:caller:2",
     },
     {
       name: "isolates getopts variables and cursor in command substitution",
-      script: "printf '%s|' \"$(getopts a OPT; printf '%s:%s' \"$OPT\" \"$OPTIND\")\"; printf '%s:%s' \"$OPT\" \"$OPTIND\"",
+      script:
+        'printf \'%s|\' "$(getopts a OPT; printf \'%s:%s\' "$OPT" "$OPTIND")"; printf \'%s:%s\' "$OPT" "$OPTIND"',
       args: ["-a"],
       stdout: "a:2|:1",
     },
     {
       name: "isolates getopts state changes in subshells and pipelines",
-      script: "(getopts a OPT; printf '%s:%s|' \"$OPT\" \"$OPTIND\"); printf x | getopts a OPT; printf '%s:%s' \"$OPT\" \"$OPTIND\"",
+      script:
+        '(getopts a OPT; printf \'%s:%s|\' "$OPT" "$OPTIND"); printf x | getopts a OPT; printf \'%s:%s\' "$OPT" "$OPTIND"',
       args: ["-a"],
       stdout: "a:2|:1",
     },
@@ -2030,7 +2127,9 @@ const rejectedSyntax: ReadonlyArray<readonly [name: string, syntax: string, diag
   ["unsupported $$", "printf $$", "special parameter"],
 ];
 
-const malformedCompoundSyntax: ReadonlyArray<readonly [name: string, syntax: string, diagnostic: string]> = [
+const malformedCompoundSyntax: ReadonlyArray<
+  readonly [name: string, syntax: string, diagnostic: string]
+> = [
   ["empty subshell", "()", "non-empty command list"],
   ["empty brace group", "{ }", "non-empty command list"],
   ["empty if condition", "if then printf yes; fi", "non-empty command list"],
@@ -2045,21 +2144,29 @@ const malformedCompoundSyntax: ReadonlyArray<readonly [name: string, syntax: str
 ];
 
 describe("Bash v2 deterministic rejection", () => {
-  bashCases(rejectedSyntax.map(([name, syntax, diagnostic]): BashCase => ({
-    name: `rejects ${name} before an earlier mutation`,
-    script: `printf changed > /side; ${syntax}`,
-    exitCode: 2,
-    stderrIncludes: diagnostic,
-    missingFiles: ["/side"],
-  })));
+  bashCases(
+    rejectedSyntax.map(
+      ([name, syntax, diagnostic]): BashCase => ({
+        name: `rejects ${name} before an earlier mutation`,
+        script: `printf changed > /side; ${syntax}`,
+        exitCode: 2,
+        stderrIncludes: diagnostic,
+        missingFiles: ["/side"],
+      }),
+    ),
+  );
 
-  bashCases(malformedCompoundSyntax.map(([name, syntax, diagnostic]): BashCase => ({
-    name: `rejects ${name} before an earlier mutation`,
-    script: `printf changed > /side; ${syntax}`,
-    exitCode: 2,
-    stderrIncludes: diagnostic,
-    missingFiles: ["/side"],
-  })));
+  bashCases(
+    malformedCompoundSyntax.map(
+      ([name, syntax, diagnostic]): BashCase => ({
+        name: `rejects ${name} before an earlier mutation`,
+        script: `printf changed > /side; ${syntax}`,
+        exitCode: 2,
+        stderrIncludes: diagnostic,
+        missingFiles: ["/side"],
+      }),
+    ),
+  );
 
   bashCases([
     {
@@ -2116,7 +2223,9 @@ describe("Bash v2 deterministic rejection", () => {
   it("reports syntax offsets in UTF-8 bytes", async () => {
     const harness = createBashHarness();
     const source = `printf 가😀; printf "$((1 + @))"`;
-    const expectedOffset = new TextEncoder().encode(source.slice(0, source.indexOf("@"))).byteLength;
+    const expectedOffset = new TextEncoder().encode(
+      source.slice(0, source.indexOf("@")),
+    ).byteLength;
     const result = await harness.run(source);
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain(`at byte ${expectedOffset}`);
@@ -2162,4 +2271,149 @@ describe("Bash v2 pathname expansion", () => {
       stdout: "</g/deep>\n</g/top>\n",
     },
   ]);
+});
+
+describe("argument, sequence, encoding, and environment utilities", () => {
+  bashCases([
+    {
+      name: "xargs batches whitespace-separated input into one invocation",
+      script: "printf 'a b\\nc\\n' | xargs echo",
+      stdout: "a b c\n",
+    },
+    {
+      name: "xargs -n splits input into fixed-size batches",
+      script: "printf '1 2 3 4 5\\n' | xargs -n 2 echo",
+      stdout: "1 2\n3 4\n5\n",
+    },
+    {
+      name: "xargs appends collected arguments after fixed operands",
+      files: { "/one": "first\n", "/two": "second\n" },
+      script: "printf '/one\\n/two\\n' | xargs cat",
+      stdout: "first\nsecond\n",
+    },
+    {
+      name: "xargs treats input as data rather than shell syntax",
+      script: "printf '%s\\n' '$HOME' 'a;rm -rf /' '`id`' | xargs -n 1 echo",
+      stdout: "$HOME\na;rm\n-rf\n/\n`id`\n",
+    },
+    {
+      name: "xargs runs once on empty input and -r suppresses that run",
+      script: [`printf '' | xargs echo empty`, `printf '' | xargs -r echo skipped`],
+      stdout: "empty\n",
+    },
+    {
+      name: "xargs reports a failing invocation as status 123",
+      script: "printf '1\\n2\\n' | xargs -n 1 false",
+      exitCode: 123,
+    },
+    {
+      name: "xargs propagates command-not-found without running further batches",
+      script: "printf '1\\n2\\n' | xargs -n 1 no-such-tool",
+      exitCode: 127,
+      stderrIncludes: "command not found",
+    },
+    {
+      name: "xargs charges the shared mutation budget through the invoked command",
+      script: "printf '/a\\n/b\\n' | xargs -n 1 touch; ls /",
+      stdout: "a\nb\n",
+    },
+    {
+      name: "seq counts from one when given a single operand",
+      script: "seq 3",
+      stdout: "1\n2\n3\n",
+    },
+    {
+      name: "seq accepts explicit first, increment, and last operands",
+      script: "seq 2 3 11",
+      stdout: "2\n5\n8\n11\n",
+    },
+    {
+      name: "seq counts down with a negative increment",
+      script: "seq 3 -1 1",
+      stdout: "3\n2\n1\n",
+    },
+    {
+      name: "seq produces nothing when the range is empty",
+      script: "seq 5 3",
+      stdout: "",
+    },
+    {
+      name: "seq honors an explicit separator and equal-width padding",
+      script: "seq -s , -w 8 11",
+      stdout: "08,09,10,11,",
+    },
+    {
+      name: "seq rejects a zero increment as a usage error",
+      script: "seq 1 0 5",
+      exitCode: 2,
+      stderrIncludes: "INCREMENT must not be zero",
+    },
+    {
+      name: "seq rejects floating point operands rather than approximating them",
+      script: "seq 1.5",
+      exitCode: 2,
+      stderrIncludes: "must be a decimal integer",
+    },
+    {
+      name: "base64 round-trips arbitrary bytes through the shell",
+      script: "printf 'hello world' | base64 | base64 -d",
+      stdout: "hello world",
+    },
+    {
+      name: "base64 wraps encoded output at the requested width",
+      script:
+        "printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' | base64 -w 20",
+      stdout:
+        "YWFhYWFhYWFhYWFhYWFh\nYWFhYWFhYWFhYWFhYWFh\nYWFhYWFhYWFhYWFhYWFh\nYWFhYWFhYWFhYWFhYWFh\n",
+    },
+    {
+      name: "base64 encodes a named file without wrapping when -w 0 is given",
+      files: { "/data": "hi" },
+      script: "base64 -w 0 /data",
+      stdout: "aGk=\n",
+    },
+    {
+      name: "base64 -d rejects invalid input instead of guessing",
+      script: "printf 'not!base64' | base64 -d",
+      exitCode: 2,
+      stderrIncludes: "invalid input",
+    },
+    {
+      name: "env prints the session environment in byte order",
+      script: "env",
+      env: { B: "2", A: "1" },
+      stdout: "A=1\nB=2\nIFS= \t\n\nLC_ALL=C\nOPTIND=1\nPWD=/\nTZ=UTC\n",
+    },
+    {
+      name: "env assignments without a command persist in the session",
+      script: [`env X=kept`, `printf '%s\\n' "$X"`],
+      stdout: "IFS= \t\n\nLC_ALL=C\nOPTIND=1\nPWD=/\nTZ=UTC\nX=kept\nkept\n",
+    },
+    {
+      name: "env rejects options rather than silently ignoring them",
+      script: "env -i true",
+      exitCode: 2,
+      stderrIncludes: "unsupported option -i",
+    },
+  ]);
+
+  it("splits NUL-separated input under xargs -0 so whitespace stays in one argument", async () => {
+    const harness = createBashHarness();
+    expect(await harness.run("xargs -0 -n 1 echo", { stdin: "a b\0c d\0" })).toMatchObject({
+      exitCode: 0,
+      stdout: "a b\nc d\n",
+      stderr: "",
+    });
+  });
+
+  it("runs a command with env-scoped assignments and restores the prior value", async () => {
+    const probe = defineCommand("probe", async (context, _argv, fds) => {
+      await fds[1].write(new TextEncoder().encode(`${context.session.env.get("X") ?? ""}\n`));
+      return 0;
+    });
+    const harness = createBashHarness({ extraCommands: [probe] });
+    expect(
+      await harness.run([`export X=outer`, `env X=inner probe`, `probe`, `printf '%s\\n' "$X"`]),
+    ).toMatchObject({ exitCode: 0, stdout: "inner\nouter\nouter\n", stderr: "" });
+  });
 });

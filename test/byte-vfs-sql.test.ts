@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { VfsError } from "../src/core/errors.js";
+import type { VfsError } from "../src/core/errors.js";
+import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
+import type { VfsEvent } from "../src/vfs/events.js";
 import { putOpaque, readOpaque } from "../src/vfs/opaque.js";
 import { readAllBytes, streamFromChunks } from "../src/vfs/streams.js";
-import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import type { OpaqueObjectMetadata, OpaqueStore } from "../src/vfs/types.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 import { runVfsConformance } from "./helpers/vfs-conformance.js";
 
 async function bytes(stream: ReadableStream<Uint8Array>): Promise<number[]> {
-  return [...await readAllBytes(stream, 16 * 1024 * 1024)];
+  return [...(await readAllBytes(stream, 16 * 1024 * 1024))];
 }
 
 describe("byte-oriented in-memory SQLite filesystem", () => {
@@ -22,6 +23,102 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
 
   describe("shared VFS conformance", () => {
     runVfsConformance(() => createTestFileSystem());
+  });
+
+  describe("observability", () => {
+    it("reports quota refusals, usage, and opaque lifecycle to onEvent", async () => {
+      const events: VfsEvent[] = [];
+      const store = new MemoryOpaqueStore();
+      const fileSystem = createTestFileSystem({
+        onEvent: (event) => events.push(event),
+        opaqueStore: store,
+        maxEntries: 3,
+      });
+
+      await fileSystem.writeFile("/a", "body");
+      expect(events).toContainEqual({ type: "vfs.usage", inlineBytes: 4, entries: 2 });
+
+      await expect(
+        fileSystem.writeFile("/b/c", "x", { createParents: true }),
+      ).rejects.toMatchObject({ code: "ENOSPC" });
+      expect(events).toContainEqual({
+        type: "vfs.quota",
+        limit: "maxEntries",
+        requested: 1,
+        used: 3,
+        max: 3,
+        path: "/b/c",
+      });
+      // The rolled-back parent creation must not have reported usage.
+      expect(events.filter((event) => event.type === "vfs.usage")).toHaveLength(1);
+
+      const upload = await fileSystem.beginOpaqueUpload("/blob");
+      expect(events.at(-1)).toMatchObject({ type: "vfs.opaque-upload", phase: "begin" });
+      await store.putIfAbsent(upload.objectKey, "opaque body");
+      await fileSystem.commitOpaqueUpload(upload.uploadId);
+      expect(events.at(-1)).toMatchObject({
+        type: "vfs.opaque-upload",
+        phase: "commit",
+        path: "/blob",
+      });
+
+      await fileSystem.remove("/blob");
+      await fileSystem.drainGarbage();
+      expect(events.at(-1)).toMatchObject({ type: "vfs.garbage", deleted: 1, failed: 0 });
+    });
+
+    it("reports a rejected commit and keeps a throwing observer from changing behavior", async () => {
+      const events: VfsEvent[] = [];
+      const store = new MemoryOpaqueStore();
+      const fileSystem = createTestFileSystem({
+        onEvent: (event) => {
+          events.push(event);
+          throw new Error("observer failure must not escape");
+        },
+        opaqueStore: store,
+      });
+
+      // A committed write still succeeds even though every emit throws.
+      await fileSystem.writeFile("/kept", "body");
+      expect(await bytes(fileSystem.readFile("/kept").stream)).toEqual([
+        ...new TextEncoder().encode("body"),
+      ]);
+
+      const upload = await fileSystem.beginOpaqueUpload("/blob", { expectedSizeBytes: 99 });
+      await store.putIfAbsent(upload.objectKey, "wrong size");
+      await expect(fileSystem.commitOpaqueUpload(upload.uploadId)).rejects.toMatchObject({
+        code: "EIO",
+      });
+      expect(events).toContainEqual({
+        type: "vfs.opaque-upload",
+        phase: "reject",
+        uploadId: upload.uploadId,
+        objectKey: upload.objectKey,
+        path: "/blob",
+        reason: "size-mismatch",
+      });
+    });
+
+    it("performs no usage bookkeeping when no observer is attached", async () => {
+      const fileSystem = createTestFileSystem();
+      await fileSystem.writeFile("/a", "body");
+      // Nothing to assert beyond the mutation succeeding: the guarded usage
+      // query in updateUsage() is skipped, so this pins that the guard exists.
+      expect(fileSystem.stat("/a").sizeBytes).toBe(4);
+    });
+  });
+
+  it("counts a subtree past the ceiling that truncates find()", async () => {
+    const fileSystem = createTestFileSystem();
+    await fileSystem.mkdir("/bulk");
+    for (let index = 0; index < 10_050; index += 1) {
+      await fileSystem.writeFile(`/bulk/f${index}`, "x");
+    }
+
+    // find() materializes a VfsStat per entry and stops at its 10,000 default,
+    // so it cannot be used to charge a mutation budget accurately.
+    expect(fileSystem.find({ path: "/bulk", includeRoot: true })).toHaveLength(10_000);
+    expect(fileSystem.countSubtree("/bulk")).toBe(10_051);
   });
 
   it("stores arbitrary bytes and gives active readers a bounded snapshot", async () => {
@@ -52,10 +149,9 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
 
     const writing = fileSystem.writeFile("/file", body);
     await Promise.resolve();
-    expect(new TextDecoder().decode(await readAllBytes(
-      fileSystem.readFile("/file").stream,
-      16,
-    ))).toBe("old");
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/file").stream, 16)),
+    ).toBe("old");
 
     fileSystem.touch("/file");
     release?.();
@@ -82,18 +178,24 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
       maxInFlightBufferedBytes: 4,
     });
     let closeFirst: (() => void) | undefined;
-    const firstGate = new Promise<void>((resolve) => { closeFirst = resolve; });
-    const first = fileSystem.writeFile("/first", new ReadableStream<Uint8Array>({
-      async start(controller) {
-        controller.enqueue(new Uint8Array([1, 2, 3]));
-        await firstGate;
-        controller.close();
-      },
-    }));
+    const firstGate = new Promise<void>((resolve) => {
+      closeFirst = resolve;
+    });
+    const first = fileSystem.writeFile(
+      "/first",
+      new ReadableStream<Uint8Array>({
+        async start(controller) {
+          controller.enqueue(new Uint8Array([1, 2, 3]));
+          await firstGate;
+          controller.close();
+        },
+      }),
+    );
     await Promise.resolve();
     await Promise.resolve();
-    await expect(fileSystem.writeFile("/second", new Uint8Array([4, 5, 6])))
-      .rejects.toMatchObject({ code: "ENOSPC" });
+    await expect(fileSystem.writeFile("/second", new Uint8Array([4, 5, 6]))).rejects.toMatchObject({
+      code: "ENOSPC",
+    });
     closeFirst?.();
     await first;
   });
@@ -108,8 +210,9 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
       },
     });
     await expect(fileSystem.writeFile("/file", failed)).rejects.toThrow("source failed");
-    expect(new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/file").stream, 16)))
-      .toBe("old");
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/file").stream, 16)),
+    ).toBe("old");
   });
 
   it("enforces file, workspace, entry, and in-flight limits without partial mutation", async () => {
@@ -120,20 +223,19 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
       maxInFlightBufferedBytes: 4,
     });
     await fileSystem.writeFile("/a", "1234");
-    await expect(fileSystem.writeFile("/a", "12345"))
-      .rejects.toMatchObject({ code: "ENOSPC" });
+    await expect(fileSystem.writeFile("/a", "12345")).rejects.toMatchObject({ code: "ENOSPC" });
     expect(await bytes(fileSystem.readFile("/a").stream)).toEqual([49, 50, 51, 52]);
 
     await fileSystem.writeFile("/b", "12");
-    await expect(fileSystem.writeFile("/c", "x"))
-      .rejects.toMatchObject({ code: "ENOSPC" });
+    await expect(fileSystem.writeFile("/c", "x")).rejects.toMatchObject({ code: "ENOSPC" });
   });
 
   it("preflights recursive parent creation with the final entry quota", async () => {
     const fileSystem = createTestFileSystem({ maxEntries: 2 });
 
-    await expect(fileSystem.writeFile("/parent/file", "x", { createParents: true }))
-      .rejects.toMatchObject({ code: "ENOSPC" });
+    await expect(
+      fileSystem.writeFile("/parent/file", "x", { createParents: true }),
+    ).rejects.toMatchObject({ code: "ENOSPC" });
     expect(() => fileSystem.stat("/parent")).toThrowError(
       expect.objectContaining({ code: "ENOENT" }),
     );
@@ -151,17 +253,24 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
 
     const first = store.putIfAbsent("reserved", firstBody);
     await Promise.resolve();
-    await expect(store.putIfAbsent("reserved", "second"))
-      .rejects.toMatchObject({ code: "EEXIST", path: "reserved" });
+    await expect(store.putIfAbsent("reserved", "second")).rejects.toMatchObject({
+      code: "EEXIST",
+      path: "reserved",
+    });
     finish?.();
     await expect(first).resolves.toMatchObject({ key: "reserved", sizeBytes: 5 });
   });
 
   it("shares opaque objects without copying bodies and deletes only the last reference", async () => {
+    // A read lease pushes the object's retention deadline into the future, and
+    // GC only collects a key once that deadline has passed. Advance an injected
+    // clock rather than assuming real time elapses between the two calls.
+    let now = 1_000;
     const store = new MemoryOpaqueStore();
-    const fileSystem = createTestFileSystem({ opaqueStore: store });
+    const fileSystem = createTestFileSystem({ opaqueStore: store, now: () => now });
     const stat = await putOpaque(fileSystem, store, "/asset", new Uint8Array([1, 2, 3]));
     const lease = fileSystem.resolveOpaqueRead("/asset", 1);
+    expect(lease.leaseExpiresAtMs).toBe(now + 1);
 
     expect(stat).toMatchObject({ contentClass: "opaque", sizeBytes: 3 });
     expect(await fileSystem.copy("/asset", "/copy")).toMatchObject({
@@ -171,6 +280,12 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     expect((await fileSystem.remove("/asset")).opaqueObjectsQueuedForDeletion).toBe(0);
     expect(store.has(lease.object.key)).toBe(true);
     expect((await fileSystem.remove("/copy")).opaqueObjectsQueuedForDeletion).toBe(1);
+
+    // Still inside the lease: the name is gone but the body is retained.
+    await fileSystem.drainGarbage();
+    expect(store.has(lease.object.key)).toBe(true);
+
+    now = lease.leaseExpiresAtMs;
     await fileSystem.drainGarbage();
     expect(store.has(lease.object.key)).toBe(false);
   });
@@ -243,8 +358,9 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     await fileSystem.commitOpaqueUpload(upload.uploadId);
     now = 2;
 
-    await expect(fileSystem.commitOpaqueUpload(upload.uploadId))
-      .rejects.toMatchObject({ code: "ENOENT" });
+    await expect(fileSystem.commitOpaqueUpload(upload.uploadId)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     expect(fileSystem.stat("/asset")).toMatchObject({ contentClass: "opaque", sizeBytes: 4 });
   });
 
@@ -254,17 +370,23 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     const upload = await fileSystem.beginOpaqueUpload("/asset");
     await store.putIfAbsent(upload.objectKey, "body");
 
-    await expect(fileSystem.commitOpaqueUpload(upload.uploadId, {
-      verifiedSha256: "untrusted",
-    })).rejects.toEqual(expect.objectContaining<Partial<VfsError>>({ code: "EINVAL" }));
+    await expect(
+      fileSystem.commitOpaqueUpload(upload.uploadId, {
+        verifiedSha256: "untrusted",
+      }),
+    ).rejects.toEqual(expect.objectContaining<Partial<VfsError>>({ code: "EINVAL" }));
   });
 
   it("serializes concurrent commits and loses an in-flight verification after abort", async () => {
     let now = 0;
     let releaseHead: (() => void) | undefined;
     let signalHead: (() => void) | undefined;
-    const headStarted = new Promise<void>((resolve) => { signalHead = resolve; });
-    const headGate = new Promise<void>((resolve) => { releaseHead = resolve; });
+    const headStarted = new Promise<void>((resolve) => {
+      signalHead = resolve;
+    });
+    const headGate = new Promise<void>((resolve) => {
+      releaseHead = resolve;
+    });
     const backing = new MemoryOpaqueStore();
     const store: OpaqueStore = {
       putIfAbsent: (...args) => backing.putIfAbsent(...args),
@@ -300,8 +422,12 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     let now = 0;
     let releaseHead: (() => void) | undefined;
     let signalHead: (() => void) | undefined;
-    const headStarted = new Promise<void>((resolve) => { signalHead = resolve; });
-    const headGate = new Promise<void>((resolve) => { releaseHead = resolve; });
+    const headStarted = new Promise<void>((resolve) => {
+      signalHead = resolve;
+    });
+    const headGate = new Promise<void>((resolve) => {
+      releaseHead = resolve;
+    });
     const backing = new MemoryOpaqueStore();
     let failDelete = true;
     const store: OpaqueStore = {

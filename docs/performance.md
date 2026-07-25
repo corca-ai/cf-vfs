@@ -35,6 +35,12 @@ This is usually faster and simpler than a paged pull protocol at this size, but
 concurrent snapshots and writes are capped by the instance-wide in-flight
 budget.
 
+The shell preserves that property. `rm -r`, `mv`, and `cp -r` charge their
+mutation budget from `countSubtree()` — one indexed range count — rather than
+materializing the subtree through `find()`, so a recursive shell command costs a
+constant number of SQL statements and allocates nothing per entry. The charge is
+also exact above `find()`'s 10,000-result ceiling.
+
 Opaque work is payload-size-independent inside the metadata DO. Upload/download
 bytes go directly to R2; the DO performs metadata SQL plus one R2 `HEAD` during
 commit. Recursive copy, move, and remove use a constant number of SQL statements
@@ -99,7 +105,9 @@ profiles. Every run uses a new Durable Object ID and calls `deleteAll()` before
 returning, so benchmark contents are not retained.
 
 Production Workers intentionally freeze `performance.now()` and `Date.now()`
-between I/O events. The deployed benchmark therefore measures each operation
+between I/O events. This affects the runtime as well as measurement; see
+[the deadline note](operations.md#execution-budgets). The deployed benchmark
+therefore measures each operation
 at the calling Worker across a Durable Object RPC boundary, rather than
 pretending an in-object synchronous timer is meaningful. Fast point operations
 are batched and reported as amortized per-operation values. Append and subtree

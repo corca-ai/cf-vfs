@@ -108,6 +108,12 @@ Deliberate deterministic choices include:
   the current session; quoted delimiters produce literal bodies;
 - `set -o pipefail` selects the rightmost real non-zero stage, while normal
   downstream early close maps upstream `EPIPE` to success;
+- `xargs` splits input as data on the fixed whitespace profile or on NUL, and
+  dispatches already-expanded argv through the command registry. It performs no
+  quote, backslash, or `eval` processing, so input cannot introduce shell
+  syntax. `seq` operands are strict decimal integers rather than Bash
+  arithmetic or floating point, and `env` reports only valid variable names in
+  UTF-8 byte order;
 - status 2 is syntax/usage, 126 is policy denial, and 127 is command-not-found.
 
 Differential fixtures are pinned against `bash:5.3.3` with the same locale and

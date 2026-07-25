@@ -6,6 +6,7 @@ import {
   continueCommand,
   dotCommand,
   echoCommand,
+  envCommand,
   exitCommand,
   exportCommand,
   falseCommand,
@@ -13,8 +14,8 @@ import {
   localCommand,
   printfCommand,
   pwdCommand,
-  returnCommand,
   readCommand,
+  returnCommand,
   setCommand,
   shiftCommand,
   sourceCommand,
@@ -43,6 +44,7 @@ import {
 } from "./fs.js";
 import { lsCommand } from "./ls.js";
 import {
+  base64Command,
   cmpCommand,
   commCommand,
   cutCommand,
@@ -55,6 +57,7 @@ import {
   pasteCommand,
   patchCommand,
   sedCommand,
+  seqCommand,
   sha256sumCommand,
   sortCommand,
   tailCommand,
@@ -63,6 +66,7 @@ import {
   uniqCommand,
   wcCommand,
 } from "./text.js";
+import { xargsCommand } from "./xargs.js";
 
 export const defaultShellCommands = [
   colonCommand,
@@ -73,6 +77,7 @@ export const defaultShellCommands = [
   pwdCommand,
   cdCommand,
   exportCommand,
+  envCommand,
   unsetCommand,
   readCommand,
   shiftCommand,
@@ -124,4 +129,7 @@ export const defaultShellCommands = [
   commCommand,
   joinCommand,
   patchCommand,
+  seqCommand,
+  base64Command,
+  xargsCommand,
 ] as const;

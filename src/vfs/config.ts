@@ -1,12 +1,13 @@
 import { VfsError } from "../core/errors.js";
+import type { VfsEventSink } from "./events.js";
 import { MAX_INLINE_FILE_BYTES, type OpaqueStore } from "./types.js";
 
 export const DIRECTORY_MODE = 0o040755;
 export const FILE_MODE = 0o100644;
 export const DEFAULT_UPLOAD_TTL_MS = 15 * 60 * 1000;
 export const DEFAULT_VERIFY_LEASE_MS = 60_000;
-export const DEFAULT_UPLOAD_SETTLEMENT_GRACE_MS = 60_000;
-export const DEFAULT_RECEIPT_RETENTION_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_UPLOAD_SETTLEMENT_GRACE_MS = 60_000;
+const DEFAULT_RECEIPT_RETENTION_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_READ_LEASE_MS = 5 * 60 * 1000;
 export const MAX_READ_LEASE_MS = 60 * 60 * 1000;
 export const NEVER_MUTATED_TOKEN = "vfs:never-mutated";
@@ -28,6 +29,12 @@ export interface CommonFileSystemOptions {
   now?: () => number;
   createId?: () => string;
   workspaceId?: string;
+  /**
+   * Observes quota, usage, opaque-upload, and garbage-collection events. Never
+   * invoked when omitted — the filesystem also skips the usage query that would
+   * feed it — and a throwing sink cannot roll back a mutation or mask an error.
+   */
+  onEvent?: VfsEventSink;
 }
 
 export interface ResolvedFileSystemLimits {
@@ -55,8 +62,7 @@ export function resolveFileSystemLimits(
     maxInlineLogicalBytes: options.maxInlineLogicalBytes ?? DEFAULT_MAX_INLINE_LOGICAL_BYTES,
     maxEntries: options.maxEntries ?? DEFAULT_MAX_ENTRIES,
     maxInFlightBufferedBytes: options.maxInFlightBufferedBytes ?? DEFAULT_MAX_IN_FLIGHT_BYTES,
-    uploadSettlementGraceMs: options.uploadSettlementGraceMs
-      ?? DEFAULT_UPLOAD_SETTLEMENT_GRACE_MS,
+    uploadSettlementGraceMs: options.uploadSettlementGraceMs ?? DEFAULT_UPLOAD_SETTLEMENT_GRACE_MS,
     receiptRetentionMs: options.receiptRetentionMs ?? DEFAULT_RECEIPT_RETENTION_MS,
   };
   for (const [name, value] of Object.entries(limits)) validatePositiveInteger(value, name);

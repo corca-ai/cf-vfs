@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { VfsError } from "../src/core/errors.js";
-import {
-  InteractiveInputBuffer,
-  InteractiveShell,
-} from "../src/shell/interactive.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
+import { InteractiveInputBuffer, InteractiveShell } from "../src/shell/interactive.js";
 import type { NodeSqlFileSystem } from "../src/testing/node.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 
@@ -27,16 +24,20 @@ describe("InteractiveShell", () => {
   it("preserves cwd, variables, functions, options, and status between source units", async () => {
     const { shell } = createInteractiveShell();
 
-    await expect(shell.runText({
-      script: "mkdir -p /repo; cd /repo; NAME=world; greet() { printf 'hello %s' \"$NAME\"; }",
-    })).resolves.toMatchObject({ exitCode: 0, stderr: "" });
+    await expect(
+      shell.runText({
+        script: "mkdir -p /repo; cd /repo; NAME=world; greet() { printf 'hello %s' \"$NAME\"; }",
+      }),
+    ).resolves.toMatchObject({ exitCode: 0, stderr: "" });
     await expect(shell.runText({ script: "greet > greeting.txt; false" })).resolves.toMatchObject({
       exitCode: 1,
       stderr: "",
     });
-    await expect(shell.runText({
-      script: "printf '%s:%s:%s:' \"$PWD\" \"$NAME\" \"$?\"; cat greeting.txt",
-    })).resolves.toEqual({
+    await expect(
+      shell.runText({
+        script: 'printf \'%s:%s:%s:\' "$PWD" "$NAME" "$?"; cat greeting.txt',
+      }),
+    ).resolves.toEqual({
       exitCode: 0,
       stdout: "/repo:world:1:hello world",
       stderr: "",
@@ -67,16 +68,20 @@ describe("InteractiveShell", () => {
   it("clears unit-local flow while preserving shell options", async () => {
     const { fileSystem, shell } = createInteractiveShell();
 
-    await expect(shell.runText({
-      script: "set -e; false; touch /not-created",
-    })).resolves.toMatchObject({ exitCode: 1 });
+    await expect(
+      shell.runText({
+        script: "set -e; false; touch /not-created",
+      }),
+    ).resolves.toMatchObject({ exitCode: 1 });
     await expect(shell.runText({ script: "printf resumed" })).resolves.toMatchObject({
       exitCode: 0,
       stdout: "resumed",
     });
-    await expect(shell.runText({
-      script: "false; touch /still-not-created",
-    })).resolves.toMatchObject({ exitCode: 1 });
+    await expect(
+      shell.runText({
+        script: "false; touch /still-not-created",
+      }),
+    ).resolves.toMatchObject({ exitCode: 1 });
 
     expect(() => fileSystem.stat("/not-created")).toThrowError(VfsError);
     expect(() => fileSystem.stat("/still-not-created")).toThrowError(VfsError);

@@ -8,6 +8,12 @@ export interface UtilityOptionParserConfig<Name extends string> {
   readonly short?: Readonly<Record<string, UtilityOptionDefinition<Name>>>;
   readonly long?: Readonly<Record<string, UtilityOptionDefinition<Name>>>;
   readonly oldStyleCount?: Name;
+  /**
+   * Treats `-123` as an operand rather than an option cluster. Utilities whose
+   * operands are signed integers need this; it is mutually exclusive with
+   * `oldStyleCount`, which claims the same spelling as an option.
+   */
+  readonly negativeNumberOperands?: boolean;
 }
 
 export type ParsedUtilityOption<Name extends string> =
@@ -66,15 +72,24 @@ export function parseUtilityOptions<Name extends string>(
         options.push({ name: definition.name, argument });
       } else {
         if (separator >= 0) {
-          throw new VfsError("EINVAL", `${command}: option ${spelling} does not accept an argument`);
+          throw new VfsError(
+            "EINVAL",
+            `${command}: option ${spelling} does not accept an argument`,
+          );
         }
         options.push({ name: definition.name });
       }
       continue;
     }
-    if (config.oldStyleCount !== undefined && /^-[0-9]+$/u.test(value)) {
-      options.push({ name: config.oldStyleCount, argument: value.slice(1) });
-      continue;
+    if (/^-[0-9]+$/u.test(value)) {
+      if (config.negativeNumberOperands === true) {
+        operands.push(value);
+        continue;
+      }
+      if (config.oldStyleCount !== undefined) {
+        options.push({ name: config.oldStyleCount, argument: value.slice(1) });
+        continue;
+      }
     }
 
     const cluster = [...value.slice(1)];

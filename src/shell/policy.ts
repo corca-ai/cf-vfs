@@ -118,26 +118,23 @@ export class ScopedFileSystem implements ShellFileSystem {
     return this.#inner.findPage(options);
   }
 
+  countSubtree(path: string): number {
+    this.read(path);
+    return this.#inner.countSubtree(path);
+  }
+
   readFile(path: string): InlineReadResult {
     this.read(path);
     return this.#inner.readFile(path);
   }
 
-  writeFile(
-    path: string,
-    body: ByteBody,
-    options?: WriteFileOptions,
-  ): Promise<WriteResult> {
+  writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult> {
     this.write(path);
     this.#budget.mutation();
     return this.#inner.writeFile(path, body, options);
   }
 
-  appendFile(
-    path: string,
-    body: ByteBody,
-    options?: AppendFileOptions,
-  ): Promise<WriteResult> {
+  appendFile(path: string, body: ByteBody, options?: AppendFileOptions): Promise<WriteResult> {
     this.write(path);
     this.#budget.mutation();
     return this.#inner.appendFile(path, body, options);
@@ -164,9 +161,7 @@ export class ScopedFileSystem implements ShellFileSystem {
 
   remove(path: string, options?: RemoveOptions): Promise<RemoveResult> {
     this.write(path);
-    const count = options?.recursive === true
-      ? this.#inner.find({ path, includeRoot: true }).length
-      : 1;
+    const count = options?.recursive === true ? this.#inner.countSubtree(path) : 1;
     this.#budget.mutation(Math.max(1, count));
     return this.#inner.remove(path, options);
   }
@@ -174,17 +169,14 @@ export class ScopedFileSystem implements ShellFileSystem {
   move(from: string, to: string, options?: MoveOptions): Promise<MoveResult> {
     this.write(from);
     this.write(to);
-    const count = this.#inner.find({ path: from, includeRoot: true }).length;
-    this.#budget.mutation(Math.max(1, count));
+    this.#budget.mutation(Math.max(1, this.#inner.countSubtree(from)));
     return this.#inner.move(from, to, options);
   }
 
   copy(from: string, to: string, options?: CopyOptions): Promise<CopyResult> {
     this.read(from);
     this.write(to);
-    const count = this.#inner.find({ path: from, includeRoot: true }).length;
-    this.#budget.mutation(Math.max(1, count));
+    this.#budget.mutation(Math.max(1, this.#inner.countSubtree(from)));
     return this.#inner.copy(from, to, options);
   }
-
 }

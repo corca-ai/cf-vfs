@@ -27,7 +27,9 @@ export function defineCommand(name: string, runner: CommandRunner): ShellCommand
     name,
     run(context, argv, fds): ShellProcess {
       return {
-        completed: Promise.resolve().then(async () => ({ exitCode: await runner(context, argv, fds) })),
+        completed: Promise.resolve().then(async () => ({
+          exitCode: await runner(context, argv, fds),
+        })),
       };
     },
   };
@@ -49,9 +51,10 @@ export async function readWithAbort(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   signal: AbortSignal,
 ): Promise<ReadableStreamReadResult<Uint8Array>> {
-  const cancellation = (): VfsError => signal.reason instanceof VfsError
-    ? signal.reason
-    : new VfsError("ECANCELED", "execution was cancelled");
+  const cancellation = (): VfsError =>
+    signal.reason instanceof VfsError
+      ? signal.reason
+      : new VfsError("ECANCELED", "execution was cancelled");
   if (signal.aborted) throw cancellation();
   return await new Promise<ReadableStreamReadResult<Uint8Array>>((resolve, reject) => {
     const abort = (): void => {
@@ -60,9 +63,12 @@ export async function readWithAbort(
       reject(error);
     };
     signal.addEventListener("abort", abort, { once: true });
-    void reader.read().then(resolve, reject).finally(() => {
-      signal.removeEventListener("abort", abort);
-    });
+    void reader
+      .read()
+      .then(resolve, reject)
+      .finally(() => {
+        signal.removeEventListener("abort", abort);
+      });
   });
 }
 
@@ -189,7 +195,10 @@ export async function* readTextLines(
     await reader.cancel(error).catch(() => undefined);
     throw error;
   } finally {
-    if (!finished) await reader.cancel(new VfsError("EPIPE", "line consumer stopped early")).catch(() => undefined);
+    if (!finished)
+      await reader
+        .cancel(new VfsError("EPIPE", "line consumer stopped early"))
+        .catch(() => undefined);
     reader.releaseLock();
   }
 }
@@ -213,7 +222,8 @@ export async function collectStream(
       if (result.done) break;
       total += result.value.byteLength;
       context.budget.io(result.value.byteLength);
-      if (total > maximumBytes) throw new VfsError("E2BIG", "buffered command input limit exceeded");
+      if (total > maximumBytes)
+        throw new VfsError("E2BIG", "buffered command input limit exceeded");
       release();
       release = context.budget.buffered(total);
       chunks.push(result.value.slice());
@@ -257,10 +267,7 @@ export async function collectText(
   }
 }
 
-export function readFile(
-  context: ShellCommandContext,
-  path: string,
-): InlineReadResult {
+function readFile(context: ShellCommandContext, path: string): InlineReadResult {
   return context.fileSystem.readFile(commandPath(context, path));
 }
 
@@ -339,9 +346,8 @@ export async function inputTexts(
   const releases: Array<() => void> = [];
   try {
     for (const path of argv) {
-      const collected = path === "-"
-        ? await collectText(context, stdin)
-        : await readFileText(context, path);
+      const collected =
+        path === "-" ? await collectText(context, stdin) : await readFileText(context, path);
       output.push({ name: path, text: collected.value });
       releases.push(collected.release);
     }

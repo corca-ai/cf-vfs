@@ -1,10 +1,10 @@
 import { runInDurableObject } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
 import { readAllBytes } from "../src/vfs/streams.js";
 import type { TestWorkspaceVfs } from "../test/worker.js";
 import { meterSqlStorage } from "./metered-sql.js";
-import { env } from "cloudflare:workers";
 
 async function averageDuration(
   warmups: number,
@@ -32,7 +32,7 @@ describe("Durable Object storage benchmark metrics", () => {
       const fileCount = 512;
       const sizes = Array.from(
         { length: fileCount },
-        (_unused, index) => 8 * 1024 + (index * 997) % (4 * 1024 + 1),
+        (_unused, index) => 8 * 1024 + ((index * 997) % (4 * 1024 + 1)),
       );
       const logicalBytes = sizes.reduce((total, size) => total + size, 0);
 
@@ -54,11 +54,8 @@ describe("Durable Object storage benchmark metrics", () => {
       started = performance.now();
       let checksum = 0;
       for (let order = 0; order < fileCount; order += 1) {
-        const index = order * 257 % fileCount;
-        const body = await readAllBytes(
-          fileSystem.readFile(`/blob-${index}`).stream,
-          12 * 1024,
-        );
+        const index = (order * 257) % fileCount;
+        const body = await readAllBytes(fileSystem.readFile(`/blob-${index}`).stream, 12 * 1024);
         checksum += (body[0] ?? 0) + (body.at(-1) ?? 0);
       }
       const readMs = performance.now() - started;
@@ -68,9 +65,9 @@ describe("Durable Object storage benchmark metrics", () => {
         rowsWritten: meter.rowsWritten,
       };
       const databaseBytes = state.storage.sql.databaseSize;
-      const chunks = state.storage.sql.exec<{ count: number }>(
-        "SELECT COUNT(*) AS count FROM vfs_inline_chunks",
-      ).one().count;
+      const chunks = state.storage.sql
+        .exec<{ count: number }>("SELECT COUNT(*) AS count FROM vfs_inline_chunks")
+        .one().count;
       return {
         fileCount,
         logicalBytes,
@@ -126,9 +123,11 @@ describe("Durable Object storage benchmark metrics", () => {
       const body = await readAllBytes(snapshot.stream, replacement.byteLength);
       const rowsRead = meter.rowsRead;
       const rowsWritten = meter.rowsWritten;
-      const chunks = state.storage.sql.exec<{ count: number }>(
-        "SELECT COUNT(*) AS count FROM vfs_inline_chunks WHERE entry_id = (SELECT id FROM vfs_entries WHERE path = '/body')",
-      ).one().count;
+      const chunks = state.storage.sql
+        .exec<{ count: number }>(
+          "SELECT COUNT(*) AS count FROM vfs_inline_chunks WHERE entry_id = (SELECT id FROM vfs_entries WHERE path = '/body')",
+        )
+        .one().count;
       return {
         rowsRead,
         rowsWritten,
@@ -139,8 +138,7 @@ describe("Durable Object storage benchmark metrics", () => {
         firstByte: body[0],
         // Marginal paid-plan rates beyond included rows, 2026-07-20.
         // https://developers.cloudflare.com/durable-objects/platform/pricing/
-        estimatedSqlRowUsd: rowsRead * 0.001 / 1_000_000
-          + rowsWritten * 1.00 / 1_000_000,
+        estimatedSqlRowUsd: (rowsRead * 0.001) / 1_000_000 + (rowsWritten * 1.0) / 1_000_000,
       };
     });
 
@@ -165,11 +163,14 @@ describe("Durable Object storage benchmark metrics", () => {
       meter.reset();
       await fileSystem.appendFile("/body", "klmno");
       const rowsWritten = meter.rowsWritten;
-      const chunkSizes = state.storage.sql.exec<{ size: number }>(
-        `SELECT LENGTH(body) AS size FROM vfs_inline_chunks
+      const chunkSizes = state.storage.sql
+        .exec<{ size: number }>(
+          `SELECT LENGTH(body) AS size FROM vfs_inline_chunks
          WHERE entry_id = (SELECT id FROM vfs_entries WHERE path = '/body')
          ORDER BY chunk_index`,
-      ).toArray().map((row) => row.size);
+        )
+        .toArray()
+        .map((row) => row.size);
       const body = new TextDecoder().decode(
         await readAllBytes(fileSystem.readFile("/body").stream, 32),
       );
@@ -209,8 +210,7 @@ describe("Durable Object storage benchmark metrics", () => {
           maxRowsWritten = Math.max(maxRowsWritten, meter.rowsWritten);
         }
         return {
-          durationMs: durations.reduce((sum, duration) => sum + duration, 0)
-            / durations.length,
+          durationMs: durations.reduce((sum, duration) => sum + duration, 0) / durations.length,
           maxRowsWritten,
         };
       });
@@ -230,7 +230,10 @@ describe("Durable Object storage benchmark metrics", () => {
     const metrics = await runInDurableObject(stub, async (_instance, state) => {
       const meter = meterSqlStorage(state.storage);
       const fileSystem = new DurableObjectFileSystem(meter.storage, { chunkBytes: 4 });
-      for (const [root, files] of [["/small-source", 1], ["/large-source", 24]] as const) {
+      for (const [root, files] of [
+        ["/small-source", 1],
+        ["/large-source", 24],
+      ] as const) {
         fileSystem.mkdir(root);
         for (let index = 0; index < files; index += 1) {
           await fileSystem.writeFile(`${root}/file-${index}`, "abcdefgh");
@@ -273,9 +276,7 @@ describe("Durable Object storage benchmark metrics", () => {
       };
     });
 
-    console.info(
-      `DO subtree benchmark: ${JSON.stringify(metrics.large.statements)}`,
-    );
+    console.info(`DO subtree benchmark: ${JSON.stringify(metrics.large.statements)}`);
     expect(metrics).toMatchObject({
       small: {
         copied: { copied: 2, opaqueBodiesCopied: 0 },
@@ -297,7 +298,10 @@ describe("Durable Object storage benchmark metrics", () => {
 
   it("measures subtree latency by entry count", async () => {
     const results: Record<string, { copyMs: number; moveMs: number; removeMs: number }> = {};
-    for (const [files, repeats] of [[100, 22], [1_000, 12]] as const) {
+    for (const [files, repeats] of [
+      [100, 22],
+      [1_000, 12],
+    ] as const) {
       const stub: DurableObjectStub<TestWorkspaceVfs> = env.VFS_TEST.getByName(
         `storage-benchmark-subtree-latency-${files}`,
       );
@@ -312,7 +316,7 @@ describe("Durable Object storage benchmark metrics", () => {
         const moveDurations: number[] = [];
         const removeDurations: number[] = [];
         for (let repeat = 0; repeat < repeats; repeat += 1) {
-          let started = performance.now();
+          const started = performance.now();
           await fileSystem.copy("/source", "/copy", { recursive: true });
           const copied = performance.now();
           await fileSystem.move("/copy", "/moved");
@@ -325,9 +329,8 @@ describe("Durable Object storage benchmark metrics", () => {
             removeDurations.push(removed - moved);
           }
         }
-        const average = (durations: readonly number[]) => (
-          durations.reduce((sum, duration) => sum + duration, 0) / durations.length
-        );
+        const average = (durations: readonly number[]) =>
+          durations.reduce((sum, duration) => sum + duration, 0) / durations.length;
         return {
           copyMs: average(copyDurations),
           moveMs: average(moveDurations),
@@ -399,8 +402,9 @@ describe("Durable Object storage benchmark metrics", () => {
       const warmInitializeMs = await averageDuration(20, 1_000, () => {
         new DurableObjectFileSystem(state.storage);
       });
-      const statQueryPlan = state.storage.sql.exec<{ detail: string }>(
-        `EXPLAIN QUERY PLAN
+      const statQueryPlan = state.storage.sql
+        .exec<{ detail: string }>(
+          `EXPLAIN QUERY PLAN
          SELECT
            e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,
            e.opaque_object_id, e.size_bytes, e.mode, e.created_at_ms,
@@ -408,8 +412,10 @@ describe("Durable Object storage benchmark metrics", () => {
          FROM vfs_entries e INDEXED BY vfs_entries_path
          CROSS JOIN vfs_path_versions p
          WHERE e.path = ? AND p.path = e.path`,
-        "/point",
-      ).toArray().map((row) => row.detail);
+          "/point",
+        )
+        .toArray()
+        .map((row) => row.detail);
 
       return {
         statCost,

@@ -21,9 +21,13 @@ export class DownstreamClosedError extends VfsError {
 }
 
 export function isDownstreamClosedError(error: unknown): error is DownstreamClosedError {
-  return error instanceof DownstreamClosedError
-    || (typeof error === "object" && error !== null && "downstreamClosed" in error
-      && error.downstreamClosed === true);
+  return (
+    error instanceof DownstreamClosedError ||
+    (typeof error === "object" &&
+      error !== null &&
+      "downstreamClosed" in error &&
+      error.downstreamClosed === true)
+  );
 }
 
 export interface BytePipe {
@@ -87,8 +91,8 @@ export function createBytePipe(options: BytePipeOptions): BytePipe {
   let cancelled: unknown;
   let pullWaiters: Array<() => void> = [];
 
-  const cancellationError = (): unknown => options.signal.reason
-    ?? new VfsError("ECANCELED", "execution was cancelled");
+  const cancellationError = (): unknown =>
+    options.signal.reason ?? new VfsError("ECANCELED", "execution was cancelled");
 
   function wakeWriters(): void {
     if (cancelled === undefined && (controller?.desiredSize ?? 0) <= 0) return;
@@ -97,28 +101,32 @@ export function createBytePipe(options: BytePipeOptions): BytePipe {
     for (const resolve of waiters) resolve();
   }
 
-  const readable = new ReadableStream<Uint8Array>({
-    start(value) {
-      controller = value;
+  const readable = new ReadableStream<Uint8Array>(
+    {
+      start(value) {
+        controller = value;
+      },
+      pull() {
+        wakeWriters();
+      },
+      cancel(reason) {
+        cancelled =
+          options.onConsumerCancel === undefined
+            ? new DownstreamClosedError(`${options.name} consumer closed early`)
+            : (reason ?? new VfsError("ECANCELED", `${options.name} consumer cancelled execution`));
+        if (options.onConsumerCancel !== undefined) {
+          const cancelExecution = options.onConsumerCancel;
+          const cancellation = cancelled;
+          void Promise.resolve().then(() => cancelExecution(cancellation));
+        }
+        wakeWriters();
+      },
     },
-    pull() {
-      wakeWriters();
+    {
+      highWaterMark: Math.min(options.maximumBytes, 64 * 1024),
+      size: (chunk) => chunk.byteLength,
     },
-    cancel(reason) {
-      cancelled = options.onConsumerCancel === undefined
-        ? new DownstreamClosedError(`${options.name} consumer closed early`)
-        : reason ?? new VfsError("ECANCELED", `${options.name} consumer cancelled execution`);
-      if (options.onConsumerCancel !== undefined) {
-        const cancelExecution = options.onConsumerCancel;
-        const cancellation = cancelled;
-        void Promise.resolve().then(() => cancelExecution(cancellation));
-      }
-      wakeWriters();
-    },
-  }, {
-    highWaterMark: Math.min(options.maximumBytes, 64 * 1024),
-    size: (chunk) => chunk.byteLength,
-  });
+  );
 
   const onAbort = (): void => {
     if (cancelled !== undefined) return;

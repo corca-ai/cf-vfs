@@ -31,18 +31,19 @@ function lineOperations(before: readonly string[], after: readonly string[]): Li
   const columns = after.length + 1;
   const cells = (before.length + 1) * columns;
   if (cells > MAX_LCS_CELLS) {
-    throw new VfsError("E2BIG", `diff requires ${cells} comparison cells; limit is ${MAX_LCS_CELLS}`);
+    throw new VfsError(
+      "E2BIG",
+      `diff requires ${cells} comparison cells; limit is ${MAX_LCS_CELLS}`,
+    );
   }
   const lengths = new Uint32Array(cells);
   for (let left = before.length - 1; left >= 0; left -= 1) {
     for (let right = after.length - 1; right >= 0; right -= 1) {
       const index = left * columns + right;
-      lengths[index] = lineAt(before, left) === lineAt(after, right)
-        ? cellAt(lengths, (left + 1) * columns + right + 1) + 1
-        : Math.max(
-            cellAt(lengths, (left + 1) * columns + right),
-            cellAt(lengths, index + 1),
-          );
+      lengths[index] =
+        lineAt(before, left) === lineAt(after, right)
+          ? cellAt(lengths, (left + 1) * columns + right + 1) + 1
+          : Math.max(cellAt(lengths, (left + 1) * columns + right), cellAt(lengths, index + 1));
     }
   }
 
@@ -60,10 +61,10 @@ function lineOperations(before: readonly string[], after: readonly string[]): Li
       left += 1;
       right += 1;
     } else if (
-      left < before.length
-      && (right >= after.length
-        || cellAt(lengths, (left + 1) * columns + right)
-          >= cellAt(lengths, left * columns + right + 1))
+      left < before.length &&
+      (right >= after.length ||
+        cellAt(lengths, (left + 1) * columns + right) >=
+          cellAt(lengths, left * columns + right + 1))
     ) {
       operations.push({
         kind: "delete",
@@ -121,9 +122,7 @@ export function renderLineDiff(from: string, to: string, diff: LineDiff): string
     if (!first) throw new Error("diff hunk cannot be empty");
     const deleted = changed.filter((operation) => operation.kind === "delete");
     const inserted = changed.filter((operation) => operation.kind === "insert");
-    output.push(
-      `@@ -${first.oldLine},${deleted.length} +${first.newLine},${inserted.length} @@\n`,
-    );
+    output.push(`@@ -${first.oldLine},${deleted.length} +${first.newLine},${inserted.length} @@\n`);
     for (const operation of changed) {
       if (operation.kind === "delete") output.push(prefixedLine("-", operation.text));
       if (operation.kind === "insert") output.push(prefixedLine("+", operation.text));

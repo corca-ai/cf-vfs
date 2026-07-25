@@ -149,7 +149,11 @@ export interface OpaqueObjectMetadata {
 }
 
 export interface OpaqueStore {
-  putIfAbsent(key: string, body: ByteBody, metadata?: { contentType?: string }): Promise<OpaqueObjectMetadata>;
+  putIfAbsent(
+    key: string,
+    body: ByteBody,
+    metadata?: { contentType?: string },
+  ): Promise<OpaqueObjectMetadata>;
   head(key: string): Promise<OpaqueObjectMetadata | null>;
   getStream(key: string, range?: ByteRange): Promise<ReadableStream<Uint8Array> | null>;
   delete(keys: string | readonly string[]): Promise<void>;
@@ -195,6 +199,13 @@ export interface VirtualFileSystem {
   listPage(path: string, options?: PageOptions): EntryPage;
   find(options: FindOptions): VfsStat[];
   findPage(options: FindOptions): EntryPage;
+  /**
+   * Counts the entries at and below `path`, including `path` itself, with one
+   * indexed range query. Unlike `find()` this materializes no `VfsStat` and has
+   * no result ceiling, so it stays correct and constant-cost for a subtree of
+   * any size.
+   */
+  countSubtree(path: string): number;
   readFile(path: string): InlineReadResult;
   writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult>;
   appendFile(path: string, body: ByteBody, options?: AppendFileOptions): Promise<WriteResult>;

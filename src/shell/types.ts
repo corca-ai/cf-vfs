@@ -1,4 +1,5 @@
 import type { VfsStat, VirtualFileSystem } from "../vfs/types.js";
+import type { ShellEventSink } from "./events.js";
 import type { FunctionDefinitionNode } from "./parser.js";
 
 export type ShellFileSystem = Pick<
@@ -9,6 +10,7 @@ export type ShellFileSystem = Pick<
   | "listPage"
   | "find"
   | "findPage"
+  | "countSubtree"
   | "readFile"
   | "writeFile"
   | "appendFile"
@@ -119,6 +121,13 @@ export interface ShellCommandContext {
     args: readonly string[],
     fds: ShellFileDescriptors,
   ): Promise<number>;
+  /**
+   * Runs one already-expanded command through the same registry, policy, and
+   * budget as an ordinary simple command. `argv` is never re-parsed, so a
+   * utility that builds an invocation from untrusted data cannot inject shell
+   * syntax. The invoked status does not request errexit on its own.
+   */
+  executeCommand(argv: readonly string[], fds: ShellFileDescriptors): Promise<number>;
 }
 
 export interface ShellProcess {
@@ -174,6 +183,11 @@ export interface ShellOptions {
   policy?: ShellPolicy;
   limits?: Partial<ShellLimits>;
   now?: () => number;
+  /**
+   * Observes bounded-execution events. Never invoked when omitted, and a
+   * throwing sink cannot change an exit status or mask an error.
+   */
+  onEvent?: ShellEventSink;
 }
 
 export interface ShellBudget {

@@ -34,7 +34,11 @@ try {
     "dist/testing/index.js",
     "dist/testing/node.js",
     "docs/index.md",
-  ]) assert(files.some((file) => file.path === path), `package is missing ${path}`);
+  ])
+    assert(
+      files.some((file) => file.path === path),
+      `package is missing ${path}`,
+    );
   for (const removed of [
     "dist/core/command.js",
     "dist/core/executor.js",
@@ -42,7 +46,8 @@ try {
     "dist/commands/index.js",
     "dist/testing/memory.js",
     "dist/vfs/memory.js",
-  ]) assert(!files.some((file) => file.path === removed), `package contains removed ${removed}`);
+  ])
+    assert(!files.some((file) => file.path === removed), `package contains removed ${removed}`);
   assert(!files.some(({ path }) => path.startsWith("src/")));
 
   await mkdir(consumerDirectory, { recursive: true });
@@ -63,7 +68,9 @@ try {
     ],
     { cwd: consumerDirectory },
   );
-  await writeFile(join(consumerDirectory, "probe.mjs"), `
+  await writeFile(
+    join(consumerDirectory, "probe.mjs"),
+    `
     import { MAX_INLINE_FILE_BYTES } from "@corca-ai/cf-vfs";
     import { Shell, BASH_COMPATIBILITY_VERSION, parseShellScript } from "@corca-ai/cf-vfs/shell";
     import { InteractiveShell } from "@corca-ai/cf-vfs/shell/interactive";
@@ -98,9 +105,12 @@ try {
     const interactiveResult = await interactive.runText({ script: "printf '%s' \\"$VALUE\\"" });
     if (interactiveResult.stdout !== "kept") throw new Error("interactive shell execution");
     fileSystem.close();
-  `);
+  `,
+  );
   await execFileAsync("node", ["probe.mjs"], { cwd: consumerDirectory });
-  await writeFile(join(consumerDirectory, "probe.ts"), `
+  await writeFile(
+    join(consumerDirectory, "probe.ts"),
+    `
     import {
       Shell,
       type ExecuteBytesResult,
@@ -132,19 +142,23 @@ try {
     void snapshot;
     void Promise.all([text, bytes, interactive.runText({ script: "true" })])
       .finally(() => fileSystem.close());
-  `);
-  await writeFile(join(consumerDirectory, "tsconfig.json"), JSON.stringify({
-    compilerOptions: {
-      target: "es2022",
-      module: "nodenext",
-      moduleResolution: "nodenext",
-      strict: true,
-      types: ["@cloudflare/workers-types", "node"],
-      skipLibCheck: true,
-      noEmit: true,
-    },
-    include: ["probe.ts"],
-  }));
+  `,
+  );
+  await writeFile(
+    join(consumerDirectory, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        target: "es2022",
+        module: "nodenext",
+        moduleResolution: "nodenext",
+        strict: true,
+        types: ["@cloudflare/workers-types", "node"],
+        skipLibCheck: true,
+        noEmit: true,
+      },
+      include: ["probe.ts"],
+    }),
+  );
   await execFileAsync("npx", ["tsc", "-p", "tsconfig.json"], { cwd: consumerDirectory });
 
   for (const hidden of [
@@ -155,7 +169,9 @@ try {
     await assert.rejects(import(hidden), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });
   }
 
-  const packageFiles = await readdir(join(consumerDirectory, "node_modules", "@corca-ai", "cf-vfs"));
+  const packageFiles = await readdir(
+    join(consumerDirectory, "node_modules", "@corca-ai", "cf-vfs"),
+  );
   assert(packageFiles.includes("dist"));
   assert(!packageFiles.includes("src"));
   console.log("package tarball, runtime/type consumers, and explicit exports verified");

@@ -26,16 +26,21 @@ npm run check
 ```
 
 The complete check generates binding types, builds ESM and declarations,
-typechecks, runs Node SQLite/workerd tests, verifies docs and the `CLAUDE.md`
-symlink, installs and typechecks the packed tarball in a temporary consumer,
-and checks the Wrangler tree-shaking fixtures. Performance benchmarks use the
-separate commands below.
+typechecks, lints and formats with Biome, runs Knip for unreachable code and
+dependency drift, runs Node SQLite/workerd tests, verifies docs and the
+`CLAUDE.md` symlink, installs and typechecks the packed tarball in a temporary
+consumer, and checks the Wrangler tree-shaking fixtures. Performance benchmarks
+use the separate commands below.
 
 Useful focused commands:
 
 ```sh
 npm run build
 npm run typecheck
+npm run lint
+npm run lint:fix
+npm run format
+npm run knip
 npm test
 npm run test:docs
 npm run test:package
@@ -56,6 +61,19 @@ also be started manually. The remote commands exercise the separately deployed,
 token-protected benchmark Worker at `vfs.borca.ai`; see
 [the deployed benchmark notes](performance.md#deployed-benchmark) before
 deploying or rotating its secret.
+
+`biome.jsonc` turns off two recommended rules deliberately.
+`noTemplateCurlyInString` fires on the `${...}` Bash syntax the parser,
+expander, and their tests match as ordinary strings, and `useLiteralKeys`
+contradicts `noPropertyAccessFromIndexSignature` in `tsconfig.json`. Test
+fixtures are excluded from formatting because they pin exact Bash-observable
+strings.
+
+`knip.jsonc` treats every subpath in the package `exports` map as an entry
+point, so anything a consumer can import is reachable by definition and only
+genuinely dead code is reported. Adding a subpath means adding it to both
+files. Unused *type* exports are warnings rather than errors: a library
+legitimately publishes types this repository never imports.
 
 ## Changing the VFS
 
@@ -133,7 +151,10 @@ not add regular expressions or pathname glob scans inside a conditional.
 Keep source byte offsets linear-time: reuse the lexer's sparse UTF-8 byte-offset
 checkpoints and preserve parser deadline checks. Re-encoding
 `source.slice(0, offset)` per token makes a bounded near-limit script
-quadratic.
+quadratic. The linear scan is the real protection here: parsing performs no
+I/O, so on Workers its deadline checks may observe a frozen `Date.now()` and
+never fire. Never let a deadline check stand in for a count-based bound — see
+[the deadline note](operations.md#execution-budgets).
 
 Regenerate the fixture only after reviewing the semantic change:
 
@@ -184,6 +205,13 @@ category implementations under `src/shell/commands`; use a dedicated module
 when consumers should import one command without pulling siblings. Export the
 command from `shell/commands`, and add it to `defaultShellCommands` only when it
 belongs in the convenience preset.
+
+A utility that invokes another command must use
+`ShellCommandContext.executeCommand(argv, fds)`, never a generated source
+string. It dispatches an already-expanded argv through the same registry,
+allowlist, and budgets, so untrusted data cannot become shell syntax, and it
+charges the command budget so a dispatching utility cannot escape it. Reserve
+`executeSource` for `source` and `.`, which genuinely parse a file.
 
 Use byte streams incrementally unless the operation has a semantic barrier.
 Text operations use the shared fatal incremental decoder and line/record

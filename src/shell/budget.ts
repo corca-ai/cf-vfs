@@ -1,4 +1,5 @@
-import { VfsError } from "../core/errors.js";
+import { VfsError, type VfsErrorCode } from "../core/errors.js";
+import { emitShellEvent, type ShellEventSink } from "./events.js";
 import type { ShellBudget, ShellLimits } from "./types.js";
 
 export const MAX_PIPELINE_EDGE_BYTES = 8 * 1024 * 1024;
@@ -42,10 +43,7 @@ export function resolveShellLimits(input: Partial<ShellLimits> = {}): ShellLimit
   const limits = { ...DEFAULT_SHELL_LIMITS, ...input };
   for (const [name, value] of Object.entries(limits)) positive(value, name);
   if (limits.maxPipelineBytes > MAX_PIPELINE_EDGE_BYTES) {
-    throw new VfsError(
-      "EINVAL",
-      `maxPipelineBytes cannot exceed ${MAX_PIPELINE_EDGE_BYTES}`,
-    );
+    throw new VfsError("EINVAL", `maxPipelineBytes cannot exceed ${MAX_PIPELINE_EDGE_BYTES}`);
   }
   return limits;
 }
@@ -54,26 +52,49 @@ export class ExecutionBudget implements ShellBudget {
   readonly limits: ShellLimits;
   private readonly startedAtMs: number;
   private readonly now: () => number;
+  private readonly onEvent: ShellEventSink | undefined;
   private steps = 0;
   private commands = 0;
   private loopIterations = 0;
   private ioBytes = 0;
   private mutations = 0;
   private globMatches = 0;
-  private expansionWorkUnits = 0;
   private expansionCharacters = 0;
   private expansionFields = 0;
+  private expansionWorkUnits = 0;
   private bufferedBytes = 0;
 
-  constructor(limits: ShellLimits, now: () => number) {
+  constructor(limits: ShellLimits, now: () => number, onEvent?: ShellEventSink) {
     this.limits = limits;
     this.now = now;
+    this.onEvent = onEvent;
     this.startedAtMs = now();
   }
 
+  /** Reports the limit that refused work, then fails. */
+  private exceeded(
+    limit: keyof ShellLimits,
+    used: number,
+    code: VfsErrorCode,
+    message: string,
+  ): never {
+    emitShellEvent(this.onEvent, {
+      type: "shell.limit",
+      limit,
+      used,
+      max: this.limits[limit],
+    });
+    throw new VfsError(code, message);
+  }
+
+  elapsedMs(): number {
+    return this.now() - this.startedAtMs;
+  }
+
   checkDeadline(): void {
-    if (this.now() - this.startedAtMs > this.limits.deadlineMs) {
-      throw new VfsError("ETIMEDOUT", "shell execution deadline exceeded");
+    const elapsed = this.elapsedMs();
+    if (elapsed > this.limits.deadlineMs) {
+      this.exceeded("deadlineMs", elapsed, "ETIMEDOUT", "shell execution deadline exceeded");
     }
   }
 
@@ -85,7 +106,7 @@ export class ExecutionBudget implements ShellBudget {
     this.checkDeadline();
     this.steps += count;
     if (this.steps > this.limits.maxSteps) {
-      throw new VfsError("E2BIG", "shell execution step limit exceeded");
+      this.exceeded("maxSteps", this.steps, "E2BIG", "shell execution step limit exceeded");
     }
   }
 
@@ -93,7 +114,7 @@ export class ExecutionBudget implements ShellBudget {
     this.step();
     this.commands += 1;
     if (this.commands > this.limits.maxCommands) {
-      throw new VfsError("E2BIG", "shell command limit exceeded");
+      this.exceeded("maxCommands", this.commands, "E2BIG", "shell command limit exceeded");
     }
   }
 
@@ -101,7 +122,12 @@ export class ExecutionBudget implements ShellBudget {
     this.step();
     this.loopIterations += 1;
     if (this.loopIterations > this.limits.maxLoopIterations) {
-      throw new VfsError("E2BIG", "shell loop iteration limit exceeded");
+      this.exceeded(
+        "maxLoopIterations",
+        this.loopIterations,
+        "E2BIG",
+        "shell loop iteration limit exceeded",
+      );
     }
   }
 
@@ -109,7 +135,12 @@ export class ExecutionBudget implements ShellBudget {
     this.checkDeadline();
     this.ioBytes += bytes;
     if (this.ioBytes > this.limits.maxTotalIoBytes) {
-      throw new VfsError("E2BIG", "shell total I/O byte limit exceeded");
+      this.exceeded(
+        "maxTotalIoBytes",
+        this.ioBytes,
+        "E2BIG",
+        "shell total I/O byte limit exceeded",
+      );
     }
   }
 
@@ -117,7 +148,12 @@ export class ExecutionBudget implements ShellBudget {
     this.checkDeadline();
     this.mutations += count;
     if (this.mutations > this.limits.maxMutations) {
-      throw new VfsError("E2BIG", "shell filesystem mutation limit exceeded");
+      this.exceeded(
+        "maxMutations",
+        this.mutations,
+        "E2BIG",
+        "shell filesystem mutation limit exceeded",
+      );
     }
   }
 
@@ -125,7 +161,12 @@ export class ExecutionBudget implements ShellBudget {
     this.checkDeadline();
     this.globMatches += count;
     if (this.globMatches > this.limits.maxGlobMatches) {
-      throw new VfsError("E2BIG", "pathname expansion match limit exceeded");
+      this.exceeded(
+        "maxGlobMatches",
+        this.globMatches,
+        "E2BIG",
+        "pathname expansion match limit exceeded",
+      );
     }
   }
 
@@ -133,17 +174,32 @@ export class ExecutionBudget implements ShellBudget {
     this.checkDeadline();
     this.expansionWorkUnits += count;
     if (this.expansionWorkUnits > this.limits.maxExpansionWork) {
-      throw new VfsError("E2BIG", "shell expansion work limit exceeded");
+      this.exceeded(
+        "maxExpansionWork",
+        this.expansionWorkUnits,
+        "E2BIG",
+        "shell expansion work limit exceeded",
+      );
     }
   }
 
   checkExpansionOutput(characters: number, fields = 1): void {
     this.checkDeadline();
     if (this.expansionCharacters + characters > this.limits.maxExpansionChars) {
-      throw new VfsError("E2BIG", "shell expansion character limit exceeded");
+      this.exceeded(
+        "maxExpansionChars",
+        this.expansionCharacters + characters,
+        "E2BIG",
+        "shell expansion character limit exceeded",
+      );
     }
     if (this.expansionFields + fields > this.limits.maxExpansionFields) {
-      throw new VfsError("E2BIG", "shell expansion field limit exceeded");
+      this.exceeded(
+        "maxExpansionFields",
+        this.expansionFields + fields,
+        "E2BIG",
+        "shell expansion field limit exceeded",
+      );
     }
   }
 
@@ -157,8 +213,9 @@ export class ExecutionBudget implements ShellBudget {
     this.checkDeadline();
     this.bufferedBytes += bytes;
     if (this.bufferedBytes > this.limits.maxBufferedBytes) {
+      const attempted = this.bufferedBytes;
       this.bufferedBytes -= bytes;
-      throw new VfsError("E2BIG", "shell buffered-byte limit exceeded");
+      this.exceeded("maxBufferedBytes", attempted, "E2BIG", "shell buffered-byte limit exceeded");
     }
     let released = false;
     return () => {

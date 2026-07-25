@@ -1,9 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import {
   RemoteBenchmarkHarness,
-  runRemoteBenchmark,
   type RemoteBenchmarkProfile,
   type RemoteBenchmarkResult,
+  runRemoteBenchmark,
 } from "./remote-suite.js";
 
 interface BenchmarkResponse extends RemoteBenchmarkResult {
@@ -43,9 +43,7 @@ function json(value: unknown, init: ResponseInit = {}): Response {
 
 async function authorized(request: Request, expected: string): Promise<boolean> {
   const authorization = request.headers.get("Authorization") ?? "";
-  const provided = authorization.startsWith("Bearer ")
-    ? authorization.slice("Bearer ".length)
-    : "";
+  const provided = authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
   const encoder = new TextEncoder();
   const [providedHash, expectedHash] = await Promise.all([
     crypto.subtle.digest("SHA-256", encoder.encode(provided)),
@@ -133,10 +131,7 @@ export class VfsBenchmark extends DurableObject<VfsBenchmarkEnv> {
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
-    if (
-      request.method === "GET"
-      && (url.pathname === "/" || url.pathname === "/health")
-    ) {
+    if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/health")) {
       return json({
         ok: true,
         service: "cf-vfs-benchmark",
@@ -147,10 +142,7 @@ export default {
       return json({ error: "Not found" }, { status: 404 });
     }
     if (request.method !== "POST") {
-      return json(
-        { error: "Method not allowed" },
-        { status: 405, headers: { Allow: "POST" } },
-      );
+      return json({ error: "Method not allowed" }, { status: 405, headers: { Allow: "POST" } });
     }
     if (!(await authorized(request, env.BENCHMARK_TOKEN))) {
       return json(
@@ -160,10 +152,7 @@ export default {
     }
     const profile = profileFrom(url);
     if (profile === null) {
-      return json(
-        { error: "profile must be quick or full" },
-        { status: 400 },
-      );
+      return json({ error: "profile must be quick or full" }, { status: 400 });
     }
 
     const started = performance.now();
@@ -178,29 +167,33 @@ export default {
           rpcMs: Number((performance.now() - started).toFixed(6)),
         },
       };
-      console.log(JSON.stringify({
-        message: "benchmark completed",
-        profile,
-        colo: response.edge.colo,
-        rpcMs: response.edge.rpcMs,
-      }));
+      console.log(
+        JSON.stringify({
+          message: "benchmark completed",
+          profile,
+          colo: response.edge.colo,
+          rpcMs: response.edge.rpcMs,
+        }),
+      );
       return json(response);
     } catch (error) {
       try {
         await stub.cleanup();
       } catch (cleanupError) {
-        console.error(JSON.stringify({
-          message: "benchmark cleanup failed",
-          error: cleanupError instanceof Error
-            ? cleanupError.message
-            : String(cleanupError),
-        }));
+        console.error(
+          JSON.stringify({
+            message: "benchmark cleanup failed",
+            error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+          }),
+        );
       }
-      console.error(JSON.stringify({
-        message: "benchmark failed",
-        profile,
-        error: error instanceof Error ? error.message : String(error),
-      }));
+      console.error(
+        JSON.stringify({
+          message: "benchmark failed",
+          profile,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
       return json({ error: "Benchmark failed" }, { status: 500 });
     }
   },

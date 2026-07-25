@@ -108,6 +108,28 @@ re-encoding every source prefix at each token, and checks the shared deadline
 while building them. Sourced units use the same execution deadline and
 cumulative parser budgets.
 
+The deadline is the one limit in this table that depends on a wall clock, and
+on Workers a wall clock is not what it appears to be. Production Workers freeze
+`Date.now()` between I/O events, so an execution that performs no I/O — a
+script working only against SQLite-backed inline files, for example — can run
+without ever observing elapsed time. Every synchronous deadline check inside
+such an execution then passes regardless of how long it has actually taken.
+
+Two mechanisms carry the guarantee instead. A `setTimeout` armed for the
+remaining deadline aborts the execution on real elapsed time, independently of
+what `Date.now()` reports; it needs the execution to reach a suspension point,
+which ordinary command, pipeline, and stream work provides. Underneath that,
+the count-based limits — steps, commands, loop iterations, AST nodes, nesting
+depth, expansion work, glob matches, and every byte budget — bound the work a
+single unit can do with no reference to time at all. They, not the deadline,
+are what makes an uninterrupted synchronous stretch finite.
+
+Treat the deadline as a bound on wall-clock latency, not as the primitive that
+makes execution finite. Supply `now` in `ShellOptions` when the application has
+a clock it trusts more, and lower the count-based limits when a workload needs
+a tighter guarantee than a timer can express. Local workerd does not reproduce
+the production freeze, so tests cannot detect a dependence on it.
+
 `read -r` consumes fd 0 with a fatal streaming UTF-8 decoder. It retains at
 most the unread suffix of one upstream chunk plus one decoded line under the
 shared buffered-byte budget, applies the one-line and total-I/O limits, and
@@ -131,6 +153,79 @@ bytes without duplicating them as strings. Prefer
 `executeStream()` in-process or `executeTo()` across RPC when the consumer can
 stream.
 
+## Observability
+
+`VirtualFileSystem` and `Shell` each accept an optional `onEvent` sink.
+`ShellDurableObject` exposes one hook for both:
+
+```ts
+export class WorkspaceFiles extends ShellDurableObject<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env, {
+      commands: defaultShellCommands,
+      onEvent: (event) => console.log(JSON.stringify({ workspace: ctx.id.toString(), ...event })),
+    });
+  }
+}
+```
+
+| Event | Emitted when | Carries |
+| --- | --- | --- |
+| `vfs.quota` | a storage limit refused work | `limit`, `used`, `max`, optional `requested`/`path` |
+| `vfs.usage` | a mutation committed | `inlineBytes`, `entries` |
+| `vfs.opaque-upload` | a session reached `begin`, `commit`, `abort`, `expire`, or `reject` | `uploadId`, `objectKey`, `path`, optional `reason` |
+| `vfs.garbage` | a GC batch settled | `deleted`, `remaining`, `failed` |
+| `shell.limit` | an execution limit refused work | `limit`, `used`, `max` |
+| `shell.command` | a utility or function finished | `name`, `exitCode` |
+| `shell.execution` | a submitted unit finished | `exitCode`, `durationMs`, optional `failureCode` |
+
+`shell.limit` covers every limit `ExecutionBudget` owns — steps, commands, loop
+iterations, total I/O, mutations, glob matches, expansion work, expansion
+characters and fields, buffered bytes, and the deadline — plus the output idle
+timeout. Limits enforced by the parser and the output pipes do not emit a
+per-limit event; they surface through `shell.execution.failureCode` instead.
+
+Three properties are contractual. The sink is never invoked when omitted, and
+the filesystem additionally skips the usage query that would feed `vfs.usage`,
+so an unobserved workspace pays nothing. A throwing sink cannot change
+behavior: its failure is discarded rather than rolling back a transaction,
+altering an exit status, or masking the error the caller is about to receive.
+And `vfs.usage` is reported only after its transaction commits, so a rolled-back
+mutation never reports usage it did not apply.
+
+`shell.command` is one event per command; sample or filter it under load.
+Cloudflare bills SQLite rows read/written and stored data, so pair these events
+with platform analytics for deployed workloads.
+
+## Errors and the RPC boundary
+
+Every failure this package raises is a `VfsError` carrying a `code` from
+`VFS_ERROR_CODES` and, where a path is meaningful, a normalized `path`.
+Discriminate with the exported `isVfsError()` rather than `instanceof`:
+
+```ts
+import { isVfsError } from "@corca-ai/cf-vfs";
+
+try {
+  await workspace.stat(path);
+} catch (error) {
+  if (isVfsError(error) && error.code === "ENOENT") return null;
+  throw error;
+}
+```
+
+Workers RPC rebuilds a thrown error at the caller as a plain `Error`. The own
+properties — `name`, `code`, `path`, `message` — survive, but the prototype does
+not, so `error instanceof VfsError` is `false` for every failure observed
+through a `VfsDurableObject` or `ShellDurableObject` stub. `isVfsError()` matches
+the tagged name and a recognized code, so it holds on both sides of that
+boundary; a bare `Error`, a plain object, and an unrecognized code are all
+rejected. Never branch on `error.message`: message text is not a contract.
+
+A non-zero shell exit status is not an error. `executeText()`, `executeBytes()`,
+and `executeTo()` resolve with the status; they reject only for a limit,
+deadline, cancellation, invalid RPC argument, or runtime invariant failure.
+
 ## Inline storage controls
 
 Inline bodies are arbitrary bytes with an absolute 8 MiB per-file ceiling.
@@ -149,8 +244,8 @@ not mutate the file. `SQLITE_FULL` and proactive headroom exhaustion surface as
 
 Monitor logical inline bytes, entries, `storage.sql.databaseSize`, quota
 failures, stream-limit failures, deadline/idle cancellations, and per-command
-status. Cloudflare bills SQLite rows read/written and stored data, so also use
-platform analytics for deployed workloads.
+status. The `onEvent` hook above reports all of these except `databaseSize`,
+which the application reads directly.
 
 ## Opaque upload trust boundary
 
@@ -195,7 +290,10 @@ reset to the earliest open expiry, verification lease, retention deadline, or
 retry. Operations are idempotent and survive object eviction.
 
 Alert on old `open`/`verifying` sessions, growing GC depth, repeated delete
-attempts, R2 `HEAD` mismatch/missing objects, and database headroom. An opaque
+attempts, R2 `HEAD` mismatch/missing objects, and database headroom. The
+`vfs.opaque-upload` and `vfs.garbage` events carry each of these: an `expire`
+or `reject` phase names the failure in `reason`, and `vfs.garbage.remaining` is
+the live queue depth. An opaque
 namespace entry whose R2 body is missing is `EIO`; repair or remove it rather
 than silently treating it as empty.
 

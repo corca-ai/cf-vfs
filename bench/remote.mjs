@@ -43,9 +43,9 @@ function atPath(value, path) {
 
 function checkResult(result, baseline) {
   if (
-    result.schemaVersion !== baseline.schemaVersion
-    || result.profile !== baseline.profile
-    || result.timing !== baseline.timing
+    result.schemaVersion !== baseline.schemaVersion ||
+    result.profile !== baseline.profile ||
+    result.timing !== baseline.timing
   ) {
     throw new Error(
       "remote benchmark result schema, profile, or timing model does not match baseline",
@@ -98,9 +98,7 @@ function checkResult(result, baseline) {
     const expected = atPath(baseline, path);
     const ceiling = Math.max(expected * 3, expected + 2);
     if (actual > ceiling) {
-      failures.push(
-        `${path}: ${actual.toFixed(3)}ms exceeds ${ceiling.toFixed(3)}ms ceiling`,
-      );
+      failures.push(`${path}: ${actual.toFixed(3)}ms exceeds ${ceiling.toFixed(3)}ms ceiling`);
     }
   }
   if (failures.length > 0) {
@@ -128,30 +126,34 @@ async function requestBenchmark(endpoint, token, timeoutMs) {
     throw new Error("CF_VFS_BENCHMARK_RESOLVE must be an IPv4 or IPv6 address");
   }
   return new Promise((resolve, reject) => {
-    const request = httpsRequest(endpoint, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      lookup(_hostname, options, callback) {
-        if (typeof options === "object" && options.all === true) {
-          callback(null, [{ address: resolveAddress, family }]);
-        } else {
-          callback(null, resolveAddress, family);
-        }
+    const request = httpsRequest(
+      endpoint,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        lookup(_hostname, options, callback) {
+          if (typeof options === "object" && options.all === true) {
+            callback(null, [{ address: resolveAddress, family }]);
+          } else {
+            callback(null, resolveAddress, family);
+          }
+        },
       },
-    }, (response) => {
-      response.setEncoding("utf8");
-      let body = "";
-      response.on("data", (chunk) => {
-        body += chunk;
-        if (body.length > 1024 * 1024) {
-          request.destroy(new Error("benchmark response exceeded 1 MiB"));
-        }
-      });
-      response.on("end", () => {
-        const status = response.statusCode ?? 0;
-        resolve({ ok: status >= 200 && status < 300, status, body });
-      });
-    });
+      (response) => {
+        response.setEncoding("utf8");
+        let body = "";
+        response.on("data", (chunk) => {
+          body += chunk;
+          if (body.length > 1024 * 1024) {
+            request.destroy(new Error("benchmark response exceeded 1 MiB"));
+          }
+        });
+        response.on("end", () => {
+          const status = response.statusCode ?? 0;
+          resolve({ ok: status >= 200 && status < 300, status, body });
+        });
+      },
+    );
     request.setTimeout(timeoutMs, () => {
       request.destroy(new Error(`benchmark request exceeded ${timeoutMs}ms`));
     });
@@ -166,19 +168,13 @@ if (profile !== "quick" && profile !== "full") {
 }
 const endpoint = new URL("/benchmark", process.env.CF_VFS_BENCHMARK_URL ?? DEFAULT_URL);
 endpoint.searchParams.set("profile", profile);
-const token = process.env.CF_VFS_BENCHMARK_TOKEN ?? await localToken();
+const token = process.env.CF_VFS_BENCHMARK_TOKEN ?? (await localToken());
 if (token === undefined || token.length === 0) {
-  throw new Error(
-    "set CF_VFS_BENCHMARK_TOKEN or create ignored .dev.vars.benchmark",
-  );
+  throw new Error("set CF_VFS_BENCHMARK_TOKEN or create ignored .dev.vars.benchmark");
 }
 
 const started = performance.now();
-const response = await requestBenchmark(
-  endpoint,
-  token,
-  profile === "full" ? 300_000 : 120_000,
-);
+const response = await requestBenchmark(endpoint, token, profile === "full" ? 300_000 : 120_000);
 const body = response.body;
 if (!response.ok) {
   throw new Error(`benchmark request failed (${response.status}): ${body}`);

@@ -1,4 +1,4 @@
-import { parseBracketExpression, type BracketExpression } from "./bracket.js";
+import { type BracketExpression, parseBracketExpression } from "./bracket.js";
 
 function escapeRegex(character: string): string {
   return /[\\^$.*+?()[\]{}|]/.test(character) ? `\\${character}` : character;
@@ -6,11 +6,13 @@ function escapeRegex(character: string): string {
 
 function bracketRegex(expression: BracketExpression): string {
   if (expression.ranges.length === 0) return expression.negated ? "[^/]" : "(?!)";
-  const body = expression.ranges.map(([start, end]) => {
-    const left = `\\u{${start.toString(16)}}`;
-    const right = `\\u{${end.toString(16)}}`;
-    return start === end ? left : `${left}-${right}`;
-  }).join("");
+  const body = expression.ranges
+    .map(([start, end]) => {
+      const left = `\\u{${start.toString(16)}}`;
+      const right = `\\u{${end.toString(16)}}`;
+      return start === end ? left : `${left}-${right}`;
+    })
+    .join("");
   return `(?=[^/])[${expression.negated ? "^" : ""}${body}]`;
 }
 

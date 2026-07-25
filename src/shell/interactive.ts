@@ -1,9 +1,6 @@
 import { VfsError } from "../core/errors.js";
 import { DEFAULT_SHELL_LIMITS } from "./budget.js";
-import {
-  isIncompleteShellSyntaxError,
-  parseShellScript,
-} from "./parser.js";
+import { isIncompleteShellSyntaxError, parseShellScript } from "./parser.js";
 import { createShellSession, prepareShellSessionUnit } from "./session.js";
 import { Shell } from "./shell.js";
 import type {
@@ -23,19 +20,13 @@ export interface InteractiveShellOptions extends ShellOptions {
   args?: readonly string[];
 }
 
-export type InteractiveExecuteStreamOptions = Omit<
-  ExecuteStreamOptions,
-  "cwd" | "env" | "args"
->;
+export type InteractiveExecuteStreamOptions = Omit<ExecuteStreamOptions, "cwd" | "env" | "args">;
 
-export type InteractiveExecuteTextOptions = Omit<
-  ExecuteTextOptions,
-  "cwd" | "env" | "args"
->;
+export type InteractiveExecuteTextOptions = Omit<ExecuteTextOptions, "cwd" | "env" | "args">;
 
-function interactiveUnitOptions<
-  Options extends ExecuteStreamOptions | ExecuteTextOptions,
->(options: Options): Omit<Options, "cwd" | "env" | "args"> {
+function interactiveUnitOptions<Options extends ExecuteStreamOptions | ExecuteTextOptions>(
+  options: Options,
+): Omit<Options, "cwd" | "env" | "args"> {
   const { cwd, env, args, ...unitOptions } = options;
   if (cwd !== undefined || env !== undefined || args !== undefined) {
     throw new VfsError(
@@ -153,7 +144,6 @@ export class InteractiveShell extends Shell {
     this.closed ||= this.session.exitRequested;
     this.active = false;
   }
-
 }
 
 export interface InteractiveInputBufferOptions {
@@ -165,7 +155,7 @@ export type InteractiveInputResult =
   | { readonly status: "ready"; readonly source: string };
 
 function hasTrailingLineContinuation(line: string): boolean {
-  let quote: "'" | "\"" | undefined;
+  let quote: "'" | '"' | undefined;
   let boundary = true;
   for (let index = 0; index < line.length; index += 1) {
     const character = line[index];
@@ -179,18 +169,21 @@ function hasTrailingLineContinuation(line: string): boolean {
       boundary = false;
       continue;
     }
-    if (quote === "\"") {
-      if (character === "\"") quote = undefined;
+    if (quote === '"') {
+      if (character === '"') quote = undefined;
       continue;
     }
-    if (character === "'" || character === "\"") {
+    if (character === "'" || character === '"') {
       quote = character;
       boundary = false;
       continue;
     }
     if (character === "#" && boundary) return false;
-    boundary = character === " " || character === "\t" || character === "\r"
-      || ";\n|&<>(){}".includes(character ?? "");
+    boundary =
+      character === " " ||
+      character === "\t" ||
+      character === "\r" ||
+      ";\n|&<>(){}".includes(character ?? "");
   }
   return false;
 }
@@ -202,8 +195,7 @@ export class InteractiveInputBuffer {
 
   constructor(options: InteractiveInputBufferOptions = {}) {
     this.maximumNodes = options.limits?.maxAstNodes ?? DEFAULT_SHELL_LIMITS.maxAstNodes;
-    this.maximumDepth = options.limits?.maxNestingDepth
-      ?? DEFAULT_SHELL_LIMITS.maxNestingDepth;
+    this.maximumDepth = options.limits?.maxNestingDepth ?? DEFAULT_SHELL_LIMITS.maxNestingDepth;
   }
 
   get hasPendingSource(): boolean {

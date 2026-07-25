@@ -9,7 +9,7 @@ import type {
 } from "../../src/shell/types.js";
 import type { NodeSqlFileSystem } from "../../src/testing/node.js";
 import { readAllBytes } from "../../src/vfs/streams.js";
-import { MAX_INLINE_FILE_BYTES, type ByteBody } from "../../src/vfs/types.js";
+import { type ByteBody, MAX_INLINE_FILE_BYTES } from "../../src/vfs/types.js";
 import { createTestFileSystem } from "./node-sql.js";
 
 export type BashSource = string | readonly string[];
@@ -37,12 +37,13 @@ interface BashCaseBase extends Omit<ExecuteTextOptions, "script"> {
   missingFiles?: readonly string[];
 }
 
-export type BashCase = BashCaseBase & (
-  | { stderr?: string; stderrIncludes?: never }
-  | { stderr?: never; stderrIncludes: string | readonly string[] }
-);
+export type BashCase = BashCaseBase &
+  (
+    | { stderr?: string; stderrIncludes?: never }
+    | { stderr?: never; stderrIncludes: string | readonly string[] }
+  );
 
-export function commandList(...commands: readonly string[]): string {
+function commandList(...commands: readonly string[]): string {
   return commands.join(";\n");
 }
 
@@ -102,9 +103,10 @@ export function bashCases(cases: readonly BashCase[]): void {
       if (specification.stderrIncludes === undefined) {
         expect(result.stderr).toBe(specification.stderr ?? "");
       } else {
-        const fragments = typeof specification.stderrIncludes === "string"
-          ? [specification.stderrIncludes]
-          : specification.stderrIncludes;
+        const fragments =
+          typeof specification.stderrIncludes === "string"
+            ? [specification.stderrIncludes]
+            : specification.stderrIncludes;
         for (const fragment of fragments) expect(result.stderr).toContain(fragment);
       }
       for (const [path, expected] of Object.entries(specification.expectedFiles ?? {})) {
