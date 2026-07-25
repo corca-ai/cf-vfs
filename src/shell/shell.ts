@@ -1543,6 +1543,7 @@ async function runScript(
 
 export class Shell {
   private readonly commands: AppletRegistry;
+  #appletListing: readonly string[] | undefined;
   private readonly pathLookup: boolean;
   private readonly fileSystem: ShellOptions["fileSystem"];
   private readonly policy: ShellPolicy;
@@ -1637,24 +1638,37 @@ export class Shell {
    * no rows — a row there could be removed while `/bin/cat` kept working —
    * which is why they are reserved here instead of provisioned.
    */
-  #reservedView(budget: ExecutionBudget, names: readonly string[]): ShellFileSystem {
-    const directory = APPLET_DIRECTORIES[0] ?? "/bin";
-    const listed = names.filter(
-      (name) =>
-        // Only names that resolve as a path belong in the listing, which is
-        // what keeps a session-built-in like `cd` from appearing as
-        // `/bin/cd` and then failing with 127.
-        this.commands.findPath(`${directory}/${name}`) !== undefined &&
-        // And only names that survive being written as one. `.` is a real
-        // applet, but `/bin/.` normalizes back to `/bin`, so listing it would
-        // put the directory inside itself.
-        name !== "." &&
-        name !== ".." &&
-        !name.includes("/"),
-    );
+  #reservedView(budget: ExecutionBudget): ShellFileSystem {
+    this.#appletListing ??= this.#buildAppletListing();
     return new ReservedPathFileSystem(new ScopedFileSystem(this.fileSystem, this.policy, budget), {
-      applets: { directories: APPLET_DIRECTORIES, names: listed },
+      applets: { directories: APPLET_DIRECTORIES, names: this.#appletListing },
     });
+  }
+
+  /**
+   * The applet directory listing, which depends only on the registry and the
+   * policy and so is computed once rather than per execution.
+   *
+   * Session functions are deliberately not an input: a function is not a
+   * program, so it has no path form and the filter below would drop it anyway.
+   */
+  #buildAppletListing(): readonly string[] {
+    const directory = APPLET_DIRECTORIES[0] ?? "/bin";
+    const allowed = this.policy.allowedCommands;
+    const listed: string[] = [];
+    for (const name of this.commands.names()) {
+      if (allowed !== undefined && !allowed.includes(name)) continue;
+      // Only names that resolve as a path belong in the listing, which is what
+      // keeps a session-built-in like `cd` from appearing as `/bin/cd` and
+      // then failing with 127.
+      if (this.commands.findPath(`${directory}/${name}`) === undefined) continue;
+      // And only names that survive being written as one. `.` is a real
+      // applet, but `/bin/.` normalizes back to `/bin`, so listing it would
+      // put the directory inside itself.
+      if (name === "." || name === ".." || name.includes("/")) continue;
+      listed.push(name);
+    }
+    return listed.sort();
   }
 
   protected completionSource(session: ShellSession): {
@@ -1667,7 +1681,7 @@ export class Shell {
     // any applet does.
     const names = this.#runnableNames(new Set(session.functions.keys()));
     return {
-      fileSystem: this.#reservedView(budget, names),
+      fileSystem: this.#reservedView(budget),
       commands: names,
       // An absolute applet path resolves before any PATH search, so these
       // spell a runnable command whether or not PATH lookup is enabled.
@@ -1708,7 +1722,7 @@ export class Shell {
     // execution. None of them can name anything the roots protect, so
     // requiring `/dev` in a session's roots would break `> /dev/null` for
     // every scoped caller while preventing nothing.
-    const scoped = this.#reservedView(budget, this.#runnableNames(new Set()));
+    const scoped = this.#reservedView(budget);
     // The reader a host supplies is built over the unscoped filesystem, which
     // is where the lease lives; a session's copy carries the session's roots.
     const content =
