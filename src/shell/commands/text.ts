@@ -17,7 +17,6 @@ import {
   collectStream,
   collectText,
   commandPath,
-  contentInputs,
   inputStreams,
   inputTexts,
   parseInteger,
@@ -369,7 +368,7 @@ export const grepCommand = /* @__PURE__ */ defineApplet(GREP, async (context, ar
 
   const sources = recursive
     ? recursiveInputs(context, values)
-    : contentInputs(context, values, fds[0]);
+    : inputStreams(context, values, fds[0]);
   // The name is shown when more than one file can be searched. Under `-r` that
   // means a directory operand — `grep -r pattern one.txt` prints bare lines,
   // exactly as the non-recursive form does.
@@ -570,7 +569,7 @@ export const headCommand = /* @__PURE__ */ defineApplet(HEAD, async (context, ar
   // ranges gives the same answer for more bytes.
   const wanted: ByteRange | undefined =
     options.bytes && options.count > 0 ? { offset: 0, length: options.count } : undefined;
-  for await (const input of contentInputs(context, options.paths, fds[0], wanted)) {
+  for await (const input of inputStreams(context, options.paths, fds[0], wanted)) {
     if (options.bytes) {
       await headBytes(input.stream);
       continue;
@@ -617,7 +616,7 @@ export const wcCommand = /* @__PURE__ */ defineApplet(WC, async (context, argv, 
   const linesOnly = parsed.options.some((option) => option.name === "lines");
   const wordsOnly = parsed.options.some((option) => option.name === "words");
   const bytesOnly = parsed.options.some((option) => option.name === "bytes");
-  for await (const input of contentInputs(context, parsed.operands, fds[0])) {
+  for await (const input of inputStreams(context, parsed.operands, fds[0])) {
     const reader = input.stream.getReader();
     const decoder = new TextDecoder("utf-8", { fatal: true });
     let lineCount = 0;

@@ -96,59 +96,44 @@ export async function* inputStreams(
   context: ShellCommandContext,
   argv: readonly string[],
   stdin: ReadableStream<Uint8Array>,
-): AsyncGenerator<{ name: string; stream: ReadableStream<Uint8Array> }> {
-  if (argv.length === 0) {
-    yield { name: "-", stream: stdin };
-    return;
-  }
-  for (const path of argv) {
-    if (path === "-") yield { name: "-", stream: stdin };
-    else yield { name: path, stream: readFile(context, path).stream };
-  }
-}
-
-/**
- * The same operands, with an opaque R2 body streamed when the session allows.
- *
- * Used by the commands that consume their input and emit as they go, and
- * deliberately not by the ones that have to hold all of it. A barrier reading
- * an opaque body would buffer something chosen for being too large to store
- * inline, so `sort`, `diff`, `patch`, `join`, `sed -i`, and command
- * substitution keep reporting `ENOTSUP` — a refusal a caller can act on beats
- * an execution that dies against a limit halfway through.
- *
- * Every body is released when the walk ends, including on an early break: an
- * opaque read holds a retention lease, and abandoning one keeps the object
- * alive until it expires.
- */
-export async function* contentInputs(
-  context: ShellCommandContext,
-  argv: readonly string[],
-  stdin: ReadableStream<Uint8Array>,
   range?: ByteRange,
 ): AsyncGenerator<{ name: string; stream: ReadableStream<Uint8Array> }> {
   if (argv.length === 0) {
     yield { name: "-", stream: stdin };
     return;
   }
-  const opened: Array<() => void> = [];
-  try {
-    for (const path of argv) {
-      if (path === "-") {
-        yield { name: "-", stream: stdin };
-        continue;
-      }
-      const body = await openContent(context.fileSystem, commandPath(context, path), {
-        reader: context.content,
-        access: context.policy.opaqueContent,
-        ...(range === undefined ? {} : { range }),
-      });
-      opened.push(body.release);
-      yield { name: path, stream: body.stream };
+  for (const path of argv) {
+    if (path === "-") {
+      yield { name: "-", stream: stdin };
+      continue;
     }
-  } finally {
-    for (const release of opened) release();
+    yield { name: path, stream: await openInput(context, path, range) };
   }
+}
+
+/**
+ * Opens one operand, streaming an opaque R2 body when the session allows it.
+ *
+ * Every path into a command's input goes through here — operands, recursive
+ * walks, and `<` redirection — so a command cannot accidentally get a
+ * different answer depending on how its input was spelled.
+ *
+ * A consumer that stops early cancels the stream, which stops the transfer.
+ * The retention lease behind an opaque read is a deadline in the row and
+ * lapses on its own; there is nothing to release.
+ */
+async function openInput(
+  context: ShellCommandContext,
+  path: string,
+  range?: ByteRange,
+): Promise<ReadableStream<Uint8Array>> {
+  const body = await openContent(context.fileSystem, commandPath(context, path), {
+    reader: context.content,
+    access: context.policy.opaqueContent,
+    signal: context.signal,
+    ...(range === undefined ? {} : { range }),
+  });
+  return body.stream;
 }
 
 /**
@@ -185,7 +170,7 @@ export async function* recursiveInputs(
     const normalized = commandPath(context, path === "" ? "." : path);
     const stat = context.fileSystem.stat(normalized);
     if (stat.kind !== "directory") {
-      yield { name: path, stream: context.fileSystem.readFile(normalized).stream };
+      yield { name: path, stream: await openInput(context, normalized) };
       continue;
     }
     // The walk returns canonical paths, so the prefix being replaced has to be
@@ -209,7 +194,7 @@ export async function* recursiveInputs(
         // and matches what `grep -r` does with a file it cannot open.
         let stream: ReadableStream<Uint8Array>;
         try {
-          stream = context.fileSystem.readFile(entry.path).stream;
+          stream = await openInput(context, entry.path);
         } catch (error) {
           yield {
             name,

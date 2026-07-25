@@ -2,6 +2,8 @@ import { VfsError } from "../core/errors.js";
 import { normalizePath } from "../core/path.js";
 import { bodyToStream } from "../vfs/streams.js";
 import type { ByteBody } from "../vfs/types.js";
+import type { OpaqueContentAccess, ShellContentReader } from "./content.js";
+import { openContent } from "./content.js";
 import { deviceInput, deviceSink, shellDevice } from "./devices.js";
 import { type ExpansionRuntime, expandScalarWord, expandWord } from "./expand.js";
 import { shellInput } from "./input.js";
@@ -104,6 +106,12 @@ export async function applyRedirections(
   budget: ShellBudget,
   cancelReplacedInput: boolean,
   runtime: ExpansionRuntime,
+  /** What a `<` may open: the same rule a command operand goes through. */
+  input: {
+    readonly content?: ShellContentReader | undefined;
+    readonly access?: OpaqueContentAccess | undefined;
+    readonly signal?: AbortSignal | undefined;
+  } = {},
 ): Promise<AppliedRedirections> {
   const fds: ShellFileDescriptors = { 0: initial[0], 1: initial[1], 2: initial[2] };
   const redirected = new Set<1 | 2>();
@@ -162,7 +170,15 @@ export async function applyRedirections(
         // then hand back what was just cancelled.
         if (device === "stdin") continue;
         const replacement =
-          device === undefined ? fileSystem.readFile(path).stream : deviceInput(device, fds, path);
+          device === undefined
+            ? (
+                await openContent(fileSystem, path, {
+                  reader: input.content,
+                  access: input.access,
+                  signal: input.signal,
+                })
+              ).stream
+            : deviceInput(device, fds, path);
         if (cancelReplacedInput || inputRedirected) {
           await fds[0].cancel(new VfsError("EPIPE", "pipeline input was replaced by redirection"));
         }

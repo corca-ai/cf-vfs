@@ -227,12 +227,9 @@ export const catCommand = /* @__PURE__ */ defineApplet(CAT, async (context, argv
     const body = await openContent(context.fileSystem, commandPath(context, path), {
       reader: context.content,
       access: context.policy.opaqueContent,
+      signal: context.signal,
     });
-    try {
-      await pipeToSink(context, body.stream, fds[1]);
-    } finally {
-      body.release();
-    }
+    await pipeToSink(context, body.stream, fds[1]);
   }
   return 0;
 });

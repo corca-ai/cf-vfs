@@ -121,6 +121,7 @@ const PRESETS = [
     describe: "the SQLite filesystem with no shell and no R2",
     include: [M.sql, M.doSql],
     exclude: [
+      M.content,
       M.applet,
       M.helpers,
       M.core,

@@ -93,14 +93,6 @@ export interface ShellPolicy {
   readonly readRoots?: readonly string[];
   readonly writeRoots?: readonly string[];
   /**
-   * Canonical applet names a script may run.
-   *
-   * A name is matched after the multicall resolver runs, so one entry covers
-   * that applet's aliases and its `/bin` and `/usr/bin` spellings. Entries must
-   * therefore be canonical names: an alias or an applet path in the list
-   * matches nothing and denies everything it was meant to allow.
-   */
-  /**
    * How much of an opaque R2 body a session may read.
    *
    * Independent of the read roots because it is a different question: the
@@ -110,6 +102,14 @@ export interface ShellPolicy {
    * `ls` and `stat` see the entry, and reading it is `ENOTSUP`.
    */
   readonly opaqueContent?: OpaqueContentAccess;
+  /**
+   * Canonical applet names a script may run.
+   *
+   * A name is matched after the multicall resolver runs, so one entry covers
+   * that applet's aliases and its `/bin` and `/usr/bin` spellings. Entries must
+   * therefore be canonical names: an alias or an applet path in the list
+   * matches nothing and denies everything it was meant to allow.
+   */
   readonly allowedCommands?: readonly string[];
   readonly maxMutations?: number;
 }

@@ -16,7 +16,7 @@ import {
   splitSearchPath,
 } from "./commands/applet.js";
 import { isCharacterDevice, isRegularFile } from "./commands/format.js";
-import type { ShellContentReader } from "./content.js";
+import { type ShellContentReader, scopedContentReader } from "./content.js";
 import { DeviceFileSystem } from "./devices.js";
 import { optindGeneration } from "./environment.js";
 import { ShellNounsetError } from "./errors.js";
@@ -1341,6 +1341,11 @@ async function runCommandNode(
         runtime.budget,
         cancelUnreadInput,
         expansion,
+        {
+          content: runtime.content,
+          access: runtime.policy.opaqueContent,
+          signal: runtime.signal,
+        },
       );
     } catch (error) {
       fds = { 0: initialFds[0], 1: initialFds[1], 2: fallbackStderr };
@@ -1628,6 +1633,14 @@ export class Shell {
     // requiring `/dev` in a session's roots would break `> /dev/null` for
     // every scoped caller while preventing nothing.
     const scoped = new DeviceFileSystem(new ScopedFileSystem(this.fileSystem, this.policy, budget));
+    // The reader a host supplies is built over the unscoped filesystem, which
+    // is where the lease lives; a session's copy carries the session's roots.
+    const content =
+      this.content === undefined
+        ? undefined
+        : scopedContentReader(this.content, (path) => {
+            scoped.assertReadable(path);
+          });
     const stdout = createBytePipe({
       maximumBytes: this.limits.maxStdoutBytes,
       signal: controller.signal,
@@ -1689,7 +1702,7 @@ export class Shell {
           fileSystem: scoped,
           budget,
           policy: this.policy,
-          content: this.content,
+          content,
           signal: controller.signal,
           limits: this.limits,
           parserBudget,
