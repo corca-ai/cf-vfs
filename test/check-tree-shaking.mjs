@@ -96,6 +96,10 @@ const PRESETS = [
     describe: "a small explicit registry of two applets",
     include: [M.fs, M.text, M.applet],
     exclude: [
+      // `grep` lives in the module this preset imports and is the only reason
+      // the regex engine would ever link here. Absent means the `@__PURE__`
+      // applet annotations are doing their job.
+      M.posixRegex,
       M.ls,
       M.core,
       M.xargs,

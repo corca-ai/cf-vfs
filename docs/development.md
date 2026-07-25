@@ -209,10 +209,18 @@ declarative `AppletSpec`: canonical name, optional aliases, operand syntax,
 one-line summary, and the option table. Declare the specification as a
 module-level constant and pass it to `parseAppletOptions` and `appletUsageError`
 so the command name appears exactly once. Put shared category implementations
-under `src/shell/commands`; use a dedicated module when consumers should import
-one command without pulling siblings. Export the command from `shell/commands`,
-and add it to `defaultShellCommands` only when it belongs in the convenience
-preset.
+under `src/shell/commands`. Export the command from `shell/commands`, and add it
+to `defaultShellCommands` only when it belongs in the convenience preset.
+
+**Write `/* @__PURE__ */` before every `defineApplet` call.** That annotation is
+what lets a bundler drop an applet nobody imports even though it shares a module
+with ones they do, and it is the only reason a twenty-applet module like
+`text.ts` costs a narrow consumer nothing. Without it the call looks like it
+might have side effects and the whole module survives, along with whatever it
+imports — importing `wc` would link the regex engine that `grep`, its neighbour,
+compiles patterns with. A dedicated module is therefore not what buys
+independent import; the annotation is. Split a module when it has grown hard to
+read, not to win bytes that are already won.
 
 `applet.ts` sits with the other shared command primitives — `options.ts`,
 `helpers.ts`, `format.ts` — and must never import a concrete applet. `shell.ts`
