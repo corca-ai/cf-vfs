@@ -25,6 +25,13 @@ const shell = new Shell({
 });
 ```
 
+`allowedCommands` names canonical applets, and the entry `sh` is a capability
+rather than a reference to an applet: it authorizes running *any* executable
+file inside the readable roots, whether or not an `sh` applet is registered.
+Omit it — as the example above does — when a workload should never run stored
+source. The commands a script invokes are still checked against the same list,
+so the reachable surface is the readable roots intersected with the allowlist.
+
 The shell receives a capability-wrapped `ShellFileSystem`; it has no opaque
 upload, lease, GC, or R2 body method. Treat scripts, positional arguments,
 environment variables, and uploaded bytes as separate inputs. Put dynamic
@@ -39,7 +46,8 @@ Every execution owns one shared budget across all pipeline stages. Defaults:
 | one submitted or sourced unit / cumulative source bytes | 1 MiB / 4 MiB |
 | AST nodes / nesting depth | 10,000 / 64 |
 | commands / steps / loop iterations | 10,000 / 100,000 / 10,000 |
-| function depth / source depth / one command-substitution output | 64 / 16 / 1 MiB |
+| function depth / source depth / script depth | 64 / 16 / 8 |
+| one command-substitution output | 1 MiB |
 | expansion work / produced characters / produced fields | 10,000,000 / 1 MiB / 10,000 |
 | pipeline bytes | 8 MiB |
 | stdout / stderr | 8 MiB each |
@@ -51,7 +59,8 @@ Every execution owns one shared budget across all pipeline stages. Defaults:
 | deadline / no-output-consumer timeout | 30 s / 5 s |
 
 Lower these per workload. A policy mutation limit can only tighten the runtime
-limit. Glob scans, traversal, decoded records, and output all charge their
+limit. Script depth is counted separately from source depth, so a script that
+sources a file that runs a script is bounded by both. Glob scans, traversal, decoded records, and output all charge their
 specific limit as well as relevant shared work/I/O limits.
 
 Nested scripts, sourced units, pipelines, functions, loops, and command

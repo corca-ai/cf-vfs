@@ -127,6 +127,7 @@ const PRESETS = [
       M.text,
       M.xargs,
       M.discovery,
+      M.sh,
       M.registry,
       M.linux,
       M.sql,

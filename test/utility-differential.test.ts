@@ -74,6 +74,27 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     // A POSIX shell would print nothing and exit 1 for an unexported name.
     expect(result.stdout).toBe("value\n");
   },
+  "script-child-inherits-the-whole-session": async () => {
+    const harness = createBashHarness({ commandResolution: "path" });
+    await harness.fileSystem.writeFile(
+      "/work/probe.sh",
+      "#!/bin/sh\nhelper\nprintf '%s|' \"$UNEXPORTED\"\nfalse\nprintf 'reached'\n",
+      { createParents: true },
+    );
+    harness.fileSystem.setMetadata("/work/probe.sh", { mode: 0o100755 });
+    const result = await harness.run(
+      [
+        "helper() { printf 'parent-function|'; }",
+        "UNEXPORTED=seen",
+        "set -e",
+        "./probe.sh || printf 'stopped'",
+      ],
+      { cwd: "/work" },
+    );
+    // Bash would print nothing for the function, an empty value, and reach the
+    // end because errexit is not inherited either.
+    expect(result.stdout).toBe("parent-function|seen|stopped");
+  },
   "script-interpreter-profile-is-bounded": async () => {
     const harness = createBashHarness({ commandResolution: "path" });
     await harness.fileSystem.writeFile("/work/py.sh", "#!/usr/bin/python3\nprint(1)\n", {

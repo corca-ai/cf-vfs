@@ -1,6 +1,5 @@
-import { VfsError } from "../../core/errors.js";
 import { type AppletSpec, appletUsageError, defineApplet } from "./applet.js";
-import { commandPath, readFileText } from "./helpers.js";
+import { commandPath, writeText } from "./helpers.js";
 
 const SH = {
   name: "sh",
@@ -25,26 +24,23 @@ const SH = {
  * from standard input are outside the profile.
  */
 export const shCommand = /* @__PURE__ */ defineApplet(SH, async (context, argv, fds) => {
-  const [first, ...rest] = argv;
+  const operands = argv[0] === "--" ? argv.slice(1) : argv;
+  const [first, ...rest] = operands;
   if (first === undefined) {
     throw appletUsageError(SH, "reading a script from standard input is not supported");
   }
   if (first === "-c") {
     const [source, name, ...args] = rest;
     if (source === undefined) throw appletUsageError(SH, "-c requires a command");
+    // Bash names the shell itself when `-c` is given no explicit `$0`.
     return await context.executeScript(source, name ?? SH.name, args, fds);
   }
-  if (first.startsWith("-") && first !== "-") {
-    throw appletUsageError(SH, `unsupported option ${first}`);
-  }
-  const path = commandPath(context, first);
-  const source = await readFileText(context, path, context.budget.limits.maxScriptBytes);
-  try {
-    if (source.value.includes("\0")) {
-      throw new VfsError("ENOEXEC", "contains a NUL byte", path);
-    }
-    return await context.executeScript(source.value, path, rest, fds);
-  } finally {
-    source.release();
-  }
+  if (first.startsWith("-")) throw appletUsageError(SH, `unsupported option ${first}`);
+  // A named file does not need the executable bit: naming the interpreter is
+  // the authorization. Everything else — a directory, opaque content, a bad
+  // interpreter line — refuses exactly as an executable file would.
+  const status = await context.executeScriptFile(commandPath(context, first), rest, fds, first);
+  if (status !== undefined) return status;
+  await writeText(fds[2], `${SH.name}: ${first}: no such file or directory\n`);
+  return 127;
 });

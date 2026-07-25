@@ -18,7 +18,7 @@ host filesystem access.
 | Links and special files | Symbolic links, hard links, devices, sockets, FIFOs, sparse files, xattrs, and `mmap` are unsupported. |
 | Execution | An inline file with an executable mode bit runs as a shell script in an isolated child scope. There are no processes, `fork`, `execve`, signals, job control, or native binaries, and no interpreter other than this shell profile. |
 | Locks and open handles | There is no persistent descriptor lifecycle or advisory/mandatory locking. Returned inline streams are bounded snapshots; guards provide optimistic concurrency. |
-| Errors | Familiar codes include `ENOENT`, `EEXIST`, `ENOTDIR`, `EISDIR`, `ENOTEMPTY`, `EFBIG`, `ENOSPC`, `EPIPE`, and `ENOTSUP`. `EREVISION` denotes a stale guard. This is not the complete POSIX errno set. |
+| Errors | Familiar codes include `ENOENT`, `ENOEXEC`, `EEXIST`, `ENOTDIR`, `EISDIR`, `ENOTEMPTY`, `EFBIG`, `ENOSPC`, `EPIPE`, and `ENOTSUP`. `EREVISION` denotes a stale guard. This is not the complete POSIX errno set. |
 
 Virtual descriptors `0`, `1`, and `2` exist only for one submitted source
 unit, including in an interactive session. Pipelines connect them with byte

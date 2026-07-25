@@ -67,7 +67,7 @@ export const commandCommand = /* @__PURE__ */ defineApplet(COMMAND, async (conte
   if (name === undefined) throw appletUsageError(COMMAND, "missing command name");
   if (!verify) return await context.executeCommand([name, ...rest], fds, { bypassFunctions: true });
   if (rest.length > 0) throw appletUsageError(COMMAND, "-v accepts one name");
-  const resolution = context.resolveCommand(name);
+  const resolution = await context.resolveCommand(name);
   if (resolution === undefined) return 1;
   // `command -v` prints something a script can run: a bare name for a function,
   // a built-in, or an applet reached without a searched path, and the applet
@@ -84,7 +84,7 @@ export const typeCommand = /* @__PURE__ */ defineApplet(TYPE, async (context, ar
   let status = 0;
   try {
     for (const name of argv) {
-      const resolution = context.resolveCommand(name);
+      const resolution = await context.resolveCommand(name);
       if (resolution === undefined) {
         await writeText(fds[2], `type: ${name}: not found\n`);
         status = 1;
@@ -115,7 +115,7 @@ export const whichCommand = /* @__PURE__ */ defineApplet(WHICH, async (context, 
   let status = 0;
   try {
     for (const name of argv) {
-      const resolution = context.resolveCommand(name);
+      const resolution = await context.resolveCommand(name);
       const path = resolution?.kind === "function" ? undefined : resolution?.path;
       if (path === undefined) {
         status = 1;

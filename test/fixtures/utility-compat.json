@@ -102,6 +102,13 @@
       "oracle": "bash",
       "summary": "an executable file runs only as the cf-vfs shell profile, whatever its shebang names",
       "reason": "There is no process runtime to hand a file to, so the only interpreter that can exist is this shell. `/bin/sh`, `/bin/bash`, and `/usr/bin/env sh|bash` select it, a file with no shebang gets it, and every other interpreter is refused with status 126 rather than run by something it did not ask for. Interpreter arguments such as `#!/bin/sh -e` are refused for the same reason."
+    },
+    {
+      "id": "script-child-inherits-the-whole-session",
+      "command": "script execution",
+      "oracle": "bash",
+      "summary": "a script sees every variable, function, and shell option of its caller, not only the exported ones",
+      "reason": "A Bash script runs in a separate process and inherits only exported variables and no functions. There is no process boundary here and one variable map, so `export` records intent rather than moving a value; a child therefore sees unexported variables, the caller's functions, and options such as `set -e`. The isolation that does hold is outbound: nothing the child defines, and no working-directory change or `exit` it performs, reaches the caller. Do not rely on `export` to keep a value from a script."
     }
   ],
   "cases": [

@@ -389,15 +389,14 @@ cannot lose commands, and `type cat` reports an applet rather than inventing a
 location. Set `commandResolution: "path"`, or spread `LINUX_SHELL_OPTIONS`, to
 get the search.
 
-Under the search, components are looked at left to right and the first applet
-directory decides. A duplicated component is harmless. A component naming
-anything else contributes nothing — including the empty component POSIX gives to
-the working directory, and including `/bin/`, since a component must be spelled
-exactly `/bin` or `/usr/bin` and no namespace directory can supply a command
-until executing a stored file is supported. A prefix assignment applies before
-the search, so `PATH=/opt/tools cat file` reports `cat: command not found`
-exactly as in Bash. An absolute applet path bypasses the search entirely, under
-either setting.
+Under the search, components are looked at left to right and the first match
+decides. A component is normalized before it is classified, so `/bin/`, `//bin`,
+and `/bin/.` are the applet directory they name and no stored file can answer in
+their place. A duplicated component is harmless, and an empty component means
+the working directory, as in POSIX. A prefix assignment applies before the
+search, so `PATH=/opt/tools cat file` reports `cat: command not found` exactly as
+in Bash. An absolute applet path bypasses the search entirely, under either
+setting.
 
 A name the command policy denies is reported as unresolved by `command -v`,
 `type`, and `which`, so discovery never advertises something that would
@@ -422,12 +421,21 @@ writable `/bin`, and no host process.
 An inline VFS file whose compatibility mode bits include an executable bit runs
 as a shell script. `chmod +x script.sh` followed by `./script.sh` behaves the
 way it does on Linux, and `sh script.sh` runs a file without requiring the bit.
+`chmod` accepts an octal mode or comma-separated symbolic clauses matching
+`[ugoa]*[-+=][rwx]*`; `s`, `t`, `X`, and numeric copies such as `u=g` are
+outside the profile and are usage errors.
 
 A pathname — anything containing `/` — names the file directly and is never
 searched. A bare name is searched only under `commandResolution: "path"`, and
 only through `PATH` components that are not applet directories: those already
-answered, and no file can shadow an applet. Applets always win, so a file
-written at `/bin/cat` never displaces `cat`.
+answered, and no file can shadow an applet however the component is spelled.
+
+A search skips a candidate that exists but cannot run and keeps looking, exactly
+as Bash does, so one non-executable entry cannot mask a command a later
+component provides; the refusal is reported only when nothing runs. A component
+outside the readable roots supplies nothing at all, so it cannot turn an unknown
+command into 126. An explicit pathname fails immediately, because there is
+nothing else to try.
 
 The interpreter line is read from a bounded 256-byte prefix before the file is
 decoded. `#!/bin/sh`, `#!/bin/bash`, `#!/usr/bin/sh`, `#!/usr/bin/bash`,
@@ -445,16 +453,24 @@ interpreter line.
 
 Execution creates an isolated child scope. It inherits the environment, working
 directory, shell options, policy, cancellation, and the execution-wide budget,
-and receives its own positional parameters with `$0` set to the script path.
-Variables, functions, and working-directory changes it makes stay inside it, and
-`exit` ends the script rather than the caller — an interactive session survives
+and receives its own positional parameters with `$0` set to the spelling used to
+invoke it, as Bash does.
+
+The isolation is outbound only. Because there is no process boundary and one
+variable map, a script also sees the caller's *unexported* variables, its shell
+functions, and its options — a declared divergence from Bash, which inherits
+only exported variables. Nothing the script defines, and no working-directory
+change or `exit` it performs, reaches the caller, and `exit` ends the script
+rather than the caller — an interactive session survives
 a script that exits. Each script is parsed completely before it can mutate
 anything, and nesting is bounded by `maxScriptDepth` independently of `source`.
 
 When `ShellPolicy.allowedCommands` is set, one `sh` entry authorizes running
 executable files, rather than requiring every script path an application might
 store. `sh` and its `bash` alias run a bounded unit in that same isolated child
-scope: `sh -c COMMAND [NAME [ARGUMENT...]]` or `sh FILE [ARGUMENT...]`.
+scope: `sh -c COMMAND [NAME [ARGUMENT...]]` or `sh FILE [ARGUMENT...]`. A named
+file does not need the executable bit — naming the interpreter is the
+authorization — and reports the same statuses an executable file does.
 Interactive invocation, `-s`, `-l`, reading a script from standard input, and
 job control are outside the profile.
 

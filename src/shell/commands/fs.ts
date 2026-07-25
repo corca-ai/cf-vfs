@@ -107,9 +107,50 @@ const STAT = {
 
 const CHMOD = {
   name: "chmod",
-  usage: "OCTAL-MODE PATH...",
+  usage: "OCTAL-MODE|SYMBOLIC-MODE PATH...",
   summary: "sets the compatibility mode bits of a path",
 } as const satisfies AppletSpec;
+
+const SYMBOLIC_MODE = /^([ugoa]*)([-+=])([rwx]*)$/u;
+
+/**
+ * Applies one symbolic mode clause to existing permission bits.
+ *
+ * The profile covers the spellings scripts actually use — `+x`, `u+x`,
+ * `go-w`, `a=rx` — and nothing else. `s`, `t`, `X`, numeric copies such as
+ * `u=g`, and an omitted `umask` interaction are outside it, so an unsupported
+ * clause is a usage error rather than an approximation.
+ */
+function applySymbolicMode(permission: number, clause: string, spec: AppletSpec): number {
+  const match = SYMBOLIC_MODE.exec(clause);
+  if (match === null) throw appletUsageError(spec, `unsupported mode: ${clause}`);
+  const [, whoValue = "", operator = "", permissions = ""] = match;
+  // A bare operator means every class, exactly as `chmod +x` does.
+  const who = whoValue === "" || whoValue.includes("a") ? "ugo" : whoValue;
+  let bits = 0;
+  for (const shift of [
+    ["u", 6],
+    ["g", 3],
+    ["o", 0],
+  ] as const) {
+    if (!who.includes(shift[0])) continue;
+    if (permissions.includes("r")) bits |= 0o4 << shift[1];
+    if (permissions.includes("w")) bits |= 0o2 << shift[1];
+    if (permissions.includes("x")) bits |= 0o1 << shift[1];
+  }
+  if (operator === "+") return permission | bits;
+  if (operator === "-") return permission & ~bits;
+  // `=` replaces only the classes the clause names.
+  let cleared = permission;
+  for (const shift of [
+    ["u", 6],
+    ["g", 3],
+    ["o", 0],
+  ] as const) {
+    if (who.includes(shift[0])) cleared &= ~(0o7 << shift[1]);
+  }
+  return cleared | bits;
+}
 
 const DU = {
   name: "du",
@@ -333,13 +374,17 @@ export const statCommand = /* @__PURE__ */ defineApplet(STAT, async (context, ar
 
 export const chmodCommand = /* @__PURE__ */ defineApplet(CHMOD, async (context, argv) => {
   const [modeValue, ...paths] = argv;
-  if (modeValue === undefined || paths.length === 0 || !/^[0-7]{3,4}$/u.test(modeValue)) {
-    throw appletUsageError(CHMOD, "requires an octal mode and paths");
+  if (modeValue === undefined || paths.length === 0) {
+    throw appletUsageError(CHMOD, "requires a mode and paths");
   }
-  const permission = Number.parseInt(modeValue, 8);
+  const octal = /^[0-7]{3,4}$/u.test(modeValue);
+  const clauses = octal ? [] : modeValue.split(",");
   for (const path of paths) {
     const normalized = commandPath(context, path);
     const stat = context.fileSystem.stat(normalized);
+    // A symbolic mode reads the current bits; an octal mode replaces them.
+    let permission = octal ? Number.parseInt(modeValue, 8) : stat.mode & 0o7777;
+    for (const clause of clauses) permission = applySymbolicMode(permission, clause, CHMOD);
     context.fileSystem.setMetadata(normalized, {
       mode: (stat.kind === "directory" ? 0o040000 : 0o100000) | permission,
     });

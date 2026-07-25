@@ -203,6 +203,107 @@ describe("executing an inline VFS script", () => {
     expect(result.stderr).toContain("is not valid UTF-8");
   });
 
+  it("skips a PATH candidate that cannot run and keeps searching", async () => {
+    const harness = await withScripts(
+      { "/a/greet": "#!/bin/sh\nprintf a\n", "/b/greet": "#!/bin/sh\nprintf from-b\n" },
+      ["/b/greet"],
+    );
+    // `/a/greet` exists without an executable bit, exactly as in Bash, so the
+    // search continues rather than reporting 126.
+    const found = await harness.run("PATH=/a:/b greet");
+    expect(found.stdout).toBe("from-b");
+    expect(found.exitCode).toBe(0);
+
+    await harness.fileSystem.writeFile("/a/dirtool/keep", "x", { createParents: true });
+    await harness.fileSystem.writeFile("/b/dirtool", "#!/bin/sh\nprintf from-b2\n");
+    harness.fileSystem.setMetadata("/b/dirtool", { mode: EXECUTABLE });
+    const past = await harness.run("PATH=/a:/b dirtool");
+    expect(past.stdout).toBe("from-b2");
+  });
+
+  it("reports the first refusal only when no component supplies anything", async () => {
+    const harness = await withScripts({ "/a/only": "#!/bin/sh\nprintf a\n" }, []);
+    const result = await harness.run("PATH=/a:/b only");
+    expect(result.exitCode).toBe(126);
+    expect(result.stderr).toBe("/a/only: is not executable\n");
+  });
+
+  it("keeps an unreadable PATH component from turning an unknown name into 126", async () => {
+    const harness = await withScripts({ "/opt/t/found": "#!/bin/sh\nprintf ok\n" }, [
+      "/opt/t/found",
+    ]);
+    const scoped = createBashHarness({
+      fileSystem: harness.fileSystem,
+      commandResolution: "path",
+      policy: { readRoots: ["/opt"] },
+    });
+    expect((await scoped.run("PATH=/nope:/opt/t found")).stdout).toBe("ok");
+    const unknown = await scoped.run("PATH=/nope:/opt/t absent-command");
+    expect(unknown.exitCode).toBe(127);
+    expect(unknown.stderr).toBe("absent-command: command not found\n");
+  });
+
+  it("cannot be shadowed through a non-literal applet directory spelling", async () => {
+    const harness = await withScripts({ "/bin/echo": "#!/bin/sh\nprintf shadowed\n" }, [
+      "/bin/echo",
+    ]);
+    for (const searchPath of ["/bin", "/bin/", "//bin", "/bin/.", "/usr/bin/../bin"]) {
+      const result = await harness.run(`PATH=${searchPath} echo applet`);
+      expect(result.stdout, searchPath).toBe("applet\n");
+    }
+  });
+
+  it("reports an oversized script as unusable instead of ending the execution", async () => {
+    const harness = createBashHarness({
+      commandResolution: "path",
+      limits: { maxScriptBytes: 64 },
+    });
+    await harness.fileSystem.writeFile("/w/big.sh", `#!/bin/sh\n${"#".repeat(200)}\n`, {
+      createParents: true,
+    });
+    harness.fileSystem.setMetadata("/w/big.sh", { mode: EXECUTABLE });
+    const result = await harness.run(["/w/big.sh", "printf 'after=%s' \"$?\""]);
+    // The stream limit is otherwise fatal; an oversized script must not end the
+    // whole execution.
+    expect(result.stdout).toBe("after=126");
+    expect(result.stderr).toBe("/w/big.sh: exceeds the script byte limit\n");
+  });
+
+  it("passes the invoked spelling as the zeroth parameter", async () => {
+    const harness = await withScripts({ "/w/rel.sh": '#!/bin/sh\nprintf %s "$0"\n' }, [
+      "/w/rel.sh",
+    ]);
+    // Bash hands a script the path it was invoked with, not a resolved one.
+    expect((await harness.run("cd /w; ./rel.sh")).stdout).toBe("./rel.sh");
+    expect((await harness.run("cd /w; sh rel.sh")).stdout).toBe("rel.sh");
+    expect((await harness.run("/w/rel.sh")).stdout).toBe("/w/rel.sh");
+  });
+
+  it("gives sh FILE the same statuses an executable file gets", async () => {
+    const harness = await withScripts({ "/w/dir/keep": "x" }, []);
+    const missing = await harness.run("sh /w/absent.sh");
+    expect(missing.exitCode).toBe(127);
+    expect(missing.stderr).toBe("sh: /w/absent.sh: no such file or directory\n");
+
+    const directory = await harness.run("sh /w/dir");
+    expect(directory.exitCode).toBe(126);
+    expect(directory.stderr).toBe("/w/dir: is not a regular file\n");
+  });
+
+  it("lets discovery see an executable file", async () => {
+    const harness = await withScripts({ "/opt/t/found": "#!/bin/sh\nprintf ok\n" }, [
+      "/opt/t/found",
+    ]);
+    const result = await harness.run([
+      "PATH=/opt/t:/bin",
+      "command -v found",
+      "type found",
+      "which found",
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("/opt/t/found\nfound is /opt/t/found\n/opt/t/found\n");
+  });
+
   it("does not search PATH for a name containing a separator", async () => {
     const harness = await withScripts(
       { "/opt/tools/nested/run.sh": "#!/bin/sh\nprintf nested\n" },
