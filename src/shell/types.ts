@@ -182,6 +182,13 @@ export interface ShellCommandContext {
    * status 126. The executable mode bit is not required: naming the interpreter
    * is the authorization.
    */
+  /**
+   * Describes every registered applet, in UTF-8 byte order by name.
+   *
+   * Help and completion need the whole set, and taking it from the active
+   * registry keeps them from importing the applet table themselves.
+   */
+  listCommands(): readonly ShellCommandDescription[];
   executeScriptFile(
     path: string,
     args: readonly string[],
@@ -192,6 +199,14 @@ export interface ShellCommandContext {
 
 export interface ExecuteCommandOptions {
   readonly bypassFunctions?: boolean;
+}
+
+export interface ShellCommandDescription {
+  readonly name: string;
+  readonly kind: "builtin" | "program" | "session-builtin";
+  /** Operand syntax, or `""` when the applet takes none. */
+  readonly usage: string;
+  readonly summary: string;
 }
 
 export type ShellCommandResolution =

@@ -340,6 +340,43 @@ See [POSIX and Bash compatibility](posix-compatibility.md) for deterministic
 locale, glob, and redirection details and [the parser spike](parser-spike.md)
 for parser selection.
 
+### Environment ergonomics
+
+An unquoted leading `~` expands to `HOME`: `~` and `~/path` only. Every other
+form stays literal — `~user`, `~+`, `~-`, `~2` — which is what Bash does for a
+name it cannot resolve and the only honest answer here, since there is no user
+database. A tilde with `HOME` unset or empty stays literal too, a quoted tilde is
+never expanded, and a tilde produced by an expansion is data rather than syntax.
+An assignment expands a tilde after `=` and after each `:`, so
+`PATH=~/bin:~/tools` works.
+
+`cd` maintains `PWD` and `OLDPWD`. `cd -` returns to `OLDPWD` and prints the
+directory it moved to, as Bash does, and fails when there is no previous
+directory. A bare `cd` uses `HOME` and fails when it is unset. Both failures are
+usage errors with status 2 rather than Bash's 1, matching the profile's rule that
+2 is a usage failure. A directory change persists in the caller's session from a
+function, a group, and a sourced unit; a subshell, a pipeline stage, and an
+executable script each clone the session, so their changes are discarded with the
+clone.
+
+`set` accepts clustered short flags and named options in one invocation:
+`set -eu`, `set +eu`, `set -e -o nounset`, and `set -uo nounset` all work. `$-`
+reports the options that are on, as `e` and `u` in that order. It lists only what
+this profile spells as a short flag, so `pipefail` — which has no short form —
+never appears, and neither do Bash's `h`, `B`, and `c`.
+
+`test` and `[` add `-r`, `-w`, and `-x` beside `-e`, `-f`, `-d`, and `-s`. They
+read compatibility mode bits and report whether *any* class carries the bit,
+because there is no user, group, or account to ask about. They enforce nothing,
+and they do not consult the shell's read and write roots: those refuse an
+operation, and a predicate that reported them would conflate policy with
+metadata. `chmod` accordingly accepts symbolic clauses as well as an octal mode.
+
+`help` lists the registered commands with their summaries, `help NAME...`
+describes named ones and exits 1 for an unknown one, and `help -s` prints only
+the synopsis. It reads the active registry, so a narrow registry describes
+exactly what it registered.
+
 ## Built-ins and utilities
 
 The default registry is available only from
@@ -490,6 +527,12 @@ row there would mean nothing and could be removed while `/bin/cat` kept working.
 Listing them is not supported, and a `home` or `cwd` option inside one is a
 usage error.
 
+`LINUX_PROFILE_VARIABLES` names what the profile sets. A caller may override any
+of them by passing its own value after the profile's, and a script may reassign
+them: this language has no `readonly`, and adding one would create a restriction
+the shell cannot enforce anywhere else. Reassigning `LC_ALL` or `TZ` changes
+nothing, because collation and timestamps do not follow them.
+
 `LinuxProfileOptions` accepts `user` (default `cf`), `home` (default
 `/home/<user>`), `cwd` (default `/workspace`), and `tmp` (default `/tmp`). `cwd`
 decides which directory is provisioned; pass the same path as the execution
@@ -497,8 +540,9 @@ decides which directory is provisioned; pass the same path as the execution
 
 | Registry group | Available commands and principal options |
 | --- | --- |
-| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (`-e/+e`, `-o/+o errexit`, `-u/+u`, `-o/+o nounset`, `-o/+o pipefail`), `test`, `[` |
+| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd -`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (clustered `-eu/+eu`, `-o/+o errexit`, `-o/+o nounset`, `-o/+o pipefail`), `test`/`[` (`-e -f -d -s -r -w -x`, string and integer comparison) |
 | discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
+| help | `help -s`, from the dedicated `/shell/commands/help` subpath |
 | shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
 | namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f`, `ls -l -d -a -A`, `find -name -type -maxdepth`, `stat`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | streaming text/bytes | `cat`, `grep -i -v -n -F -c`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed s/old/new/[g]`, `seq -s -w` |

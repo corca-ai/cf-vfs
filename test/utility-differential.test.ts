@@ -74,6 +74,30 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     // A POSIX shell would print nothing and exit 1 for an unexported name.
     expect(result.stdout).toBe("value\n");
   },
+  "permission-predicates-have-no-user": async () => {
+    const harness = createBashHarness({ policy: { writeRoots: ["/allowed"] } });
+    await harness.fileSystem.writeFile("/only-owner", "body");
+    harness.fileSystem.setMetadata("/only-owner", { mode: 0o100400 });
+    // A privileged POSIX account would report this writable; there is no
+    // account here, so the answer comes from the bits alone.
+    const result = await harness.run("test -w /only-owner || printf 'not-writable'");
+    expect(result.stdout).toBe("not-writable");
+
+    await harness.fileSystem.writeFile("/outside-roots", "body");
+    harness.fileSystem.setMetadata("/outside-roots", { mode: 0o100644 });
+    // The policy refuses the write, but the predicate answers about metadata.
+    const metadata = await harness.run("test -w /outside-roots && printf 'bits-say-writable'");
+    expect(metadata.stdout).toBe("bits-say-writable");
+    expect((await harness.run("printf x > /outside-roots")).exitCode).toBe(126);
+  },
+  "dollar-dash-reports-only-declared-options": async () => {
+    const harness = createBashHarness();
+    const result = await harness.run(["set -eu", "printf '%s' \"$-\""]);
+    expect(result.exitCode).toBe(0);
+    // Bash reports `ehuBc` here: `h`, `B`, and `c` name behavior this runtime
+    // does not have.
+    expect(result.stdout).toBe("eu");
+  },
   "script-child-inherits-the-whole-session": async () => {
     const harness = createBashHarness({ commandResolution: "path" });
     await harness.fileSystem.writeFile(

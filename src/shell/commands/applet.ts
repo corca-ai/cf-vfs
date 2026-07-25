@@ -1,4 +1,5 @@
 import { VfsError } from "../../core/errors.js";
+import { compareUtf8 } from "../../core/path.js";
 import type {
   ShellCommand,
   ShellCommandContext,
@@ -179,6 +180,12 @@ export interface AppletRegistry {
   isAppletDirectory(directory: string): boolean;
   /** Resolves an absolute applet path such as `/bin/cat`. */
   findPath(path: string): AppletEntry | undefined;
+  /**
+   * Every resolvable bare name, including declared aliases, in UTF-8 byte
+   * order. Help and completion enumerate through this rather than rebuilding
+   * the index from specifications.
+   */
+  names(): readonly string[];
 }
 
 export function createAppletRegistry(commands: readonly ShellCommand[]): AppletRegistry {
@@ -200,6 +207,9 @@ export function createAppletRegistry(commands: readonly ShellCommand[]): AppletR
     },
     isAppletDirectory(directory: string): boolean {
       return APPLET_DIRECTORIES.includes(directory);
+    },
+    names(): readonly string[] {
+      return [...byName.keys()].sort(compareUtf8);
     },
     findPath(path: string): AppletEntry | undefined {
       const base = appletPathName(path);

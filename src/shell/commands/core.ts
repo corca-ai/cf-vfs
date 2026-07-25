@@ -58,7 +58,7 @@ const PWD = {
 
 const CD = {
   name: "cd",
-  usage: "[DIRECTORY]",
+  usage: "[DIRECTORY|-]",
   summary: "changes the working directory",
   kind: "session-builtin",
 } as const satisfies AppletSpec;
@@ -141,7 +141,7 @@ const EXIT = {
 
 const SET = {
   name: "set",
-  usage: "[-e|+e] [-u|+u] [-o|+o OPTION]",
+  usage: "[-eu|+eu] [-o|+o OPTION]",
   summary: "sets supported shell options",
   kind: "session-builtin",
 } as const satisfies AppletSpec;
@@ -320,16 +320,31 @@ export const pwdCommand = /* @__PURE__ */ defineApplet(PWD, async (context, argv
   return 0;
 });
 
-export const cdCommand = /* @__PURE__ */ defineApplet(CD, async (context, argv) => {
+export const cdCommand = /* @__PURE__ */ defineApplet(CD, async (context, argv, fds) => {
   if (argv.length > 1) throw appletUsageError(CD, "too many arguments");
-  const target = normalizePath(
-    argv[0] ?? context.session.env.get("HOME") ?? "/",
-    context.session.cwd,
-  );
+  const [operand] = argv;
+  const previous = context.session.cwd;
+  let requested: string;
+  if (operand === "-") {
+    const old = context.session.env.get("OLDPWD");
+    // Bash refuses rather than guessing when there is no previous directory.
+    if (old === undefined || old === "") throw appletUsageError(CD, "OLDPWD not set");
+    requested = old;
+  } else if (operand === undefined) {
+    const home = context.session.env.get("HOME");
+    if (home === undefined || home === "") throw appletUsageError(CD, "HOME not set");
+    requested = home;
+  } else {
+    requested = operand;
+  }
+  const target = normalizePath(requested, previous);
   const stat = context.fileSystem.stat(target);
   if (stat.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", target);
   context.session.cwd = target;
+  context.session.env.set("OLDPWD", previous);
   context.session.env.set("PWD", target);
+  // `cd -` reports where it went, as Bash does, so a script can see the swap.
+  if (operand === "-") await writeText(fds[1], `${target}\n`);
   return 0;
 });
 
@@ -706,28 +721,63 @@ export const exitCommand = /* @__PURE__ */ defineApplet(EXIT, (context, argv) =>
   return context.session.requestedExitCode;
 });
 
+/** Short flags `set` accepts, and the option each one names. */
+const SET_FLAGS: Readonly<Record<string, "errexit" | "nounset">> = {
+  e: "errexit",
+  u: "nounset",
+};
+
+/** Long option names `set -o` accepts. */
+const SET_OPTIONS = ["errexit", "nounset", "pipefail"] as const;
+
+function applyShellOption(
+  session: ShellCommandContext["session"],
+  option: (typeof SET_OPTIONS)[number],
+  enabled: boolean,
+): void {
+  if (option === "errexit") session.errexit = enabled;
+  else if (option === "nounset") session.nounset = enabled;
+  else session.pipefail = enabled;
+}
+
 export const setCommand = /* @__PURE__ */ defineApplet(SET, (context, argv) => {
   if (argv.length === 0) return 0;
-  if (
-    argv.length === 1 &&
-    (argv[0] === "-e" || argv[0] === "+e" || argv[0] === "-u" || argv[0] === "+u")
-  ) {
-    if (argv[0] === "-e" || argv[0] === "+e") context.session.errexit = argv[0] === "-e";
-    else context.session.nounset = argv[0] === "-u";
-    return 0;
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index] ?? "";
+    const enabled = value.startsWith("-");
+    if ((!enabled && !value.startsWith("+")) || value.length < 2) {
+      throw appletUsageError(SET, `unsupported form: ${value}`);
+    }
+    // Short flags cluster, so `set -eu`, `set +eu`, and `set -uo nounset` all
+    // behave as one word; a clustered `o` takes the next word as its name.
+    for (const flag of value.slice(1)) {
+      if (flag === "o") {
+        const name = argv[++index];
+        const option = SET_OPTIONS.find((candidate) => candidate === name);
+        if (option === undefined) {
+          throw appletUsageError(SET, `unsupported option name: ${name ?? ""}`);
+        }
+        applyShellOption(context.session, option, enabled);
+        continue;
+      }
+      const option = Object.hasOwn(SET_FLAGS, flag) ? SET_FLAGS[flag] : undefined;
+      if (option === undefined) throw appletUsageError(SET, `unsupported option -${flag}`);
+      applyShellOption(context.session, option, enabled);
+    }
   }
-  if (argv.length === 2 && (argv[0] === "-o" || argv[0] === "+o")) {
-    if (argv[1] === "pipefail") context.session.pipefail = argv[0] === "-o";
-    else if (argv[1] === "nounset") context.session.nounset = argv[0] === "-o";
-    else if (argv[1] === "errexit") context.session.errexit = argv[0] === "-o";
-    else throw appletUsageError(SET, `unsupported option name: ${argv[1]}`);
-    return 0;
-  }
-  throw appletUsageError(
-    SET,
-    "supported forms are -e, +e, -u, +u, -o/+o errexit, -o/+o nounset, or -o/+o pipefail",
-  );
+  return 0;
 });
+
+/** Unary predicates that consult namespace metadata. */
+const FILE_PREDICATES = ["-e", "-f", "-d", "-s", "-r", "-w", "-x"] as const;
+type FilePredicate = (typeof FILE_PREDICATES)[number];
+type PermissionPredicate = "-r" | "-w" | "-x";
+
+const PERMISSION_BITS: Readonly<Record<PermissionPredicate, number>> = {
+  "-r": 0o444,
+  "-w": 0o222,
+  "-x": 0o111,
+};
 
 function normalizeTestInteger(value: string): NormalizedDecimalInteger {
   const normalized = normalizeDecimalInteger(value);
@@ -753,7 +803,7 @@ async function evaluateTest(
   if (values.length === 2 && operand !== undefined) {
     if (unary === "-n") return operand.length > 0;
     if (unary === "-z") return operand.length === 0;
-    if (unary === "-e" || unary === "-f" || unary === "-d" || unary === "-s") {
+    if (FILE_PREDICATES.includes(unary as FilePredicate)) {
       if (operand.length === 0) return false;
       try {
         const stat = context.fileSystem.stat(
@@ -762,7 +812,11 @@ async function evaluateTest(
         if (unary === "-e") return true;
         if (unary === "-f") return stat.kind === "file";
         if (unary === "-d") return stat.kind === "directory";
-        return stat.sizeBytes > 0;
+        if (unary === "-s") return stat.sizeBytes > 0;
+        // Compatibility mode bits only. There is no user or group here, so a
+        // permission predicate asks whether any class carries the bit; it
+        // enforces nothing and does not consult the shell's read/write roots.
+        return (stat.mode & PERMISSION_BITS[unary as PermissionPredicate]) !== 0;
       } catch (error) {
         if (error instanceof VfsError && (error.code === "ENOENT" || error.code === "ENOTDIR")) {
           return false;

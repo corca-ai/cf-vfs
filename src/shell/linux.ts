@@ -98,11 +98,34 @@ function profile(options: LinuxProfileOptions): {
 }
 
 /**
+ * Variables the profile controls.
+ *
+ * A caller may override any of them by passing its own value after the
+ * profile's, and a script may reassign them: there is no `readonly` in this
+ * language, and inventing one would create a restriction the shell cannot
+ * enforce elsewhere. `LC_ALL` and `TZ` are the exception in spirit — the
+ * runtime's collation and timestamps do not follow them, so changing them
+ * changes nothing.
+ */
+export const LINUX_PROFILE_VARIABLES: readonly string[] = [
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "TMPDIR",
+  "LANG",
+  "LC_ALL",
+  "TZ",
+];
+
+/**
  * Environment defaults for the profile.
  *
  * `PATH` names the virtual applet directories, so command resolution searches
  * them left to right. `LC_ALL` and `TZ` repeat the runtime's fixed values
- * rather than offering a choice: the profile does not add locale support.
+ * rather than offering a choice: the profile does not add locale support, and
+ * the values are stated so a script that reads them sees the truth.
  */
 export function linuxShellEnvironment(options: LinuxProfileOptions = {}): Record<string, string> {
   const { user, home, tmp } = profile(options);

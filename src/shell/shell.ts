@@ -9,7 +9,12 @@ import { bodyToStream, readAllBytes } from "../vfs/streams.js";
 import type { VfsStat } from "../vfs/types.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 import { ExecutionBudget, resolveShellLimits } from "./budget.js";
-import { type AppletRegistry, createAppletRegistry, splitSearchPath } from "./commands/applet.js";
+import {
+  type AppletRegistry,
+  createAppletRegistry,
+  type ShellApplet,
+  splitSearchPath,
+} from "./commands/applet.js";
 import { optindGeneration } from "./environment.js";
 import { ShellNounsetError } from "./errors.js";
 import { emitShellEvent, type ShellEventSink } from "./events.js";
@@ -50,6 +55,7 @@ import type {
   ExecuteTextResult,
   ShellBudget,
   ShellCommand,
+  ShellCommandDescription,
   ShellCommandResolution,
   ShellExecution,
   ShellFileDescriptors,
@@ -551,6 +557,28 @@ async function resolveExecutableScript(
 }
 
 /**
+ * Describes every registered applet.
+ *
+ * An applet without a specification is still listed, so a consumer's own
+ * `ShellCommand` appears in help rather than silently missing.
+ */
+function describeCommands(runtime: Runtime): readonly ShellCommandDescription[] {
+  const described: ShellCommandDescription[] = [];
+  for (const name of runtime.commands.names()) {
+    const entry = runtime.commands.find(name);
+    if (entry === undefined) continue;
+    const spec = (entry.command as Partial<ShellApplet>).spec;
+    described.push({
+      name,
+      kind: entry.kind,
+      usage: spec?.usage ?? "",
+      summary: spec?.summary ?? "",
+    });
+  }
+  return described;
+}
+
+/**
  * Finds an executable VFS file a name selects, without reading it.
  *
  * Discovery classifies rather than runs, so it stops at the mode bit: a file
@@ -887,6 +915,7 @@ async function executeSimpleCommand(
             },
             resolveCommand: async (candidate) =>
               await resolveShellCommand(candidate, session, runtime),
+            listCommands: () => describeCommands(runtime),
             executeScript: async (scriptSource, scriptName, scriptArgs, scriptFds) =>
               await runScriptUnit(
                 scriptSource,

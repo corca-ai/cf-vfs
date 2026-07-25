@@ -26,8 +26,21 @@ export interface ExpansionRuntime {
   lastSubstitutionStatus(): number | undefined;
 }
 
+/**
+ * The `$-` option string.
+ *
+ * Only the options this profile spells as short flags appear, in a fixed order,
+ * so the value is a declaration of what is on rather than an imitation of
+ * Bash's flag set — Bash also reports `h`, `B`, `c`, and interactivity flags
+ * that have no meaning here.
+ */
+function shellOptionFlags(session: ShellSession): string {
+  return `${session.errexit === true ? "e" : ""}${session.nounset === true ? "u" : ""}`;
+}
+
 function variableState(name: string, session: ShellSession): { set: boolean; value: string } {
   if (name === "?") return { set: true, value: String(session.lastExitCode) };
+  if (name === "-") return { set: true, value: shellOptionFlags(session) };
   if (name === "#") return { set: true, value: String(session.args.length) };
   if (name === "@") return { set: session.args.length > 0, value: session.args.join(" ") };
   if (name === "0") return { set: true, value: session.env.get("0") ?? "cf-vfs" };
@@ -437,6 +450,34 @@ async function partValues(
   return splitValues([value], part.quoted, budget, existingCharacters, existingFields);
 }
 
+/**
+ * Replaces a leading unquoted tilde with `HOME`.
+ *
+ * The declared profile is `~` and `~/path` only. Every other form — `~user`,
+ * `~+`, `~-`, `~N` — stays literal, which is both what Bash does for a user it
+ * cannot resolve and the only honest answer here: there is no user database, so
+ * a name after the tilde identifies nothing. A tilde with `HOME` unset stays
+ * literal for the same reason.
+ *
+ * Tilde expansion precedes parameter expansion and reads only the first
+ * literal part, so a quoted tilde, a tilde produced by an expansion, and a
+ * tilde anywhere but the start of a word are all untouched.
+ */
+function expandTildePrefix(value: string, session: ShellSession): string {
+  if (!value.startsWith("~")) return value;
+  const rest = value.slice(1);
+  if (rest !== "" && !rest.startsWith("/")) return value;
+  const home = session.env.get("HOME");
+  return home === undefined || home === "" ? value : `${home}${rest}`;
+}
+
+function withTildePrefix(parts: readonly WordPart[], session: ShellSession): readonly WordPart[] {
+  const [first, ...rest] = parts;
+  if (first?.kind !== "literal" || first.quoted) return parts;
+  const value = expandTildePrefix(first.value, session);
+  return value === first.value ? parts : [{ ...first, value }, ...rest];
+}
+
 export async function expandWord(
   word: ShellWord,
   session: ShellSession,
@@ -448,7 +489,7 @@ export async function expandWord(
   let materializedCharacters = 0;
   let preservesEmptyField = false;
   let removedByExpansion = false;
-  for (const part of word.parts) {
+  for (const part of withTildePrefix(word.parts, session)) {
     if (part.kind === "literal") {
       const value = assertNoNul(part.value);
       preservesEmptyField ||= part.quoted;
@@ -527,7 +568,16 @@ export async function expandAssignmentValue(
 ): Promise<string> {
   const [first, ...rest] = word.parts;
   if (first?.kind !== "literal") throw new VfsError("EINVAL", "invalid assignment word");
-  const parts: WordPart[] = [{ ...first, value: first.value.slice(name.length + 1) }, ...rest];
+  // An assignment expands a tilde after `=` and after each `:`, which is what
+  // makes `PATH=~/bin:~/tools` work.
+  const assigned = first.value.slice(name.length + 1);
+  const literal = first.quoted
+    ? assigned
+    : assigned
+        .split(":")
+        .map((segment) => expandTildePrefix(segment, session))
+        .join(":");
+  const parts: WordPart[] = [{ ...first, value: literal }, ...rest];
   const value = await scalarParts(parts, session, fileSystem, budget, runtime);
   budget.expansionOutput(codePointLength(value));
   return value;

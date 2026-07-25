@@ -796,7 +796,7 @@ class Lexer {
       const expansion = this.readBracedParameter();
       return { kind: "parameter", expansion, quoted };
     }
-    if (next !== undefined && /[A-Za-z_?#@0-9]/u.test(next)) {
+    if (next !== undefined && /[A-Za-z_?#@0-9-]/u.test(next)) {
       this.offset += 2;
       let name = next;
       if (/[A-Za-z_]/u.test(next)) {
@@ -806,7 +806,7 @@ class Lexer {
       }
       return { kind: "parameter", expansion: { name, length: false }, quoted };
     }
-    if (next === "*" || next === "-" || next === "$") {
+    if (next === "*" || next === "$") {
       throw this.error("special parameter is not supported by this language version", start);
     }
     return undefined;
@@ -820,7 +820,7 @@ class Lexer {
       length = true;
       this.offset += 1;
     }
-    const name = /^(?:[A-Za-z_][A-Za-z0-9_]*|[?#@]|[0-9]+)/u.exec(
+    const name = /^(?:[A-Za-z_][A-Za-z0-9_]*|[?#@-]|[0-9]+)/u.exec(
       this.source.slice(this.offset),
     )?.[0];
     if (name === undefined) throw this.error("invalid parameter expansion", start);
