@@ -13,6 +13,7 @@ import { optindGeneration, setOptindFromGetopts } from "../environment.js";
 import { readInputRecord } from "../input.js";
 import type { ShellCommandContext } from "../types.js";
 import { type AppletSpec, appletUsageError, defineApplet } from "./applet.js";
+import { FILE_TYPE_MASK, REGULAR_FILE_TYPE } from "./format.js";
 import { type BufferLease, commandPath, parseInteger, readFileText, writeText } from "./helpers.js";
 
 const COLON = {
@@ -822,7 +823,10 @@ async function evaluateTest(
         const stat = asks ? context.fileSystem.lstat(path) : context.fileSystem.stat(path);
         if (asks) return stat.kind === "symlink";
         if (unary === "-e") return true;
-        if (unary === "-f") return stat.kind === "file";
+        // A regular file, which a character device is not.
+        if (unary === "-f") {
+          return stat.kind === "file" && (stat.mode & FILE_TYPE_MASK) === REGULAR_FILE_TYPE;
+        }
         if (unary === "-d") return stat.kind === "directory";
         if (unary === "-s") return stat.sizeBytes > 0;
         // Compatibility mode bits only. There is no user or group here, so a

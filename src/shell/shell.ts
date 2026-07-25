@@ -15,6 +15,7 @@ import {
   type ShellApplet,
   splitSearchPath,
 } from "./commands/applet.js";
+import { FILE_TYPE_MASK, REGULAR_FILE_TYPE } from "./commands/format.js";
 import { optindGeneration } from "./environment.js";
 import { ShellNounsetError } from "./errors.js";
 import { emitShellEvent, type ShellEventSink } from "./events.js";
@@ -1013,7 +1014,9 @@ function conditionalFileTest(operator: ConditionalUnaryOperator, stat: VfsStat):
     case "-h":
       return stat.kind === "symlink";
     case "-f":
-      return stat.kind === "file";
+      // A regular file, which a character device is not — the mode's type
+      // field is the only thing that distinguishes them here.
+      return stat.kind === "file" && (stat.mode & FILE_TYPE_MASK) === REGULAR_FILE_TYPE;
     case "-d":
       return stat.kind === "directory";
     case "-s":

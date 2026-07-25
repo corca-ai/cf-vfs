@@ -1,5 +1,6 @@
 import { VfsError } from "../core/errors.js";
 import { dirname, isDescendant, normalizePath } from "../core/path.js";
+import { bodyToStream } from "../vfs/streams.js";
 import type {
   AppendFileOptions,
   ByteBody,
@@ -22,6 +23,7 @@ import type {
   WriteFileOptions,
   WriteResult,
 } from "../vfs/types.js";
+import { deviceStat, type ShellDevice, shellDevice } from "./devices.js";
 import type { ShellBudget, ShellFileSystem, ShellPolicy } from "./types.js";
 
 function allowed(path: string, roots: readonly string[] | undefined): boolean {
@@ -153,6 +155,8 @@ export class ScopedFileSystem implements ShellFileSystem {
 
   lstat(path: string) {
     this.readLink(path);
+    const device = this.#device(path);
+    if (device !== undefined) return deviceStat(device.path, device.device);
     return this.#inner.lstat(path);
   }
 
@@ -177,6 +181,8 @@ export class ScopedFileSystem implements ShellFileSystem {
   inspectWriteTarget(path: string): VfsStat | null {
     const normalized = normalizePath(path);
     this.write(normalized);
+    const device = this.#device(normalized);
+    if (device !== undefined) return deviceStat(device.path, device.device);
     const parent = this.#inner.stat(dirname(normalized));
     if (parent.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", parent.path);
     try {
@@ -187,8 +193,24 @@ export class ScopedFileSystem implements ShellFileSystem {
     }
   }
 
+  /**
+   * Answers a device path, or reports that this is not one.
+   *
+   * The check happens after the policy check, never before: a device is
+   * subject to the declared roots like any other path, so a session scoped to
+   * `/work` does not silently gain `/dev`. Nothing below this reaches storage,
+   * which is what keeps a device from costing a SQL statement.
+   */
+  #device(path: string): { device: ShellDevice; path: string } | undefined {
+    const normalized = normalizePath(path);
+    const device = shellDevice(normalized);
+    return device === undefined ? undefined : { device, path: normalized };
+  }
+
   stat(path: string) {
     this.read(path);
+    const device = this.#device(path);
+    if (device !== undefined) return deviceStat(device.path, device.device);
     return this.#inner.stat(path);
   }
 
@@ -219,17 +241,68 @@ export class ScopedFileSystem implements ShellFileSystem {
 
   readFile(path: string): InlineReadResult {
     this.read(path);
+    const device = this.#device(path);
+    if (device !== undefined) {
+      if (device.device !== "null") {
+        // `cat /dev/stdin` as an operand would need the execution's input,
+        // which this layer does not hold. Redirection is where a descriptor
+        // alias belongs, and `< /dev/stdin` is how to write it.
+        throw new VfsError("EINVAL", "device is not readable as a file", device.path);
+      }
+      return {
+        stat: deviceStat(device.path, device.device) as InlineReadResult["stat"],
+        stream: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.close();
+          },
+        }),
+      };
+    }
     return this.#inner.readFile(path);
   }
 
   writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult> {
     this.write(path);
+    const discarded = this.#discard(path, body);
+    if (discarded !== undefined) return discarded;
     this.#budget.mutation();
     return this.#inner.writeFile(path, body, options);
   }
 
+  /**
+   * Consumes and drops a body written to `/dev/null`.
+   *
+   * The stream is drained rather than ignored so a producer sees its writes
+   * accepted and any lease it holds is released, and the bytes are charged to
+   * the I/O budget so the discard is not a way to do unmetered work. No
+   * mutation is charged, because nothing was mutated.
+   */
+  #discard(path: string, body: ByteBody): Promise<WriteResult> | undefined {
+    const device = this.#device(path);
+    if (device?.device !== "null") return undefined;
+    const stat = deviceStat(device.path, device.device);
+    return (async () => {
+      const stream = bodyToStream(body);
+      const reader = stream.getReader();
+      for (;;) {
+        const next = await reader.read();
+        if (next.done) break;
+        this.#budget.io(next.value.byteLength);
+      }
+      return {
+        path: stat.path,
+        revision: stat.revision,
+        mutationToken: stat.mutationToken,
+        sizeBytes: 0,
+        created: false,
+      };
+    })();
+  }
+
   appendFile(path: string, body: ByteBody, options?: AppendFileOptions): Promise<WriteResult> {
     this.write(path);
+    const discarded = this.#discard(path, body);
+    if (discarded !== undefined) return discarded;
     this.#budget.mutation();
     return this.#inner.appendFile(path, body, options);
   }

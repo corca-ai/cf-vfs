@@ -21,6 +21,11 @@ host filesystem access.
 | Locks and open handles | There is no persistent descriptor lifecycle or advisory/mandatory locking. Returned inline streams are bounded snapshots; guards provide optimistic concurrency. |
 | Errors | Familiar codes include `ENOENT`, `ENOEXEC`, `EEXIST`, `ENOTDIR`, `EISDIR`, `ENOTEMPTY`, `ELOOP`, `EFBIG`, `ENOSPC`, `EPIPE`, and `ENOTSUP`. `EREVISION` denotes a stale guard. This is not the complete POSIX errno set. |
 
+`/dev/null` and the descriptor paths `/dev/stdin`, `/dev/stdout`, `/dev/stderr`
+and their `/dev/fd/N` spellings exist during a shell execution and nowhere
+else. They are not namespace entries, they cost no storage, and they are
+subject to the declared roots like any other path. No other device exists.
+
 Virtual descriptors `0`, `1`, and `2` exist only for one submitted source
 unit, including in an interactive session. Pipelines connect them with byte
 streams and left-to-right `2>&1` duplication; they are not Durable Object state

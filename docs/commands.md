@@ -600,6 +600,36 @@ abort signal or the execution deadline, so one short pattern from a caller would
 burn the whole CPU limit. Patterns that would still be large after expansion
 (`(x{50}){50}`) are refused with status 2 rather than compiled.
 
+### Virtual devices
+
+`/dev/null`, `/dev/stdin`, `/dev/stdout`, and `/dev/stderr` exist during a
+shell execution, along with the `/dev/fd/0`, `/dev/fd/1`, and `/dev/fd/2`
+spellings of the last three. They are names the shell knows, not entries: no
+`/dev` directory exists, nothing creates one, `ls /` does not show one, and
+using one performs no SQL statement and no R2 request.
+
+`/dev/null` discards what is written to it and reads as empty. Nothing is
+buffered — each chunk is charged to the I/O budget and dropped, so discarding
+costs what writing costs and cannot be used to move bytes for free. The other
+three are aliases for this execution's descriptors, taken through the same
+reference counting `2>&1` uses, so `> /dev/stderr` writes where standard error
+currently goes and releasing the alias does not close what it duplicates. A
+descriptor alias names where the descriptor points at the moment it is opened,
+which is why `> /dev/null > /dev/stdout` discards, as it does in Bash.
+
+They report as character devices: `test -e` and `-r`/`-w` succeed, `test -f`
+fails because a device is not a regular file, and `stat -c %F`, `file`, and
+`ls -l` say so. Reading `/dev/stdout` or writing `/dev/stdin` is refused rather
+than approximated — there is no file behind a descriptor to read back, and
+answering with nothing would look like an empty one. Any other `/dev` path is
+`ENOENT` like any other missing path; `/dev/zero`, terminals, and the rest
+would each need a model this runtime cannot make true.
+
+The declared roots apply to a device exactly as they do to any other path,
+with no exemption: a session scoped to `/work` cannot write `/dev/null` unless
+it also lists `/dev`. Making devices unconditionally reachable would be a hole
+in the sandbox that no policy could close.
+
 ### Symbolic links
 
 `ln -s` creates a link and stores the target exactly as written. The target is
