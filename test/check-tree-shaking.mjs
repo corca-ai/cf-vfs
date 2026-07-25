@@ -151,8 +151,13 @@ const PRESETS = [
     name: "shell",
     config: "wrangler.shell-tree-shake.jsonc",
     describe: "the non-interactive shell with one applet",
-    include: [M.shell, M.parser, M.applet, M.core],
+    // `devices` and `content` are named here because the executor constructs
+    // them on every run: they are core by consequence, and listing them keeps
+    // that a decision rather than an accident.
+    include: [M.shell, M.parser, M.applet, M.core, M.devices, M.content],
     exclude: [
+      M.completion,
+      M.opaqueReader,
       M.interactive,
       M.fs,
       M.ls,
