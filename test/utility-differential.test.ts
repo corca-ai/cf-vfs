@@ -39,27 +39,25 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe("2 3 14\n");
   },
-  "regexp-dialect-is-javascript": async () => {
+  "regexp-subset-is-declared": async () => {
     const harness = createBashHarness();
-    // `a+` repeats here and is a literal plus under POSIX basic expressions.
-    const repetition = await harness.run("printf 'a+b\\naab\\n' | grep 'a+'");
-    expect(repetition.exitCode).toBe(0);
-    expect(repetition.stdout).toBe("a+b\naab\n");
-    // `\|` is an escaped literal here and alternation under POSIX.
-    const alternation = await harness.run("printf 'a\\nb\\n' | grep 'a\\|x'");
-    expect(alternation.exitCode).toBe(1);
-    expect(alternation.stdout).toBe("");
+    // A GNU extension is refused rather than silently meaning a JavaScript class.
+    const supported = await harness.run(String.raw`printf 'a1
+' | grep '[[:digit:]]'`);
+    expect(supported.stdout).toBe("a1\n");
+    for (const pattern of ["\\w", "\\b", "\\1"]) {
+      const result = await harness.run(`printf 'a\\n' | grep '${pattern}'`);
+      expect(result.exitCode, pattern).toBe(2);
+      expect(result.stderr, pattern).toContain("grep:");
+    }
   },
-  "sed-replacement-is-literal-text": async () => {
+  "sed-language-is-a-bounded-subset": async () => {
     const harness = createBashHarness();
-    // GNU expands `&` to the match; this profile writes it literally.
-    const ampersand = await harness.run("printf 'a+b\\n' | sed 's/a/[&]/'");
-    expect(ampersand.exitCode).toBe(0);
-    expect(ampersand.stdout).toBe("[&]+b\n");
-    // JavaScript substitution syntax must not splice the record into itself.
-    const splice = await harness.run("printf 'secret-token\\n' | sed 's/token/$`/'");
-    expect(splice.exitCode).toBe(0);
-    expect(splice.stdout).toBe("secret-$`\n");
+    for (const script of ["y/a/b/", "1h", ":top", "a\\text"]) {
+      const result = await harness.run(`printf 'x\\n' | sed '${script}'`);
+      expect(result.exitCode, script).toBe(2);
+      expect(result.stderr, script).toContain("sed:");
+    }
   },
   "type-does-not-print-a-function-body": async () => {
     const harness = createBashHarness();
@@ -198,7 +196,9 @@ for (const [name, oracle] of Object.entries(fixtures.oracles)) {
         const harness = createBashHarness({ commandResolution: "path" });
         harness.fileSystem.mkdir(WORKDIR, true);
         for (const [path, content] of Object.entries(fixture.files ?? {})) {
-          await harness.fileSystem.writeFile(`${WORKDIR}/${path}`, content);
+          await harness.fileSystem.writeFile(`${WORKDIR}/${path}`, content, {
+            createParents: true,
+          });
         }
         const result = await harness.run(fixture.script, {
           cwd: WORKDIR,

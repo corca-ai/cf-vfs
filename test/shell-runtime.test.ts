@@ -58,10 +58,11 @@ describe("stream-first shell runtime", () => {
       script: `mkdir -p src; printf b > src/b.ts; printf a > src/a.ts; find src -name '*.ts' | sort > files.txt; cat files.txt`,
     });
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toBe("/src/a.ts\n/src/b.ts\n");
+    // `find` reports each match the way the operand was written, as GNU does.
+    expect(result.stdout).toBe("src/a.ts\nsrc/b.ts\n");
     expect(
       new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/files.txt").stream, 1024)),
-    ).toBe("/src/a.ts\n/src/b.ts\n");
+    ).toBe("src/a.ts\nsrc/b.ts\n");
   });
 
   it("lets touch -c ignore only missing targets", async () => {
@@ -122,7 +123,10 @@ describe("stream-first shell runtime", () => {
 
     expect(result).toEqual({
       exitCode: 0,
-      stdout: ["drwx------        0 sub\n", "10\n2\n", "1:Alpha\n", "1 2 4\n", "b\n"].join(""),
+      // `ls -d` names the operand as it was written, as GNU does.
+      stdout: ["drwx------        0 /copy/sub\n", "10\n2\n", "1:Alpha\n", "1 2 4\n", "b\n"].join(
+        "",
+      ),
       stderr: "",
     });
     expect(() => fileSystem.stat("/copy")).toThrowError(

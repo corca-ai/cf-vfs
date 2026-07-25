@@ -161,6 +161,14 @@ export interface ShellCommandContext {
    * registry keeps them from importing the applet table themselves.
    */
   listCommands(): readonly ShellCommandDescription[];
+  /**
+   * The execution's clock, in milliseconds since the epoch.
+   *
+   * Injected so a test can pin it and so nothing reads a host clock directly.
+   * On Workers it advances only across I/O, which is why no command may use it
+   * as a bound; see the deadline note in the operations documentation.
+   */
+  now(): number;
 
   /**
    * Runs a bounded source unit in an isolated child scope.

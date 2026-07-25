@@ -125,6 +125,7 @@ async function abortRedirectedDescriptors(
 interface Runtime {
   commands: AppletRegistry;
   pathLookup: boolean;
+  now: () => number;
   fileSystem: ScopedFileSystem;
   budget: ShellBudget;
   policy: ShellPolicy;
@@ -917,6 +918,7 @@ async function executeSimpleCommand(
             resolveCommand: async (candidate) =>
               await resolveShellCommand(candidate, session, runtime),
             listCommands: () => describeCommands(runtime),
+            now: () => runtime.now(),
             executeScript: async (scriptSource, scriptName, scriptArgs, scriptFds) =>
               await runScriptUnit(
                 scriptSource,
@@ -1657,6 +1659,7 @@ export class Shell {
         const result = await runScript(parsed, session, rootFds, {
           commands: this.commands,
           pathLookup: this.pathLookup,
+          now: this.now,
           fileSystem: scoped,
           budget,
           policy: this.policy,

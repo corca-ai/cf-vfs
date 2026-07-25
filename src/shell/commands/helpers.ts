@@ -1,7 +1,7 @@
 import { VfsError } from "../../core/errors.js";
 import { splitLinesPreservingEndings } from "../../core/lines.js";
 import { normalizePath } from "../../core/path.js";
-import type { InlineReadResult } from "../../vfs/types.js";
+import type { EntryPage, InlineReadResult } from "../../vfs/types.js";
 import type { ShellCommandContext, ShellSink } from "../types.js";
 
 export interface BufferLease<T> {
@@ -104,6 +104,56 @@ export async function* inputStreams(
     if (path === "-") yield { name: "-", stream: stdin };
     else yield { name: path, stream: readFile(context, path).stream };
   }
+}
+
+/**
+ * Walks the file operands of a recursive command.
+ *
+ * A directory expands through `findPage`, so a large subtree costs a bounded
+ * number of indexed queries and never materializes the whole namespace. Each
+ * page charges the shared glob budget, which is what bounds the walk, and a
+ * non-directory operand is yielded as itself so `grep -r file` still works.
+ */
+export async function* recursiveInputs(
+  context: ShellCommandContext,
+  paths: readonly string[],
+): AsyncGenerator<{ name: string; stream: ReadableStream<Uint8Array> }> {
+  for (const path of paths.length === 0 ? ["."] : paths) {
+    const normalized = commandPath(context, path);
+    const stat = context.fileSystem.stat(normalized);
+    if (stat.kind !== "directory") {
+      yield { name: path, stream: context.fileSystem.readFile(normalized).stream };
+      continue;
+    }
+    const display = (entry: string): string => displayPath(path, normalized, entry);
+    let cursor: string | null = null;
+    do {
+      context.budget.step();
+      const page: EntryPage = context.fileSystem.findPage({
+        path: normalized,
+        type: "file",
+        ...(cursor === null ? {} : { cursor }),
+      });
+      context.budget.glob(page.scanned);
+      for (const entry of page.entries) {
+        yield { name: display(entry.path), stream: context.fileSystem.readFile(entry.path).stream };
+      }
+      cursor = page.nextCursor;
+    } while (cursor !== null);
+  }
+}
+
+/**
+ * Renders a resolved path the way the operand was written.
+ *
+ * A recursive utility reports `t/sub/b.txt` for the operand `t`, not the
+ * absolute path it resolved to, because that is what the caller named and what
+ * every other tool prints.
+ */
+export function displayPath(operand: string, resolved: string, entry: string): string {
+  if (entry === resolved) return operand;
+  const suffix = resolved === "/" ? entry : entry.slice(resolved.length);
+  return `${operand.replace(/\/$/u, "")}${suffix}`;
 }
 
 export async function* readTextLines(

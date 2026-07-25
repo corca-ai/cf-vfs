@@ -69,20 +69,6 @@
       "reason": "GNU diff defaults to the normal format and selects others by option. cf-vfs documents one format so `diff | patch` composes deterministically."
     },
     {
-      "id": "regexp-dialect-is-javascript",
-      "command": "grep, sed",
-      "oracle": "coreutils",
-      "summary": "patterns use JavaScript regular-expression syntax under the Unicode flag, not POSIX basic or extended regular expressions",
-      "reason": "The runtime compiles a pattern with the Workers RegExp engine rather than shipping a POSIX matcher. Literals, `.`, `*`, `^`, `$`, and bracket expressions agree with BRE and are pinned by fixtures, but every other metacharacter differs: `a+` repeats in cf-vfs and is literal in BRE, while `a\\|x` alternates in BRE and is literal here. `grep -E` and a declared BRE translation are follow-up work in #49."
-    },
-    {
-      "id": "sed-replacement-is-literal-text",
-      "command": "sed",
-      "oracle": "coreutils",
-      "summary": "the replacement is literal text with no match reference",
-      "reason": "GNU sed expands `&` to the match and `\\1` to a capture group. This profile writes both literally and escapes JavaScript's `$&`, `$\\`` , `$'`, and `$n` forms so replacement text taken from data can never splice another part of the record into the output. Capture groups and match references are follow-up work in #49."
-    },
-    {
       "id": "type-does-not-print-a-function-body",
       "command": "type",
       "oracle": "bash",
@@ -130,6 +116,20 @@
       "oracle": "bash",
       "summary": "an unquoted default such as ${X-~/d} keeps the tilde literal",
       "reason": "Tilde expansion runs on the written word, where quote provenance is still available. A default inside a parameter expansion is produced during that expansion, so treating it as a tilde prefix would mean re-scanning generated text as syntax — which is exactly what this runtime refuses to do everywhere else. Quoted `\"${X-~/d}\"` agrees with Bash; the unquoted form differs."
+    },
+    {
+      "id": "regexp-subset-is-declared",
+      "command": "grep, sed",
+      "oracle": "coreutils",
+      "summary": "patterns are a declared subset of POSIX basic and extended expressions; anything outside it is a usage error",
+      "reason": "Patterns are translated rather than handed to the JavaScript engine, so no JavaScript-only construct can mean something here that it does not mean in grep. The subset is literals, `.`, `*`, bracket expressions with ranges and POSIX classes, `^`, `$`, grouping, alternation, `+`, `?`, and intervals. Back-references and the GNU extensions `\\\\w`, `\\\\b`, `\\\\<`, and `\\\\>` are refused with status 2 rather than approximated, and `-i` folds the twenty-six ASCII pairs only, because the runtime declares LC_ALL=C."
+    },
+    {
+      "id": "sed-language-is-a-bounded-subset",
+      "command": "sed",
+      "oracle": "coreutils",
+      "summary": "sed implements s, p, and d with addresses; the rest of the language is refused",
+      "reason": "Hold space, branching, labels, and `a`, `i`, `c`, `y`, `r`, and `w` are a programming language rather than a utility, and several of them need state across records that a streaming profile cannot bound. Every command in the subset reads only the current record, so ordinary operation streams; `-i` is the one barrier and publishes a single guarded whole-file write. An unsupported command is status 2."
     }
   ],
   "cases": [
@@ -1000,6 +1000,294 @@
       "oracle": "bash",
       "script": "HOME=/tmp/home; case ~ in /tmp/home) printf 'match\\n';; *) printf 'no\\n';; esac",
       "stdout": "match\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-recursive",
+      "oracle": "coreutils",
+      "files": {
+        "t/a.txt": "alpha\nbeta\n",
+        "t/sub/b.txt": "gamma\nalpha\n",
+        "t/c.log": "nothing\n"
+      },
+      "script": "grep -r alpha t | sort",
+      "stdout": "t/a.txt:alpha\nt/sub/b.txt:alpha\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-files-with-matches",
+      "oracle": "coreutils",
+      "files": {
+        "t/a.txt": "alpha\nbeta\n",
+        "t/sub/b.txt": "gamma\nalpha\n",
+        "t/c.log": "nothing\n"
+      },
+      "script": "grep -rl alpha t | sort",
+      "stdout": "t/a.txt\nt/sub/b.txt\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-quiet-status",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "alpha\n"
+      },
+      "script": "grep -q alpha in.txt; printf 'found=%s\\n' \"$?\"; grep -q zzz in.txt; printf 'missing=%s\\n' \"$?\"",
+      "stdout": "found=0\nmissing=1\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-basic-plus-is-literal",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "a+b\naab\n"
+      },
+      "script": "grep 'a+' in.txt",
+      "stdout": "a+b\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-basic-escaped-plus-repeats",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "a+b\naab\n"
+      },
+      "script": "grep 'a\\\\+b' in.txt",
+      "stdout": "",
+      "exitCode": 1
+    },
+    {
+      "name": "grep-extended-alternation",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "alpha\nbeta\ngamma\n"
+      },
+      "script": "grep -E 'al|be' in.txt",
+      "stdout": "alpha\nbeta\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-basic-alternation",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "alpha\nbeta\ngamma\n"
+      },
+      "script": "grep 'al\\\\|be' in.txt",
+      "stdout": "",
+      "exitCode": 1
+    },
+    {
+      "name": "grep-character-class",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "abc\na1c\n"
+      },
+      "script": "grep '[[:digit:]]' in.txt",
+      "stdout": "a1c\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-ignore-case-is-ascii",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "k\nK\n"
+      },
+      "script": "grep -ic k in.txt",
+      "stdout": "2\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-interval",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "aa\naaa\n"
+      },
+      "script": "grep -E 'a{3}' in.txt",
+      "stdout": "aaa\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-print-address",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "one\ntwo\nthree\nfour\n"
+      },
+      "script": "sed -n '2p' in.txt",
+      "stdout": "two\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-delete-address",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "one\ntwo\nthree\nfour\n"
+      },
+      "script": "sed '2d' in.txt",
+      "stdout": "one\nthree\nfour\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-range",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "one\ntwo\nthree\nfour\n"
+      },
+      "script": "sed -n '2,3p' in.txt",
+      "stdout": "two\nthree\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-regex-address",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "one\ntwo\nthree\n"
+      },
+      "script": "sed -n '/tw/p' in.txt",
+      "stdout": "two\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-last-address",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "one\ntwo\nthree\n"
+      },
+      "script": "sed -n '$p' in.txt; sed '$d' in.txt",
+      "stdout": "three\none\ntwo\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-negated-address",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "one\ntwo\nthree\n"
+      },
+      "script": "sed -n '2!p' in.txt",
+      "stdout": "one\nthree\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-multiple-expressions",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "one\ntwo\n"
+      },
+      "script": "sed -e 's/one/1/' -e 's/two/2/' in.txt",
+      "stdout": "1\n2\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-capture-and-ampersand",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "two\nabc\n"
+      },
+      "script": "sed 's/\\\\(t\\\\)wo/[\\\\1]/' in.txt; sed 's/b/[&]/' in.txt",
+      "stdout": "two\nabc\ntwo\na[b]c\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-nth-occurrence",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "oxoxo\n"
+      },
+      "script": "sed 's/o/0/2' in.txt; sed 's/o/0/2g' in.txt",
+      "stdout": "ox0xo\nox0x0\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-in-place",
+      "oracle": "coreutils",
+      "files": {
+        "edit.txt": "alpha\nbeta\n"
+      },
+      "script": "sed -i 's/alpha/ALPHA/' edit.txt; cat edit.txt",
+      "stdout": "ALPHA\nbeta\n",
+      "exitCode": 0
+    },
+    {
+      "name": "find-print0-through-xargs",
+      "oracle": "coreutils",
+      "files": {
+        "t/a.txt": "alpha\nbeta\n",
+        "t/sub/b.txt": "gamma\nalpha\n",
+        "t/c.log": "nothing\n"
+      },
+      "script": "find t -type f -print0 | xargs -0 -n1 basename | sort",
+      "stdout": "a.txt\nb.txt\nc.log\n",
+      "exitCode": 0
+    },
+    {
+      "name": "find-exec-once-per-path",
+      "oracle": "coreutils",
+      "files": {
+        "t/a.txt": "alpha\nbeta\n",
+        "t/sub/b.txt": "gamma\nalpha\n",
+        "t/c.log": "nothing\n"
+      },
+      "script": "find t -name '*.txt' -exec cat {} ';' | sort",
+      "stdout": "alpha\nalpha\nbeta\ngamma\n",
+      "exitCode": 0
+    },
+    {
+      "name": "find-exec-batched",
+      "oracle": "coreutils",
+      "files": {
+        "t/a.txt": "alpha\nbeta\n",
+        "t/sub/b.txt": "gamma\nalpha\n",
+        "t/c.log": "nothing\n"
+      },
+      "script": "find t -name '*.txt' -exec cat {} + | sort",
+      "stdout": "alpha\nalpha\nbeta\ngamma\n",
+      "exitCode": 0
+    },
+    {
+      "name": "ls-recursive",
+      "oracle": "coreutils",
+      "files": {
+        "t/a.txt": "alpha\nbeta\n",
+        "t/sub/b.txt": "gamma\nalpha\n",
+        "t/c.log": "nothing\n"
+      },
+      "script": "ls -R t",
+      "stdout": "t:\na.txt\nc.log\nsub\n\nt/sub:\nb.txt\n",
+      "exitCode": 0
+    },
+    {
+      "name": "ls-one-per-line",
+      "oracle": "coreutils",
+      "files": {
+        "t/a.txt": "alpha\nbeta\n",
+        "t/sub/b.txt": "gamma\nalpha\n",
+        "t/c.log": "nothing\n"
+      },
+      "script": "ls -1 t",
+      "stdout": "a.txt\nc.log\nsub\n",
+      "exitCode": 0
+    },
+    {
+      "name": "stat-format",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "body\n"
+      },
+      "script": "chmod 644 in.txt; stat -c '%s %a %F' in.txt",
+      "stdout": "5 644 regular file\n",
+      "exitCode": 0
+    },
+    {
+      "name": "expr-arithmetic-and-comparison",
+      "oracle": "coreutils",
+      "script": "expr 2 + 3; expr 7 / 2; expr 5 - 8; expr 1 = 1; expr abc = abc; expr length hello",
+      "stdout": "5\n3\n-3\n1\n1\n5\n",
+      "exitCode": 0
+    },
+    {
+      "name": "expr-status",
+      "oracle": "coreutils",
+      "script": "expr 1 = 2; printf 'status=%s\\n' \"$?\"",
+      "stdout": "0\nstatus=1\n",
       "exitCode": 0
     }
   ]

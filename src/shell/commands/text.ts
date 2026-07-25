@@ -1,6 +1,7 @@
 import { VfsError } from "../../core/errors.js";
 import { createLineDiff, renderLineDiff } from "../../core/line-diff.js";
 import { compareUtf8 } from "../../core/path.js";
+import { compilePosixRegex } from "../../core/posix-regex.js";
 import { applyUnifiedPatch } from "../../core/unified-patch.js";
 import {
   type AppletSpec,
@@ -22,6 +23,7 @@ import {
   readFileText,
   readTextLines,
   readWithAbort,
+  recursiveInputs,
   splitLines,
   writeBytes,
   writeText,
@@ -42,7 +44,7 @@ const SORT = {
 
 const GREP = {
   name: "grep",
-  usage: "[-cinvF] PATTERN [FILE...]",
+  usage: "[-cinvFElqrRh] PATTERN [PATH...]",
   summary: "prints records matching a pattern",
   options: {
     short: {
@@ -50,11 +52,26 @@ const GREP = {
       v: { name: "invert" },
       n: { name: "line-numbers" },
       F: { name: "fixed" },
+      E: { name: "extended" },
       c: { name: "count" },
+      l: { name: "files-with-matches" },
+      q: { name: "quiet" },
+      r: { name: "recursive" },
+      R: { name: "recursive" },
+      h: { name: "no-filename" },
     },
   },
 } as const satisfies AppletSpecWithOptions<
-  "ignore-case" | "invert" | "line-numbers" | "fixed" | "count"
+  | "ignore-case"
+  | "invert"
+  | "line-numbers"
+  | "fixed"
+  | "extended"
+  | "count"
+  | "files-with-matches"
+  | "quiet"
+  | "recursive"
+  | "no-filename"
 >;
 
 /** Shared by `head` and `tail`, which accept the same option spellings. */
@@ -168,12 +185,6 @@ const SHA256SUM = {
   name: "sha256sum",
   usage: "FILE...",
   summary: "prints the SHA-256 digest of each file",
-} as const satisfies AppletSpec;
-
-const SED = {
-  name: "sed",
-  usage: "s/PATTERN/REPLACEMENT/[g] [FILE...]",
-  summary: "applies the supported substitution to each record",
 } as const satisfies AppletSpec;
 
 const COMM = {
@@ -316,122 +327,79 @@ function asciiLower(value: string): string {
 
 const C_WHITESPACE = " \t\n\v\f\r";
 
-function asciiCaseInsensitiveRegexSource(source: string): string {
-  let output = "";
-  for (let index = 0; index < source.length; ) {
-    const character = source[index] ?? "";
-    if (character !== "\\") {
-      if (source.startsWith("(?<", index) && !["=", "!"].includes(source[index + 3] ?? "")) {
-        const end = source.indexOf(">", index + 3);
-        if (end >= 0) {
-          output += source.slice(index, end + 1);
-          index = end + 1;
-          continue;
-        }
-      }
-      output += asciiLower(character);
-      index += character.length;
-      continue;
-    }
-
-    const escaped = source[index + 1];
-    if (escaped === undefined) {
-      output += character;
-      break;
-    }
-    if ((escaped === "p" || escaped === "P") && source[index + 2] === "{") {
-      const end = source.indexOf("}", index + 3);
-      if (end >= 0) {
-        output += source.slice(index, end + 1);
-        index = end + 1;
-        continue;
-      }
-    }
-    if (escaped === "k" && source[index + 2] === "<") {
-      const end = source.indexOf(">", index + 3);
-      if (end >= 0) {
-        output += source.slice(index, end + 1);
-        index = end + 1;
-        continue;
-      }
-    }
-
-    const fixedHexDigits = escaped === "x" ? 2 : escaped === "u" ? 4 : 0;
-    if (fixedHexDigits > 0) {
-      const digits = source.slice(index + 2, index + 2 + fixedHexDigits);
-      if (digits.length === fixedHexDigits && /^[0-9a-f]+$/iu.test(digits)) {
-        const codePoint = Number.parseInt(digits, 16);
-        const folded = codePoint >= 0x41 && codePoint <= 0x5a ? codePoint + 0x20 : codePoint;
-        output += `\\${escaped}${folded.toString(16).padStart(fixedHexDigits, "0")}`;
-        index += 2 + fixedHexDigits;
-        continue;
-      }
-    }
-    if (escaped === "u" && source[index + 2] === "{") {
-      const end = source.indexOf("}", index + 3);
-      const digits = end < 0 ? "" : source.slice(index + 3, end);
-      if (end >= 0 && /^[0-9a-f]+$/iu.test(digits)) {
-        const codePoint = Number.parseInt(digits, 16);
-        const folded = codePoint >= 0x41 && codePoint <= 0x5a ? codePoint + 0x20 : codePoint;
-        output += `\\u{${folded.toString(16)}}`;
-        index = end + 1;
-        continue;
-      }
-    }
-    output += `\\${escaped}`;
-    index += 2;
-  }
-  return output;
-}
-
+/**
+ * Prints records matching a pattern.
+ *
+ * The pattern is a POSIX basic regular expression, or an extended one under
+ * `-E`. It is translated rather than handed to the JavaScript engine, so no
+ * JavaScript-only construct can mean something here that it does not mean in
+ * `grep`. `-r` walks a directory operand through the paged traversal, so a
+ * large subtree costs a bounded number of indexed queries and charges the
+ * shared glob budget. `-q` stops at the first match without producing output,
+ * which is what a guard wants.
+ */
 export const grepCommand = /* @__PURE__ */ defineApplet(GREP, async (context, argv, fds) => {
   const parsed = parseAppletOptions(GREP, argv);
-  const ignoreCase = parsed.options.some((option) => option.name === "ignore-case");
-  const invert = parsed.options.some((option) => option.name === "invert");
-  const lineNumbers = parsed.options.some((option) => option.name === "line-numbers");
-  const fixed = parsed.options.some((option) => option.name === "fixed");
-  const count = parsed.options.some((option) => option.name === "count");
+  const has = (name: string): boolean => parsed.options.some((option) => option.name === name);
+  const ignoreCase = has("ignore-case");
+  const invert = has("invert");
+  const lineNumbers = has("line-numbers");
+  const fixed = has("fixed");
+  const extended = has("extended");
+  const count = has("count");
+  const filesWithMatches = has("files-with-matches");
+  const quiet = has("quiet");
+  const recursive = has("recursive");
+  const noFilename = has("no-filename");
+  if (fixed && extended) throw appletUsageError(GREP, "specify at most one of -F and -E");
   const values = [...parsed.operands];
   const pattern = values.shift();
   if (pattern === undefined) throw appletUsageError(GREP, "missing pattern");
   if (new TextEncoder().encode(pattern).byteLength > 4096) {
     throw new VfsError("E2BIG", "grep pattern is too large");
   }
-  let regular: RegExp | undefined;
-  if (!fixed) {
-    try {
-      regular = new RegExp(ignoreCase ? asciiCaseInsensitiveRegexSource(pattern) : pattern, "u");
-    } catch {
-      throw appletUsageError(GREP, "invalid regular expression");
-    }
-  }
-  const multipleInputs = values.length > 1;
+  const regular = fixed
+    ? undefined
+    : compilePosixRegex(pattern, extended ? "extended" : "basic", GREP.name, {
+        ...(ignoreCase ? { ignoreCase: true } : {}),
+      });
+  const needle = ignoreCase ? asciiLower(pattern) : pattern;
+
+  const sources = recursive
+    ? recursiveInputs(context, values)
+    : inputStreams(context, values, fds[0]);
+  // With `-r` one directory operand still expands to many files, so the name is
+  // shown whenever more than one source can appear.
+  const showName = !noFilename && (values.length > 1 || recursive);
   let matches = 0;
   const output = new BufferedTextWriter(context, fds[1]);
   try {
-    for await (const input of inputStreams(context, values, fds[0])) {
+    for await (const input of sources) {
       let inputMatches = 0;
       let index = 0;
       for await (const line of readTextLines(context, input.stream, input.name)) {
         index += 1;
         const candidate = line.endsWith("\n") ? line.slice(0, -1) : line;
         const found = fixed
-          ? ignoreCase
-            ? asciiLower(candidate).includes(asciiLower(pattern))
-            : candidate.includes(pattern)
-          : (regular?.test(ignoreCase ? asciiLower(candidate) : candidate) ?? false);
+          ? (ignoreCase ? asciiLower(candidate) : candidate).includes(needle)
+          : (regular?.test(candidate) ?? false);
         if (regular !== undefined) regular.lastIndex = 0;
         if (found === invert) continue;
         matches += 1;
         inputMatches += 1;
-        if (!count) {
-          const prefix = `${multipleInputs ? `${input.name}:` : ""}${lineNumbers ? `${index}:` : ""}`;
-          await output.write(`${prefix}${line}${line.endsWith("\n") ? "" : "\n"}`);
-        }
+        if (quiet || filesWithMatches) break;
+        if (count) continue;
+        const prefix = `${showName ? `${input.name}:` : ""}${lineNumbers ? `${index}:` : ""}`;
+        await output.write(`${prefix}${line}${line.endsWith("\n") ? "" : "\n"}`);
       }
-      if (count) await output.write(`${multipleInputs ? `${input.name}:` : ""}${inputMatches}\n`);
+      if (quiet && matches > 0) break;
+      if (filesWithMatches) {
+        if (inputMatches > 0) await output.write(`${input.name}\n`);
+      } else if (count) {
+        await output.write(`${showName ? `${input.name}:` : ""}${inputMatches}\n`);
+      }
     }
-    await output.flush();
+    if (!quiet) await output.flush();
   } finally {
     output.abort();
   }
@@ -978,37 +946,6 @@ export const sha256sumCommand = /* @__PURE__ */ defineApplet(
     return 0;
   },
 );
-
-export const sedCommand = /* @__PURE__ */ defineApplet(SED, async (context, argv, fds) => {
-  const expression = argv[0];
-  if (expression === undefined) throw appletUsageError(SED, "missing expression");
-  const match = /^s(.)(.*?)\1(.*?)\1(g?)$/u.exec(expression);
-  if (match === null) throw appletUsageError(SED, "only s/old/new/[g] is supported");
-  const [, , pattern = "", replacement = "", global = ""] = match;
-  let regular: RegExp;
-  try {
-    regular = new RegExp(pattern, global === "g" ? "gu" : "u");
-  } catch {
-    throw appletUsageError(SED, "invalid regular expression");
-  }
-  // The replacement is literal text in this profile. Escaping `$` keeps
-  // JavaScript's `$&`, `$\``, `$'`, and `$1` substitution syntax from leaking
-  // through and splicing other parts of the record into the output.
-  const literalReplacement = replacement.replaceAll("$", "$$$$");
-  const output = new BufferedTextWriter(context, fds[1]);
-  try {
-    for await (const input of inputStreams(context, argv.slice(1), fds[0])) {
-      for await (const line of readTextLines(context, input.stream, input.name)) {
-        regular.lastIndex = 0;
-        await output.write(line.replace(regular, literalReplacement));
-      }
-    }
-    await output.flush();
-  } finally {
-    output.abort();
-  }
-  return 0;
-});
 
 function requireSorted(lines: readonly string[], name: string): void {
   for (let index = 1; index < lines.length; index += 1) {
