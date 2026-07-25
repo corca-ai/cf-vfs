@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SHELL_LIMITS, ExecutionBudget } from "../src/shell/budget.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
-import { DeviceFileSystem } from "../src/shell/devices.js";
+import { ReservedPathFileSystem } from "../src/shell/devices.js";
 import { ScopedFileSystem } from "../src/shell/policy.js";
 import { Shell } from "../src/shell/shell.js";
 import { bashCases, createBashHarness } from "./helpers/bash.js";
@@ -196,7 +196,7 @@ describe("virtual devices", () => {
     ]) {
       const result = await harness.run(script);
       expect(result.exitCode, script).not.toBe(0);
-      expect(result.stderr, script).toContain("device namespace cannot be changed");
+      expect(result.stderr, script).toContain("is reserved and cannot be changed");
     }
     // And the directory reads as one, listing exactly what it holds.
     expect((await harness.run("ls /dev")).stdout).toBe("fd\nnull\nstderr\nstdin\nstdout\n");
@@ -243,11 +243,13 @@ describe("virtual devices", () => {
     // A directory you can enter, stat, and read must also be one you can see.
     // Answering for `/dev` everywhere except its parent's listing is the same
     // disagreement the reservation exists to prevent.
-    expect((await harness.run("ls /")).stdout).toBe("dev\nhome\n");
+    expect((await harness.run("ls /")).stdout).toBe("bin\ndev\nhome\nusr\n");
     // `find / -maxdepth 1` is the same question as `ls /`, so it answers the
     // same. What is inside is not reported: those are descriptor paths a
     // recursive reader cannot open.
-    expect((await harness.run("find / -maxdepth 1 | sort")).stdout).toBe("/\n/dev\n/home\n");
+    expect((await harness.run("find / -maxdepth 1 | sort")).stdout).toBe(
+      "/\n/bin\n/dev\n/home\n/usr\n",
+    );
     expect((await harness.run("find / -type f | sort")).stdout).toBe("/home/a.txt\n");
     expect((await harness.run("find / -name dev")).stdout).toBe("/dev\n");
     // Naming it directly still lists what it holds.
@@ -259,7 +261,9 @@ describe("virtual devices", () => {
   it("returns every root entry exactly once when the listing is paged", async () => {
     const fileSystem = createTestFileSystem();
     for (const name of ["alpha", "beta", "zeta"]) await fileSystem.mkdir(`/${name}`, true);
-    const view = new DeviceFileSystem(
+    // No applet directories here: this is about placing a synthetic entry in a
+    // paged listing, and `/dev` alone shows that without 57 more names.
+    const view = new ReservedPathFileSystem(
       new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
     );
 
@@ -280,11 +284,62 @@ describe("virtual devices", () => {
     expect(seen).toEqual(["/alpha", "/beta", "/dev", "/zeta"]);
   });
 
+  it("lists the applet directories that resolve commands", async () => {
+    const harness = createBashHarness();
+    // `which cat` answering `/bin/cat` and `ls /bin` showing it are the same
+    // fact; a path that resolves has to be a path you can see.
+    const listed = (await harness.run("ls /bin")).stdout.trim().split("\n");
+    expect(listed).toContain("cat");
+    expect(listed).toContain("grep");
+    expect((await harness.run("ls /usr")).stdout).toBe("bin\n");
+    expect((await harness.run("ls /usr/bin")).stdout).toBe(`${listed.join("\n")}\n`);
+
+    // Only what actually resolves as a path. A session built-in has no program
+    // form, so listing `/bin/cd` would advertise a command that exits 127.
+    expect(listed).not.toContain("cd");
+    expect(listed).not.toContain("export");
+    // And `.` is a real applet whose path spelling collapses onto the
+    // directory itself, so it cannot be an entry in it.
+    expect(listed).not.toContain(".");
+    expect((await harness.run("/bin/echo runs")).stdout).toBe("runs\n");
+  });
+
+  it("reports an applet path as an executable file with no content", async () => {
+    const harness = createBashHarness();
+    expect((await harness.run("stat -c '%F %a %s' /bin/cat")).stdout).toBe("regular file 755 0\n");
+    expect((await harness.run("[ -x /bin/cat ] && echo executable")).stdout).toBe("executable\n");
+    expect((await harness.run("[ -f /bin/cat ] && echo file")).stdout).toBe("file\n");
+    expect((await harness.run("[ -d /bin ] && echo directory")).stdout).toBe("directory\n");
+    // There is no file behind it, and saying so beats returning nothing and
+    // letting that read as an empty one.
+    const read = await harness.run("cat /bin/cat");
+    expect(read.exitCode).not.toBe(0);
+    expect(read.stderr).toContain("no file content");
+  });
+
+  it("reserves the applet directories against change", async () => {
+    const harness = createBashHarness();
+    // The reason #46 kept these out of the namespace was that a row there
+    // could be removed while `/bin/cat` kept working. Reserving them answers
+    // that without making the directory invisible.
+    for (const script of [
+      "rm -r /bin",
+      "rm /bin/cat",
+      "mkdir /bin/x",
+      "touch /usr/bin/y",
+      "mkdir /usr",
+    ]) {
+      const result = await harness.run(script);
+      expect(result.exitCode, script).not.toBe(0);
+      expect(result.stderr, script).toContain("is reserved and cannot be changed");
+    }
+  });
+
   it("keeps devices out of the namespace", async () => {
     const harness = createBashHarness();
     // Using one creates nothing: `/dev` is shown because it is a directory
     // that answers, not because a row appeared behind it.
-    expect((await harness.run("echo x > /dev/null; ls /")).stdout).toBe("dev\n");
+    expect((await harness.run("echo x > /dev/null; ls /")).stdout).toBe("bin\ndev\nusr\n");
     expect(() => harness.fileSystem.stat("/dev/null")).toThrowError(/no such file or directory/u);
     expect(() => harness.fileSystem.stat("/dev")).toThrowError(/no such file or directory/u);
   });

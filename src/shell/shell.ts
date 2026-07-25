@@ -18,7 +18,7 @@ import {
 } from "./commands/applet.js";
 import { isCharacterDevice, isRegularFile } from "./commands/format.js";
 import { type ShellContentReader, scopedContentReader } from "./content.js";
-import { DeviceFileSystem } from "./devices.js";
+import { ReservedPathFileSystem } from "./devices.js";
 import { optindGeneration } from "./environment.js";
 import { ShellNounsetError } from "./errors.js";
 import { emitShellEvent, type ShellEventSink } from "./events.js";
@@ -1611,24 +1611,64 @@ export class Shell {
    * allowlist and include the applet path spellings that actually resolve, so
    * completion never advertises a command that would fail with 126 or 127.
    */
-  protected completionSource(session: ShellSession): {
-    fileSystem: ShellFileSystem;
-    commands: readonly string[];
-    appletDirectories: readonly string[];
-  } {
-    const budget = new ExecutionBudget(this.limits, this.now, this.onEvent);
+  /**
+   * The names this session could actually run, in resolution order.
+   *
+   * Filtered by the command allowlist and joined with the session's own
+   * functions, so nothing offered or listed is a command that would be refused.
+   */
+  #runnableNames(functions: ReadonlySet<string>): string[] {
     const allowed = this.policy.allowedCommands;
     const names: string[] = [];
     for (const command of this.commands.names()) {
       if (allowed !== undefined && !allowed.includes(command)) continue;
       names.push(command);
     }
+    for (const name of functions) if (!names.includes(name)) names.push(name);
+    return names.sort();
+  }
+
+  /**
+   * The filesystem a session sees: the policy's, with the reserved paths in
+   * front of it.
+   *
+   * The applet directories are listable rather than absent, so `which cat`
+   * answering `/bin/cat` and `ls /bin` showing it are the same fact. They hold
+   * no rows — a row there could be removed while `/bin/cat` kept working —
+   * which is why they are reserved here instead of provisioned.
+   */
+  #reservedView(budget: ExecutionBudget, names: readonly string[]): ShellFileSystem {
+    const directory = APPLET_DIRECTORIES[0] ?? "/bin";
+    const listed = names.filter(
+      (name) =>
+        // Only names that resolve as a path belong in the listing, which is
+        // what keeps a session-built-in like `cd` from appearing as
+        // `/bin/cd` and then failing with 127.
+        this.commands.findPath(`${directory}/${name}`) !== undefined &&
+        // And only names that survive being written as one. `.` is a real
+        // applet, but `/bin/.` normalizes back to `/bin`, so listing it would
+        // put the directory inside itself.
+        name !== "." &&
+        name !== ".." &&
+        !name.includes("/"),
+    );
+    return new ReservedPathFileSystem(new ScopedFileSystem(this.fileSystem, this.policy, budget), {
+      applets: { directories: APPLET_DIRECTORIES, names: listed },
+    });
+  }
+
+  protected completionSource(session: ShellSession): {
+    fileSystem: ShellFileSystem;
+    commands: readonly string[];
+    appletDirectories: readonly string[];
+  } {
+    const budget = new ExecutionBudget(this.limits, this.now, this.onEvent);
     // A shell function is a name this session created, and it resolves before
     // any applet does.
-    for (const name of session.functions.keys()) if (!names.includes(name)) names.push(name);
+    const names = this.#runnableNames(new Set(session.functions.keys()));
     return {
-      fileSystem: new DeviceFileSystem(new ScopedFileSystem(this.fileSystem, this.policy, budget)),
-      commands: names.sort(),
+      fileSystem: this.#reservedView(budget, names),
+      commands: names,
       // An absolute applet path resolves before any PATH search, so these
       // spell a runnable command whether or not PATH lookup is enabled.
       appletDirectories: APPLET_DIRECTORIES,
@@ -1668,7 +1708,7 @@ export class Shell {
     // execution. None of them can name anything the roots protect, so
     // requiring `/dev` in a session's roots would break `> /dev/null` for
     // every scoped caller while preventing nothing.
-    const scoped = new DeviceFileSystem(new ScopedFileSystem(this.fileSystem, this.policy, budget));
+    const scoped = this.#reservedView(budget, this.#runnableNames(new Set()));
     // The reader a host supplies is built over the unscoped filesystem, which
     // is where the lease lives; a session's copy carries the session's roots.
     const content =
