@@ -162,6 +162,34 @@ bytes without duplicating them as strings. Prefer
 `executeStream()` in-process or `executeTo()` across RPC when the consumer can
 stream.
 
+## Interactive sessions and reconnect
+
+The demo protocol's `hello` message is machine-readable so an agent or a UI can
+discover what a session supports without sniffing versions: a protocol number,
+a feature list, the byte and candidate caps it enforces, and — the part that
+matters most — what survives a disconnect.
+
+Files are in the Durable Object and durable. The shell session is not: working
+directory, environment, shell functions, and history live in memory for as long
+as the socket does. A reconnect produces a new session, and a client must not
+present it as a resumed one. The `durability` field says exactly this
+(`files: "durable"`, `session: "connection"`), and the demo client prints it on
+connect rather than leaving a user to discover it by losing a `cd`.
+
+Terminal dimensions are forwarded as a presentation hint and nothing more.
+There is no terminal behind the session — no modes, no `ioctl`, no job control
+— so the numbers are remembered for output decisions and never reported as a
+capability that does not exist.
+
+Line editing is the client's. Ctrl-W, Ctrl-U, Ctrl-K, Ctrl-L, and
+reverse-history-search never reach the server, because the shell reads lines
+and not keystrokes. Ctrl-C is the exception and keeps its meaning: it cancels
+the running execution, or clears a partly typed line when nothing is running.
+Ctrl-D on an empty line ends the session. Completion is the one editing feature
+that needs the server, and the client debounces it and stamps each request so
+an answer that arrives after the line has moved on is dropped rather than
+applied to the wrong text.
+
 ## Observability
 
 `VirtualFileSystem` and `Shell` each accept an optional `onEvent` sink.

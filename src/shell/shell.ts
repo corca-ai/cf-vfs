@@ -1542,8 +1542,8 @@ async function runScript(
 
 export class Shell {
   private readonly commands: AppletRegistry;
-  private readonly pathLookup: boolean;
-  private readonly fileSystem: ShellOptions["fileSystem"];
+  protected readonly pathLookup: boolean;
+  protected readonly fileSystem: ShellOptions["fileSystem"];
   private readonly policy: ShellPolicy;
   private readonly content: ShellContentReader | undefined;
   private readonly limits: ShellLimits;

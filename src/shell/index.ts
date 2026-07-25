@@ -1,5 +1,11 @@
 export * from "./budget.js";
 export type {
+  CompletionCandidate,
+  CompletionKind,
+  CompletionLimits,
+  CompletionResult,
+} from "./completion.js";
+export type {
   ContentBody,
   OpaqueContentAccess,
   ShellContentReader,

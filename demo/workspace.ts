@@ -6,6 +6,13 @@ import { VfsDurableObject } from "../src/vfs/durable-object.js";
 
 const MAX_PENDING_SOURCE_BYTES = 128 * 1024;
 const MAX_MESSAGE_BYTES = MAX_PENDING_SOURCE_BYTES + 1024;
+/**
+ * How many candidates one completion answer carries.
+ *
+ * A cap the client can see in the hello message, so it can say "and more"
+ * rather than presenting a truncated list as the whole answer.
+ */
+const MAX_COMPLETION_CANDIDATES = 48;
 const WORKSPACE_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
@@ -58,10 +65,54 @@ shell. It cannot launch processes or access the host filesystem.
 type ClientMessage =
   | { readonly type: "line"; readonly line: string }
   | { readonly type: "signal"; readonly signal: "SIGINT" }
+  | {
+      readonly type: "complete";
+      readonly line: string;
+      readonly cursor: number;
+      /** Echoed back, so a client can drop an answer to a stale keystroke. */
+      readonly token: number;
+    }
+  | {
+      /** Presentation only: nothing here claims a terminal mode or an ioctl. */
+      readonly type: "resize";
+      readonly columns: number;
+      readonly rows: number;
+    }
   | { readonly type: "ping" };
 
+/**
+ * What the server tells a client about itself on connect.
+ *
+ * Machine-readable on purpose: an agent or a UI should be able to discover
+ * what this session supports without a version-sniffing table, and should be
+ * able to see plainly that only files survive a reconnect.
+ */
+interface HelloMessage {
+  readonly type: "hello";
+  readonly cwd: string;
+  readonly protocol: 1;
+  readonly features: readonly string[];
+  readonly limits: {
+    readonly maxSourceBytes: number;
+    readonly maxCompletionCandidates: number;
+    readonly maxLineBytes: number;
+  };
+  /**
+   * What survives a reconnect, said outright.
+   *
+   * Files are in the Durable Object and durable. The shell session — working
+   * directory, environment, functions, history — lives in memory for as long
+   * as the socket does. A client that reconnects gets a new session and must
+   * not present it as a resumed one.
+   */
+  readonly durability: {
+    readonly files: "durable";
+    readonly session: "connection";
+  };
+}
+
 type ServerMessage =
-  | { readonly type: "hello"; readonly cwd: string }
+  | HelloMessage
   | {
       readonly type: "output";
       readonly stream: "stdout" | "stderr";
@@ -77,12 +128,24 @@ type ServerMessage =
   | { readonly type: "complete"; readonly cwd: string; readonly exitCode: number }
   | { readonly type: "error"; readonly message: string }
   | { readonly type: "closed"; readonly exitCode: number }
+  | {
+      readonly type: "candidates";
+      readonly token: number;
+      readonly start: number;
+      readonly end: number;
+      readonly commonPrefix: string;
+      readonly truncated: boolean;
+      readonly values: readonly { readonly value: string; readonly kind: string }[];
+    }
   | { readonly type: "pong" };
 
 interface TerminalSession {
   readonly shell: InteractiveShell;
   readonly input: InteractiveInputBuffer;
   pendingSourceBytes: number;
+  /** Presentation hints from the client; no terminal mode is implied. */
+  columns: number;
+  rows: number;
   execution: ShellExecution | undefined;
 }
 
@@ -111,6 +174,26 @@ function parseClientMessage(message: string | ArrayBuffer): ClientMessage {
   }
   if (input["type"] === "line" && typeof input["line"] === "string") {
     return { type: "line", line: input["line"] };
+  }
+  if (
+    input["type"] === "complete" &&
+    typeof input["line"] === "string" &&
+    typeof input["cursor"] === "number" &&
+    typeof input["token"] === "number"
+  ) {
+    return {
+      type: "complete",
+      line: input["line"],
+      cursor: input["cursor"],
+      token: input["token"],
+    };
+  }
+  if (
+    input["type"] === "resize" &&
+    typeof input["columns"] === "number" &&
+    typeof input["rows"] === "number"
+  ) {
+    return { type: "resize", columns: input["columns"], rows: input["rows"] };
   }
   throw new VfsError("EINVAL", "unsupported WebSocket message");
 }
@@ -240,6 +323,8 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
         },
       }),
       pendingSourceBytes: 0,
+      columns: 80,
+      rows: 24,
       execution: undefined,
     };
     this.sessions.set(server, session);
@@ -265,7 +350,18 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
     server.addEventListener("close", () => this.removeSession(server));
     server.addEventListener("error", () => this.removeSession(server));
 
-    send(server, { type: "hello", cwd: session.shell.cwd });
+    send(server, {
+      type: "hello",
+      cwd: session.shell.cwd,
+      protocol: 1,
+      features: ["completion", "resize-hint", "sigint", "continuation"],
+      limits: {
+        maxSourceBytes: MAX_PENDING_SOURCE_BYTES,
+        maxCompletionCandidates: MAX_COMPLETION_CANDIDATES,
+        maxLineBytes: SHELL_LIMITS.maxLineBytes ?? 0,
+      },
+      durability: { files: "durable", session: "connection" },
+    });
     prompt(server, session);
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -293,6 +389,35 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
         session.pendingSourceBytes = 0;
         prompt(socket, session);
       }
+      return;
+    }
+    if (message.type === "resize") {
+      // A presentation hint and nothing more: the shell has no terminal, no
+      // modes, and no ioctl, so this is remembered for `COLUMNS`-style output
+      // decisions and never reported as a capability the session does not have.
+      session.columns = Math.max(1, Math.min(1000, Math.trunc(message.columns)));
+      session.rows = Math.max(1, Math.min(1000, Math.trunc(message.rows)));
+      return;
+    }
+    if (message.type === "complete") {
+      // Answered even while a command runs: completion reads the session and
+      // does not touch the execution, and a user typing the next line should
+      // not have to wait for the current one.
+      const result = session.shell.complete(message.line, message.cursor, {
+        maxCandidates: MAX_COMPLETION_CANDIDATES,
+      });
+      send(socket, {
+        type: "candidates",
+        token: message.token,
+        start: result.start,
+        end: result.end,
+        commonPrefix: result.commonPrefix,
+        truncated: result.truncated,
+        values: result.candidates.map((candidate) => ({
+          value: candidate.value,
+          kind: candidate.kind,
+        })),
+      });
       return;
     }
     if (session.execution !== undefined) {

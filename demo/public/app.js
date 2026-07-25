@@ -82,6 +82,107 @@
   let cursor = 0;
   let historyIndex = 0;
   const history = [];
+  let searching = false;
+  let searchQuery = "";
+  let completionToken = 0;
+  let completionTimer = 0;
+  let lastCompletion = null;
+
+  /**
+   * Asks the server what could come next, debounced.
+   *
+   * Debounced and token-stamped because completion is a request per keystroke
+   * otherwise, and an answer that arrives after the line has moved on would
+   * edit the wrong text. A stale token is dropped rather than applied.
+   */
+  function requestCompletion() {
+    if (completionTimer !== 0) clearTimeout(completionTimer);
+    completionTimer = setTimeout(() => {
+      completionTimer = 0;
+      completionToken += 1;
+      send({ type: "complete", line, cursor, token: completionToken });
+    }, 40);
+  }
+
+  /** Applies an answer, if it is still about the line on screen. */
+  function applyCandidates(message) {
+    if (message.token !== completionToken) return;
+    if (message.values.length === 0) return;
+    const word = line.slice(message.start, message.end);
+    if (message.values.length === 1) {
+      const only = message.values[0];
+      // A directory is a step on the way somewhere, so it keeps its separator
+      // and the line stays open; anything else is finished with a space.
+      const finished = only.kind === "directory" ? only.value : `${only.value} `;
+      line = `${line.slice(0, message.start)}${finished}${line.slice(message.end)}`;
+      cursor = message.start + finished.length;
+      redrawLine();
+      return;
+    }
+    if (message.commonPrefix.length > word.length) {
+      line = `${line.slice(0, message.start)}${message.commonPrefix}${line.slice(message.end)}`;
+      cursor = message.start + message.commonPrefix.length;
+      redrawLine();
+      return;
+    }
+    // Nothing more to type: show the choices, and say so when the list was cut
+    // short rather than presenting part of it as all of it.
+    const shown = message.values.map((candidate) => candidate.value).join("  ");
+    terminal.write(`\r\n${shown}${message.truncated ? "  \x1b[38;5;244m…more\x1b[0m" : ""}\r\n`);
+    redrawLine();
+    lastCompletion = message;
+  }
+
+  function startSearch() {
+    searching = true;
+    searchQuery = "";
+    drawSearch();
+  }
+
+  function drawSearch() {
+    const match = searchMatch();
+    terminal.write(`\r\x1b[2K(reverse-i-search)\`${searchQuery}': ${match ?? ""}`);
+  }
+
+  function searchMatch() {
+    if (searchQuery === "") return history[history.length - 1];
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+      if ((history[index] ?? "").includes(searchQuery)) return history[index];
+    }
+    return undefined;
+  }
+
+  /** Returns true when the key belonged to the search, not to the line. */
+  function handleSearchKey(data) {
+    if (data === "\x12") {
+      drawSearch();
+      return true;
+    }
+    if (data === "\x07" || data === "\x1b") {
+      searching = false;
+      redrawLine();
+      return true;
+    }
+    if (data === "\r") {
+      const match = searchMatch();
+      searching = false;
+      line = match ?? "";
+      cursor = line.length;
+      redrawLine();
+      return true;
+    }
+    if (data === "\x7f") {
+      searchQuery = searchQuery.slice(0, -1);
+      drawSearch();
+      return true;
+    }
+    if (data.length === 1 && data >= " ") {
+      searchQuery += data;
+      drawSearch();
+      return true;
+    }
+    return false;
+  }
   const queuedLines = [];
 
   function setConnection(kind, label) {
@@ -198,6 +299,49 @@
       return;
     }
     if (running) return;
+    if (searching) {
+      if (handleSearchKey(data)) return;
+    }
+    // Ctrl-D on an empty line ends the session, as a shell does; on a line
+    // with text it does nothing, rather than deleting forward, because there
+    // is no forward-delete convention worth surprising anyone with here.
+    if (data === "\x04") {
+      if (line.length === 0) {
+        terminal.write("exit\r\n");
+        socket?.close();
+      }
+      return;
+    }
+    // Ctrl-W deletes the word before the cursor, Ctrl-U to the start of the
+    // line, Ctrl-K to the end. All three are line editing and never reach the
+    // server: the shell sees a line, not keystrokes.
+    if (data === "\x17") {
+      const before = line.slice(0, cursor).replace(/\s+$/u, "");
+      const start = Math.max(0, before.lastIndexOf(" ") + 1);
+      line = `${line.slice(0, start)}${line.slice(cursor)}`;
+      cursor = start;
+      redrawLine();
+      return;
+    }
+    if (data === "\x15") {
+      line = line.slice(cursor);
+      cursor = 0;
+      redrawLine();
+      return;
+    }
+    if (data === "\x0b") {
+      line = line.slice(0, cursor);
+      redrawLine();
+      return;
+    }
+    if (data === "\x12") {
+      startSearch();
+      return;
+    }
+    if (data === "\t") {
+      requestCompletion();
+      return;
+    }
     if (data === "\x0c") {
       terminal.clear();
       redrawLine();
@@ -270,12 +414,27 @@
       return;
     }
     if (message.type === "hello") {
+      // Said plainly, because the difference matters and is invisible: the
+      // files are in the Durable Object and survive; the session is not.
+      const durability =
+        message.durability?.session === "connection"
+          ? "\x1b[38;5;244mFiles persist. Working directory, variables, and history do not " +
+            "survive a reconnect.\x1b[0m\r\n"
+          : "";
       terminal.write(
         "\x1b[1;38;5;114mcf-vfs interactive demo\x1b[0m\r\n" +
           "\x1b[38;5;244mPersistent SQLite workspace · WebSocket transport · bounded Bash v4\x1b[0m\r\n" +
+          durability +
+          "\x1b[38;5;244mTab completes · Ctrl-R searches history · Ctrl-W/U/K edit · " +
+          "Ctrl-C cancels · Ctrl-D exits\x1b[0m\r\n" +
           "\x1b[38;5;244mTry \x1b[38;5;150mcat README.txt\x1b[38;5;244m or " +
           "\x1b[38;5;150mprintf 'hello\\n' > hello.txt\x1b[0m\r\n\r\n",
       );
+      return;
+    }
+    if (message.type === "candidates") {
+      applyCandidates(message);
+      sendDimensions();
       return;
     }
     if (message.type === "output") {
@@ -348,7 +507,22 @@
   }
 
   terminal.onData(handleTerminalData);
-  window.addEventListener("resize", () => fitAddon.fit());
+  window.addEventListener("resize", () => {
+    fitAddon.fit();
+    sendDimensions();
+  });
+
+  /**
+   * Tells the server how wide the view is, as a hint and nothing more.
+   *
+   * There is no terminal behind this session — no modes, no ioctl — so the
+   * server treats the numbers as presentation and never reports a capability
+   * it does not have.
+   */
+  function sendDimensions() {
+    if (!connected) return;
+    send({ type: "resize", columns: terminal.cols, rows: terminal.rows });
+  }
   terminalElement.addEventListener("click", () => terminal.focus());
 
   copyWorkspaceButton.addEventListener("click", async () => {

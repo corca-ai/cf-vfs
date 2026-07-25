@@ -38,6 +38,7 @@ const M = {
   script: "shell/script",
   devices: "shell/devices",
   content: "shell/content",
+  completion: "shell/completion",
   opaqueReader: "shell/opaque",
   linux: "shell/linux",
   parser: "shell/parser",
@@ -83,6 +84,7 @@ const PRESETS = [
       M.shell,
       M.script,
       M.devices,
+      M.completion,
       M.opaqueReader,
       M.interactive,
       M.sql,
@@ -109,6 +111,7 @@ const PRESETS = [
       M.shell,
       M.script,
       M.devices,
+      M.completion,
       M.opaqueReader,
       M.interactive,
       M.sql,
@@ -139,6 +142,7 @@ const PRESETS = [
       M.shell,
       M.script,
       M.devices,
+      M.completion,
       M.opaqueReader,
       M.r2,
     ],
@@ -211,8 +215,9 @@ const PRESETS = [
       M.devices,
     ],
     // The opt-in R2 reader must stay out even of the preset that imports every
-    // applet: a shell is inline-only until a host hands it the capability.
-    exclude: [M.interactive, M.linux, M.sql, M.doSql, M.r2, M.opaqueReader],
+    // applet: a shell is inline-only until a host hands it the capability. So
+    // must completion, which belongs to the interactive layer.
+    exclude: [M.interactive, M.completion, M.linux, M.sql, M.doSql, M.r2, M.opaqueReader],
   },
   {
     name: "linux-profile",
@@ -255,6 +260,7 @@ const PRESETS = [
       M.shell,
       M.script,
       M.devices,
+      M.completion,
       M.opaqueReader,
       M.interactive,
     ],

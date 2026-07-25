@@ -1,5 +1,7 @@
 import { VfsError } from "../core/errors.js";
 import { DEFAULT_SHELL_LIMITS } from "./budget.js";
+import { APPLET_DIRECTORIES } from "./commands/applet.js";
+import { type CompletionLimits, type CompletionResult, completeShellLine } from "./completion.js";
 import { isIncompleteShellSyntaxError, parseShellScript } from "./parser.js";
 import { createShellSession, prepareShellSessionUnit } from "./session.js";
 import { Shell } from "./shell.js";
@@ -72,6 +74,28 @@ export class InteractiveShell extends Shell {
 
   get isClosed(): boolean {
     return this.closed;
+  }
+
+  /**
+   * Offers what could come next at the cursor of a partly typed line.
+   *
+   * Runs against this session's working directory and environment, so a
+   * completion reflects where the user actually is. The registry is the one
+   * this shell was built with — completion never widens it.
+   *
+   * Bounded by construction: candidates returned, namespace entries examined,
+   * and the length of a word worth working on all have caps, and the result
+   * says what it scanned and whether a cap stopped it.
+   */
+  complete(line: string, cursor: number, limits?: Partial<CompletionLimits>): CompletionResult {
+    return completeShellLine(line, cursor, {
+      commands: this.listCommands().map((command) => command.name),
+      ...(this.pathLookup ? { appletDirectories: APPLET_DIRECTORIES } : {}),
+      fileSystem: this.fileSystem,
+      cwd: this.session.cwd,
+      env: Object.fromEntries(this.session.env),
+      ...(limits === undefined ? {} : { limits }),
+    });
   }
 
   snapshot(): InteractiveShellSnapshot {

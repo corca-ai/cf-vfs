@@ -84,6 +84,32 @@ here-documents, conditionals, loops, functions, groups, and trailing
 line-continuation backslashes so a terminal can display a continuation prompt.
 Complete invalid syntax is submitted immediately and returns status 2.
 
+### Completion
+
+`InteractiveShell.complete(line, cursor)` offers what could come next: command
+names in a command position, the `/bin` and `/usr/bin` spellings of them when
+PATH lookup is on, environment variables after `$` or `${`, and namespace paths
+everywhere else. It answers against the session's own working directory and
+environment, so a completion reflects where the user actually is.
+
+It is not a parse. Completion is asked for on lines that are usually
+incomplete — that is when anyone wants it — so it reads backwards from the
+cursor for a word and decides from what precedes it. A parser would refuse most
+of the lines a user completes on.
+
+Every search is bounded, and the bounds are visible in the result: candidates
+returned, namespace entries examined across all pages, and the length of a word
+worth working on. The result reports what it `scanned` so a caller can see the
+cost of a keystroke, and sets `truncated` when a cap stopped it rather than
+presenting a partial list as the whole answer. `commonPrefix` is computed over
+everything found, including candidates that were dropped, so a client that
+types it never has to undo it.
+
+The registry is an input, not a discovery: `completeShellLine` takes the
+command names it should offer. Completion never widens the set a shell was
+built with, and nothing in it imports the default registry — which is what
+keeps every applet out of the bundle of a shell that registered three.
+
 The `/shell` entry point does not re-export either interactive class.
 Non-interactive consumers therefore do not bundle the persistent-session or
 input-buffer layer. Both entry points share the single execution path in
