@@ -1,0 +1,380 @@
+(() => {
+  "use strict";
+
+  const STORAGE_KEY = "cf-vfs-demo-workspace-v1";
+  const UUID_PATTERN =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const RECONNECT_MIN_MS = 750;
+  const RECONNECT_MAX_MS = 8_000;
+  const KEEPALIVE_MS = 25_000;
+  const encoder = new TextEncoder();
+
+  const stateElement = document.querySelector("#connection-state");
+  const stateLabel = document.querySelector("#connection-label");
+  const workspaceElement = document.querySelector("#workspace-id");
+  const copyWorkspaceButton = document.querySelector("#copy-workspace");
+  const reconnectButton = document.querySelector("#reconnect");
+  const clearButton = document.querySelector("#clear-terminal");
+  const terminalElement = document.querySelector("#terminal");
+
+  function workspaceId() {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored !== null && UUID_PATTERN.test(stored)) return stored;
+    const created = crypto.randomUUID();
+    localStorage.setItem(STORAGE_KEY, created);
+    return created;
+  }
+
+  const workspace = workspaceId();
+  workspaceElement.textContent = workspace;
+
+  const terminal = new Terminal({
+    allowProposedApi: false,
+    convertEol: true,
+    cursorBlink: true,
+    cursorStyle: "bar",
+    fontFamily:
+      '"SFMono-Regular", Consolas, "Liberation Mono", "Noto Sans Mono", monospace',
+    fontSize: 13,
+    fontWeight: "400",
+    letterSpacing: 0.2,
+    lineHeight: 1.45,
+    scrollback: 3_000,
+    theme: {
+      background: "#07120f",
+      foreground: "#c8d8cf",
+      cursor: "#a7f3b4",
+      cursorAccent: "#07120f",
+      selectionBackground: "#315744",
+      black: "#07120f",
+      red: "#ff7b82",
+      green: "#83e5a4",
+      yellow: "#e7c477",
+      blue: "#7ab6e8",
+      magenta: "#c59be8",
+      cyan: "#72d7cf",
+      white: "#dbe8e0",
+      brightBlack: "#60766b",
+      brightRed: "#ff969b",
+      brightGreen: "#a7f3b4",
+      brightYellow: "#f1d491",
+      brightBlue: "#9ac9ee",
+      brightMagenta: "#d3afea",
+      brightCyan: "#94e6df",
+      brightWhite: "#f0f7f2",
+    },
+  });
+  const fitAddon = new FitAddon.FitAddon();
+  terminal.loadAddon(fitAddon);
+  terminal.open(terminalElement);
+  fitAddon.fit();
+  terminal.focus();
+
+  let socket;
+  let reconnectTimer;
+  let keepaliveTimer;
+  let reconnectDelay = RECONNECT_MIN_MS;
+  let manualReconnect = false;
+  let connected = false;
+  let running = true;
+  let promptAnsi = "";
+  let line = "";
+  let cursor = 0;
+  let historyIndex = 0;
+  const history = [];
+  const queuedLines = [];
+
+  function setConnection(kind, label) {
+    stateElement.classList.remove("online", "offline");
+    if (kind !== "connecting") stateElement.classList.add(kind);
+    stateLabel.textContent = label;
+  }
+
+  function safeCwd(value) {
+    return String(value)
+      .replace(/[^\x20-\x7e]/g, "?")
+      .slice(0, 96);
+  }
+
+  function buildPrompt(cwd, continuation) {
+    if (continuation) return "\x1b[38;5;244m> \x1b[0m";
+    return (
+      "\x1b[38;5;81mcf-vfs\x1b[0m:" +
+      `\x1b[38;5;114m${safeCwd(cwd)}\x1b[0m$ `
+    );
+  }
+
+  function redrawLine() {
+    terminal.write(`\r\x1b[2K${promptAnsi}${line}`);
+    const distance = line.length - cursor;
+    if (distance > 0) terminal.write(`\x1b[${distance}D`);
+  }
+
+  function showPrompt(cwd, continuation) {
+    promptAnsi = buildPrompt(cwd, continuation);
+    line = "";
+    cursor = 0;
+    running = false;
+    terminal.write(promptAnsi);
+    drainQueuedLine();
+  }
+
+  function writeNotice(text, color = "244") {
+    terminal.write(`\x1b[38;5;${color}m${text}\x1b[0m\r\n`);
+  }
+
+  function send(message) {
+    if (socket?.readyState !== WebSocket.OPEN) return false;
+    socket.send(JSON.stringify(message));
+    return true;
+  }
+
+  function submitLine(value = line) {
+    if (running || !connected) return;
+    terminal.write(`\r\x1b[2K${promptAnsi}${value}\r\n`);
+    if (value.length > 0) {
+      if (history[history.length - 1] !== value) history.push(value);
+      if (history.length > 250) history.shift();
+    }
+    historyIndex = history.length;
+    line = "";
+    cursor = 0;
+    running = true;
+    if (!send({ type: "line", line: value })) {
+      running = false;
+      writeNotice("connection lost before command was sent", "203");
+    }
+  }
+
+  function drainQueuedLine() {
+    if (running || queuedLines.length === 0) return;
+    const next = queuedLines.shift();
+    window.setTimeout(() => submitLine(next), 0);
+  }
+
+  function queuePaste(value) {
+    const normalized = value.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const parts = normalized.split("\n");
+    const first = parts.shift() ?? "";
+    line = `${line.slice(0, cursor)}${first}${line.slice(cursor)}`;
+    cursor += first.length;
+    redrawLine();
+    if (parts.length === 0) return;
+
+    const finalIsPartial = !normalized.endsWith("\n");
+    const finalPart = finalIsPartial ? parts.pop() ?? "" : undefined;
+    queuedLines.push(...parts);
+    submitLine();
+    if (finalPart !== undefined && finalPart.length > 0) {
+      queuedLines.push(finalPart);
+    }
+  }
+
+  function moveHistory(direction) {
+    if (history.length === 0) return;
+    historyIndex = Math.max(0, Math.min(history.length, historyIndex + direction));
+    line = historyIndex === history.length ? "" : history[historyIndex] ?? "";
+    cursor = line.length;
+    redrawLine();
+  }
+
+  function handleTerminalData(data) {
+    if (!connected) return;
+    if (data.includes("\n") || (data.includes("\r") && data !== "\r")) {
+      if (!running) queuePaste(data);
+      return;
+    }
+    if (data === "\r") {
+      submitLine();
+      return;
+    }
+    if (data === "\x03") {
+      terminal.write("^C\r\n");
+      queuedLines.length = 0;
+      line = "";
+      cursor = 0;
+      running = true;
+      send({ type: "signal", signal: "SIGINT" });
+      return;
+    }
+    if (running) return;
+    if (data === "\x0c") {
+      terminal.clear();
+      redrawLine();
+      return;
+    }
+    if (data === "\x7f") {
+      if (cursor > 0) {
+        line = `${line.slice(0, cursor - 1)}${line.slice(cursor)}`;
+        cursor -= 1;
+        redrawLine();
+      }
+      return;
+    }
+    if (data === "\x1b[A") {
+      moveHistory(-1);
+      return;
+    }
+    if (data === "\x1b[B") {
+      moveHistory(1);
+      return;
+    }
+    if (data === "\x1b[D") {
+      if (cursor > 0) {
+        cursor -= 1;
+        terminal.write("\x1b[D");
+      }
+      return;
+    }
+    if (data === "\x1b[C") {
+      if (cursor < line.length) {
+        cursor += 1;
+        terminal.write("\x1b[C");
+      }
+      return;
+    }
+    if (data === "\x1b[H" || data === "\x1bOH") {
+      cursor = 0;
+      redrawLine();
+      return;
+    }
+    if (data === "\x1b[F" || data === "\x1bOF") {
+      cursor = line.length;
+      redrawLine();
+      return;
+    }
+    if (data === "\x1b[3~") {
+      if (cursor < line.length) {
+        line = `${line.slice(0, cursor)}${line.slice(cursor + 1)}`;
+        redrawLine();
+      }
+      return;
+    }
+    if (data === "\t") {
+      terminal.write("\x07");
+      return;
+    }
+    if (/^\x1b/.test(data) || /[\x00-\x08\x0b-\x1f]/.test(data)) return;
+
+    line = `${line.slice(0, cursor)}${data}${line.slice(cursor)}`;
+    cursor += data.length;
+    redrawLine();
+  }
+
+  function handleServerMessage(event) {
+    let message;
+    try {
+      message = JSON.parse(event.data);
+    } catch {
+      writeNotice("received an invalid server message", "203");
+      return;
+    }
+    if (message.type === "hello") {
+      terminal.write(
+        "\x1b[1;38;5;114mcf-vfs interactive demo\x1b[0m\r\n" +
+          "\x1b[38;5;244mPersistent SQLite workspace · WebSocket transport · bounded Bash v4\x1b[0m\r\n" +
+          "\x1b[38;5;244mTry \x1b[38;5;150mcat README.txt\x1b[38;5;244m or " +
+          "\x1b[38;5;150mprintf 'hello\\n' > hello.txt\x1b[0m\r\n\r\n",
+      );
+      return;
+    }
+    if (message.type === "output") {
+      terminal.write(String(message.data));
+      return;
+    }
+    if (message.type === "prompt") {
+      showPrompt(message.cwd, message.continuation === true);
+      return;
+    }
+    if (message.type === "running") {
+      running = true;
+      setConnection("online", "running");
+      return;
+    }
+    if (message.type === "complete") {
+      setConnection("online", message.exitCode === 0 ? "connected" : `exit ${message.exitCode}`);
+      return;
+    }
+    if (message.type === "error") {
+      writeNotice(String(message.message), "203");
+      return;
+    }
+    if (message.type === "closed") {
+      writeNotice(`logout (status ${message.exitCode})`);
+      running = true;
+    }
+  }
+
+  function scheduleReconnect() {
+    window.clearTimeout(reconnectTimer);
+    if (manualReconnect) {
+      reconnectDelay = RECONNECT_MIN_MS;
+      manualReconnect = false;
+    }
+    reconnectTimer = window.setTimeout(connect, reconnectDelay);
+    reconnectDelay = Math.min(RECONNECT_MAX_MS, reconnectDelay * 1.7);
+  }
+
+  function connect() {
+    window.clearTimeout(reconnectTimer);
+    window.clearInterval(keepaliveTimer);
+    setConnection("connecting", "connecting");
+    running = true;
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const url = new URL("/ws", location.href);
+    url.protocol = protocol;
+    url.searchParams.set("workspace", workspace);
+    socket = new WebSocket(url);
+
+    socket.addEventListener("open", () => {
+      connected = true;
+      reconnectDelay = RECONNECT_MIN_MS;
+      setConnection("online", "connected");
+      keepaliveTimer = window.setInterval(() => send({ type: "ping" }), KEEPALIVE_MS);
+      terminal.focus();
+    });
+    socket.addEventListener("message", handleServerMessage);
+    socket.addEventListener("close", (event) => {
+      connected = false;
+      running = true;
+      window.clearInterval(keepaliveTimer);
+      setConnection("offline", "reconnecting");
+      if (event.code !== 1000) writeNotice("session disconnected; reconnecting…", "214");
+      scheduleReconnect();
+    });
+    socket.addEventListener("error", () => {
+      setConnection("offline", "connection error");
+    });
+  }
+
+  terminal.onData(handleTerminalData);
+  window.addEventListener("resize", () => fitAddon.fit());
+  terminalElement.addEventListener("click", () => terminal.focus());
+
+  copyWorkspaceButton.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(workspace);
+      const previous = workspaceElement.textContent;
+      workspaceElement.textContent = "copied";
+      window.setTimeout(() => {
+        workspaceElement.textContent = previous;
+      }, 1_000);
+    } catch {
+      writeNotice("clipboard access was unavailable", "214");
+    }
+  });
+  reconnectButton.addEventListener("click", () => {
+    manualReconnect = true;
+    socket?.close(1012, "session reconnect requested");
+  });
+  clearButton.addEventListener("click", () => {
+    terminal.clear();
+    if (!running) redrawLine();
+    terminal.focus();
+  });
+
+  if (encoder.encode(workspace).byteLength > 64) {
+    throw new Error("invalid workspace identifier");
+  }
+  connect();
+})();

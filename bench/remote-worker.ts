@@ -1,10 +1,13 @@
 import { DurableObject } from "cloudflare:workers";
+import { DemoWorkspace, handleTerminalRequest } from "../demo/workspace.js";
 import {
   RemoteBenchmarkHarness,
   type RemoteBenchmarkProfile,
   type RemoteBenchmarkResult,
   runRemoteBenchmark,
 } from "./remote-suite.js";
+
+export { DemoWorkspace };
 
 interface BenchmarkResponse extends RemoteBenchmarkResult {
   edge: {
@@ -18,6 +21,25 @@ const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
   "X-Content-Type-Options": "nosniff",
   "X-Robots-Tag": "noindex, nofollow",
+} as const;
+
+const ASSET_SECURITY_HEADERS = {
+  "Content-Security-Policy": [
+    "default-src 'none'",
+    "script-src 'self' https://cdn.jsdelivr.net",
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+    "connect-src 'self' ws: wss:",
+    "img-src 'self'",
+    "font-src 'self'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'none'",
+  ].join("; "),
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  "Referrer-Policy": "no-referrer",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
 } as const;
 
 interface TimingSafeSubtleCrypto {
@@ -39,6 +61,19 @@ function json(value: unknown, init: ResponseInit = {}): Response {
     headers.set(name, headerValue);
   }
   return new Response(JSON.stringify(value), { ...init, headers });
+}
+
+async function asset(request: Request, env: VfsBenchmarkEnv): Promise<Response> {
+  const response = await env.ASSETS.fetch(request);
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(ASSET_SECURITY_HEADERS)) {
+    headers.set(name, value);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 async function authorized(request: Request, expected: string): Promise<boolean> {
@@ -131,15 +166,18 @@ export class VfsBenchmark extends DurableObject<VfsBenchmarkEnv> {
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
-    if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/health")) {
+    if (url.pathname === "/ws") return handleTerminalRequest(request, env);
+    if (request.method === "GET" && url.pathname === "/health") {
       return json({
         ok: true,
-        service: "cf-vfs-benchmark",
+        service: "cf-vfs-demo",
+        terminal: "websocket",
+        persistence: "durable-object-sqlite",
         benchmarkAuthentication: "bearer",
       });
     }
     if (url.pathname !== "/benchmark") {
-      return json({ error: "Not found" }, { status: 404 });
+      return asset(request, env);
     }
     if (request.method !== "POST") {
       return json({ error: "Method not allowed" }, { status: 405, headers: { Allow: "POST" } });
