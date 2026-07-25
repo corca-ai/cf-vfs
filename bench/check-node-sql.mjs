@@ -22,6 +22,8 @@ for (const name of [
   "early-cancellation",
   "slow-consumer",
   "concurrent-shells",
+  "command-lookup-bare",
+  "command-lookup-path",
   "opaque-lifecycle-gc",
   "opaque-gc-batch",
 ]) {

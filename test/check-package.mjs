@@ -28,6 +28,8 @@ try {
     "dist/shell/interactive.js",
     "dist/shell/commands/index.js",
     "dist/shell/commands/applet.js",
+    "dist/shell/commands/discovery.js",
+    "dist/shell/linux.js",
     "dist/shell/commands/default.js",
     "dist/shell/commands/ls.js",
     "dist/storage/r2.js",
@@ -77,6 +79,12 @@ try {
     import { InteractiveShell } from "@corca-ai/cf-vfs/shell/interactive";
     import { lsCommand } from "@corca-ai/cf-vfs/shell/commands/ls";
     import { createAppletRegistry, defineApplet } from "@corca-ai/cf-vfs/shell/commands/applet";
+    import { typeCommand, whichCommand } from "@corca-ai/cf-vfs/shell/commands/discovery";
+    import {
+      LINUX_APPLET_DIRECTORIES,
+      linuxShellEnvironment,
+      provisionLinuxFilesystem,
+    } from "@corca-ai/cf-vfs/shell/linux";
     import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
     import { MemoryOpaqueStore } from "@corca-ai/cf-vfs/testing";
     import { NodeSqlFileSystem } from "@corca-ai/cf-vfs/testing/node";
@@ -92,6 +100,12 @@ try {
     }
     if (applets.lookup("p")?.name !== "probe") throw new Error("applet alias");
     if (applets.lookup("/sbin/ls") !== undefined) throw new Error("unexpected applet directory");
+    if (typeCommand.name !== "type" || whichCommand.name !== "which") {
+      throw new Error("discovery exports");
+    }
+    if (linuxShellEnvironment().PATH !== LINUX_APPLET_DIRECTORIES.join(":")) {
+      throw new Error("linux profile PATH");
+    }
     const parsed = parseShellScript('printf "%s" "$VALUE"', 100);
     const expansion = parsed.lists[0].first.commands[0].words[2].parts[0].expansion;
     if ("kind" in expansion || expansion.length !== false || expansion.operator !== undefined) {
@@ -108,6 +122,14 @@ try {
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });
     const result = await shell.executeText({ script: 'X=$(printf ok); printf "package-%s" "$X"' });
     if (result.stdout !== "package-ok") throw new Error("shell execution");
+    provisionLinuxFilesystem(fileSystem);
+    const discovery = await shell.executeText({
+      script: "cd $HOME; pwd; command -v grep",
+      env: linuxShellEnvironment(),
+    });
+    if (discovery.stdout !== "/home/cf\\n/bin/grep\\n") {
+      throw new Error("linux profile execution: " + discovery.stdout + discovery.stderr);
+    }
     const interactive = new InteractiveShell({
       fileSystem,
       commands: defaultShellCommands,

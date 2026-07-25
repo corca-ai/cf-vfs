@@ -245,6 +245,28 @@ await measure("concurrent-shells", { concurrency: 4, sizeBytes: 256 * 1024 }, as
   };
 });
 
+// Command resolution is on the hot path of every simple command. These two
+// scenarios are identical except for the search: 500 invocations of the
+// cheapest applet, once by bare name with no PATH and once through a PATH
+// search. The loop overhead is common to both, so the difference between them
+// isolates the resolver.
+for (const [name, prologue] of [
+  ["command-lookup-bare", ""],
+  ["command-lookup-path", "PATH=/usr/bin:/bin; "],
+]) {
+  await measure(name, { invocations: 500 }, async () => {
+    const fileSystem = createFileSystem();
+    const shell = new Shell({ fileSystem, commands: defaultShellCommands });
+    const result = await shell.executeText({
+      script: `${prologue}index=0; while [ $index -lt 500 ]; do true; index=$((index + 1)); done; printf done`,
+    });
+    if (result.exitCode !== 0 || result.stdout !== "done") {
+      throw new Error(`${name} verification failed: ${result.exitCode} ${result.stderr}`);
+    }
+    return { outputBytes: Buffer.byteLength(result.stdout) };
+  });
+}
+
 await measure("opaque-lifecycle-gc", { sizeBytes: 1024 * 1024 }, async () => {
   const store = new MemoryOpaqueStore();
   const fileSystem = createFileSystem({ opaqueStore: store });

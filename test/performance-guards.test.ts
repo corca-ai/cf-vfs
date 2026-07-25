@@ -137,6 +137,32 @@ describe("common-path SQL cost", () => {
     expect(meter.statements).toBe(0);
   });
 
+  it("charges no storage work to a PATH search or to command discovery", async () => {
+    const { fileSystem, meter } = meteredFileSystem();
+    const shell = new Shell({ fileSystem, commands: defaultShellCommands });
+    await fileSystem.writeFile("/probe", "x");
+    meter.reset();
+    await shell.executeText({ script: "cat /probe" });
+    expect(meter.statements).toBeGreaterThan(0);
+
+    meter.reset();
+    const result = await shell.executeText({
+      script: [
+        "PATH=/usr/bin:/bin",
+        "index=0",
+        "while [ $index -lt 100 ]; do true; index=$((index + 1)); done",
+        "command -v grep",
+        "type cat",
+        "which sort",
+      ].join("\n"),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("/usr/bin/grep\ncat is /usr/bin/cat\n/usr/bin/sort\n");
+    // A PATH search walks a JavaScript array of components. Discovery reuses
+    // the same resolver, so neither may reach storage.
+    expect(meter.statements).toBe(0);
+  });
+
   it("resolves a virtual applet path with the same storage cost as a bare name", async () => {
     const { fileSystem, meter } = meteredFileSystem();
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });

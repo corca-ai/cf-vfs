@@ -61,6 +61,12 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     expect(splice.exitCode).toBe(0);
     expect(splice.stdout).toBe("secret-$`\n");
   },
+  "type-does-not-print-a-function-body": async () => {
+    const harness = createBashHarness();
+    const result = await harness.run(["greet() { printf 'hi\\n'; }", "type greet"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("greet is a function\n");
+  },
   "diff-output-format": async () => {
     const harness = createBashHarness();
     await harness.fileSystem.writeFile("/left", "a\n");

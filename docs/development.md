@@ -224,10 +224,17 @@ the applet-path branch is guarded by a single character comparison — and resol
 before checking `allowedCommands` so a policy decision always names the
 canonical applet.
 
-Mark an applet `builtin: true` when it changes the calling session. Those stay
-reachable only by bare name, because Linux has no `/bin/cd`, and a later
-filesystem profile must be able to list `/bin` without inventing entries
-resolution would refuse.
+Declare `kind` when the applet is not an ordinary program. `builtin` means Bash
+resolves it without a `PATH` search but Linux still ships a program, such as
+`echo` or `test`. `shell-builtin` means it changes or inspects the calling
+session and therefore has no program form, so it never answers to `/bin/NAME`.
+Getting this wrong is observable: a program is unreachable under an empty
+`PATH`, and a built-in is not.
+
+Command discovery lives in `src/shell/commands/discovery.ts` and reads
+`ShellCommandContext.resolveCommand()`, which runs exactly the resolution order
+execution uses. Add discovery behavior there rather than importing the registry
+into an applet, so `type` and `which` can never disagree with what would run.
 
 A summary is a lowercase fragment without a trailing period, and a usage
 diagnostic ends with the declared synopsis, so `usage` is rendered rather than
@@ -256,9 +263,10 @@ Update the package and Wrangler fixtures when adding a new subpath.
 
 ## Compatibility, bundle, and performance gates
 
-`test/check-tree-shaking.mjs` builds seven representative Worker bundles — one
+`test/check-tree-shaking.mjs` builds eight representative Worker bundles — one
 applet, a small explicit registry, the SQLite filesystem alone, shell-only,
-interactive, the full default registry, and the R2 opaque adapter. Each preset
+interactive, the full default registry, the opt-in Linux profile, and the R2
+opaque adapter. Each preset
 declares the library modules that must and must not be reachable *and* a
 recorded byte budget in `test/fixtures/bundle-budgets.json`. Size alone is
 insufficient, so the inclusion check reads the emitted source map, whose

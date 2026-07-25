@@ -42,6 +42,7 @@ import type {
   ExecuteTextOptions,
   ExecuteTextResult,
   ShellBudget,
+  ShellCommandResolution,
   ShellExecution,
   ShellFileDescriptors,
   ShellLimits,
@@ -306,6 +307,23 @@ interface PreparedSimpleCommand {
   assignments: Array<{ name: string; value: string }>;
   argv: string[];
   substitutionStatus?: number;
+  /** Set by `command NAME`, which runs an applet in spite of a function. */
+  bypassFunctions?: boolean;
+}
+
+/**
+ * Reports how a name would resolve, using exactly the order execution uses:
+ * shell function, then the multicall registry under the session's `PATH`.
+ */
+function resolveShellCommand(
+  name: string,
+  session: ShellSession,
+  runtime: Runtime,
+): ShellCommandResolution | undefined {
+  if (session.functions.has(name)) return { kind: "function", name };
+  const resolved = runtime.commands.resolve(name, session.env.get("PATH"));
+  if (resolved === undefined) return undefined;
+  return { kind: resolved.kind, name: resolved.command.name, path: resolved.path };
 }
 
 async function prepareSimpleCommand(
@@ -464,25 +482,29 @@ async function executeSimpleCommand(
     return prepared.substitutionStatus ?? 0;
   }
   const [name = "", ...argv] = prepared.argv;
-  const definition = session.functions.get(name);
-  // Resolve before the policy check so an allowlist naming an applet also
-  // covers its aliases and virtual `/bin` spelling, and so a denial reports
-  // the canonical name rather than the spelling that reached the shell.
-  const command = definition === undefined ? runtime.commands.lookup(name) : undefined;
-  const canonicalName = command?.name ?? name;
-  if (
-    definition === undefined &&
-    runtime.policy.allowedCommands !== undefined &&
-    !runtime.policy.allowedCommands.includes(canonicalName)
-  ) {
-    throw new VfsError("EACCES", `command is not allowed: ${canonicalName}`);
-  }
+  // Prefix assignments apply before the name is resolved, so `PATH=/opt cat`
+  // searches the assigned PATH exactly as Bash does.
   const previous = new Map<string, string | undefined>();
   for (const value of prepared.assignments) {
     previous.set(value.name, session.env.get(value.name));
     session.env.set(value.name, value.value);
   }
+  let canonicalName = name;
   try {
+    const definition = prepared.bypassFunctions === true ? undefined : session.functions.get(name);
+    // Resolve before the policy check so an allowlist naming an applet also
+    // covers its aliases and virtual `/bin` spelling, and so a denial reports
+    // the canonical name rather than the spelling that reached the shell.
+    const command =
+      definition === undefined ? runtime.commands.lookup(name, session.env.get("PATH")) : undefined;
+    canonicalName = command?.name ?? name;
+    if (
+      definition === undefined &&
+      runtime.policy.allowedCommands !== undefined &&
+      !runtime.policy.allowedCommands.includes(canonicalName)
+    ) {
+      throw new VfsError("EACCES", `command is not allowed: ${canonicalName}`);
+    }
     let exitCode: number;
     if (definition !== undefined) {
       exitCode = await runFunction(definition, argv, session, fds, runtime, context);
@@ -502,18 +524,23 @@ async function executeSimpleCommand(
             policy: runtime.policy,
             executeSource: async (source, path, sourceArgs, sourceFds) =>
               await runSourcedUnit(source, path, sourceArgs, session, sourceFds, runtime, context),
-            executeCommand: async (commandArgv, commandFds) => {
+            executeCommand: async (commandArgv, commandFds, commandOptions) => {
               runtime.budget.command();
               // The invoked status belongs to the invoking utility, not to the
               // enclosing shell, so it never requests errexit on its own.
               return await executeSimpleCommand(
-                { assignments: [], argv: [...commandArgv] },
+                {
+                  assignments: [],
+                  argv: [...commandArgv],
+                  ...(commandOptions?.bypassFunctions === true ? { bypassFunctions: true } : {}),
+                },
                 session,
                 commandFds,
                 runtime,
                 SUPPRESSED_EVALUATION_CONTEXT,
               );
             },
+            resolveCommand: (candidate) => resolveShellCommand(candidate, session, runtime),
           },
           argv,
           fds,

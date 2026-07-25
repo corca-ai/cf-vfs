@@ -43,6 +43,7 @@ const DEFAULT_REGISTRY = [
   "chmod",
   "cmp",
   "comm",
+  "command",
   "continue",
   "cp",
   "cut",
@@ -69,6 +70,7 @@ const DEFAULT_REGISTRY = [
   "nl",
   "paste",
   "patch",
+  "printenv",
   "printf",
   "pwd",
   "read",
@@ -91,9 +93,11 @@ const DEFAULT_REGISTRY = [
   "tr",
   "tree",
   "true",
+  "type",
   "uniq",
   "unset",
   "wc",
+  "which",
   "xargs",
 ] as const;
 
@@ -199,14 +203,15 @@ describe("applet registry", () => {
     }
   });
 
-  it("keeps a shell built-in out of the virtual applet directories", () => {
+  it("keeps a session-scoped built-in out of the virtual applet directories", () => {
     const registry = createAppletRegistry(defaultShellCommands);
-    for (const builtin of ["cd", "export", "set", "source", "local", "exit"]) {
+    for (const builtin of ["cd", "export", "set", "source", "local", "exit", "command", "type"]) {
       expect(registry.lookup(builtin), builtin).toBeDefined();
       expect(registry.lookup(`/bin/${builtin}`), builtin).toBeUndefined();
       expect(registry.lookup(`/usr/bin/${builtin}`), builtin).toBeUndefined();
     }
-    for (const program of ["cat", "ls", "grep", "printf", "echo", "test", "env"]) {
+    // A built-in Linux also ships as a program keeps both spellings.
+    for (const program of ["cat", "ls", "grep", "printf", "echo", "test", "env", "which"]) {
       expect(registry.lookup(`/bin/${program}`), program).toBe(registry.lookup(program));
     }
   });

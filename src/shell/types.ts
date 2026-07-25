@@ -134,9 +134,35 @@ export interface ShellCommandContext {
    * budget as an ordinary simple command. `argv` is never re-parsed, so a
    * utility that builds an invocation from untrusted data cannot inject shell
    * syntax. The invoked status does not request errexit on its own.
+   *
+   * `options.bypassFunctions` skips shell-function lookup, which is what
+   * `command NAME` means.
    */
-  executeCommand(argv: readonly string[], fds: ShellFileDescriptors): Promise<number>;
+  executeCommand(
+    argv: readonly string[],
+    fds: ShellFileDescriptors,
+    options?: ExecuteCommandOptions,
+  ): Promise<number>;
+  /**
+   * Reports how the shell would resolve `name`, without running it.
+   *
+   * Discovery utilities use this so they can never disagree with execution and
+   * so they do not need to import the registry or the applet table themselves.
+   */
+  resolveCommand(name: string): ShellCommandResolution | undefined;
 }
+
+export interface ExecuteCommandOptions {
+  readonly bypassFunctions?: boolean;
+}
+
+export type ShellCommandResolution =
+  | { readonly kind: "function"; readonly name: string; readonly path?: undefined }
+  | {
+      readonly kind: "builtin" | "program";
+      readonly name: string;
+      readonly path: string | undefined;
+    };
 
 export interface ShellProcess {
   completed: Promise<{ exitCode: number }>;
