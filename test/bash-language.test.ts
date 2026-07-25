@@ -1417,7 +1417,7 @@ describe("Bash v3 bounded double-bracket conditionals", () => {
   const rejectedConditionals: ReadonlyArray<readonly [string, string, string]> = [
     ["regex matching", "[[ x =~ x ]]", "unsupported [[ operator =~"],
     ["single-equals matching", "[[ x = x ]]", "unsupported [[ operator ="],
-    ["unsupported metadata predicates", "[[ -s /side ]]", "unsupported [[ unary operator -s"],
+    ["unsupported metadata predicates", "[[ -O /side ]]", "unsupported [[ unary operator -O"],
     ["timestamp comparisons", "[[ /left -nt /right ]]", "unsupported [[ operator -nt"],
     ["a missing expression", "[[ ]]", "[[ expression is missing"],
     ["a missing unary operand", "[[ -n ]]", "[[ operand for -n is missing"],

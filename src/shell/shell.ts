@@ -32,6 +32,7 @@ import {
   type CommandNode,
   type CompoundCommandNode,
   type ConditionalExpression,
+  type ConditionalUnaryOperator,
   type FunctionDefinitionNode,
   type PipelineNode,
   parseShellScript,
@@ -562,10 +563,10 @@ async function resolveExecutableScript(
  * An applet without a specification is still listed, so a consumer's own
  * `ShellCommand` appears in help rather than silently missing.
  */
-function describeCommands(runtime: Runtime): readonly ShellCommandDescription[] {
+function describeCommands(registry: Pick<Runtime, "commands">): readonly ShellCommandDescription[] {
   const described: ShellCommandDescription[] = [];
-  for (const name of runtime.commands.names()) {
-    const entry = runtime.commands.find(name);
+  for (const name of registry.commands.names()) {
+    const entry = registry.commands.find(name);
     if (entry === undefined) continue;
     const spec = (entry.command as Partial<ShellApplet>).spec;
     described.push({
@@ -995,6 +996,35 @@ function compareConditionalIntegers(left: string, right: string, budget: ShellBu
   );
 }
 
+/**
+ * Answers a `[[ ]]` file predicate.
+ *
+ * The mapping is exhaustive rather than defaulted, so adding an operator to the
+ * parser's list without deciding its meaning is a type error instead of
+ * silently inheriting `-d`.
+ */
+function conditionalFileTest(operator: ConditionalUnaryOperator, stat: VfsStat): boolean {
+  switch (operator) {
+    case "-e":
+      return true;
+    case "-f":
+      return stat.kind === "file";
+    case "-d":
+      return stat.kind === "directory";
+    case "-s":
+      return stat.sizeBytes > 0;
+    // Compatibility mode bits only; see the `test` profile.
+    case "-r":
+      return (stat.mode & 0o444) !== 0;
+    case "-w":
+      return (stat.mode & 0o222) !== 0;
+    case "-x":
+      return (stat.mode & 0o111) !== 0;
+    default:
+      throw new VfsError("EINVAL", `[[: unsupported unary operator ${operator}`);
+  }
+}
+
 async function evaluateConditional(
   expression: ConditionalExpression,
   session: ShellSession,
@@ -1052,9 +1082,7 @@ async function evaluateConditional(
           const stat = runtime.fileSystem.stat(
             normalizePathPreservingTrailingSlash(operand, session.cwd),
           );
-          if (current.operator === "-e") value = true;
-          else if (current.operator === "-f") value = stat.kind === "file";
-          else value = stat.kind === "directory";
+          value = conditionalFileTest(current.operator, stat);
         } catch (error) {
           if (error instanceof VfsError && (error.code === "ENOENT" || error.code === "ENOTDIR")) {
             value = false;
@@ -1531,6 +1559,17 @@ export class Shell {
     );
     this.now = options.now ?? Date.now;
     this.onEvent = options.onEvent;
+  }
+
+  /**
+   * Describes every registered applet, in UTF-8 byte order by name.
+   *
+   * The same list `help` sees. It is public because completion runs before any
+   * command exists, in the interactive layer, which has no command context to
+   * ask.
+   */
+  listCommands(): readonly ShellCommandDescription[] {
+    return describeCommands({ commands: this.commands });
   }
 
   executeStream(options: ExecuteStreamOptions): ShellExecution {

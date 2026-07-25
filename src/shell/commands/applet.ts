@@ -200,6 +200,7 @@ export function createAppletRegistry(commands: readonly ShellCommand[]): AppletR
       byName.set(name, entry);
     }
   }
+  let sortedNames: readonly string[] | undefined;
   return {
     commands: registered,
     find(name: string): AppletEntry | undefined {
@@ -209,7 +210,9 @@ export function createAppletRegistry(commands: readonly ShellCommand[]): AppletR
       return APPLET_DIRECTORIES.includes(directory);
     },
     names(): readonly string[] {
-      return [...byName.keys()].sort(compareUtf8);
+      // The index never changes, so sort once: completion asks per keystroke.
+      sortedNames ??= [...byName.keys()].sort(compareUtf8);
+      return sortedNames;
     },
     findPath(path: string): AppletEntry | undefined {
       const base = appletPathName(path);

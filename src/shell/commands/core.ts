@@ -323,6 +323,7 @@ export const pwdCommand = /* @__PURE__ */ defineApplet(PWD, async (context, argv
 export const cdCommand = /* @__PURE__ */ defineApplet(CD, async (context, argv, fds) => {
   if (argv.length > 1) throw appletUsageError(CD, "too many arguments");
   const [operand] = argv;
+  if (operand === "") throw appletUsageError(CD, "directory must not be empty");
   const previous = context.session.cwd;
   let requested: string;
   if (operand === "-") {
@@ -742,6 +743,10 @@ function applyShellOption(
 
 export const setCommand = /* @__PURE__ */ defineApplet(SET, (context, argv) => {
   if (argv.length === 0) return 0;
+  // Scan the whole invocation before applying any of it. Bash validates first,
+  // so a typo in `set -euo pipefail` is a survivable usage error rather than a
+  // half-applied state that then enables errexit and aborts the script.
+  const pending: Array<{ option: (typeof SET_OPTIONS)[number]; enabled: boolean }> = [];
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index] ?? "";
     const enabled = value.startsWith("-");
@@ -753,18 +758,18 @@ export const setCommand = /* @__PURE__ */ defineApplet(SET, (context, argv) => {
     for (const flag of value.slice(1)) {
       if (flag === "o") {
         const name = argv[++index];
+        if (name === undefined) throw appletUsageError(SET, "-o requires an option name");
         const option = SET_OPTIONS.find((candidate) => candidate === name);
-        if (option === undefined) {
-          throw appletUsageError(SET, `unsupported option name: ${name ?? ""}`);
-        }
-        applyShellOption(context.session, option, enabled);
+        if (option === undefined) throw appletUsageError(SET, `unsupported option name: ${name}`);
+        pending.push({ option, enabled });
         continue;
       }
       const option = Object.hasOwn(SET_FLAGS, flag) ? SET_FLAGS[flag] : undefined;
       if (option === undefined) throw appletUsageError(SET, `unsupported option -${flag}`);
-      applyShellOption(context.session, option, enabled);
+      pending.push({ option, enabled });
     }
   }
+  for (const { option, enabled } of pending) applyShellOption(context.session, option, enabled);
   return 0;
 });
 

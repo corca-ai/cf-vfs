@@ -122,7 +122,7 @@
       "command": "test",
       "oracle": "bash",
       "summary": "-r, -w, and -x report whether any class carries the bit, because there is no user to ask about",
-      "reason": "A POSIX shell answers these for the effective user, so the same file gives different answers to different accounts and a privileged account can write a read-only file. There is no user, group, or account here and mode bits enforce nothing, so the predicate reports whether the bit is set for any class. It also does not consult the shell's read and write roots: those refuse the operation, and a predicate that reported them would conflate policy with metadata."
+      "reason": "A POSIX shell answers these for the effective user, so the same file gives different answers to different accounts and a privileged account can write a read-only file. There is no user, group, or account here and mode bits enforce nothing, so the predicate reports whether the bit is set for any class. That agrees with an unprivileged POSIX user, which the fixtures pin, and differs from a privileged one. It also does not consult the shell's read and write roots: those refuse the operation, and a predicate that reported them would conflate policy with metadata."
     },
     {
       "id": "tilde-is-not-expanded-inside-a-parameter-word",
@@ -832,7 +832,7 @@
       "files": {
         "scope.sh": "#!/bin/sh\nV=child\ncd /\nprintf '%s\\n' \"$V\"\n"
       },
-      "script": "chmod 755 scope.sh\nV=parent\n./scope.sh\nprintf '%s\\n' \"$V\"\ntest \"$PWD\" = /work && printf 'cwd-kept\\n'",
+      "script": "chmod 755 scope.sh\nSTART=$PWD\nV=parent\n./scope.sh\nprintf '%s\\n' \"$V\"\ntest \"$PWD\" = \"$START\" && printf 'cwd-kept\\n'",
       "stdout": "child\nparent\ncwd-kept\n",
       "exitCode": 0
     },
@@ -949,8 +949,8 @@
       "files": {
         "perm.txt": "body\n"
       },
-      "script": "chmod 400 perm.txt\ntest -r perm.txt && printf 'r'\ntest -x perm.txt || printf ' no-x'\nchmod 755 perm.txt\ntest -x perm.txt && printf ' now-x'\nprintf '\\n'",
-      "stdout": "r no-x now-x\n",
+      "script": "chmod 400 perm.txt\ntest -r perm.txt && printf 'r'\ntest -w perm.txt || printf ' no-w'\ntest -x perm.txt || printf ' no-x'\nchmod 755 perm.txt\ntest -x perm.txt && printf ' now-x'\nprintf '\\n'",
+      "stdout": "r no-w no-x now-x\n",
       "exitCode": 0
     },
     {

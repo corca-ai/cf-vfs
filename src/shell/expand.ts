@@ -3,7 +3,7 @@ import { compareUtf8, dirname, normalizePath } from "../core/path.js";
 import { codePointLength } from "../core/unicode.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 import { ShellNounsetError } from "./errors.js";
-import type { ParameterExpansion, ShellWord, WordPart } from "./parser.js";
+import type { LiteralWordPart, ParameterExpansion, ShellWord, WordPart } from "./parser.js";
 import { matchesShellPattern, removeShellPattern, replaceShellPattern } from "./pattern.js";
 import type { ShellBudget, ShellFileSystem, ShellSession } from "./types.js";
 
@@ -450,64 +450,131 @@ async function partValues(
   return splitValues([value], part.quoted, budget, existingCharacters, existingFields);
 }
 
-/**
- * Replaces a leading unquoted tilde with `HOME`.
- *
- * The declared profile is `~` and `~/path` only. Every other form — `~user`,
- * `~+`, `~-`, `~N` — stays literal, which is both what Bash does for a user it
- * cannot resolve and the only honest answer here: there is no user database, so
- * a name after the tilde identifies nothing. A tilde with `HOME` unset stays
- * literal for the same reason.
- *
- * Tilde expansion precedes parameter expansion and reads only the first
- * literal part, so a quoted tilde, a tilde produced by an expansion, and a
- * tilde anywhere but the start of a word are all untouched.
- */
-function expandTildePrefix(value: string, session: ShellSession): string {
-  if (!value.startsWith("~")) return value;
-  const rest = value.slice(1);
-  if (rest !== "" && !rest.startsWith("/")) return value;
-  const home = session.env.get("HOME");
-  return home === undefined || home === "" ? value : `${home}${rest}`;
-}
-
 const ASSIGNMENT_WORD = /^[A-Za-z_][A-Za-z0-9_]*=/u;
 
-/** Applies the assignment rule: a tilde after `=` and after each `:`. */
-function expandTildeAssignment(value: string, session: ShellSession): string {
-  return value
-    .split(":")
-    .map((segment) => expandTildePrefix(segment, session))
-    .join(":");
+/**
+ * The `HOME` a tilde expands to, or `undefined` when none applies.
+ *
+ * An unset or empty `HOME` leaves the tilde literal, which is what Bash does
+ * when it cannot resolve one.
+ */
+function tildeHome(session: ShellSession): string | undefined {
+  const home = session.env.get("HOME");
+  return home === undefined || home === "" ? undefined : home;
 }
 
 /**
- * Applies tilde expansion to a word.
+ * Splits a tilde prefix off a literal segment.
  *
- * A word shaped like an assignment expands a tilde after `=` and after each
- * `:`, which is what makes both `PATH=~/bin:~/tools` and `export PATH=~/bin`
- * work. The name before `=` must be a valid identifier, so `--opt=~/y` and
- * `9X=~/y` stay literal, exactly as in Bash.
+ * The declared profile is `~` and `~/path`. Every other form — `~user`, `~+`,
+ * `~-`, `~N` — is not a prefix: there is no user database and no directory
+ * stack, so a name after the tilde identifies nothing.
  */
-function withTildePrefix(parts: readonly WordPart[], session: ShellSession): readonly WordPart[] {
-  const [first, ...rest] = parts;
+function tildeSuffix(segment: string): string | undefined {
+  if (!segment.startsWith("~")) return undefined;
+  const rest = segment.slice(1);
+  return rest === "" || rest.startsWith("/") ? rest : undefined;
+}
+
+/**
+ * Emits the substituted home as a quoted part.
+ *
+ * Bash treats the result of tilde expansion as quoted: it is a value, not
+ * syntax. Marking it quoted here makes the shared word machinery escape it for
+ * pathname expansion and keep it out of field splitting, so a `HOME` holding
+ * `*`, `?`, or `[` cannot turn `~/secret` into a wildcard that reaches paths
+ * the caller never named.
+ */
+function tildeParts(template: LiteralWordPart, home: string, suffix: string): WordPart[] {
+  const parts: WordPart[] = [{ ...template, value: home, quoted: true }];
+  if (suffix !== "") parts.push({ ...template, value: suffix, quoted: false });
+  return parts;
+}
+
+/**
+ * Charges one substitution before it is materialized.
+ *
+ * An assignment can name many boundaries, and every one of them copies `HOME`.
+ * Charging first keeps a bounded script from building an unbounded string, and
+ * keeps the failure a budget diagnostic rather than a `RangeError` escaping the
+ * runtime.
+ */
+function chargeTilde(home: string, budget: ShellBudget): void {
+  budget.expansionWork(home.length);
+  budget.checkExpansionOutput(codePointLength(home));
+}
+
+/**
+ * Applies tilde expansion to the literal parts of a word.
+ *
+ * A word shaped like an assignment expands after `=` and after each unquoted
+ * literal `:`, which is what makes `PATH=~/bin:~/tools` and
+ * `PATH=$PATH:~/bin` work. The name before `=` must be an identifier, so
+ * `--opt=~/y` and `9X=~/y` stay literal, exactly as in Bash. Otherwise only a
+ * leading tilde counts, and its prefix must end inside the written literal: a
+ * quoted part or an expansion continues it, and then `~"x"` and `~$X` are not
+ * prefixes at all.
+ */
+function withTildePrefix(
+  parts: readonly WordPart[],
+  session: ShellSession,
+  budget: ShellBudget,
+): readonly WordPart[] {
+  const first = parts[0];
   if (first?.kind !== "literal" || first.quoted) return parts;
-  const separator = ASSIGNMENT_WORD.test(first.value) ? first.value.indexOf("=") : -1;
-  if (separator >= 0) {
-    const expanded = `${first.value.slice(0, separator + 1)}${expandTildeAssignment(
-      first.value.slice(separator + 1),
-      session,
-    )}`;
-    return expanded === first.value ? parts : [{ ...first, value: expanded }, ...rest];
+  const home = tildeHome(session);
+  if (home === undefined) return parts;
+  const assignment = ASSIGNMENT_WORD.test(first.value);
+  if (!assignment) {
+    const suffix = tildeSuffix(first.value);
+    // Without a `/` the prefix has to be the whole word: anything following it
+    // continues the prefix rather than terminating it.
+    if (suffix === undefined || (suffix === "" && parts.length > 1)) return parts;
+    chargeTilde(home, budget);
+    return [...tildeParts(first, home, suffix), ...parts.slice(1)];
   }
-  if (!first.value.startsWith("~")) return parts;
-  // The prefix has to end inside this literal part: either the word is exactly
-  // `~`, or a `/` terminates it here. Otherwise a quoted part or an expansion
-  // continues the prefix — `~"x"` and `~$X` — and Bash leaves the tilde alone.
-  const terminated = first.value.length > 1 ? first.value[1] === "/" : rest.length === 0;
-  if (!terminated) return parts;
-  const value = expandTildePrefix(first.value, session);
-  return value === first.value ? parts : [{ ...first, value }, ...rest];
+
+  const output: WordPart[] = [];
+  let expandedAny = false;
+  // `=` opens the first boundary; every unquoted literal `:` opens another. A
+  // boundary closes at any expansion, because a `:` it produces is data.
+  let atBoundary = false;
+  let seenName = false;
+  for (const [index, part] of parts.entries()) {
+    if (part.kind !== "literal" || part.quoted) {
+      output.push(part);
+      atBoundary = false;
+      continue;
+    }
+    let value = part.value;
+    if (!seenName) {
+      const separator = value.indexOf("=");
+      output.push({ ...part, value: value.slice(0, separator + 1) });
+      value = value.slice(separator + 1);
+      seenName = true;
+      atBoundary = true;
+    }
+    const segments = value.split(":");
+    for (const [segmentIndex, segment] of segments.entries()) {
+      if (segmentIndex > 0) {
+        output.push({ ...part, value: ":" });
+        atBoundary = true;
+      }
+      // A bare `~` is a prefix when a `:` or the end of the word terminates it.
+      // Only a following part continues it, as in `PATH=~$SUFFIX`.
+      const continues = segmentIndex === segments.length - 1 && index < parts.length - 1;
+      const suffix = atBoundary ? tildeSuffix(segment) : undefined;
+      if (suffix === undefined || (suffix === "" && continues)) {
+        if (segment !== "") output.push({ ...part, value: segment });
+      } else {
+        chargeTilde(home, budget);
+        output.push(...tildeParts(part, home, suffix));
+        expandedAny = true;
+      }
+      atBoundary = false;
+    }
+  }
+  return expandedAny ? output : parts;
 }
 
 export async function expandWord(
@@ -521,7 +588,7 @@ export async function expandWord(
   let materializedCharacters = 0;
   let preservesEmptyField = false;
   let removedByExpansion = false;
-  for (const part of withTildePrefix(word.parts, session)) {
+  for (const part of withTildePrefix(word.parts, session, budget)) {
     if (part.kind === "literal") {
       const value = assertNoNul(part.value);
       preservesEmptyField ||= part.quoted;
@@ -586,7 +653,7 @@ export async function expandScalarWord(
   runtime: ExpansionRuntime,
 ): Promise<string> {
   const value = await scalarParts(
-    withTildePrefix(word.parts, session),
+    withTildePrefix(word.parts, session, budget),
     session,
     fileSystem,
     budget,
@@ -608,10 +675,22 @@ export async function expandAssignmentValue(
   if (first?.kind !== "literal") throw new VfsError("EINVAL", "invalid assignment word");
   // An assignment expands a tilde after `=` and after each `:`, which is what
   // makes `PATH=~/bin:~/tools` work.
-  const assigned = first.value.slice(name.length + 1);
-  const literal = first.quoted ? assigned : expandTildeAssignment(assigned, session);
-  const parts: WordPart[] = [{ ...first, value: literal }, ...rest];
-  const value = await scalarParts(parts, session, fileSystem, budget, runtime);
+  // The whole word carries the assignment shape, so the shared rule applies to
+  // every boundary it names, including one a later literal part opens.
+  const parts = withTildePrefix([first, ...rest], session, budget);
+  const value = await scalarParts(
+    [
+      {
+        ...(parts[0] as LiteralWordPart),
+        value: (parts[0] as LiteralWordPart).value.slice(name.length + 1),
+      },
+      ...parts.slice(1),
+    ],
+    session,
+    fileSystem,
+    budget,
+    runtime,
+  );
   budget.expansionOutput(codePointLength(value));
   return value;
 }

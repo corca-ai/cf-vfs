@@ -141,13 +141,49 @@ describe("tilde expansion", () => {
     },
   ]);
 
-  it("charges tilde output to the expansion budget", async () => {
+  it("charges the substituted home to the expansion budget", async () => {
     const harness = createBashHarness({ limits: { maxExpansionChars: 32 } });
-    const result = await harness.run("printf %s ~/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", {
-      env: { HOME: "/home/cf" },
-    });
+    // The written word is short; only the substitution can exceed the limit.
+    const result = await harness.run("printf %s ~/x", { env: { HOME: `/${"h".repeat(40)}` } });
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("expansion");
+    const short = await harness.run("printf %s ~/x", { env: { HOME: "/home/cf" } });
+    expect(short.exitCode).toBe(0);
+  });
+
+  it("bounds an assignment that names many tilde boundaries", async () => {
+    const harness = createBashHarness();
+    const home = `/${"h".repeat(20_000)}`;
+    const result = await harness.run(`X=${":~".repeat(30_000)}; printf done`, {
+      env: { HOME: home },
+    });
+    // Every boundary copies HOME. Charging before materializing keeps this a
+    // budget diagnostic instead of a RangeError escaping the runtime.
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("expansion work limit exceeded");
+  });
+
+  it("keeps a substituted home out of pathname expansion", async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/home-a/secret", "TENANT-A", { createParents: true });
+    await harness.fileSystem.writeFile("/home-b/secret", "TENANT-B", { createParents: true });
+    // A glob character in HOME must not turn a home-relative path into a
+    // wildcard that reaches paths the caller never named.
+    const result = await harness.run("cat ~/secret", { env: { HOME: "/home-*" } });
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("no such file or directory");
+
+    const literal = await harness.run("printf %s ~", { env: { HOME: "/home-*" } });
+    expect(literal.stdout).toBe("/home-*");
+  });
+
+  it("expands a tilde after a colon that a later part opens", async () => {
+    const harness = createBashHarness();
+    const result = await harness.run(["P=/bin", "PATH=$P:~/bin", 'printf %s "$PATH"'], {
+      env: { HOME: "/home/cf" },
+    });
+    expect(result.stdout).toBe("/bin:/home/cf/bin");
   });
 });
 
@@ -164,6 +200,12 @@ describe("working-directory tracking", () => {
       files: { "/a/keep": "x", "/b/keep": "x" },
       script: ["cd /a", "cd /b", "cd -", 'printf \'|%s|%s\' "$PWD" "$OLDPWD"'],
       stdout: "/a\n|/a|/b",
+    },
+    {
+      name: "refuses an empty directory operand",
+      script: 'cd ""',
+      exitCode: 2,
+      stderrIncludes: "cd: directory must not be empty",
     },
     {
       name: "refuses cd - with no previous directory",
@@ -241,6 +283,26 @@ describe("shell option state", () => {
       stderrIncludes: "set: unsupported option -x",
     },
     {
+      name: "applies nothing when any flag in the invocation is unsupported",
+      script: ["set -euxo pipefail || true", 'printf "[%s]" "$-"'],
+      // A typo must stay a survivable usage error rather than half-applying
+      // errexit and then aborting on it.
+      stdout: "[]",
+      stderrIncludes: "set: unsupported option -x",
+    },
+    {
+      name: "applies nothing regardless of where the unsupported flag sits",
+      script: ["set -xe || true", 'printf "[%s]" "$-"'],
+      stdout: "[]",
+      stderrIncludes: "set: unsupported option -x",
+    },
+    {
+      name: "requires an option name after -o",
+      script: "set -o",
+      exitCode: 2,
+      stderrIncludes: "set: -o requires an option name",
+    },
+    {
       name: "rejects an unsupported option name",
       script: "set -o noclobber",
       exitCode: 2,
@@ -297,6 +359,20 @@ describe("permission-shaped predicates", () => {
     },
   ]);
 
+  it("answers the same predicates inside a double-bracket conditional", async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/f", "body");
+    harness.fileSystem.setMetadata("/f", { mode: 0o100400 });
+    const result = await harness.run([
+      "[[ -r /f ]] && printf r",
+      "[[ -w /f ]] || printf ' no-w'",
+      "[[ -x /f ]] || printf ' no-x'",
+      "[[ -s /f ]] && printf ' s'",
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("r no-w no-x s");
+  });
+
   it("does not consult the policy write roots", async () => {
     const harness = createBashHarness({ policy: { writeRoots: ["/allowed"] } });
     await harness.fileSystem.writeFile("/elsewhere", "body");
@@ -315,7 +391,11 @@ describe("help", () => {
     const result = await harness.run("help");
     expect(result.exitCode).toBe(0);
     const listed = result.stdout.trimEnd().split("\n");
-    expect(listed).toHaveLength(defaultShellCommands.length + 1);
+    // Every registered name plus each declared alias.
+    const aliases = defaultShellCommands.flatMap(
+      (command) => (command as { spec?: { aliases?: readonly string[] } }).spec?.aliases ?? [],
+    );
+    expect(listed).toHaveLength(defaultShellCommands.length + aliases.length);
     expect(result.stdout).toContain("cd          changes the working directory");
   });
 

@@ -151,7 +151,7 @@ export interface ArithmeticCommandNode {
   sourceOffset: number;
 }
 
-export type ConditionalUnaryOperator = "-n" | "-z" | "-e" | "-f" | "-d";
+export type ConditionalUnaryOperator = "-n" | "-z" | "-e" | "-f" | "-d" | "-s" | "-r" | "-w" | "-x";
 export type ConditionalBinaryOperator =
   | "=="
   | "!="
@@ -301,11 +301,20 @@ const UNSUPPORTED_CONDITIONAL_UNARY = new Set([
   "-x",
 ]);
 
+const CONDITIONAL_UNARY_OPERATORS: readonly ConditionalUnaryOperator[] = [
+  "-n",
+  "-z",
+  "-e",
+  "-f",
+  "-d",
+  "-s",
+  "-r",
+  "-w",
+  "-x",
+];
+
 function conditionalUnaryOperator(value: string | undefined): ConditionalUnaryOperator | undefined {
-  if (value === "-n" || value === "-z" || value === "-e" || value === "-f" || value === "-d") {
-    return value;
-  }
-  return undefined;
+  return CONDITIONAL_UNARY_OPERATORS.find((candidate) => candidate === value);
 }
 
 function conditionalBinaryOperator(

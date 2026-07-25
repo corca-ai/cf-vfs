@@ -349,10 +349,16 @@ database. A tilde with `HOME` unset or empty stays literal too, a quoted tilde i
 never expanded, and a tilde produced by an expansion is data rather than syntax.
 A tilde whose prefix is continued by a quoted part or an expansion — `~"x"`,
 `~$SUFFIX` — stays literal, because the prefix must end inside the written
-literal for the shell to know it is one.
+literal for the shell to know it is one. The substituted value is treated as
+quoted, as Bash does: it is a value, not syntax, so it is neither field-split
+nor matched as a pattern, and a `HOME` holding `*` cannot turn `~/notes` into a
+wildcard. Each substitution is charged to the expansion budget before it is
+materialized, so a value naming many boundaries fails with a budget diagnostic
+rather than building an unbounded string.
 
 Any word shaped like an assignment expands a tilde after `=` and after each `:`,
-so `PATH=~/bin:~/tools` and `export PATH=~/bin` both work. The name before `=`
+so `PATH=~/bin:~/tools`, `PATH=$PATH:~/bin`, and `export PATH=~/bin` all work.
+A `:` produced by an expansion is data and opens no boundary. The name before `=`
 must be an identifier, so `--opt=~/y` and `9X=~/y` stay literal. A `case` word
 and a `[[ ]]` operand expand a tilde as well; an unquoted default inside a
 parameter expansion, such as `${X-~/d}`, does not.
@@ -372,7 +378,7 @@ reports the options that are on, as `e` and `u` in that order. It lists only wha
 this profile spells as a short flag, so `pipefail` — which has no short form —
 never appears, and neither do Bash's `h`, `B`, and `c`.
 
-`test` and `[` add `-r`, `-w`, and `-x` beside `-e`, `-f`, `-d`, and `-s`. They
+`test`, `[`, and `[[ ]]` all offer `-e`, `-f`, `-d`, `-s`, `-r`, `-w`, and `-x`. They
 read compatibility mode bits and report whether *any* class carries the bit,
 because there is no user, group, or account to ask about. They enforce nothing,
 and they do not consult the shell's read and write roots: those refuse an
@@ -534,11 +540,19 @@ row there would mean nothing and could be removed while `/bin/cat` kept working.
 Listing them is not supported, and a `home` or `cwd` option inside one is a
 usage error.
 
-`LINUX_PROFILE_VARIABLES` names what the profile sets. A caller may override any
-of them by passing its own value after the profile's, and a script may reassign
-them: this language has no `readonly`, and adding one would create a restriction
-the shell cannot enforce anywhere else. Reassigning `LC_ALL` or `TZ` changes
-nothing, because collation and timestamps do not follow them.
+`LINUX_PROFILE_VARIABLES` names what the profile sets. Seven of them are
+defaults: a caller may override one by passing its own value after the
+profile's, and a script may reassign it. `LC_ALL` and `TZ` are controlled — the
+session sets them after the caller's environment, so they always read `C` and
+`UTC`, which is the truth about a runtime whose collation and timestamps do not
+follow them.
+
+Nothing is `readonly`: this language has no such concept, and adding one would
+create a restriction the shell cannot enforce anywhere else. What bounds a
+reassignment instead is the execution unit. `Shell` builds a fresh session per
+execution, so a script that overwrites `HOME` or `PATH` affects that unit only
+and the next one starts from the profile again. `InteractiveShell` deliberately
+persists a session, so there a reassignment lasts until the session ends.
 
 `LinuxProfileOptions` accepts `user` (default `cf`), `home` (default
 `/home/<user>`), `cwd` (default `/workspace`), and `tmp` (default `/tmp`). `cwd`

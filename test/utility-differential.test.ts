@@ -3,7 +3,7 @@ import fixtures from "./fixtures/utility-compat.json" with { type: "json" };
 import { createBashHarness } from "./helpers/bash.js";
 
 // Must match `WORKDIR` in scripts/regenerate-utility-fixtures.mjs.
-const WORKDIR = "/work";
+const WORKDIR = "/tmp/work";
 
 interface UtilityFixture {
   readonly name: string;
