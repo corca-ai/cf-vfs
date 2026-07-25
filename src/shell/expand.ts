@@ -2,6 +2,7 @@ import { VfsError } from "../core/errors.js";
 import { compareUtf8, normalizePath } from "../core/path.js";
 import { codePointLength } from "../core/unicode.js";
 import { evaluateArithmetic } from "./arithmetic.js";
+import { expandBraces } from "./brace.js";
 import { ShellNounsetError } from "./errors.js";
 import type { LiteralWordPart, ParameterExpansion, ShellWord, WordPart } from "./parser.js";
 import { matchesShellPattern, removeShellPattern, replaceShellPattern } from "./pattern.js";
@@ -589,7 +590,31 @@ function withTildePrefix(
   return expandedAny ? output : parts;
 }
 
+/**
+ * Expands one word into the fields it stands for.
+ *
+ * Brace expansion runs first and separately, exactly as it does in Bash: it
+ * reads only the word, so its result is what the remaining steps expand, and
+ * nothing a later step produces is scanned for braces again.
+ */
 export async function expandWord(
+  word: ShellWord,
+  session: ShellSession,
+  fileSystem: ShellFileSystem,
+  budget: ShellBudget,
+  runtime: ExpansionRuntime,
+): Promise<string[]> {
+  const braced = expandBraces(word, budget);
+  const single = braced.length === 1 ? braced[0] : undefined;
+  if (single !== undefined) return expandOneWord(single, session, fileSystem, budget, runtime);
+  const output: string[] = [];
+  for (const candidate of braced) {
+    output.push(...(await expandOneWord(candidate, session, fileSystem, budget, runtime)));
+  }
+  return output;
+}
+
+async function expandOneWord(
   word: ShellWord,
   session: ShellSession,
   fileSystem: ShellFileSystem,

@@ -2111,10 +2111,8 @@ describe("Bash v3 getopts", () => {
 });
 
 const rejectedSyntax: ReadonlyArray<readonly [name: string, syntax: string, diagnostic: string]> = [
-  ["backtick substitution", "printf `printf x`", "backtick command substitution"],
   ["process substitution", "cat <(printf x)", "redirection requires a word"],
   ["array assignment", "A[0]=x", "array"],
-  ["brace expansion", "printf {a,b}", "brace expansion"],
   ["background job", "printf no & printf background", "expected command separator"],
   ["arbitrary descriptor", "printf x 3>/other", "arbitrary file descriptors"],
   ["select loop", "select X in a; do :; done", "reserved syntax select"],
@@ -2124,6 +2122,43 @@ const rejectedSyntax: ReadonlyArray<readonly [name: string, syntax: string, diag
   ["unsupported $*", "printf $*", "special parameter"],
   ["unsupported $$", "printf $$", "special parameter"],
 ];
+
+describe("Bash v4 brace expansion and backtick substitution", () => {
+  bashCases([
+    {
+      name: "expands braces before the remaining expansions",
+      script: "printf '%s|' pre{a,b}post {1..3} {x,y}{1,2}",
+      stdout: "preapost|prebpost|1|2|3|x1|x2|y1|y2|",
+    },
+    {
+      name: "leaves a brace that spells no group alone",
+      script: "printf '%s|' {a} {} '{a,b}' \\{c,d\\}",
+      stdout: "{a}|{}|{a,b}|{c,d}|",
+    },
+    {
+      name: "does not rescan what an expansion produced",
+      script: "V={a,b}; printf '%s|' $V",
+      stdout: "{a,b}|",
+    },
+    {
+      name: "bounds a range against the expansion budget",
+      script: "printf '%s' {1..2000000000}",
+      exitCode: 1,
+      stderrIncludes: ["shell expansion work limit exceeded"],
+    },
+    {
+      name: "runs a backtick substitution and keeps its status",
+      script: "printf '%s|' `printf x` \"`printf y`\"; `false`; printf '%s' $?",
+      stdout: "x|y|1",
+    },
+    {
+      name: "reports an unterminated backtick as incomplete input",
+      script: "printf `printf x",
+      exitCode: 2,
+      stderrIncludes: ["unterminated backtick"],
+    },
+  ]);
+});
 
 const malformedCompoundSyntax: ReadonlyArray<
   readonly [name: string, syntax: string, diagnostic: string]

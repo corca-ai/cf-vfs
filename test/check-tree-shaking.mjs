@@ -36,6 +36,7 @@ const M = {
   system: "shell/commands/system",
   posixRegex: "core/posix-regex",
   script: "shell/script",
+  brace: "shell/brace",
   devices: "shell/devices",
   content: "shell/content",
   completion: "shell/completion",
@@ -84,6 +85,7 @@ const PRESETS = [
       M.shell,
       M.script,
       M.devices,
+      M.brace,
       M.completion,
       M.opaqueReader,
       M.interactive,
@@ -115,6 +117,7 @@ const PRESETS = [
       M.shell,
       M.script,
       M.devices,
+      M.brace,
       M.completion,
       M.opaqueReader,
       M.interactive,
@@ -146,6 +149,7 @@ const PRESETS = [
       M.shell,
       M.script,
       M.devices,
+      M.brace,
       M.completion,
       M.opaqueReader,
       M.r2,
@@ -158,7 +162,7 @@ const PRESETS = [
     // `devices` and `content` are named here because the executor constructs
     // them on every run: they are core by consequence, and listing them keeps
     // that a decision rather than an accident.
-    include: [M.shell, M.parser, M.applet, M.core, M.devices, M.content],
+    include: [M.shell, M.parser, M.applet, M.core, M.devices, M.content, M.brace],
     exclude: [
       M.completion,
       M.opaqueReader,
@@ -222,6 +226,7 @@ const PRESETS = [
       M.parser,
       M.script,
       M.devices,
+      M.brace,
     ],
     // The opt-in R2 reader must stay out even of the preset that imports every
     // applet: a shell is inline-only until a host hands it the capability. So
@@ -269,6 +274,7 @@ const PRESETS = [
       M.shell,
       M.script,
       M.devices,
+      M.brace,
       M.completion,
       M.opaqueReader,
       M.interactive,
