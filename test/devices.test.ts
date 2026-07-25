@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_SHELL_LIMITS, ExecutionBudget } from "../src/shell/budget.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
+import { DeviceFileSystem } from "../src/shell/devices.js";
+import { ScopedFileSystem } from "../src/shell/policy.js";
 import { Shell } from "../src/shell/shell.js";
 import { bashCases, createBashHarness } from "./helpers/bash.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
@@ -232,10 +235,56 @@ describe("virtual devices", () => {
     expect(stderrCase.stderr).toContain("no such file or directory");
   });
 
+  it("shows /dev where a directory of its own would be shown", async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.mkdir("/home", true);
+    await harness.fileSystem.writeFile("/home/a.txt", "x\n");
+
+    // A directory you can enter, stat, and read must also be one you can see.
+    // Answering for `/dev` everywhere except its parent's listing is the same
+    // disagreement the reservation exists to prevent.
+    expect((await harness.run("ls /")).stdout).toBe("dev\nhome\n");
+    // `find / -maxdepth 1` is the same question as `ls /`, so it answers the
+    // same. What is inside is not reported: those are descriptor paths a
+    // recursive reader cannot open.
+    expect((await harness.run("find / -maxdepth 1 | sort")).stdout).toBe("/\n/dev\n/home\n");
+    expect((await harness.run("find / -type f | sort")).stdout).toBe("/home/a.txt\n");
+    expect((await harness.run("find / -name dev")).stdout).toBe("/dev\n");
+    // Naming it directly still lists what it holds.
+    expect((await harness.run("find /dev -type f | sort")).stdout).toBe(
+      "/dev/fd/0\n/dev/fd/1\n/dev/fd/2\n/dev/null\n/dev/stderr\n/dev/stdin\n/dev/stdout\n",
+    );
+  });
+
+  it("returns every root entry exactly once when the listing is paged", async () => {
+    const fileSystem = createTestFileSystem();
+    for (const name of ["alpha", "beta", "zeta"]) await fileSystem.mkdir(`/${name}`, true);
+    const view = new DeviceFileSystem(
+      new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
+    );
+
+    // Walked one entry at a time, so the synthetic entry has to land in exactly
+    // one page rather than in every page or none. `/dev` sorts between `/beta`
+    // and `/zeta`, and the cursor is the last path returned.
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let guard = 0; guard < 20; guard += 1) {
+      const page = view.listPage("/", {
+        limit: 1,
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      for (const entry of page.entries) seen.push(entry.path);
+      cursor = page.nextCursor ?? undefined;
+      if (cursor === undefined) break;
+    }
+    expect(seen).toEqual(["/alpha", "/beta", "/dev", "/zeta"]);
+  });
+
   it("keeps devices out of the namespace", async () => {
     const harness = createBashHarness();
-    // Nothing was created by using one, and nothing lists one.
-    expect((await harness.run("echo x > /dev/null; ls /")).stdout).toBe("");
+    // Using one creates nothing: `/dev` is shown because it is a directory
+    // that answers, not because a row appeared behind it.
+    expect((await harness.run("echo x > /dev/null; ls /")).stdout).toBe("dev\n");
     expect(() => harness.fileSystem.stat("/dev/null")).toThrowError(/no such file or directory/u);
     expect(() => harness.fileSystem.stat("/dev")).toThrowError(/no such file or directory/u);
   });

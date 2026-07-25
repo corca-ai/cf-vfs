@@ -670,6 +670,13 @@ the device view and the entry view from disagreeing — without it a real
 `/dev/null` would be read as the device but listed, moved, and removed as a
 file, and a write to it would be silently discarded.
 
+`ls /` shows `dev`, and `find / -maxdepth 1` reports `/dev`, because those ask
+the same question and a directory you can enter, stat, and read has to be one
+you can see. A recursive walk of the root reports `/dev` itself but does not
+descend into it: what is inside are descriptor paths a recursive reader cannot
+open, so `grep -r /` would collect errors instead of results. Naming `/dev`
+directly still lists everything in it.
+
 `/dev/null` discards what is written to it and reads as empty. Nothing is
 buffered and nothing extra is charged: the bytes were already metered when
 whatever produced them ran, so `cmd > /dev/null` costs exactly what

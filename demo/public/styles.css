@@ -330,9 +330,18 @@ h1 em {
 #terminal {
   height: 480px;
   padding: 20px 22px;
+  /* The grid is a whole number of cells and the box is not, so the last column
+     can land a fraction of a pixel outside it. Clipping here keeps that
+     fraction inside the card instead of over its border. */
+  overflow: hidden;
   background:
     radial-gradient(circle at 75% 15%, rgba(81, 174, 126, 0.045), transparent 30%),
     #07120f;
+}
+
+#terminal .xterm,
+#terminal .xterm-screen {
+  max-width: 100%;
 }
 
 #terminal .xterm {

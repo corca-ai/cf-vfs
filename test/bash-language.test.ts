@@ -2313,7 +2313,8 @@ describe("argument, sequence, encoding, and environment utilities", () => {
     {
       name: "xargs charges the shared mutation budget through the invoked command",
       script: "printf '/a\\n/b\\n' | xargs -n 1 touch; ls /",
-      stdout: "a\nb\n",
+      // `dev` is the reserved device directory, which every root listing shows.
+      stdout: "a\nb\ndev\n",
     },
     {
       name: "seq counts from one when given a single operand",
