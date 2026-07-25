@@ -119,7 +119,10 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     // so it cannot be used to charge a mutation budget accurately.
     expect(fileSystem.find({ path: "/bulk", includeRoot: true })).toHaveLength(10_000);
     expect(fileSystem.countSubtree("/bulk")).toBe(10_051);
-  });
+    // Writing past the find() ceiling is the point of this case, so it is
+    // legitimately long: about two seconds locally and more on a shared CI
+    // runner. The default five-second timeout is not enough headroom.
+  }, 30_000);
 
   it("stores arbitrary bytes and gives active readers a bounded snapshot", async () => {
     const fileSystem = createTestFileSystem({ chunkBytes: 2 });
