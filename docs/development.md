@@ -286,6 +286,32 @@ must be usage errors.
 
 Update the package and Wrangler fixtures when adding a new subpath.
 
+## What belongs in the core
+
+The core is the VFS and the non-interactive shell — see
+[what this library is for](index.md#what-this-library-is-for). Before adding to
+it, three questions decide where the code goes:
+
+**Does an agent workload run this?** If only a human at a terminal does, it
+belongs behind an entry point of its own and must be asserted absent from the
+non-interactive presets. Completion is the worked example: it lives in
+`/shell/completion`, and `test/check-tree-shaking.mjs` excludes it from every
+preset including the one that imports every applet.
+
+**Does a consumer who does not use it still carry it?** A capability that is
+off should cost nothing, not a little. The opaque content reader is the worked
+example: the host supplies it, so `shell/opaque` is excluded from all eight
+presets, and an inline-only shell carries no R2 code at all.
+
+**Would importing one applet drag in the rest?** Shared parsers, formatters,
+and path helpers must not import the commands that use them, and an applet
+that pulls a large engine belongs in a module where that cost is visible in a
+budget rather than hidden in a neighbour's.
+
+A change that fails one of these is not necessarily wrong — but it needs a
+recorded budget move and a sentence in the pull request saying which property
+was traded and for what.
+
 ## Compatibility, bundle, and performance gates
 
 `test/check-tree-shaking.mjs` builds eight representative Worker bundles — one
