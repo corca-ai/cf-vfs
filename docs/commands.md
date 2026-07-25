@@ -158,7 +158,8 @@ Supported syntax:
 - signed 64-bit `$((expression))` expansion and `((expression))` commands,
   including integer variables, assignment/update, arithmetic, comparison,
   bitwise, logical, conditional, and comma operators;
-- `<`, `>`, `>>`, `2>`, `2>>`, left-to-right `2>&1`, `<<`, `<<-`, and `<<<`;
+- `<`, `>`, `>>`, `2>`, `2>>`, left-to-right `2>&1` and `>&2` (also spelled
+  `1>&2`), `<<`, `<<-`, and `<<<`;
 - pathname expansion with `*`, `?`, and bracket/range expressions;
 - comments beginning with `#` at a word boundary.
 

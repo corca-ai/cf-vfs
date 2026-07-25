@@ -320,6 +320,28 @@ describe("stream-first shell runtime", () => {
     ).toBe("out\n");
   });
 
+  it("duplicates standard output onto standard error with >&2", async () => {
+    const harness = createBashHarness();
+    // The mirror of `2>&1`, over the two descriptors that exist. `1>&2` is the
+    // same redirection with the descriptor `>` already implies.
+    const result = await harness.run("echo out; echo err >&2; echo also 1>&2");
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("out\n");
+    expect(result.stderr).toBe("err\nalso\n");
+
+    // Left to right, like every other redirection here: the duplicate takes
+    // where the descriptor points at the moment it is applied.
+    await harness.fileSystem.mkdir("/d", true);
+    const ordered = await harness.run("sh -c 'echo x >&2' 2> /d/captured; cat /d/captured");
+    expect(ordered.exitCode).toBe(0);
+    expect(ordered.stdout).toBe("x\n");
+
+    // Releasing the duplicate must not tear down the descriptor it copied.
+    const survives = await harness.run("echo a; echo b >&2; echo c");
+    expect(survives.stdout).toBe("a\nc\n");
+    expect(survives.stderr).toBe("b\n");
+  });
+
   it("preflights redirection parents before running the command", async () => {
     const { fileSystem, shell } = createBashHarness();
     const result = await shell.executeText({ script: "touch /side-effect > /missing/output" });

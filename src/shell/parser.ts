@@ -92,6 +92,7 @@ export type PathRedirectionOperator = "<" | ">" | ">>" | "2>" | "2>>";
 export type Redirection =
   | { operator: PathRedirectionOperator; target: ShellWord }
   | { operator: "2>&1" }
+  | { operator: ">&2" }
   | { operator: "<<<"; target: ShellWord }
   | { operator: "<<" | "<<-"; document: ShellWord };
 
@@ -252,6 +253,7 @@ type Operator =
   | ";;"
   | PathRedirectionOperator
   | "2>&1"
+  | ">&2"
   | "<<"
   | "<<-"
   | "<<<";
@@ -272,6 +274,7 @@ const REDIRECTIONS = new Set<Operator>([
   ...PATH_REDIRECTIONS,
   ...HEREDOC_REDIRECTIONS,
   "2>&1",
+  ">&2",
   "<<<",
 ]);
 const UNSUPPORTED_RESERVED = new Set([
@@ -503,6 +506,7 @@ function assignmentName(parts: readonly WordPart[]): string | undefined {
 function operatorAt(source: string, offset: number, atBoundary: boolean): Operator | null {
   for (const candidate of [
     "2>&1",
+    ">&2",
     "<<<",
     "<<-",
     "&&",
@@ -517,7 +521,7 @@ function operatorAt(source: string, offset: number, atBoundary: boolean): Operat
     if ((candidate === "2>&1" || candidate === "2>>" || candidate === "2>") && !atBoundary)
       continue;
     const next = source[offset + candidate.length];
-    if (candidate === "2>&1" && !isBoundary(next)) continue;
+    if ((candidate === "2>&1" || candidate === ">&2") && !isBoundary(next)) continue;
     return candidate;
   }
   const character = source[offset];
@@ -582,6 +586,12 @@ class Lexer {
       }
       if (this.source.startsWith("((", this.offset)) {
         this.tokens.push(this.readArithmeticCommand());
+        continue;
+      }
+      if (this.source.startsWith("1>&2", this.offset) && isBoundary(this.source[this.offset + 4])) {
+        // The same redirection as `>&2`, written with the descriptor `>` already
+        // implies. Refusing it would be refusing a spelling, not a capability.
+        this.offset += 1;
         continue;
       }
       if (
@@ -1781,6 +1791,7 @@ class Parser {
       throw this.tokenError("expected redirection", token);
     }
     if (token.value === "2>&1") return { operator: "2>&1" };
+    if (token.value === ">&2") return { operator: ">&2" };
     const target = this.take();
     if (target.type !== "word") throw this.tokenError("redirection requires a word", target);
     if (token.value === "<<" || token.value === "<<-") {

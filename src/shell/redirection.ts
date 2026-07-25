@@ -125,6 +125,17 @@ export async function applyRedirections(
         else redirected.delete(2);
         continue;
       }
+      // The mirror of `2>&1`, and implemented as one: both descriptors exist,
+      // so duplicating either way is the same three lines. The duplicate stays
+      // out of `redirected` for the reason `2>&1`'s does — aborting it would
+      // tear down the stream it was duplicated from.
+      if (redirection.operator === ">&2") {
+        await fds[1].close();
+        fds[1] = fds[2].clone();
+        if (redirected.has(2)) redirected.add(1);
+        else redirected.delete(1);
+        continue;
+      }
       if (redirection.operator === "<<<") {
         const value = await expandScalarWord(
           redirection.target,
