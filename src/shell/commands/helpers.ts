@@ -1,7 +1,8 @@
 import { VfsError } from "../../core/errors.js";
 import { splitLinesPreservingEndings } from "../../core/lines.js";
 import { basename, normalizePath } from "../../core/path.js";
-import type { EntryPage, InlineReadResult } from "../../vfs/types.js";
+import type { ByteRange, EntryPage, InlineReadResult } from "../../vfs/types.js";
+import { openContent } from "../content.js";
 import type { ShellCommandContext, ShellSink } from "../types.js";
 
 export interface BufferLease<T> {
@@ -103,6 +104,50 @@ export async function* inputStreams(
   for (const path of argv) {
     if (path === "-") yield { name: "-", stream: stdin };
     else yield { name: path, stream: readFile(context, path).stream };
+  }
+}
+
+/**
+ * The same operands, with an opaque R2 body streamed when the session allows.
+ *
+ * Used by the commands that consume their input and emit as they go, and
+ * deliberately not by the ones that have to hold all of it. A barrier reading
+ * an opaque body would buffer something chosen for being too large to store
+ * inline, so `sort`, `diff`, `patch`, `join`, `sed -i`, and command
+ * substitution keep reporting `ENOTSUP` — a refusal a caller can act on beats
+ * an execution that dies against a limit halfway through.
+ *
+ * Every body is released when the walk ends, including on an early break: an
+ * opaque read holds a retention lease, and abandoning one keeps the object
+ * alive until it expires.
+ */
+export async function* contentInputs(
+  context: ShellCommandContext,
+  argv: readonly string[],
+  stdin: ReadableStream<Uint8Array>,
+  range?: ByteRange,
+): AsyncGenerator<{ name: string; stream: ReadableStream<Uint8Array> }> {
+  if (argv.length === 0) {
+    yield { name: "-", stream: stdin };
+    return;
+  }
+  const opened: Array<() => void> = [];
+  try {
+    for (const path of argv) {
+      if (path === "-") {
+        yield { name: "-", stream: stdin };
+        continue;
+      }
+      const body = await openContent(context.fileSystem, commandPath(context, path), {
+        reader: context.content,
+        access: context.policy.opaqueContent,
+        ...(range === undefined ? {} : { range }),
+      });
+      opened.push(body.release);
+      yield { name: path, stream: body.stream };
+    }
+  } finally {
+    for (const release of opened) release();
   }
 }
 

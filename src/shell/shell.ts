@@ -16,6 +16,7 @@ import {
   splitSearchPath,
 } from "./commands/applet.js";
 import { isCharacterDevice, isRegularFile } from "./commands/format.js";
+import type { ShellContentReader } from "./content.js";
 import { DeviceFileSystem } from "./devices.js";
 import { optindGeneration } from "./environment.js";
 import { ShellNounsetError } from "./errors.js";
@@ -130,6 +131,7 @@ interface Runtime {
   pathLookup: boolean;
   now: () => number;
   fileSystem: ShellFileSystem;
+  content: ShellContentReader | undefined;
   budget: ShellBudget;
   policy: ShellPolicy;
   signal: AbortSignal;
@@ -900,6 +902,7 @@ async function executeSimpleCommand(
             signal: runtime.signal,
             budget: runtime.budget,
             policy: runtime.policy,
+            ...(runtime.content === undefined ? {} : { content: runtime.content }),
             executeSource: async (source, path, sourceArgs, sourceFds) =>
               await runSourcedUnit(source, path, sourceArgs, session, sourceFds, runtime, context),
             executeCommand: async (commandArgv, commandFds, commandOptions) => {
@@ -1537,6 +1540,7 @@ export class Shell {
   private readonly pathLookup: boolean;
   private readonly fileSystem: ShellOptions["fileSystem"];
   private readonly policy: ShellPolicy;
+  private readonly content: ShellContentReader | undefined;
   private readonly limits: ShellLimits;
   private readonly now: () => number;
   private readonly onEvent: ShellEventSink | undefined;
@@ -1545,6 +1549,7 @@ export class Shell {
     this.commands = createAppletRegistry(options.commands);
     this.pathLookup = options.commandResolution === "path";
     this.fileSystem = options.fileSystem;
+    this.content = options.content;
     this.policy = Object.freeze({
       ...(options.policy?.readRoots === undefined
         ? {}
@@ -1556,6 +1561,9 @@ export class Shell {
         : {
             writeRoots: Object.freeze(options.policy.writeRoots.map((path) => normalizePath(path))),
           }),
+      ...(options.policy?.opaqueContent === undefined
+        ? {}
+        : { opaqueContent: options.policy.opaqueContent }),
       ...(options.policy?.allowedCommands === undefined
         ? {}
         : { allowedCommands: Object.freeze([...options.policy.allowedCommands]) }),
@@ -1681,6 +1689,7 @@ export class Shell {
           fileSystem: scoped,
           budget,
           policy: this.policy,
+          content: this.content,
           signal: controller.signal,
           limits: this.limits,
           parserBudget,

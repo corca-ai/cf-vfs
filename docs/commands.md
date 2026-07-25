@@ -600,6 +600,24 @@ abort signal or the execution deadline, so one short pattern from a caller would
 burn the whole CPU limit. Patterns that would still be large after expansion
 (`(x{50}){50}`) are refused with status 2 rather than compiled.
 
+### Opaque R2 content
+
+`cat`, `head`, `grep`, and `wc` can stream an opaque R2 body when the host
+supplies a content reader and the session's policy says `opaqueContent:
+"stream"`. Both are required; either alone leaves the body unreadable, which is
+the default every existing caller already has. `ls`, `stat`, and `file` name
+and describe an opaque entry without either.
+
+`sort`, `diff`, `patch`, `join`, `sed -i`, and command substitution keep
+reporting `ENOTSUP` for an opaque body. They have to hold all of their input,
+and a body is opaque because it was too large to hold — the refusal is what
+keeps a script from dying against a limit halfway through instead of at the
+start.
+
+Nothing is materialized: at most one chunk is in flight, and a command that
+stops early stops the read with it. `head -c N` asks the store for N bytes
+rather than the whole body.
+
 ### Virtual devices
 
 `/dev/null`, `/dev/stdin`, `/dev/stdout`, and `/dev/stderr` exist during a

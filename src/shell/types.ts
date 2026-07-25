@@ -1,4 +1,5 @@
 import type { VfsStat, VirtualFileSystem } from "../vfs/types.js";
+import type { OpaqueContentAccess, ShellContentReader } from "./content.js";
 import type { ShellEventSink } from "./events.js";
 import type { FunctionDefinitionNode } from "./parser.js";
 
@@ -99,6 +100,16 @@ export interface ShellPolicy {
    * therefore be canonical names: an alias or an applet path in the list
    * matches nothing and denies everything it was meant to allow.
    */
+  /**
+   * How much of an opaque R2 body a session may read.
+   *
+   * Independent of the read roots because it is a different question: the
+   * roots say which paths a session can name, and this says whether the bytes
+   * behind an opaque one may be streamed on the workspace's R2 budget.
+   * `metadata` — the default — keeps the behavior every existing caller has:
+   * `ls` and `stat` see the entry, and reading it is `ENOTSUP`.
+   */
+  readonly opaqueContent?: OpaqueContentAccess;
   readonly allowedCommands?: readonly string[];
   readonly maxMutations?: number;
 }
@@ -134,6 +145,13 @@ export interface ShellLimits {
 
 export interface ShellCommandContext {
   fileSystem: ShellFileSystem;
+  /**
+   * Streams an opaque body, when the session was built with the capability.
+   *
+   * Absent by default, which is what keeps an inline-only shell from carrying
+   * any R2 code at all.
+   */
+  content?: ShellContentReader | undefined;
   session: ShellSession;
   signal: AbortSignal;
   budget: ShellBudget;
@@ -288,6 +306,14 @@ export interface ExecuteBytesResult {
 
 export interface ShellOptions {
   fileSystem: VirtualFileSystem;
+  /**
+   * The capability that lets streaming commands read opaque R2 bodies.
+   *
+   * Supplying it is the opt-in; `policy.opaqueContent` decides whether a given
+   * session may use it. Both are required, so adding the capability to a host
+   * does not silently widen what an existing sandboxed session can read.
+   */
+  content?: ShellContentReader;
   commands: readonly ShellCommand[];
   /**
    * How a bare command name reaches an applet.

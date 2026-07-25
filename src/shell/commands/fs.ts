@@ -2,6 +2,7 @@ import { VfsError } from "../../core/errors.js";
 import { matchesGlob } from "../../core/glob.js";
 import { basename, dirname, normalizePath } from "../../core/path.js";
 import type { EntryKind, VfsStat } from "../../vfs/types.js";
+import { openContent } from "../content.js";
 import {
   type AppletSpec,
   type AppletSpecWithOptions,
@@ -219,13 +220,19 @@ export const catCommand = /* @__PURE__ */ defineApplet(CAT, async (context, argv
     return 0;
   }
   for (const path of argv) {
-    if (path === "-") await pipeToSink(context, fds[0], fds[1]);
-    else
-      await pipeToSink(
-        context,
-        context.fileSystem.readFile(commandPath(context, path)).stream,
-        fds[1],
-      );
+    if (path === "-") {
+      await pipeToSink(context, fds[0], fds[1]);
+      continue;
+    }
+    const body = await openContent(context.fileSystem, commandPath(context, path), {
+      reader: context.content,
+      access: context.policy.opaqueContent,
+    });
+    try {
+      await pipeToSink(context, body.stream, fds[1]);
+    } finally {
+      body.release();
+    }
   }
   return 0;
 });
