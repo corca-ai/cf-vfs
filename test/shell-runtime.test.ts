@@ -2,19 +2,22 @@ import { describe, expect, it } from "vitest";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { defineCommand, writeText } from "../src/shell/commands/helpers.js";
 import { Shell } from "../src/shell/shell.js";
+import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import { putOpaque } from "../src/vfs/opaque.js";
 import { readAllBytes, streamFromChunks } from "../src/vfs/streams.js";
-import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
-import { createTestFileSystem } from "./helpers/node-sql.js";
 import { createBashHarness } from "./helpers/bash.js";
+import { createTestFileSystem } from "./helpers/node-sql.js";
 
 describe("stream-first shell runtime", () => {
   it("keeps the per-edge pipeline limit at or below 8 MiB", () => {
-    expect(() => new Shell({
-      fileSystem: createTestFileSystem(),
-      commands: defaultShellCommands,
-      limits: { maxPipelineBytes: 8 * 1024 * 1024 + 1 },
-    })).toThrowError(expect.objectContaining({ code: "EINVAL" }));
+    expect(
+      () =>
+        new Shell({
+          fileSystem: createTestFileSystem(),
+          commands: defaultShellCommands,
+          limits: { maxPipelineBytes: 8 * 1024 * 1024 + 1 },
+        }),
+    ).toThrowError(expect.objectContaining({ code: "EINVAL" }));
   });
 
   it("treats printf %b arguments as escaped data and reports invalid test integers as usage errors", async () => {
@@ -54,25 +57,31 @@ describe("stream-first shell runtime", () => {
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe("/src/a.ts\n/src/b.ts\n");
-    expect(new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/files.txt").stream, 1024)))
-      .toBe("/src/a.ts\n/src/b.ts\n");
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/files.txt").stream, 1024)),
+    ).toBe("/src/a.ts\n/src/b.ts\n");
   });
 
   it("lets touch -c ignore only missing targets", async () => {
     const { fileSystem, shell } = createBashHarness();
-    expect(await shell.executeText({
-      script: "touch /existing; touch -c /missing /existing; [[ ! -e /missing && -e /existing ]]",
-    })).toMatchObject({ exitCode: 0, stderr: "" });
-    expect(() => fileSystem.stat("/missing"))
-      .toThrowError(expect.objectContaining({ code: "ENOENT" }));
+    expect(
+      await shell.executeText({
+        script: "touch /existing; touch -c /missing /existing; [[ ! -e /missing && -e /existing ]]",
+      }),
+    ).toMatchObject({ exitCode: 0, stderr: "" });
+    expect(() => fileSystem.stat("/missing")).toThrowError(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
 
     const restricted = new Shell({
       fileSystem,
       commands: defaultShellCommands,
       policy: { writeRoots: ["/allowed"] },
     });
-    expect(await restricted.executeText({ script: "touch -c /forbidden" }))
-      .toMatchObject({ exitCode: 126, stderr: expect.stringContaining("writable roots") });
+    expect(await restricted.executeText({ script: "touch -c /forbidden" })).toMatchObject({
+      exitCode: 126,
+      stderr: expect.stringContaining("writable roots"),
+    });
   });
 
   it.each([
@@ -111,17 +120,12 @@ describe("stream-first shell runtime", () => {
 
     expect(result).toEqual({
       exitCode: 0,
-      stdout: [
-        "drwx------        0 sub\n",
-        "10\n2\n",
-        "1:Alpha\n",
-        "1 2 4\n",
-        "b\n",
-      ].join(""),
+      stdout: ["drwx------        0 sub\n", "10\n2\n", "1:Alpha\n", "1 2 4\n", "b\n"].join(""),
       stderr: "",
     });
-    expect(() => fileSystem.stat("/copy"))
-      .toThrowError(expect.objectContaining({ code: "ENOENT" }));
+    expect(() => fileSystem.stat("/copy")).toThrowError(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
   });
 
   it("accepts attached option arguments and -- terminated dash-prefixed operands", async () => {
@@ -143,14 +147,7 @@ describe("stream-first shell runtime", () => {
 
     expect(result).toEqual({
       exitCode: 0,
-      stdout: [
-        "a:1\n",
-        "2\n",
-        "1\n2\n",
-        "ab\ncd\ne\n",
-        "a:1:x\nb:2:y\n",
-        "2 -data\n",
-      ].join(""),
+      stdout: ["a:1\n", "2\n", "1\n2\n", "ab\ncd\ne\n", "a:1:x\nb:2:y\n", "2 -data\n"].join(""),
       stderr: "",
     });
   });
@@ -224,10 +221,12 @@ describe("stream-first shell runtime", () => {
   it("handles split UTF-8 sequences consistently in head, tail, and wc text modes", async () => {
     const { shell } = createBashHarness();
     const source = new TextEncoder().encode("가\n나 다\n");
-    const input = (chunkBytes: number): ReadableStream<Uint8Array> => streamFromChunks(
-      Array.from({ length: Math.ceil(source.byteLength / chunkBytes) }, (_unused, index) =>
-        source.slice(index * chunkBytes, (index + 1) * chunkBytes)),
-    );
+    const input = (chunkBytes: number): ReadableStream<Uint8Array> =>
+      streamFromChunks(
+        Array.from({ length: Math.ceil(source.byteLength / chunkBytes) }, (_unused, index) =>
+          source.slice(index * chunkBytes, (index + 1) * chunkBytes),
+        ),
+      );
     const expected = new Map([
       ["head -n 1", "가\n"],
       ["tail -n 1", "나 다\n"],
@@ -237,8 +236,10 @@ describe("stream-first shell runtime", () => {
     ]);
     for (const chunkBytes of [1, 2, 4]) {
       for (const [script, stdout] of expected) {
-        expect(await shell.executeText({ script, stdin: input(chunkBytes) }), `${script}, ${chunkBytes}`)
-          .toEqual({ exitCode: 0, stdout, stderr: "" });
+        expect(
+          await shell.executeText({ script, stdin: input(chunkBytes) }),
+          `${script}, ${chunkBytes}`,
+        ).toEqual({ exitCode: 0, stdout, stderr: "" });
       }
     }
   });
@@ -249,20 +250,19 @@ describe("stream-first shell runtime", () => {
       [new Uint8Array([0x61, 0x0a, 0xff, 0x0a])],
       [new Uint8Array([0x61, 0x0a]), new Uint8Array([0xff, 0x0a])],
     ]) {
-      expect(await shell.executeText({
-        script: "head -n 1",
-        stdin: streamFromChunks(chunks),
-      })).toEqual({ exitCode: 0, stdout: "a\n", stderr: "" });
+      expect(
+        await shell.executeText({
+          script: "head -n 1",
+          stdin: streamFromChunks(chunks),
+        }),
+      ).toEqual({ exitCode: 0, stdout: "a\n", stderr: "" });
     }
   });
 
   it("keeps split invalid bytes opaque in head, tail, and wc byte modes", async () => {
     const { shell } = createBashHarness();
-    const chunks = (): ReadableStream<Uint8Array> => streamFromChunks([
-      Uint8Array.of(0x61),
-      Uint8Array.of(0xff),
-      Uint8Array.of(0x0a),
-    ]);
+    const chunks = (): ReadableStream<Uint8Array> =>
+      streamFromChunks([Uint8Array.of(0x61), Uint8Array.of(0xff), Uint8Array.of(0x0a)]);
     for (const [script, expected] of [
       ["head -c 2", [0x61, 0xff]],
       ["tail -c 2", [0xff, 0x0a]],
@@ -277,8 +277,11 @@ describe("stream-first shell runtime", () => {
       expect(stderr.byteLength, script).toBe(0);
       expect(status.exitCode, script).toBe(0);
     }
-    expect(await shell.executeText({ script: "wc -c", stdin: chunks() }))
-      .toEqual({ exitCode: 0, stdout: "3\n", stderr: "" });
+    expect(await shell.executeText({ script: "wc -c", stdin: chunks() })).toEqual({
+      exitCode: 0,
+      stdout: "3\n",
+      stderr: "",
+    });
   });
 
   it("commits normal-close redirections even for a non-zero command", async () => {
@@ -287,7 +290,9 @@ describe("stream-first shell runtime", () => {
     const result = await shell.executeText({ script: "set -e; false > /file; touch /after" });
     expect(result.exitCode).toBe(1);
     expect((await fileSystem.stat("/file")).sizeBytes).toBe(0);
-    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
+    expect(() => fileSystem.stat("/after")).toThrowError(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
   });
 
   it("honors left-to-right fd duplication", async () => {
@@ -301,10 +306,12 @@ describe("stream-first shell runtime", () => {
     });
     expect(result.stdout).toBe("err\n");
     expect(result.stderr).toBe("");
-    expect(new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/both").stream, 32)))
-      .toBe("out\nerr\n");
-    expect(new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/stdout").stream, 32)))
-      .toBe("out\n");
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/both").stream, 32)),
+    ).toBe("out\nerr\n");
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/stdout").stream, 32)),
+    ).toBe("out\n");
   });
 
   it("preflights redirection parents before running the command", async () => {
@@ -329,10 +336,12 @@ describe("stream-first shell runtime", () => {
       script: "printf direct > /output/new; cp /input/a /output/copy",
     });
     expect(result).toMatchObject({ exitCode: 0, stderr: "" });
-    expect(new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/output/new").stream, 16)))
-      .toBe("direct");
-    expect(new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/output/copy").stream, 16)))
-      .toBe("body");
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/output/new").stream, 16)),
+    ).toBe("direct");
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/output/copy").stream, 16)),
+    ).toBe("body");
   });
 
   it("aborts an opened atomic target if a later redirection cannot be applied", async () => {
@@ -342,8 +351,9 @@ describe("stream-first shell runtime", () => {
     const result = await shell.executeText({ script: "printf new > /target > /directory" });
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("is a directory");
-    expect(new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/target").stream, 16)))
-      .toBe("old");
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/target").stream, 16)),
+    ).toBe("old");
   });
 
   it("reports an atomic redirection close failure instead of discarding it", async () => {
@@ -359,9 +369,12 @@ describe("stream-first shell runtime", () => {
     });
     expect(result).toMatchObject({ exitCode: 1 });
     expect(result.stderr).toContain("mutation token");
-    expect(new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/target").stream, 16)))
-      .toBe("old");
-    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/target").stream, 16)),
+    ).toBe("old");
+    expect(() => fileSystem.stat("/after")).toThrowError(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
   });
 
   it("keeps parent shell state for ordinary builtins but clones pipeline stages", async () => {
@@ -382,7 +395,7 @@ describe("stream-first shell runtime", () => {
         "(X=subshell; printf '%s|' \"$X\")",
         "printf '%s|' \"$X\"",
         "if false; then printf no; elif true; then printf elif; else printf no; fi",
-        "for item in a b c; do test \"$item\" = b && continue; printf ':%s' \"$item\"; test \"$item\" = c && break; done",
+        'for item in a b c; do test "$item" = b && continue; printf \':%s\' "$item"; test "$item" = c && break; done',
         "count=0",
         "while ((count < 2)); do ((count += 1)); done",
         "until ((count >= 3)); do ((count++)); done",
@@ -403,32 +416,37 @@ describe("stream-first shell runtime", () => {
       commands: defaultShellCommands,
       limits: { maxLoopIterations: 2 },
     });
-    expect(await loopLimited.executeText({ script: "while true; do :; done" }))
-      .toMatchObject({ exitCode: 1, stdout: "" });
+    expect(await loopLimited.executeText({ script: "while true; do :; done" })).toMatchObject({
+      exitCode: 1,
+      stdout: "",
+    });
 
     const recursive = new Shell({
       fileSystem,
       commands: defaultShellCommands,
       limits: { maxFunctionDepth: 2 },
     });
-    expect(await recursive.executeText({ script: "recurse() { recurse; }; recurse" }))
-      .toMatchObject({ exitCode: 1 });
+    expect(
+      await recursive.executeText({ script: "recurse() { recurse; }; recurse" }),
+    ).toMatchObject({ exitCode: 1 });
 
     const substitution = new Shell({
       fileSystem,
       commands: defaultShellCommands,
       limits: { maxCommandSubstitutionBytes: 4 },
     });
-    expect(await substitution.executeText({ script: "printf '%s' \"$(printf 12345)\"" }))
-      .toMatchObject({ exitCode: 1, stdout: "" });
+    expect(
+      await substitution.executeText({ script: "printf '%s' \"$(printf 12345)\"" }),
+    ).toMatchObject({ exitCode: 1, stdout: "" });
 
     const bufferedSubstitution = new Shell({
       fileSystem,
       commands: defaultShellCommands,
       limits: { maxBufferedBytes: 4 },
     });
-    expect(await bufferedSubstitution.executeText({ script: "printf '%s' \"$(printf 12345)\"" }))
-      .toMatchObject({ exitCode: 1, stdout: "" });
+    expect(
+      await bufferedSubstitution.executeText({ script: "printf '%s' \"$(printf 12345)\"" }),
+    ).toMatchObject({ exitCode: 1, stdout: "" });
 
     const nested = new Shell({
       fileSystem,
@@ -436,8 +454,9 @@ describe("stream-first shell runtime", () => {
       limits: { maxNestingDepth: 1 },
     });
     expect(await nested.executeText({ script: "(true)" })).toMatchObject({ exitCode: 1 });
-    expect(await nested.executeText({ script: "printf '%s' \"$((- - 1))\"" }))
-      .toMatchObject({ exitCode: 1 });
+    expect(await nested.executeText({ script: "printf '%s' \"$((- - 1))\"" })).toMatchObject({
+      exitCode: 1,
+    });
   });
 
   it("enforces command and path capabilities below utilities", async () => {
@@ -458,7 +477,9 @@ describe("stream-first shell runtime", () => {
       stdout: "ok",
     });
     expect(await shell.executeText({ script: "cat /secret" })).toMatchObject({ exitCode: 126 });
-    expect(await shell.executeText({ script: "rm /allowed/input" })).toMatchObject({ exitCode: 126 });
+    expect(await shell.executeText({ script: "rm /allowed/input" })).toMatchObject({
+      exitCode: 126,
+    });
   });
 
   it("enforces read policy for double-bracket metadata predicates", async () => {
@@ -491,10 +512,13 @@ describe("stream-first shell runtime", () => {
       commands: defaultShellCommands,
       policy: { allowedCommands: ["printf"] },
     });
-    expect(await shell.executeText({ script: "say() { printf allowed; }; say" }))
-      .toMatchObject({ exitCode: 0, stdout: "allowed" });
-    expect(await shell.executeText({ script: "remove() { rm /anything; }; remove" }))
-      .toMatchObject({ exitCode: 126 });
+    expect(await shell.executeText({ script: "say() { printf allowed; }; say" })).toMatchObject({
+      exitCode: 0,
+      stdout: "allowed",
+    });
+    expect(await shell.executeText({ script: "remove() { rm /anything; }; remove" })).toMatchObject(
+      { exitCode: 126 },
+    );
   });
 
   it("applies command, path, opaque-content, size, and cancellation boundaries to source", async () => {
@@ -511,7 +535,9 @@ describe("stream-first shell runtime", () => {
         allowedCommands: ["source", "printf"],
       },
     });
-    await expect(scoped.executeText({ script: "source /allowed/library.sh" })).resolves.toMatchObject({
+    await expect(
+      scoped.executeText({ script: "source /allowed/library.sh" }),
+    ).resolves.toMatchObject({
       exitCode: 0,
       stdout: "allowed",
     });
@@ -525,8 +551,9 @@ describe("stream-first shell runtime", () => {
       commands: defaultShellCommands,
       policy: { allowedCommands: ["printf"] },
     });
-    await expect(commandDenied.executeText({ script: "source /allowed/library.sh" }))
-      .resolves.toMatchObject({ exitCode: 126, stdout: "" });
+    await expect(
+      commandDenied.executeText({ script: "source /allowed/library.sh" }),
+    ).resolves.toMatchObject({ exitCode: 126, stdout: "" });
 
     const store = new MemoryOpaqueStore();
     const opaqueFileSystem = createTestFileSystem({ opaqueStore: store });
@@ -556,8 +583,9 @@ describe("stream-first shell runtime", () => {
     await cancelled.fileSystem.writeFile("/cancelled.sh", "printf no");
     const abort = new AbortController();
     abort.abort();
-    await expect(cancelled.run("source /cancelled.sh", { signal: abort.signal }))
-      .resolves.toMatchObject({ exitCode: 1, stdout: "" });
+    await expect(
+      cancelled.run("source /cancelled.sh", { signal: abort.signal }),
+    ).resolves.toMatchObject({ exitCode: 1, stdout: "" });
   });
 
   it("keeps opaque bodies outside shell content commands", async () => {
@@ -638,10 +666,12 @@ describe("stream-first shell runtime", () => {
         stderr: "",
       });
     }
-    expect(await shell.executeText({
-      script: "grep anything",
-      stdin: new Uint8Array([0xe2, 0x82]),
-    })).toMatchObject({
+    expect(
+      await shell.executeText({
+        script: "grep anything",
+        stdin: new Uint8Array([0xe2, 0x82]),
+      }),
+    ).toMatchObject({
       exitCode: 1,
       stdout: "",
       stderr: expect.stringContaining("valid UTF-8"),
@@ -656,7 +686,9 @@ describe("stream-first shell runtime", () => {
     const { shell } = createBashHarness({ extraCommands: [produce] });
     const execution = shell.executeStream({ script: "produce" });
     let completed = false;
-    void execution.completed.then(() => { completed = true; });
+    void execution.completed.then(() => {
+      completed = true;
+    });
     await Promise.resolve();
     await Promise.resolve();
     expect(completed).toBe(false);
@@ -681,7 +713,9 @@ describe("stream-first shell runtime", () => {
       script: "set -e; fail-after-output; touch /after",
     });
     let completed = false;
-    void execution.completed.then(() => { completed = true; });
+    void execution.completed.then(() => {
+      completed = true;
+    });
     await Promise.resolve();
     await Promise.resolve();
     expect(completed).toBe(false);
@@ -693,14 +727,16 @@ describe("stream-first shell runtime", () => {
     expect(output.byteLength).toBe(128 * 1024);
     expect(error.byteLength).toBe(128 * 1024);
     expect(status.exitCode).toBe(7);
-    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
+    expect(() => fileSystem.stat("/after")).toThrowError(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
   });
 
   it("treats a downstream head close as a successful pipeline edge under pipefail", async () => {
     const { fileSystem, shell } = createBashHarness({
       fileSystem: createTestFileSystem({ chunkBytes: 1024 }),
     });
-    await fileSystem.writeFile("/many", "first\n" + "next\n".repeat(1000));
+    await fileSystem.writeFile("/many", `first\n${"next\n".repeat(1000)}`);
     const result = await shell.executeText({
       script: "set -e; set -o pipefail; cat /many | head -n 1; printf '%s\\n' $?",
     });
@@ -719,14 +755,19 @@ describe("stream-first shell runtime", () => {
       script: "set -e; spam > /target; touch /after",
     });
     expect(result.exitCode).toBe(1);
-    expect(new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/target").stream, 16)))
-      .toBe("old");
-    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/target").stream, 16)),
+    ).toBe("old");
+    expect(() => fileSystem.stat("/after")).toThrowError(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
   });
 
   it("rolls back an atomic redirection when the caller cancels execution", async () => {
     let signalStarted: (() => void) | undefined;
-    const started = new Promise<void>((resolve) => { signalStarted = resolve; });
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
     const waiting = defineCommand("waiting", async (context, _argv, fds) => {
       await writeText(fds[1], "new");
       signalStarted?.();
@@ -748,9 +789,12 @@ describe("stream-first shell runtime", () => {
     execution.cancel();
     expect(await execution.completed).toEqual({ exitCode: 1 });
     await Promise.all([stdout, stderr]);
-    expect(new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/target").stream, 16)))
-      .toBe("old");
-    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/target").stream, 16)),
+    ).toBe("old");
+    expect(() => fileSystem.stat("/after")).toThrowError(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
   });
 
   it("wakes a backpressured producer when the execution deadline expires", async () => {
@@ -765,7 +809,9 @@ describe("stream-first shell runtime", () => {
     });
     const execution = shell.executeStream({ script: "set -e; produce; touch /after" });
     await expect(execution.completed).resolves.toEqual({ exitCode: 1 });
-    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
+    expect(() => fileSystem.stat("/after")).toThrowError(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
   });
 
   it("wakes a pending stdin read on cancellation", async () => {
@@ -783,7 +829,9 @@ describe("stream-first shell runtime", () => {
     execution.cancel();
     const result = await Promise.race([
       execution.completed,
-      new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error("cancel hung")), 100)),
+      new Promise<never>((_resolve, reject) =>
+        setTimeout(() => reject(new Error("cancel hung")), 100),
+      ),
     ]);
     expect(result).toEqual({ exitCode: 1 });
     await Promise.all([stdout, stderr]);
@@ -822,9 +870,12 @@ describe("stream-first shell runtime", () => {
         maxStdoutBytes: 64 * 1024 * 1024,
       },
     });
-    await expect(shell.executeStream({ script: "set -e; produce; touch /after" }).completed)
-      .resolves.toEqual({ exitCode: 1 });
-    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
+    await expect(
+      shell.executeStream({ script: "set -e; produce; touch /after" }).completed,
+    ).resolves.toEqual({ exitCode: 1 });
+    expect(() => fileSystem.stat("/after")).toThrowError(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
   });
 
   it("rejects completed for a command invariant failure", async () => {
@@ -849,11 +900,15 @@ describe("stream-first shell runtime", () => {
       commands: [...defaultShellCommands, produce],
       limits: { maxStdoutBytes: 512 },
     });
-    await expect(shell.executeText({ script: "set -e; produce; touch /after" })).resolves.toMatchObject({
+    await expect(
+      shell.executeText({ script: "set -e; produce; touch /after" }),
+    ).resolves.toMatchObject({
       exitCode: 1,
       stdout: "",
     });
-    expect(() => fileSystem.stat("/after")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
+    expect(() => fileSystem.stat("/after")).toThrowError(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
   });
 
   it("settles command-budget overflow and rejects invalid plugin exit statuses", async () => {
@@ -862,15 +917,20 @@ describe("stream-first shell runtime", () => {
       commands: defaultShellCommands,
       limits: { maxCommands: 1 },
     });
-    await expect(Promise.race([
-      limited.executeText({ script: "true; true" }),
-      new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error("budget hung")), 100)),
-    ])).resolves.toMatchObject({ exitCode: 1 });
+    await expect(
+      Promise.race([
+        limited.executeText({ script: "true; true" }),
+        new Promise<never>((_resolve, reject) =>
+          setTimeout(() => reject(new Error("budget hung")), 100),
+        ),
+      ]),
+    ).resolves.toMatchObject({ exitCode: 1 });
 
     const invalid = defineCommand("invalid", () => Number.NaN);
     const { shell } = createBashHarness({ extraCommands: [invalid] });
-    await expect(shell.executeStream({ script: "invalid" }).completed)
-      .rejects.toThrow("invalid exit status");
+    await expect(shell.executeStream({ script: "invalid" }).completed).rejects.toThrow(
+      "invalid exit status",
+    );
   });
 
   it("does not expose mutable policy or the wrapped filesystem to commands", async () => {
@@ -891,7 +951,9 @@ describe("stream-first shell runtime", () => {
       commands: [probe],
       policy: { readRoots: ["/allowed"], writeRoots: ["/allowed"] },
     });
-    await expect(shell.executeText({ script: "probe-policy" })).resolves.toMatchObject({ exitCode: 126 });
+    await expect(shell.executeText({ script: "probe-policy" })).resolves.toMatchObject({
+      exitCode: 126,
+    });
   });
 
   it("provides comm, join, and atomic unified patch utilities", async () => {
@@ -906,7 +968,8 @@ describe("stream-first shell runtime", () => {
       "--- a/document\n+++ b/document\n@@ -1 +1 @@\n-old\n+new\n",
     );
     const result = await shell.executeText({
-      script: "comm /left /right; join -a 1 /users /roles; patch /document /change.patch; cat /document",
+      script:
+        "comm /left /right; join -a 1 /users /roles; patch /document /change.patch; cat /document",
     });
     expect(result).toMatchObject({
       exitCode: 0,
@@ -951,13 +1014,15 @@ describe("stream-first shell runtime", () => {
 
   it("preserves delimiter-free cut records and validates Unicode delimiters", async () => {
     const { shell } = createBashHarness();
-    expect(await shell.executeText({
-      script: [
-        "printf 'plain\\na:b\\n' | cut -d : -f 2",
-        "printf ':a::b:\\n' | cut -d : -f 1,3,5",
-        "printf 'left💥right\\nplain\\n' | cut -d 💥 -f 2",
-      ].join("; "),
-    })).toEqual({
+    expect(
+      await shell.executeText({
+        script: [
+          "printf 'plain\\na:b\\n' | cut -d : -f 2",
+          "printf ':a::b:\\n' | cut -d : -f 1,3,5",
+          "printf 'left💥right\\nplain\\n' | cut -d 💥 -f 2",
+        ].join("; "),
+      }),
+    ).toEqual({
       exitCode: 0,
       stdout: "plain\nb\n::\nright\nplain\n",
       stderr: "",
@@ -970,9 +1035,11 @@ describe("stream-first shell runtime", () => {
 
   it("numbers only non-empty lines with nl by default", async () => {
     const { shell } = createBashHarness();
-    expect(await shell.executeText({
-      script: "printf '\\n\\n' | nl; printf '\\na\\n\\nb\\n\\n' | nl",
-    })).toEqual({
+    expect(
+      await shell.executeText({
+        script: "printf '\\n\\n' | nl; printf '\\na\\n\\nb\\n\\n' | nl",
+      }),
+    ).toEqual({
       exitCode: 0,
       stdout: [
         "       \n",
@@ -989,14 +1056,16 @@ describe("stream-first shell runtime", () => {
 
   it("uses the last head and tail count mode without mixing option state", async () => {
     const { shell } = createBashHarness();
-    expect(await shell.executeText({
-      script: [
-        "printf 'a\\nb\\nc\\n' | head -c 1 -n 2",
-        "printf 'a\\nb\\nc\\n' | head -n 2 -c 1",
-        "printf 'a\\nb\\nc\\n' | tail -c 1 -n 2",
-        "printf 'a\\nb\\nc\\n' | tail -n 2 -c 1",
-      ].join("; "),
-    })).toEqual({
+    expect(
+      await shell.executeText({
+        script: [
+          "printf 'a\\nb\\nc\\n' | head -c 1 -n 2",
+          "printf 'a\\nb\\nc\\n' | head -n 2 -c 1",
+          "printf 'a\\nb\\nc\\n' | tail -c 1 -n 2",
+          "printf 'a\\nb\\nc\\n' | tail -n 2 -c 1",
+        ].join("; "),
+      }),
+    ).toEqual({
       exitCode: 0,
       stdout: "a\nb\nab\nc\n\n",
       stderr: "",
@@ -1007,9 +1076,11 @@ describe("stream-first shell runtime", () => {
     const { fileSystem, shell } = createBashHarness();
     await fileSystem.writeFile("/left-join", "b Lb1\nb Lb2\nd Ld\nf Lf\n");
     await fileSystem.writeFile("/right-join", "a Ra\nb Rb1\nb Rb2\nc Rc\nf Rf\ng Rg\n");
-    expect(await shell.executeText({
-      script: "join -a 1 -a 2 /left-join /right-join",
-    })).toEqual({
+    expect(
+      await shell.executeText({
+        script: "join -a 1 -a 2 /left-join /right-join",
+      }),
+    ).toEqual({
       exitCode: 0,
       stdout: [
         "a Ra\n",
@@ -1104,7 +1175,8 @@ describe("stream-first shell runtime", () => {
     await fileSystem.writeFile("/before", "one\ntwo\n");
     await fileSystem.writeFile("/after", "one\nchanged\n");
     const result = await shell.executeText({
-      script: "diff /before /after > /change.patch || :; patch /before /change.patch; cmp /before /after",
+      script:
+        "diff /before /after > /change.patch || :; patch /before /change.patch; cmp /before /after",
     });
     expect(result).toMatchObject({ exitCode: 0, stdout: "", stderr: "" });
   });
@@ -1120,14 +1192,19 @@ describe("stream-first shell runtime", () => {
       policy: { maxMutations: 2 },
       limits: { maxGlobMatches: 2, maxBufferedRecords: 2, maxLineBytes: 4 },
     });
-    expect(await shell.executeText({ script: "printf '%s\n' /tree/*" }))
-      .toMatchObject({ exitCode: 1, stdout: "" });
-    expect(await shell.executeText({ script: "sort", stdin: "a\nb\nc\n" }))
-      .toMatchObject({ exitCode: 1, stdout: "" });
-    expect(await shell.executeText({ script: "grep x", stdin: "xxxxx" }))
-      .toMatchObject({ exitCode: 1, stdout: "" });
-    expect(await shell.executeText({ script: "rm -r /tree" }))
-      .toMatchObject({ exitCode: 1 });
+    expect(await shell.executeText({ script: "printf '%s\n' /tree/*" })).toMatchObject({
+      exitCode: 1,
+      stdout: "",
+    });
+    expect(await shell.executeText({ script: "sort", stdin: "a\nb\nc\n" })).toMatchObject({
+      exitCode: 1,
+      stdout: "",
+    });
+    expect(await shell.executeText({ script: "grep x", stdin: "xxxxx" })).toMatchObject({
+      exitCode: 1,
+      stdout: "",
+    });
+    expect(await shell.executeText({ script: "rm -r /tree" })).toMatchObject({ exitCode: 1 });
     expect(fileSystem.stat("/tree/a").kind).toBe("file");
   });
 
@@ -1153,8 +1230,9 @@ describe("stream-first shell runtime", () => {
       commands: defaultShellCommands,
       limits: { maxBufferedBytes: 2_000 },
     });
-    await expect(shell.executeText({ script: "diff /left-large /right-large" }))
-      .resolves.toMatchObject({ exitCode: 1, stdout: "" });
+    await expect(
+      shell.executeText({ script: "diff /left-large /right-large" }),
+    ).resolves.toMatchObject({ exitCode: 1, stdout: "" });
   });
 
   it("charges glob matches cumulatively across words", async () => {
@@ -1166,8 +1244,9 @@ describe("stream-first shell runtime", () => {
       commands: defaultShellCommands,
       limits: { maxGlobMatches: 1 },
     });
-    await expect(shell.executeText({ script: "printf '%s\\n' /g/a* /g/b*" }))
-      .resolves.toMatchObject({ exitCode: 1, stdout: "" });
+    await expect(
+      shell.executeText({ script: "printf '%s\\n' /g/a* /g/b*" }),
+    ).resolves.toMatchObject({ exitCode: 1, stdout: "" });
   });
 
   it("rejects opaque bodies consistently across body-dependent utilities", async () => {
@@ -1209,9 +1288,7 @@ describe("stream-first shell runtime", () => {
       commands: defaultShellCommands,
       policy: { maxMutations: 1 },
     });
-    expect(await shell.executeText({ script: "mkdir -p /one/two" }))
-      .toMatchObject({ exitCode: 1 });
+    expect(await shell.executeText({ script: "mkdir -p /one/two" })).toMatchObject({ exitCode: 1 });
     expect(() => fileSystem.stat("/one")).toThrowError(expect.objectContaining({ code: "ENOENT" }));
   });
-
 });

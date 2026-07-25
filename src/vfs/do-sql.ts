@@ -20,10 +20,7 @@ function adaptStorage(storage: DurableObjectStorage): SqlFileSystemStorage {
       get databaseSize() {
         return storage.sql.databaseSize;
       },
-      exec<Row extends VfsSqlRow>(
-        query: string,
-        ...bindings: VfsSqlBinding[]
-      ): VfsSqlCursor<Row> {
+      exec<Row extends VfsSqlRow>(query: string, ...bindings: VfsSqlBinding[]): VfsSqlCursor<Row> {
         return storage.sql.exec<Row>(query, ...bindings);
       },
     },
@@ -46,14 +43,8 @@ function adaptStorage(storage: DurableObjectStorage): SqlFileSystemStorage {
 }
 
 export class DurableObjectFileSystem extends SqlFileSystem {
-  constructor(
-    storage: DurableObjectStorage,
-    options: DurableObjectFileSystemOptions = {},
-  ) {
-    if (
-      options.chunkBytes !== undefined
-      && options.chunkBytes > MAX_SQLITE_INLINE_CHUNK_BYTES
-    ) {
+  constructor(storage: DurableObjectStorage, options: DurableObjectFileSystemOptions = {}) {
+    if (options.chunkBytes !== undefined && options.chunkBytes > MAX_SQLITE_INLINE_CHUNK_BYTES) {
       throw new VfsError(
         "EINVAL",
         `chunkBytes cannot exceed ${MAX_SQLITE_INLINE_CHUNK_BYTES} for SQLite storage`,

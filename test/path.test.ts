@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { globToRegExp, matchesGlob } from "../src/core/glob.js";
-import {
-  normalizePath,
-  normalizePathPreservingTrailingSlash,
-} from "../src/core/path.js";
+import { normalizePath, normalizePathPreservingTrailingSlash } from "../src/core/path.js";
 
 describe("path normalization", () => {
   it("resolves relative segments without escaping the virtual root", () => {

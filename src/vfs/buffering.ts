@@ -35,15 +35,10 @@ export async function collectInlineBytes(
 ): Promise<BufferedChunksLease> {
   let accounted = 0;
   try {
-    const collected = await collectRechunkedBytes(
-      body,
-      maximumBytes,
-      chunkBytes,
-      (delta) => {
-        budget.acquire(delta);
-        accounted += delta;
-      },
-    );
+    const collected = await collectRechunkedBytes(body, maximumBytes, chunkBytes, (delta) => {
+      budget.acquire(delta);
+      accounted += delta;
+    });
     let released = false;
     return {
       chunks: collected.chunks,

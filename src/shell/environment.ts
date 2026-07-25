@@ -1,10 +1,7 @@
 export class ShellEnvironment extends Map<string, string> {
   private optindGenerationValue: number;
 
-  constructor(
-    entries: Iterable<readonly [string, string]> = [],
-    optindGeneration = 0,
-  ) {
+  constructor(entries: Iterable<readonly [string, string]> = [], optindGeneration = 0) {
     super();
     for (const [name, value] of entries) super.set(name, value);
     this.optindGenerationValue = optindGeneration;

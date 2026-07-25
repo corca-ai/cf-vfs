@@ -19,8 +19,7 @@ export function parseBracketExpression(
 ): BracketExpression | undefined {
   let index = open + 1;
   let negated = false;
-  if ((characters[index] === "!" || characters[index] === "^")
-    && characters[index] !== undefined) {
+  if ((characters[index] === "!" || characters[index] === "^") && characters[index] !== undefined) {
     negated = true;
     index += 1;
   }
@@ -53,7 +52,12 @@ export function parseBracketExpression(
     const start = elements[offset];
     const separator = elements[offset + 1];
     const end = elements[offset + 2];
-    if (start !== undefined && separator?.value === "-" && !separator.escaped && end !== undefined) {
+    if (
+      start !== undefined &&
+      separator?.value === "-" &&
+      !separator.escaped &&
+      end !== undefined
+    ) {
       const left = firstCodePoint(start.value);
       const right = firstCodePoint(end.value);
       if (left <= right) ranges.push([left, right]);

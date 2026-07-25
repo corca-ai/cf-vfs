@@ -1,11 +1,11 @@
-import { VfsDurableObject } from "../vfs/durable-object.js";
-import type { DurableObjectFileSystemOptions } from "../vfs/do-sql.js";
-import { Shell } from "./shell.js";
 import { VfsError } from "../core/errors.js";
+import type { DurableObjectFileSystemOptions } from "../vfs/do-sql.js";
+import { VfsDurableObject } from "../vfs/durable-object.js";
 import { rpcByteBody, rpcString } from "../vfs/rpc-validation.js";
+import { Shell } from "./shell.js";
 import type {
-  ExecuteTextResult,
   ExecuteBytesResult,
+  ExecuteTextResult,
   RemoteExecuteTextOptions,
   ShellCommand,
   ShellLimits,
@@ -36,8 +36,9 @@ function remoteTextOptions(
     throw new VfsError("EINVAL", "options must be an object");
   }
   const input = value as Readonly<Record<string, unknown>>;
-  const extra = Object.keys(input).find((key) =>
-    !["script", "cwd", "env", "args", "stdin", ...additionalKeys].includes(key));
+  const extra = Object.keys(input).find(
+    (key) => !["script", "cwd", "env", "args", "stdin", ...additionalKeys].includes(key),
+  );
   if (extra !== undefined) throw new VfsError("EINVAL", `options.${extra} is not supported`);
   const env = input["env"];
   if (env !== undefined && (env === null || typeof env !== "object" || Array.isArray(env))) {
@@ -47,12 +48,18 @@ function remoteTextOptions(
     throw new VfsError("EINVAL", "options.env values must be strings");
   }
   const args = input["args"];
-  if (args !== undefined && (!Array.isArray(args) || args.some((item) => typeof item !== "string"))) {
+  if (
+    args !== undefined &&
+    (!Array.isArray(args) || args.some((item) => typeof item !== "string"))
+  ) {
     throw new VfsError("EINVAL", "options.args must be an array of strings");
   }
   const stdin = input["stdin"];
   const body = stdin === undefined ? undefined : rpcByteBody(stdin);
-  if (body !== undefined && !(typeof body === "string" || body instanceof Uint8Array || body instanceof ReadableStream)) {
+  if (
+    body !== undefined &&
+    !(typeof body === "string" || body instanceof Uint8Array || body instanceof ReadableStream)
+  ) {
     throw new VfsError("EINVAL", "options.stdin must be text, bytes, or a byte stream");
   }
   return {
@@ -70,7 +77,10 @@ function remoteExecuteToOptions(value: unknown): ExecuteToOptions {
   if (!(common.stdin instanceof ReadableStream)) {
     throw new VfsError("EINVAL", "options.stdin must be a byte stream");
   }
-  if (!(input["stdout"] instanceof WritableStream) || !(input["stderr"] instanceof WritableStream)) {
+  if (
+    !(input["stdout"] instanceof WritableStream) ||
+    !(input["stderr"] instanceof WritableStream)
+  ) {
     throw new VfsError("EINVAL", "options.stdout and options.stderr must be byte sinks");
   }
   return {

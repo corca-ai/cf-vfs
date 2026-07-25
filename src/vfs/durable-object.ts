@@ -1,8 +1,22 @@
 import { DurableObject } from "cloudflare:workers";
+import { DurableObjectFileSystem, type DurableObjectFileSystemOptions } from "./do-sql.js";
 import {
-  DurableObjectFileSystem,
-  type DurableObjectFileSystemOptions,
-} from "./do-sql.js";
+  rpcAppendOptions,
+  rpcBeginUploadOptions,
+  rpcByteBody,
+  rpcCommitUploadOptions,
+  rpcCopyOptions,
+  rpcFindOptions,
+  rpcMetadataOptions,
+  rpcMoveOptions,
+  rpcOptionalNonnegativeInteger,
+  rpcOptionalPositiveInteger,
+  rpcPageOptions,
+  rpcRemoveOptions,
+  rpcString,
+  rpcTouchOptions,
+  rpcWriteOptions,
+} from "./rpc-validation.js";
 import type {
   AppendFileOptions,
   BeginOpaqueUploadOptions,
@@ -28,23 +42,6 @@ import type {
   WriteFileOptions,
   WriteResult,
 } from "./types.js";
-import {
-  rpcAppendOptions,
-  rpcBeginUploadOptions,
-  rpcByteBody,
-  rpcCommitUploadOptions,
-  rpcCopyOptions,
-  rpcFindOptions,
-  rpcMetadataOptions,
-  rpcMoveOptions,
-  rpcOptionalNonnegativeInteger,
-  rpcOptionalPositiveInteger,
-  rpcPageOptions,
-  rpcRemoveOptions,
-  rpcString,
-  rpcTouchOptions,
-  rpcWriteOptions,
-} from "./rpc-validation.js";
 
 export abstract class VfsDurableObject<Environment> extends DurableObject<Environment> {
   protected readonly fileSystem: DurableObjectFileSystem;

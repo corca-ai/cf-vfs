@@ -1,0 +1,44 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // The published surface is the exports map: anything reachable from a
+  // subpath is public API, not dead code. Everything else — tests, benchmarks,
+  // scripts, tree-shaking fixtures, and Wrangler entry points — is a root of
+  // its own, so knip reports only genuinely unreachable code.
+  "entry": [
+    "src/index.ts",
+    "src/core/index.ts",
+    "src/vfs/index.ts",
+    "src/shell/index.ts",
+    "src/shell/interactive.ts",
+    "src/shell/commands/index.ts",
+    "src/shell/commands/default.ts",
+    "src/shell/commands/core.ts",
+    "src/shell/commands/fs.ts",
+    "src/shell/commands/ls.ts",
+    "src/shell/commands/text.ts",
+    "src/storage/do-sql.ts",
+    "src/storage/r2.ts",
+    "src/durable-object.ts",
+    "src/testing/index.ts",
+    "src/testing/node.ts",
+    "test/**/*.test.ts",
+    "test/worker.ts",
+    "test/repl-worker.ts",
+    "test/check-*.mjs",
+    "test/fixtures/*-worker.ts",
+    "bench/*.bench.ts",
+    "bench/*.mjs",
+    "bench/remote-worker.ts",
+    "scripts/*.mjs",
+    "vitest*.config.ts"
+  ],
+  "project": ["src/**/*.ts", "test/**/*.ts", "bench/**/*.ts", "scripts/**/*.mjs"],
+  // `cloudflare:workers` and `cloudflare:test` are workerd built-in modules
+  // with no package behind them.
+  "ignoreDependencies": ["cloudflare"],
+  "rules": {
+    // A library legitimately exports types consumers never import in this repo.
+    "types": "warn",
+    "enumMembers": "warn"
+  }
+}

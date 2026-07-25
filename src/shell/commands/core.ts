@@ -1,7 +1,7 @@
 import {
   compareDecimalIntegers,
-  normalizeDecimalInteger,
   type NormalizedDecimalInteger,
+  normalizeDecimalInteger,
 } from "../../core/decimal-integer.js";
 import { VfsError } from "../../core/errors.js";
 import { normalizePath, normalizePathPreservingTrailingSlash } from "../../core/path.js";
@@ -9,6 +9,7 @@ import { optindGeneration, setOptindFromGetopts } from "../environment.js";
 import { readInputRecord } from "../input.js";
 import type { ShellCommandContext } from "../types.js";
 import {
+  type BufferLease,
   commandPath,
   defineCommand,
   parseInteger,
@@ -31,7 +32,10 @@ export const echoCommand = /* @__PURE__ */ defineCommand("echo", async (_context
   return 0;
 });
 
-function formatPrintfOnce(format: string, values: readonly string[]): {
+function formatPrintfOnce(
+  format: string,
+  values: readonly string[],
+): {
   output: string;
   consumed: number;
   diagnostics: string[];
@@ -61,8 +65,7 @@ function formatPrintfOnce(format: string, values: readonly string[]): {
       const parsed = parsePrintfInteger(values[index++] ?? "0");
       output += String(parsed.value);
       if (parsed.diagnostic !== undefined) diagnostics.push(parsed.diagnostic);
-    }
-    else if (specifier === "b") output += decodeBackslashEscapes(values[index++] ?? "");
+    } else if (specifier === "b") output += decodeBackslashEscapes(values[index++] ?? "");
     else throw new VfsError("EINVAL", `printf: unsupported conversion %${specifier ?? ""}`);
   }
   return { output, consumed: index, diagnostics };
@@ -72,7 +75,7 @@ const MIN_PRINTF_INTEGER = -(1n << 63n);
 const MAX_PRINTF_INTEGER = (1n << 63n) - 1n;
 
 function parsePrintfInteger(value: string): { value: bigint; diagnostic?: string } {
-  if (value.startsWith("'") || value.startsWith("\"")) {
+  if (value.startsWith("'") || value.startsWith('"')) {
     const character = [...value.slice(1)][0];
     if (character !== undefined) return { value: BigInt(character.codePointAt(0) ?? 0) };
   }
@@ -107,9 +110,8 @@ function parsePrintfInteger(value: string): { value: bigint; diagnostic?: string
   let diagnostic: string | undefined;
   const remaining = unsigned.slice(consumed);
   if (digits.length === 0 || remaining.length > 0) {
-    const message = radix === 8 && /^[89]/u.test(remaining)
-      ? "invalid octal number"
-      : "invalid number";
+    const message =
+      radix === 8 && /^[89]/u.test(remaining) ? "invalid octal number" : "invalid number";
     diagnostic = `printf: ${value}: ${message}\n`;
   }
   if (parsed < MIN_PRINTF_INTEGER || parsed > MAX_PRINTF_INTEGER) {
@@ -137,7 +139,10 @@ function decodeBackslashEscapes(value: string): string {
   return output;
 }
 
-function formatPrintf(format: string, values: readonly string[]): {
+function formatPrintf(
+  format: string,
+  values: readonly string[],
+): {
   output: string;
   diagnostics: string[];
 } {
@@ -154,17 +159,20 @@ function formatPrintf(format: string, values: readonly string[]): {
   return { output, diagnostics };
 }
 
-export const printfCommand = /* @__PURE__ */ defineCommand("printf", async (_context, argv, fds) => {
-  if (argv.length === 0) throw new VfsError("EINVAL", "printf: missing format");
-  const formatted = formatPrintf(argv[0] ?? "", argv.slice(1));
-  await Promise.all([
-    writeText(fds[1], formatted.output),
-    formatted.diagnostics.length === 0
-      ? Promise.resolve()
-      : writeText(fds[2], formatted.diagnostics.join("")),
-  ]);
-  return formatted.diagnostics.length === 0 ? 0 : 1;
-});
+export const printfCommand = /* @__PURE__ */ defineCommand(
+  "printf",
+  async (_context, argv, fds) => {
+    if (argv.length === 0) throw new VfsError("EINVAL", "printf: missing format");
+    const formatted = formatPrintf(argv[0] ?? "", argv.slice(1));
+    await Promise.all([
+      writeText(fds[1], formatted.output),
+      formatted.diagnostics.length === 0
+        ? Promise.resolve()
+        : writeText(fds[2], formatted.diagnostics.join("")),
+    ]);
+    return formatted.diagnostics.length === 0 ? 0 : 1;
+  },
+);
 
 export const pwdCommand = /* @__PURE__ */ defineCommand("pwd", async (context, argv, fds) => {
   if (argv.length > 0) throw new VfsError("EINVAL", `pwd: unsupported option ${argv[0] ?? ""}`);
@@ -174,7 +182,10 @@ export const pwdCommand = /* @__PURE__ */ defineCommand("pwd", async (context, a
 
 export const cdCommand = /* @__PURE__ */ defineCommand("cd", async (context, argv) => {
   if (argv.length > 1) throw new VfsError("EINVAL", "cd: too many arguments");
-  const target = normalizePath(argv[0] ?? context.session.env.get("HOME") ?? "/", context.session.cwd);
+  const target = normalizePath(
+    argv[0] ?? context.session.env.get("HOME") ?? "/",
+    context.session.cwd,
+  );
   const stat = context.fileSystem.stat(target);
   if (stat.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", target);
   context.session.cwd = target;
@@ -196,7 +207,7 @@ export const exportCommand = /* @__PURE__ */ defineCommand("export", (context, a
     const parsed = assignment(value);
     context.session.env.set(
       parsed.name,
-      value.includes("=") ? parsed.value : context.session.env.get(parsed.name) ?? "",
+      value.includes("=") ? parsed.value : (context.session.env.get(parsed.name) ?? ""),
     );
   }
   return 0;
@@ -285,125 +296,127 @@ function validateGetoptsSpec(optstring: string, name: string): void {
   }
 }
 
-export const getoptsCommand = /* @__PURE__ */ defineCommand("getopts", async (context, argv, fds) => {
-  if (argv.length < 2) {
-    throw new VfsError("EINVAL", "getopts: expected optstring and variable name");
-  }
-  const [optstring = "", name = "", ...explicitArgs] = argv;
-  validateGetoptsSpec(optstring, name);
-  const args = explicitArgs.length === 0 ? context.session.args : explicitArgs;
-  const optind = parseInteger(context.session.env.get("OPTIND") ?? "1", "getopts: OPTIND", 1);
-  const previous = context.session.getopts;
-  let argumentIndex = optind - 1;
-  let characterIndex = previous !== undefined
-    && previous.optind === optind
-    && previous.optindGeneration === optindGeneration(context.session.env)
-    ? previous.characterIndex
-    : 1;
-  const silent = optstring.startsWith(":");
-  const specification = silent ? optstring.slice(1) : optstring;
+export const getoptsCommand = /* @__PURE__ */ defineCommand(
+  "getopts",
+  async (context, argv, fds) => {
+    if (argv.length < 2) {
+      throw new VfsError("EINVAL", "getopts: expected optstring and variable name");
+    }
+    const [optstring = "", name = "", ...explicitArgs] = argv;
+    validateGetoptsSpec(optstring, name);
+    const args = explicitArgs.length === 0 ? context.session.args : explicitArgs;
+    const optind = parseInteger(context.session.env.get("OPTIND") ?? "1", "getopts: OPTIND", 1);
+    const previous = context.session.getopts;
+    let argumentIndex = optind - 1;
+    let characterIndex =
+      previous !== undefined &&
+      previous.optind === optind &&
+      previous.optindGeneration === optindGeneration(context.session.env)
+        ? previous.characterIndex
+        : 1;
+    const silent = optstring.startsWith(":");
+    const specification = silent ? optstring.slice(1) : optstring;
 
-  const save = (nextOptind: number, nextCharacterIndex: number): void => {
-    setOptindFromGetopts(context.session.env, String(nextOptind));
-    context.session.getopts = {
-      optind: nextOptind,
-      characterIndex: nextCharacterIndex,
-      optindGeneration: optindGeneration(context.session.env),
+    const save = (nextOptind: number, nextCharacterIndex: number): void => {
+      setOptindFromGetopts(context.session.env, String(nextOptind));
+      context.session.getopts = {
+        optind: nextOptind,
+        characterIndex: nextCharacterIndex,
+        optindGeneration: optindGeneration(context.session.env),
+      };
     };
-  };
-  const finish = (nextOptind: number): number => {
-    save(nextOptind, 1);
-    context.session.env.set(name, "?");
-    context.session.env.delete("OPTARG");
-    return 1;
-  };
-
-  while (true) {
-    const argument = args[argumentIndex];
-    if (argument === undefined || argument === "-" || !argument.startsWith("-")) {
-      return finish(argumentIndex + 1);
-    }
-    if (argument === "--") return finish(argumentIndex + 2);
-    if (characterIndex >= argument.length) {
-      argumentIndex += 1;
-      characterIndex = 1;
-      continue;
-    }
-
-    const option = argument[characterIndex] ?? "";
-    const definition = option === ":" ? -1 : specification.indexOf(option);
-    const requiresArgument = definition >= 0 && specification[definition + 1] === ":";
-    let nextOptind = argumentIndex + 1;
-    let nextCharacterIndex = characterIndex + 1;
-    if (nextCharacterIndex >= argument.length) {
-      nextOptind += 1;
-      nextCharacterIndex = 1;
-    }
-
-    if (definition < 0) {
-      save(nextOptind, nextCharacterIndex);
+    const finish = (nextOptind: number): number => {
+      save(nextOptind, 1);
       context.session.env.set(name, "?");
-      if (silent) context.session.env.set("OPTARG", option);
-      else {
+      context.session.env.delete("OPTARG");
+      return 1;
+    };
+
+    while (true) {
+      const argument = args[argumentIndex];
+      if (argument === undefined || argument === "-" || !argument.startsWith("-")) {
+        return finish(argumentIndex + 1);
+      }
+      if (argument === "--") return finish(argumentIndex + 2);
+      if (characterIndex >= argument.length) {
+        argumentIndex += 1;
+        characterIndex = 1;
+        continue;
+      }
+
+      const option = argument[characterIndex] ?? "";
+      const definition = option === ":" ? -1 : specification.indexOf(option);
+      const requiresArgument = definition >= 0 && specification[definition + 1] === ":";
+      let nextOptind = argumentIndex + 1;
+      let nextCharacterIndex = characterIndex + 1;
+      if (nextCharacterIndex >= argument.length) {
+        nextOptind += 1;
+        nextCharacterIndex = 1;
+      }
+
+      if (definition < 0) {
+        save(nextOptind, nextCharacterIndex);
+        context.session.env.set(name, "?");
+        if (silent) context.session.env.set("OPTARG", option);
+        else {
+          context.session.env.delete("OPTARG");
+          await writeText(fds[2], `getopts: illegal option -- ${option}\n`);
+        }
+        return 0;
+      }
+
+      if (!requiresArgument) {
+        save(nextOptind, nextCharacterIndex);
+        context.session.env.set(name, option);
         context.session.env.delete("OPTARG");
-        await writeText(fds[2], `getopts: illegal option -- ${option}\n`);
+        return 0;
+      }
+
+      let optionArgument: string | undefined;
+      if (characterIndex + 1 < argument.length) {
+        optionArgument = argument.slice(characterIndex + 1);
+        nextOptind = argumentIndex + 2;
+        nextCharacterIndex = 1;
+      } else if (args[argumentIndex + 1] !== undefined) {
+        optionArgument = args[argumentIndex + 1];
+        nextOptind = argumentIndex + 3;
+        nextCharacterIndex = 1;
+      }
+      if (optionArgument !== undefined) {
+        save(nextOptind, nextCharacterIndex);
+        context.session.env.set(name, option);
+        context.session.env.set("OPTARG", optionArgument);
+        return 0;
+      }
+
+      save(argumentIndex + 2, 1);
+      if (silent) {
+        context.session.env.set(name, ":");
+        context.session.env.set("OPTARG", option);
+      } else {
+        context.session.env.set(name, "?");
+        context.session.env.delete("OPTARG");
+        await writeText(fds[2], `getopts: option requires an argument -- ${option}\n`);
       }
       return 0;
     }
-
-    if (!requiresArgument) {
-      save(nextOptind, nextCharacterIndex);
-      context.session.env.set(name, option);
-      context.session.env.delete("OPTARG");
-      return 0;
-    }
-
-    let optionArgument: string | undefined;
-    if (characterIndex + 1 < argument.length) {
-      optionArgument = argument.slice(characterIndex + 1);
-      nextOptind = argumentIndex + 2;
-      nextCharacterIndex = 1;
-    } else if (args[argumentIndex + 1] !== undefined) {
-      optionArgument = args[argumentIndex + 1];
-      nextOptind = argumentIndex + 3;
-      nextCharacterIndex = 1;
-    }
-    if (optionArgument !== undefined) {
-      save(nextOptind, nextCharacterIndex);
-      context.session.env.set(name, option);
-      context.session.env.set("OPTARG", optionArgument);
-      return 0;
-    }
-
-    save(argumentIndex + 2, 1);
-    if (silent) {
-      context.session.env.set(name, ":");
-      context.session.env.set("OPTARG", option);
-    } else {
-      context.session.env.set(name, "?");
-      context.session.env.delete("OPTARG");
-      await writeText(fds[2], `getopts: option requires an argument -- ${option}\n`);
-    }
-    return 0;
-  }
-});
+  },
+);
 
 function defineSourceCommand(name: "source" | ".") {
   return defineCommand(name, async (context, argv, fds) => {
     const [path, ...args] = argv;
     if (path === undefined) throw new VfsError("EINVAL", `${name}: missing file operand`);
     const normalized = commandPath(context, path);
-    let source;
+    let source: BufferLease<string>;
     try {
-      source = await readFileText(
-        context,
-        normalized,
-        context.budget.limits.maxScriptBytes,
-      );
+      source = await readFileText(context, normalized, context.budget.limits.maxScriptBytes);
     } catch (error) {
-      if (error instanceof VfsError
-        && error.code === "E2BIG"
-        && error.message === "buffered command input limit exceeded") {
+      if (
+        error instanceof VfsError &&
+        error.code === "E2BIG" &&
+        error.message === "buffered command input limit exceeded"
+      ) {
         throw new VfsError("E2BIG", "sourced file exceeds the script byte limit", normalized);
       }
       throw error;
@@ -433,9 +446,8 @@ export const localCommand = /* @__PURE__ */ defineCommand("local", (context, arg
     if (!frame.has(parsed.name)) frame.set(parsed.name, context.session.env.get(parsed.name));
     if (parsed.name === "OPTIND" && !getoptsFrame.captured) {
       getoptsFrame.captured = true;
-      getoptsFrame.state = context.session.getopts === undefined
-        ? undefined
-        : { ...context.session.getopts };
+      getoptsFrame.state =
+        context.session.getopts === undefined ? undefined : { ...context.session.getopts };
     }
     context.session.env.set(parsed.name, value.includes("=") ? parsed.value : "");
   }
@@ -447,9 +459,10 @@ export const returnCommand = /* @__PURE__ */ defineCommand("return", (context, a
     throw new VfsError("EINVAL", "return: can only be used in a function or sourced file");
   }
   if (argv.length > 1) throw new VfsError("EINVAL", "return: too many arguments");
-  const status = argv[0] === undefined
-    ? context.session.lastExitCode
-    : parseInteger(argv[0], "return status", Number.MIN_SAFE_INTEGER) & 0xff;
+  const status =
+    argv[0] === undefined
+      ? context.session.lastExitCode
+      : parseInteger(argv[0], "return status", Number.MIN_SAFE_INTEGER) & 0xff;
   context.session.flow = { type: "return", status };
   return status;
 });
@@ -473,16 +486,19 @@ function loopControl(
 }
 
 export const breakCommand = /* @__PURE__ */ defineCommand("break", (context, argv) =>
-  loopControl("break", context, argv));
+  loopControl("break", context, argv),
+);
 
 export const continueCommand = /* @__PURE__ */ defineCommand("continue", (context, argv) =>
-  loopControl("continue", context, argv));
+  loopControl("continue", context, argv),
+);
 
 export const exitCommand = /* @__PURE__ */ defineCommand("exit", (context, argv) => {
   if (argv.length > 1) throw new VfsError("EINVAL", "exit: too many arguments");
-  const code = argv[0] === undefined
-    ? context.session.lastExitCode
-    : parseInteger(argv[0], "exit status", Number.MIN_SAFE_INTEGER);
+  const code =
+    argv[0] === undefined
+      ? context.session.lastExitCode
+      : parseInteger(argv[0], "exit status", Number.MIN_SAFE_INTEGER);
   context.session.exitRequested = true;
   context.session.requestedExitCode = code & 0xff;
   return context.session.requestedExitCode;
@@ -490,8 +506,10 @@ export const exitCommand = /* @__PURE__ */ defineCommand("exit", (context, argv)
 
 export const setCommand = /* @__PURE__ */ defineCommand("set", (context, argv) => {
   if (argv.length === 0) return 0;
-  if (argv.length === 1
-    && (argv[0] === "-e" || argv[0] === "+e" || argv[0] === "-u" || argv[0] === "+u")) {
+  if (
+    argv.length === 1 &&
+    (argv[0] === "-e" || argv[0] === "+e" || argv[0] === "-u" || argv[0] === "+u")
+  ) {
     if (argv[0] === "-e" || argv[0] === "+e") context.session.errexit = argv[0] === "-e";
     else context.session.nounset = argv[0] === "-u";
     return 0;
@@ -521,9 +539,12 @@ function compareTestIntegers(left: string, right: string): number {
   return compareDecimalIntegers(normalizeTestInteger(left), normalizeTestInteger(right));
 }
 
-async function evaluateTest(context: ShellCommandContext, values: readonly string[]): Promise<boolean> {
+async function evaluateTest(
+  context: ShellCommandContext,
+  values: readonly string[],
+): Promise<boolean> {
   if (values.length === 0) return false;
-  if (values[0] === "!") return !await evaluateTest(context, values.slice(1));
+  if (values[0] === "!") return !(await evaluateTest(context, values.slice(1)));
   if (values.length === 1) return values[0] !== "";
   const unary = values[0];
   const operand = values[1];
@@ -566,9 +587,10 @@ async function evaluateTest(context: ShellCommandContext, values: readonly strin
 }
 
 export const testCommand = /* @__PURE__ */ defineCommand("test", async (context, argv) =>
-  await evaluateTest(context, argv) ? 0 : 1);
+  (await evaluateTest(context, argv)) ? 0 : 1,
+);
 
 export const bracketCommand = /* @__PURE__ */ defineCommand("[", async (context, argv) => {
   if (argv.at(-1) !== "]") throw new VfsError("EINVAL", "[: missing ]");
-  return await evaluateTest(context, argv.slice(0, -1)) ? 0 : 1;
+  return (await evaluateTest(context, argv.slice(0, -1))) ? 0 : 1;
 });

@@ -1,7 +1,7 @@
 import {
   compareDecimalIntegers,
-  normalizeDecimalInteger,
   type NormalizedDecimalInteger,
+  normalizeDecimalInteger,
 } from "../core/decimal-integer.js";
 import { isVfsError, VfsError } from "../core/errors.js";
 import { compareUtf8, normalizePath, normalizePathPreservingTrailingSlash } from "../core/path.js";
@@ -11,28 +11,28 @@ import { ExecutionBudget, resolveShellLimits } from "./budget.js";
 import { optindGeneration } from "./environment.js";
 import { ShellNounsetError } from "./errors.js";
 import {
+  type ExpansionRuntime,
   expandAssignmentValue,
   expandCasePattern,
   expandScalarWord,
   expandWords,
   matchesCasePattern,
-  type ExpansionRuntime,
 } from "./expand.js";
-import { createBytePipe, isDownstreamClosedError } from "./pipe.js";
 import { shellInput } from "./input.js";
 import {
-  parseShellScript,
   type AndOrNode,
   type CommandNode,
-  type ConditionalExpression,
   type CompoundCommandNode,
+  type ConditionalExpression,
   type FunctionDefinitionNode,
   type PipelineNode,
+  parseShellScript,
   type ScriptNode,
   type SimpleCommandNode,
 } from "./parser.js";
+import { createBytePipe, isDownstreamClosedError } from "./pipe.js";
 import { ScopedFileSystem } from "./policy.js";
-import { applyRedirections } from "./redirection.js";
+import { type AppliedRedirections, applyRedirections } from "./redirection.js";
 import { cloneShellSession, createShellSession } from "./session.js";
 import type {
   ExecuteBytesResult,
@@ -52,13 +52,21 @@ import type {
 } from "./types.js";
 
 function emptyInput(): ReadableStream<Uint8Array> {
-  return new ReadableStream<Uint8Array>({ start(controller) { controller.close(); } });
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.close();
+    },
+  });
 }
 
 function statusFor(error: VfsError): number {
   return error instanceof ShellNounsetError
     ? 1
-    : error.code === "EINVAL" ? 2 : error.code === "EACCES" ? 126 : 1;
+    : error.code === "EINVAL"
+      ? 2
+      : error.code === "EACCES"
+        ? 126
+        : 1;
 }
 
 function formatError(error: VfsError): string {
@@ -80,7 +88,9 @@ async function runIsolatedShellScope(
 
 async function closeDescriptors(fds: ShellFileDescriptors): Promise<void> {
   const results = await Promise.allSettled([fds[1].close(), fds[2].close()]);
-  const failed = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+  const failed = results.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
   if (failed !== undefined) throw failed.reason;
 }
 
@@ -129,16 +139,14 @@ function evaluationResult(status: number, errexitEligible = true): EvaluationRes
   return { status, errexitEligible };
 }
 
-function requestErrexit(
-  status: number,
-  session: ShellSession,
-  context: EvaluationContext,
-): void {
-  if (status !== 0
-    && session.errexit === true
-    && !context.errexitSuppressed
-    && !session.exitRequested
-    && session.flow.type === "none") {
+function requestErrexit(status: number, session: ShellSession, context: EvaluationContext): void {
+  if (
+    status !== 0 &&
+    session.errexit === true &&
+    !context.errexitSuppressed &&
+    !session.exitRequested &&
+    session.flow.type === "none"
+  ) {
     session.flow = { type: "errexit" };
   }
 }
@@ -168,7 +176,9 @@ function parseScriptUnit(
       source,
       limits.maxAstNodes - budget.astNodes,
       limits.maxNestingDepth,
-      (count) => { budget.astNodes += count; },
+      (count) => {
+        budget.astNodes += count;
+      },
       () => executionBudget.checkDeadline(),
     );
     return parsed;
@@ -253,13 +263,8 @@ function expansionRuntime(fds: ShellFileDescriptors, runtime: Runtime): Expansio
       const completed = (async () => {
         try {
           return await runIsolatedShellScope(
-            async () => await runScript(
-              script,
-              child,
-              childFds,
-              runtime,
-              ACTIVE_EVALUATION_CONTEXT,
-            ),
+            async () =>
+              await runScript(script, child, childFds, runtime, ACTIVE_EVALUATION_CONTEXT),
             fds[2],
           );
         } finally {
@@ -282,7 +287,8 @@ function expansionRuntime(fds: ShellFileDescriptors, runtime: Runtime): Expansio
         } catch {
           throw new VfsError("EIO", "command substitution output is not valid UTF-8");
         }
-        if (value.includes("\0")) throw new VfsError("EINVAL", "command substitution produced a NUL byte");
+        if (value.includes("\0"))
+          throw new VfsError("EINVAL", "command substitution produced a NUL byte");
         return value.replace(/\n+$/u, "");
       } finally {
         retained?.release();
@@ -350,7 +356,10 @@ function restoreVariables(
   }
 }
 
-function restoreLocals(session: ShellSession, frame: ReadonlyMap<string, string | undefined>): void {
+function restoreLocals(
+  session: ShellSession,
+  frame: ReadonlyMap<string, string | undefined>,
+): void {
   for (const [name, value] of frame) {
     if (value === undefined) session.env.delete(name);
     else session.env.set(name, value);
@@ -376,14 +385,16 @@ async function runFunction(
   session.localFrames.push(frame);
   session.localGetoptsFrames.push(getoptsFrame);
   try {
-    let status = (await runCommandNode(
-      definition.body,
-      session,
-      { 0: fds[0], 1: fds[1].clone(), 2: fds[2].clone() },
-      runtime,
-      false,
-      context,
-    )).status;
+    let status = (
+      await runCommandNode(
+        definition.body,
+        session,
+        { 0: fds[0], 1: fds[1].clone(), 2: fds[2].clone() },
+        runtime,
+        false,
+        context,
+      )
+    ).status;
     if (session.flow.type === "return") {
       status = session.flow.status;
       session.flow = { type: "none" };
@@ -394,9 +405,10 @@ async function runFunction(
     session.localGetoptsFrames.pop();
     restoreLocals(session, frame);
     if (getoptsFrame.captured) {
-      session.getopts = getoptsFrame.state === undefined
-        ? undefined
-        : { ...getoptsFrame.state, optindGeneration: optindGeneration(session.env) };
+      session.getopts =
+        getoptsFrame.state === undefined
+          ? undefined
+          : { ...getoptsFrame.state, optindGeneration: optindGeneration(session.env) };
     }
     session.functionDepth -= 1;
     session.args = previousArgs;
@@ -415,7 +427,13 @@ async function runSourcedUnit(
   if (session.sourceDepth >= runtime.limits.maxSourceDepth) {
     throw new VfsError("E2BIG", "shell source nesting limit exceeded", path);
   }
-  const parsed = parseScriptUnit(source, runtime.limits, runtime.parserBudget, runtime.budget, path);
+  const parsed = parseScriptUnit(
+    source,
+    runtime.limits,
+    runtime.parserBudget,
+    runtime.budget,
+    path,
+  );
   const previousArgs = session.args;
   if (args.length > 0) session.args = [...args];
   session.sourceDepth += 1;
@@ -445,8 +463,11 @@ async function executeSimpleCommand(
   }
   const [name = "", ...argv] = prepared.argv;
   const definition = session.functions.get(name);
-  if (definition === undefined && runtime.policy.allowedCommands !== undefined
-    && !runtime.policy.allowedCommands.includes(name)) {
+  if (
+    definition === undefined &&
+    runtime.policy.allowedCommands !== undefined &&
+    !runtime.policy.allowedCommands.includes(name)
+  ) {
     throw new VfsError("EACCES", `command is not allowed: ${name}`);
   }
   const previous = new Map<string, string | undefined>();
@@ -464,28 +485,31 @@ async function executeSimpleCommand(
         await fds[2].write(new TextEncoder().encode(`${name}: command not found\n`));
         return 127;
       }
-      exitCode = (await command.run(
-        {
-          fileSystem: runtime.fileSystem,
-          session,
-          signal: runtime.signal,
-          budget: runtime.budget,
-          policy: runtime.policy,
-          executeSource: async (source, path, sourceArgs, sourceFds) =>
-            await runSourcedUnit(source, path, sourceArgs, session, sourceFds, runtime, context),
-        },
-        argv,
-        fds,
-      ).completed).exitCode;
+      exitCode = (
+        await command.run(
+          {
+            fileSystem: runtime.fileSystem,
+            session,
+            signal: runtime.signal,
+            budget: runtime.budget,
+            policy: runtime.policy,
+            executeSource: async (source, path, sourceArgs, sourceFds) =>
+              await runSourcedUnit(source, path, sourceArgs, session, sourceFds, runtime, context),
+          },
+          argv,
+          fds,
+        ).completed
+      ).exitCode;
       if (!Number.isInteger(exitCode) || exitCode < 0 || exitCode > 255) {
         throw new RangeError(`command ${name} returned an invalid exit status: ${exitCode}`);
       }
     }
     return exitCode;
   } finally {
-    const preserved = name === "export"
-      ? new Set(argv.map((value) => value.split("=", 1)[0] ?? ""))
-      : new Set<string>();
+    const preserved =
+      name === "export"
+        ? new Set(argv.map((value) => value.split("=", 1)[0] ?? ""))
+        : new Set<string>();
     restoreVariables(session, previous, preserved);
   }
 }
@@ -505,10 +529,7 @@ function flowActive(session: ShellSession): boolean {
   return session.flow.type !== "none";
 }
 
-function normalizeConditionalInteger(
-  value: string,
-  budget: ShellBudget,
-): NormalizedDecimalInteger {
+function normalizeConditionalInteger(value: string, budget: ShellBudget): NormalizedDecimalInteger {
   budget.expansionWork(value.length);
   const normalized = normalizeDecimalInteger(value);
   if (normalized === undefined) {
@@ -517,11 +538,7 @@ function normalizeConditionalInteger(
   return normalized;
 }
 
-function compareConditionalIntegers(
-  left: string,
-  right: string,
-  budget: ShellBudget,
-): number {
+function compareConditionalIntegers(left: string, right: string, budget: ShellBudget): number {
   return compareDecimalIntegers(
     normalizeConditionalInteger(left, budget),
     normalizeConditionalInteger(right, budget),
@@ -559,13 +576,16 @@ async function evaluateConditional(
 
     let value: boolean;
     if (current.type === "conditional-word") {
-      value = (await expandScalarWord(
-        current.word,
-        session,
-        runtime.fileSystem,
-        runtime.budget,
-        expansion,
-      )).length > 0;
+      value =
+        (
+          await expandScalarWord(
+            current.word,
+            session,
+            runtime.fileSystem,
+            runtime.budget,
+            expansion,
+          )
+        ).length > 0;
     } else if (current.type === "conditional-unary") {
       const operand = await expandScalarWord(
         current.operand,
@@ -718,9 +738,10 @@ async function executeCompoundCommand(
       }
     }
     case "for": {
-      const values = node.words === undefined
-        ? [...session.args]
-        : await expandWords(node.words, session, runtime.fileSystem, runtime.budget, expansion);
+      const values =
+        node.words === undefined
+          ? [...session.args]
+          : await expandWords(node.words, session, runtime.fileSystem, runtime.budget, expansion);
       let result = evaluationResult(0);
       session.loopDepth += 1;
       try {
@@ -768,7 +789,7 @@ async function executeCompoundCommand(
     }
     case "double-bracket": {
       return evaluationResult(
-        await evaluateConditional(node.expression, session, runtime, expansion) ? 0 : 1,
+        (await evaluateConditional(node.expression, session, runtime, expansion)) ? 0 : 1,
       );
     }
   }
@@ -811,10 +832,11 @@ async function runCommandNode(
   const expansion = expansionRuntime(initialFds, runtime);
   try {
     runtime.budget.command();
-    let prepared = node.type === "command"
-      ? await prepareSimpleCommand(node, session, runtime, expansion)
-      : undefined;
-    let applied;
+    let prepared =
+      node.type === "command"
+        ? await prepareSimpleCommand(node, session, runtime, expansion)
+        : undefined;
+    let applied: AppliedRedirections;
     try {
       applied = await applyRedirections(
         redirections(node),
@@ -858,8 +880,11 @@ async function runCommandNode(
       await Promise.allSettled([fds[1].abort(error), fds[2].abort(error)]);
       throw error;
     }
-    const fatal = error.code === "E2BIG" || error.code === "EFBIG"
-      || error.code === "ETIMEDOUT" || error.code === "ECANCELED";
+    const fatal =
+      error.code === "E2BIG" ||
+      error.code === "EFBIG" ||
+      error.code === "ETIMEDOUT" ||
+      error.code === "ECANCELED";
     if (fatal || error instanceof ShellNounsetError) {
       await abortRedirectedDescriptors(fds, redirected, error);
       throw error;
@@ -874,7 +899,9 @@ async function runCommandNode(
     return evaluationResult(statusFor(error));
   } finally {
     if (shouldCancelInput) {
-      await fds[0].cancel(new VfsError("EPIPE", "command stopped reading input")).catch(() => undefined);
+      await fds[0]
+        .cancel(new VfsError("EPIPE", "command stopped reading input"))
+        .catch(() => undefined);
     }
     await fallbackStderr.close().catch(() => undefined);
     if (semanticFailure) runtime.budget.step();
@@ -915,34 +942,32 @@ async function runPipeline(
       node,
       session: pipeline.commands.length === 1 ? session : cloneShellSession(session),
       fds: { 0: input, 1: output, 2: outerFds[2].clone() },
-      context: index === pipeline.commands.length - 1
-        ? pipelineContext
-        : suppressErrexit(pipelineContext),
+      context:
+        index === pipeline.commands.length - 1 ? pipelineContext : suppressErrexit(pipelineContext),
     });
     if (nextInput !== undefined) input = nextInput;
   }
-  const isolated = pipeline.commands.length > 1
-    || (pipeline.commands[0]?.type === "group" && pipeline.commands[0].subshell);
-  const results = await Promise.all(stages.map((stage, index) => isolated
-    ? runIsolatedShellScope(
-      async () => await runCommandNode(
-        stage.node,
-        stage.session,
-        stage.fds,
-        runtime,
-        index > 0,
-        stage.context,
-      ),
-      outerFds[2],
-    )
-    : runCommandNode(
-      stage.node,
-      stage.session,
-      stage.fds,
-      runtime,
-      index > 0,
-      stage.context,
-    )));
+  const isolated =
+    pipeline.commands.length > 1 ||
+    (pipeline.commands[0]?.type === "group" && pipeline.commands[0].subshell);
+  const results = await Promise.all(
+    stages.map((stage, index) =>
+      isolated
+        ? runIsolatedShellScope(
+            async () =>
+              await runCommandNode(
+                stage.node,
+                stage.session,
+                stage.fds,
+                runtime,
+                index > 0,
+                stage.context,
+              ),
+            outerFds[2],
+          )
+        : runCommandNode(stage.node, stage.session, stage.fds, runtime, index > 0, stage.context),
+    ),
+  );
   let selected = results.at(-1) ?? evaluationResult(0);
   if (session.pipefail) {
     for (let index = results.length - 1; index >= 0; index -= 1) {
@@ -956,9 +981,9 @@ async function runPipeline(
   const status = pipeline.negated ? (selected.status === 0 ? 1 : 0) : selected.status;
   const result = evaluationResult(
     status,
-    !pipelineContext.errexitSuppressed
-      && !pipeline.negated
-      && (pipeline.commands.length > 1 || selected.errexitEligible),
+    !pipelineContext.errexitSuppressed &&
+      !pipeline.negated &&
+      (pipeline.commands.length > 1 || selected.errexitEligible),
   );
   session.lastExitCode = result.status;
   if (result.errexitEligible) requestErrexit(result.status, session, pipelineContext);
@@ -981,8 +1006,10 @@ async function runAndOr(
   );
   for (const [index, item] of node.rest.entries()) {
     if (session.exitRequested || session.flow.type !== "none") break;
-    if ((item.operator === "&&" && result.status === 0)
-      || (item.operator === "||" && result.status !== 0)) {
+    if (
+      (item.operator === "&&" && result.status === 0) ||
+      (item.operator === "||" && result.status !== 0)
+    ) {
       result = await runPipeline(
         item.pipeline,
         session,
@@ -1023,7 +1050,8 @@ export class Shell {
   constructor(options: ShellOptions) {
     const commands = new Map<string, ShellCommand>();
     for (const command of options.commands) {
-      if (commands.has(command.name)) throw new VfsError("EINVAL", `duplicate command: ${command.name}`);
+      if (commands.has(command.name))
+        throw new VfsError("EINVAL", `duplicate command: ${command.name}`);
       commands.set(command.name, command);
     }
     this.commands = commands;
@@ -1031,10 +1059,14 @@ export class Shell {
     this.policy = Object.freeze({
       ...(options.policy?.readRoots === undefined
         ? {}
-        : { readRoots: Object.freeze(options.policy.readRoots.map((path) => normalizePath(path))) }),
+        : {
+            readRoots: Object.freeze(options.policy.readRoots.map((path) => normalizePath(path))),
+          }),
       ...(options.policy?.writeRoots === undefined
         ? {}
-        : { writeRoots: Object.freeze(options.policy.writeRoots.map((path) => normalizePath(path))) }),
+        : {
+            writeRoots: Object.freeze(options.policy.writeRoots.map((path) => normalizePath(path))),
+          }),
       ...(options.policy?.allowedCommands === undefined
         ? {}
         : { allowedCommands: Object.freeze([...options.policy.allowedCommands]) }),
@@ -1042,12 +1074,14 @@ export class Shell {
         ? {}
         : { maxMutations: options.policy.maxMutations }),
     });
-    this.limits = Object.freeze(resolveShellLimits({
-      ...options.limits,
-      ...(options.policy?.maxMutations === undefined
-        ? {}
-        : { maxMutations: options.policy.maxMutations }),
-    }));
+    this.limits = Object.freeze(
+      resolveShellLimits({
+        ...options.limits,
+        ...(options.policy?.maxMutations === undefined
+          ? {}
+          : { maxMutations: options.policy.maxMutations }),
+      }),
+    );
     this.now = options.now ?? Date.now;
   }
 
@@ -1070,9 +1104,8 @@ export class Shell {
       parseError = error;
     }
     const controller = new AbortController();
-    const cancelled = (reason: unknown): VfsError => isVfsError(reason)
-      ? reason
-      : new VfsError("ECANCELED", "execution was cancelled");
+    const cancelled = (reason: unknown): VfsError =>
+      isVfsError(reason) ? reason : new VfsError("ECANCELED", "execution was cancelled");
     let externalAbort: (() => void) | undefined;
     if (options.signal !== undefined) {
       externalAbort = () => controller.abort(cancelled(options.signal?.reason));
@@ -1086,10 +1119,8 @@ export class Shell {
       name: "stdout",
       account: (bytes) => budget.io(bytes),
       idleTimeoutMs: this.limits.outputIdleTimeoutMs,
-      onIdle: () => controller.abort(new VfsError(
-        "ETIMEDOUT",
-        "stdout consumer did not relieve backpressure",
-      )),
+      onIdle: () =>
+        controller.abort(new VfsError("ETIMEDOUT", "stdout consumer did not relieve backpressure")),
       onConsumerCancel: (reason) => controller.abort(cancelled(reason)),
     });
     const stderr = createBytePipe({
@@ -1098,10 +1129,8 @@ export class Shell {
       name: "stderr",
       account: (bytes) => budget.io(bytes),
       idleTimeoutMs: this.limits.outputIdleTimeoutMs,
-      onIdle: () => controller.abort(new VfsError(
-        "ETIMEDOUT",
-        "stderr consumer did not relieve backpressure",
-      )),
+      onIdle: () =>
+        controller.abort(new VfsError("ETIMEDOUT", "stderr consumer did not relieve backpressure")),
       onConsumerCancel: (reason) => controller.abort(cancelled(reason)),
     });
     const timeout = setTimeout(() => {
@@ -1151,11 +1180,13 @@ export class Shell {
         await Promise.allSettled([rootFds[1].close(), rootFds[2].close()]);
         return { exitCode };
       } finally {
-        const inputReason = controller.signal.reason
-          ?? new VfsError("EPIPE", "shell execution stopped reading input");
+        const inputReason =
+          controller.signal.reason ??
+          new VfsError("EPIPE", "shell execution stopped reading input");
         await rootFds[0].cancel(inputReason).catch(() => undefined);
         clearTimeout(timeout);
-        if (externalAbort !== undefined) options.signal?.removeEventListener("abort", externalAbort);
+        if (externalAbort !== undefined)
+          options.signal?.removeEventListener("abort", externalAbort);
       }
     })();
     return {
@@ -1193,9 +1224,8 @@ export class Shell {
     session: ShellSession,
   ): Promise<ExecuteBytesResult> {
     const { stdin: input, ...streamOptions } = options;
-    const stdin = typeof input === "string" || input instanceof Uint8Array
-      ? bodyToStream(input)
-      : input;
+    const stdin =
+      typeof input === "string" || input instanceof Uint8Array ? bodyToStream(input) : input;
     const execution = this.executeSessionStream(
       {
         ...streamOptions,

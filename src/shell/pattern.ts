@@ -1,5 +1,5 @@
-import { VfsError } from "../core/errors.js";
 import { parseBracketExpression } from "../core/bracket.js";
+import { VfsError } from "../core/errors.js";
 import { codePointLength, firstCodePoint } from "../core/unicode.js";
 import type { ShellBudget } from "./types.js";
 
@@ -96,8 +96,8 @@ function matchesWithoutStar(
 ): boolean {
   budget.expansionWork(pattern.tokens.length);
   for (const [offset, token] of pattern.tokens.entries()) {
-    if (token.kind === "star"
-      || !tokenMatches(token, characters[start + offset] ?? "", budget)) return false;
+    if (token.kind === "star" || !tokenMatches(token, characters[start + offset] ?? "", budget))
+      return false;
   }
   return true;
 }
@@ -131,8 +131,10 @@ function matchingEnd(
       }
     } else {
       for (let offset = 1; offset <= remaining; offset += 1) {
-        if ((previous[offset - 1] ?? 0) !== 0
-          && tokenMatches(token, characters[start + offset - 1] ?? "", budget)) {
+        if (
+          (previous[offset - 1] ?? 0) !== 0 &&
+          tokenMatches(token, characters[start + offset - 1] ?? "", budget)
+        ) {
           current[offset] = 1;
         }
       }
@@ -175,9 +177,8 @@ export function removeShellPattern(
   const characters = boundedCharacters(value, budget);
   const compiled = compilePattern(pattern, budget);
   const input = side === "prefix" ? characters : characters.reverse();
-  const effective = side === "prefix"
-    ? compiled
-    : { ...compiled, tokens: [...compiled.tokens].reverse() };
+  const effective =
+    side === "prefix" ? compiled : { ...compiled, tokens: [...compiled.tokens].reverse() };
   const length = matchingEnd(input, 0, effective, budget, longest ? "longest" : "shortest");
   if (side === "suffix") characters.reverse();
   if (length === undefined) return value;

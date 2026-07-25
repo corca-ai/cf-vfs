@@ -1,15 +1,15 @@
 import { performance } from "node:perf_hooks";
 import { defaultShellCommands } from "../dist/shell/commands/default.js";
 import { Shell } from "../dist/shell/shell.js";
-import { MemoryOpaqueStore } from "../dist/testing/opaque-store.js";
 import { NodeSqlFileSystem } from "../dist/testing/node.js";
+import { MemoryOpaqueStore } from "../dist/testing/opaque-store.js";
 import { putOpaque } from "../dist/vfs/opaque.js";
 import { readAllBytes } from "../dist/vfs/streams.js";
 
 const rows = [];
 // Marginal Standard-storage operation rates beyond included usage, 2026-07-20.
 // https://developers.cloudflare.com/r2/pricing/
-const R2_CLASS_A_USD_PER_MILLION = 4.50;
+const R2_CLASS_A_USD_PER_MILLION = 4.5;
 const R2_CLASS_B_USD_PER_MILLION = 0.36;
 const REPEATS = 3;
 const openFileSystems = new Set();
@@ -30,10 +30,7 @@ async function runOperation(operation) {
 }
 
 function estimatedR2OperationUsd(classA, classB) {
-  return (
-    classA * R2_CLASS_A_USD_PER_MILLION
-    + classB * R2_CLASS_B_USD_PER_MILLION
-  ) / 1_000_000;
+  return (classA * R2_CLASS_A_USD_PER_MILLION + classB * R2_CLASS_B_USD_PER_MILLION) / 1_000_000;
 }
 
 async function measure(name, details, operation) {
@@ -161,7 +158,10 @@ await measure("buffering-sort-long-line", { sizeBytes: 1024 * 1024 }, async () =
     commands: defaultShellCommands,
     limits: { maxLineBytes: 1024 * 1024 + 1 },
   });
-  const result = await shell.executeText({ script: "sort | head -c 1", stdin: `${"z".repeat(1024 * 1024)}\n` });
+  const result = await shell.executeText({
+    script: "sort | head -c 1",
+    stdin: `${"z".repeat(1024 * 1024)}\n`,
+  });
   if (result.exitCode !== 0 || result.stdout !== "z") throw new Error("long line");
   return { outputBytes: Buffer.byteLength(result.stdout) };
 });
@@ -181,49 +181,54 @@ await measure("early-cancellation", { sizeBytes: 1024 * 1024 }, async () => {
     },
   });
   const result = await shell.executeText({ script: "set -o pipefail; cat | head -c 1", stdin });
-  if (result.exitCode !== 0 || Buffer.byteLength(result.stdout) !== 1) throw new Error("early cancellation");
+  if (result.exitCode !== 0 || Buffer.byteLength(result.stdout) !== 1)
+    throw new Error("early cancellation");
   if (pulledBytes >= 1024 * 1024) throw new Error("early cancellation consumed the entire source");
   return { outputBytes: 1, pulledBytes };
 });
 
-await measure("slow-consumer", {
-  sizeBytes: 256 * 1024,
-  inputChunks: 64,
-  consumerDelayMs: 1,
-}, async () => {
-  const shell = new Shell({ fileSystem: createFileSystem(), commands: defaultShellCommands });
-  const stdin = new ReadableStream({
-    start(controller) {
-      for (let index = 0; index < 64; index += 1) {
-        controller.enqueue(new Uint8Array(4 * 1024));
+await measure(
+  "slow-consumer",
+  {
+    sizeBytes: 256 * 1024,
+    inputChunks: 64,
+    consumerDelayMs: 1,
+  },
+  async () => {
+    const shell = new Shell({ fileSystem: createFileSystem(), commands: defaultShellCommands });
+    const stdin = new ReadableStream({
+      start(controller) {
+        for (let index = 0; index < 64; index += 1) {
+          controller.enqueue(new Uint8Array(4 * 1024));
+        }
+        controller.close();
+      },
+    });
+    const execution = shell.executeStream({ script: "cat", stdin });
+    const consumeSlowly = async () => {
+      const reader = execution.stdout.getReader();
+      let outputBytes = 0;
+      let outputChunks = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        outputBytes += value.byteLength;
+        outputChunks += 1;
+        await new Promise((resolve) => setTimeout(resolve, 1));
       }
-      controller.close();
-    },
-  });
-  const execution = shell.executeStream({ script: "cat", stdin });
-  const consumeSlowly = async () => {
-    const reader = execution.stdout.getReader();
-    let outputBytes = 0;
-    let outputChunks = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      outputBytes += value.byteLength;
-      outputChunks += 1;
-      await new Promise((resolve) => setTimeout(resolve, 1));
+      return { outputBytes, outputChunks };
+    };
+    const [status, output, error] = await Promise.all([
+      execution.completed,
+      consumeSlowly(),
+      new Response(execution.stderr).arrayBuffer(),
+    ]);
+    if (status.exitCode !== 0 || output.outputBytes !== 256 * 1024 || error.byteLength !== 0) {
+      throw new Error("slow consumer verification failed");
     }
-    return { outputBytes, outputChunks };
-  };
-  const [status, output, error] = await Promise.all([
-    execution.completed,
-    consumeSlowly(),
-    new Response(execution.stderr).arrayBuffer(),
-  ]);
-  if (status.exitCode !== 0 || output.outputBytes !== 256 * 1024 || error.byteLength !== 0) {
-    throw new Error("slow consumer verification failed");
-  }
-  return output;
-});
+    return output;
+  },
+);
 
 await measure("concurrent-shells", { concurrency: 4, sizeBytes: 256 * 1024 }, async () => {
   const fileSystem = createFileSystem();
@@ -235,7 +240,9 @@ await measure("concurrent-shells", { concurrency: 4, sizeBytes: 256 * 1024 }, as
   if (results.some((result) => result.exitCode !== 0 || !result.stdout.includes("262144"))) {
     throw new Error("concurrent shells");
   }
-  return { outputBytes: results.reduce((total, result) => total + Buffer.byteLength(result.stdout), 0) };
+  return {
+    outputBytes: results.reduce((total, result) => total + Buffer.byteLength(result.stdout), 0),
+  };
 });
 
 await measure("opaque-lifecycle-gc", { sizeBytes: 1024 * 1024 }, async () => {

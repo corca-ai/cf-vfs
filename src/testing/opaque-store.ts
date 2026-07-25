@@ -1,11 +1,6 @@
 import { VfsError } from "../core/errors.js";
 import { collectBytes, streamFromChunks } from "../vfs/streams.js";
-import type {
-  ByteBody,
-  ByteRange,
-  OpaqueObjectMetadata,
-  OpaqueStore,
-} from "../vfs/types.js";
+import type { ByteBody, ByteRange, OpaqueObjectMetadata, OpaqueStore } from "../vfs/types.js";
 
 interface StoredObject {
   metadata: OpaqueObjectMetadata;
@@ -96,9 +91,9 @@ export class MemoryOpaqueStore implements OpaqueStore {
   getStream(key: string, range?: ByteRange): Promise<ReadableStream<Uint8Array> | null> {
     this.operations.gets += 1;
     const object = this.objects.get(key);
-    return Promise.resolve(object === undefined
-      ? null
-      : streamFromChunks(rangeChunks(object.chunks, range)));
+    return Promise.resolve(
+      object === undefined ? null : streamFromChunks(rangeChunks(object.chunks, range)),
+    );
   }
 
   delete(keys: string | readonly string[]): Promise<void> {

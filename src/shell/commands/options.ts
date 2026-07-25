@@ -66,7 +66,10 @@ export function parseUtilityOptions<Name extends string>(
         options.push({ name: definition.name, argument });
       } else {
         if (separator >= 0) {
-          throw new VfsError("EINVAL", `${command}: option ${spelling} does not accept an argument`);
+          throw new VfsError(
+            "EINVAL",
+            `${command}: option ${spelling} does not accept an argument`,
+          );
         }
         options.push({ name: definition.name });
       }

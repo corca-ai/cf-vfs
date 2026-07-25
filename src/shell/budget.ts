@@ -42,10 +42,7 @@ export function resolveShellLimits(input: Partial<ShellLimits> = {}): ShellLimit
   const limits = { ...DEFAULT_SHELL_LIMITS, ...input };
   for (const [name, value] of Object.entries(limits)) positive(value, name);
   if (limits.maxPipelineBytes > MAX_PIPELINE_EDGE_BYTES) {
-    throw new VfsError(
-      "EINVAL",
-      `maxPipelineBytes cannot exceed ${MAX_PIPELINE_EDGE_BYTES}`,
-    );
+    throw new VfsError("EINVAL", `maxPipelineBytes cannot exceed ${MAX_PIPELINE_EDGE_BYTES}`);
   }
   return limits;
 }

@@ -53,9 +53,10 @@ class ShellInputCursor {
     if (this.reading) throw new VfsError("EIO", "shell input is already being consumed");
     this.reading = true;
     const reader = this.source.getReader();
-    const cancelled = (): VfsError => signal?.reason instanceof VfsError
-      ? signal.reason
-      : new VfsError("ECANCELED", "execution was cancelled");
+    const cancelled = (): VfsError =>
+      signal?.reason instanceof VfsError
+        ? signal.reason
+        : new VfsError("ECANCELED", "execution was cancelled");
     const abort = (): void => {
       const error = cancelled();
       void reader.cancel(error).catch(() => undefined);
@@ -68,9 +69,12 @@ class ShellInputCursor {
           reject(error);
         };
         signal?.addEventListener("abort", abortRead, { once: true });
-        void reader.read().then(resolve, reject).finally(() => {
-          signal?.removeEventListener("abort", abortRead);
-        });
+        void reader
+          .read()
+          .then(resolve, reject)
+          .finally(() => {
+            signal?.removeEventListener("abort", abortRead);
+          });
       });
       if (result.done) this.done = true;
       return result;
@@ -156,20 +160,23 @@ const cursors = new WeakMap<ReadableStream<Uint8Array>, ShellInputCursor>();
 export function shellInput(source: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
   if (cursors.has(source)) return source;
   const cursor = new ShellInputCursor(source);
-  const stream = new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      try {
-        const result = await cursor.readChunk();
-        if (result.done) controller.close();
-        else controller.enqueue(result.value);
-      } catch (error) {
-        controller.error(error);
-      }
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        try {
+          const result = await cursor.readChunk();
+          if (result.done) controller.close();
+          else controller.enqueue(result.value);
+        } catch (error) {
+          controller.error(error);
+        }
+      },
+      async cancel(reason) {
+        await cursor.cancel(reason);
+      },
     },
-    async cancel(reason) {
-      await cursor.cancel(reason);
-    },
-  }, { highWaterMark: 0 });
+    { highWaterMark: 0 },
+  );
   cursors.set(stream, cursor);
   return stream;
 }

@@ -95,11 +95,12 @@ function guardOptions(input: UnknownRecord): {
 
 export function rpcByteBody(value: unknown): ByteBody {
   if (
-    typeof value === "string"
-    || value instanceof ArrayBuffer
-    || ArrayBuffer.isView(value)
-    || value instanceof ReadableStream
-  ) return value;
+    typeof value === "string" ||
+    value instanceof ArrayBuffer ||
+    ArrayBuffer.isView(value) ||
+    value instanceof ReadableStream
+  )
+    return value;
   throw new VfsError("EINVAL", "body must be bytes, text, or a byte stream");
 }
 
@@ -114,7 +115,11 @@ export function rpcPageOptions(value: unknown): PageOptions | undefined {
 
 export function rpcFindOptions(value: unknown): FindOptions {
   const input = record(value, "options");
-  keys(input, ["path", "includeRoot", "maxDepth", "name", "pathGlob", "type", "cursor", "limit"], "options");
+  keys(
+    input,
+    ["path", "includeRoot", "maxDepth", "name", "pathGlob", "type", "cursor", "limit"],
+    "options",
+  );
   const type = optionalString(input.type, "options.type");
   if (type !== undefined && type !== "file" && type !== "directory") {
     throw new VfsError("EINVAL", "options.type must be file or directory");
@@ -127,7 +132,9 @@ export function rpcFindOptions(value: unknown): FindOptions {
     ...(optionalInteger(input.maxDepth, "options.maxDepth") === undefined
       ? {}
       : { maxDepth: input.maxDepth as number }),
-    ...(optionalString(input.name, "options.name") === undefined ? {} : { name: input.name as string }),
+    ...(optionalString(input.name, "options.name") === undefined
+      ? {}
+      : { name: input.name as string }),
     ...(optionalString(input.pathGlob, "options.pathGlob") === undefined
       ? {}
       : { pathGlob: input.pathGlob as string }),
@@ -178,7 +185,11 @@ export function rpcMetadataOptions(value: unknown): MetadataUpdateOptions {
 export function rpcTouchOptions(value: unknown): TouchOptions | undefined {
   if (value === undefined) return undefined;
   const input = record(value, "options");
-  keys(input, ["ifRevision", "ifMutationToken", "mode", "modifiedAtMs", "create", "createParents"], "options");
+  keys(
+    input,
+    ["ifRevision", "ifMutationToken", "mode", "modifiedAtMs", "create", "createParents"],
+    "options",
+  );
   const create = optionalBoolean(input.create, "options.create");
   const createParents = optionalBoolean(input.createParents, "options.createParents");
   return {
@@ -226,7 +237,11 @@ export function rpcCopyOptions(value: unknown): CopyOptions | undefined {
 export function rpcBeginUploadOptions(value: unknown): BeginOpaqueUploadOptions | undefined {
   if (value === undefined) return undefined;
   const input = record(value, "options");
-  keys(input, ["createParents", "ifMutationToken", "mode", "expectedSizeBytes", "expiresInMs", "contentType"], "options");
+  keys(
+    input,
+    ["createParents", "ifMutationToken", "mode", "expectedSizeBytes", "expiresInMs", "contentType"],
+    "options",
+  );
   const createParents = optionalBoolean(input.createParents, "options.createParents");
   const ifMutationToken = optionalString(input.ifMutationToken, "options.ifMutationToken");
   const mode = optionalInteger(input.mode, "options.mode");

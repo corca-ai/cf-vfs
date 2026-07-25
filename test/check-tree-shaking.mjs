@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -33,7 +33,8 @@ for (const excluded of [
   "mktemp: template must contain XXXXXX",
   "opaque R2 content",
   "shell AST node limit exceeded",
-]) assert(!lsBundle.includes(excluded), `ls-only bundle contains ${excluded}`);
+])
+  assert(!lsBundle.includes(excluded), `ls-only bundle contains ${excluded}`);
 
 const vfsBundle = await bundle("wrangler.vfs-tree-shake.jsonc");
 for (const excluded of [
@@ -41,7 +42,8 @@ for (const excluded of [
   "command not found",
   "mkdir: missing operand",
   "opaque R2 content",
-]) assert(!vfsBundle.includes(excluded), `VFS-only bundle contains ${excluded}`);
+])
+  assert(!vfsBundle.includes(excluded), `VFS-only bundle contains ${excluded}`);
 
 const commandsBundle = await bundle("wrangler.commands-tree-shake.jsonc");
 assert.match(commandsBundle, /cat.*grep|grep.*cat/u);
@@ -52,7 +54,8 @@ for (const excluded of [
   "patch: usage",
   "join: requires two files",
   "opaque R2 content",
-]) assert(!commandsBundle.includes(excluded), `cat+grep bundle contains ${excluded}`);
+])
+  assert(!commandsBundle.includes(excluded), `cat+grep bundle contains ${excluded}`);
 
 const nonInteractiveShellBundle = await bundle("wrangler.shell-tree-shake.jsonc");
 for (const excluded of [

@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { VfsError } from "../src/core/errors.js";
+import type { VfsError } from "../src/core/errors.js";
+import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import { putOpaque, readOpaque } from "../src/vfs/opaque.js";
 import { readAllBytes, streamFromChunks } from "../src/vfs/streams.js";
-import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import type { OpaqueObjectMetadata, OpaqueStore } from "../src/vfs/types.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 import { runVfsConformance } from "./helpers/vfs-conformance.js";
 
 async function bytes(stream: ReadableStream<Uint8Array>): Promise<number[]> {
-  return [...await readAllBytes(stream, 16 * 1024 * 1024)];
+  return [...(await readAllBytes(stream, 16 * 1024 * 1024))];
 }
 
 describe("byte-oriented in-memory SQLite filesystem", () => {
@@ -52,10 +52,9 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
 
     const writing = fileSystem.writeFile("/file", body);
     await Promise.resolve();
-    expect(new TextDecoder().decode(await readAllBytes(
-      fileSystem.readFile("/file").stream,
-      16,
-    ))).toBe("old");
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/file").stream, 16)),
+    ).toBe("old");
 
     fileSystem.touch("/file");
     release?.();
@@ -82,18 +81,24 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
       maxInFlightBufferedBytes: 4,
     });
     let closeFirst: (() => void) | undefined;
-    const firstGate = new Promise<void>((resolve) => { closeFirst = resolve; });
-    const first = fileSystem.writeFile("/first", new ReadableStream<Uint8Array>({
-      async start(controller) {
-        controller.enqueue(new Uint8Array([1, 2, 3]));
-        await firstGate;
-        controller.close();
-      },
-    }));
+    const firstGate = new Promise<void>((resolve) => {
+      closeFirst = resolve;
+    });
+    const first = fileSystem.writeFile(
+      "/first",
+      new ReadableStream<Uint8Array>({
+        async start(controller) {
+          controller.enqueue(new Uint8Array([1, 2, 3]));
+          await firstGate;
+          controller.close();
+        },
+      }),
+    );
     await Promise.resolve();
     await Promise.resolve();
-    await expect(fileSystem.writeFile("/second", new Uint8Array([4, 5, 6])))
-      .rejects.toMatchObject({ code: "ENOSPC" });
+    await expect(fileSystem.writeFile("/second", new Uint8Array([4, 5, 6]))).rejects.toMatchObject({
+      code: "ENOSPC",
+    });
     closeFirst?.();
     await first;
   });
@@ -108,8 +113,9 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
       },
     });
     await expect(fileSystem.writeFile("/file", failed)).rejects.toThrow("source failed");
-    expect(new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/file").stream, 16)))
-      .toBe("old");
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/file").stream, 16)),
+    ).toBe("old");
   });
 
   it("enforces file, workspace, entry, and in-flight limits without partial mutation", async () => {
@@ -120,20 +126,19 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
       maxInFlightBufferedBytes: 4,
     });
     await fileSystem.writeFile("/a", "1234");
-    await expect(fileSystem.writeFile("/a", "12345"))
-      .rejects.toMatchObject({ code: "ENOSPC" });
+    await expect(fileSystem.writeFile("/a", "12345")).rejects.toMatchObject({ code: "ENOSPC" });
     expect(await bytes(fileSystem.readFile("/a").stream)).toEqual([49, 50, 51, 52]);
 
     await fileSystem.writeFile("/b", "12");
-    await expect(fileSystem.writeFile("/c", "x"))
-      .rejects.toMatchObject({ code: "ENOSPC" });
+    await expect(fileSystem.writeFile("/c", "x")).rejects.toMatchObject({ code: "ENOSPC" });
   });
 
   it("preflights recursive parent creation with the final entry quota", async () => {
     const fileSystem = createTestFileSystem({ maxEntries: 2 });
 
-    await expect(fileSystem.writeFile("/parent/file", "x", { createParents: true }))
-      .rejects.toMatchObject({ code: "ENOSPC" });
+    await expect(
+      fileSystem.writeFile("/parent/file", "x", { createParents: true }),
+    ).rejects.toMatchObject({ code: "ENOSPC" });
     expect(() => fileSystem.stat("/parent")).toThrowError(
       expect.objectContaining({ code: "ENOENT" }),
     );
@@ -151,8 +156,10 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
 
     const first = store.putIfAbsent("reserved", firstBody);
     await Promise.resolve();
-    await expect(store.putIfAbsent("reserved", "second"))
-      .rejects.toMatchObject({ code: "EEXIST", path: "reserved" });
+    await expect(store.putIfAbsent("reserved", "second")).rejects.toMatchObject({
+      code: "EEXIST",
+      path: "reserved",
+    });
     finish?.();
     await expect(first).resolves.toMatchObject({ key: "reserved", sizeBytes: 5 });
   });
@@ -243,8 +250,9 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     await fileSystem.commitOpaqueUpload(upload.uploadId);
     now = 2;
 
-    await expect(fileSystem.commitOpaqueUpload(upload.uploadId))
-      .rejects.toMatchObject({ code: "ENOENT" });
+    await expect(fileSystem.commitOpaqueUpload(upload.uploadId)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     expect(fileSystem.stat("/asset")).toMatchObject({ contentClass: "opaque", sizeBytes: 4 });
   });
 
@@ -254,17 +262,23 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     const upload = await fileSystem.beginOpaqueUpload("/asset");
     await store.putIfAbsent(upload.objectKey, "body");
 
-    await expect(fileSystem.commitOpaqueUpload(upload.uploadId, {
-      verifiedSha256: "untrusted",
-    })).rejects.toEqual(expect.objectContaining<Partial<VfsError>>({ code: "EINVAL" }));
+    await expect(
+      fileSystem.commitOpaqueUpload(upload.uploadId, {
+        verifiedSha256: "untrusted",
+      }),
+    ).rejects.toEqual(expect.objectContaining<Partial<VfsError>>({ code: "EINVAL" }));
   });
 
   it("serializes concurrent commits and loses an in-flight verification after abort", async () => {
     let now = 0;
     let releaseHead: (() => void) | undefined;
     let signalHead: (() => void) | undefined;
-    const headStarted = new Promise<void>((resolve) => { signalHead = resolve; });
-    const headGate = new Promise<void>((resolve) => { releaseHead = resolve; });
+    const headStarted = new Promise<void>((resolve) => {
+      signalHead = resolve;
+    });
+    const headGate = new Promise<void>((resolve) => {
+      releaseHead = resolve;
+    });
     const backing = new MemoryOpaqueStore();
     const store: OpaqueStore = {
       putIfAbsent: (...args) => backing.putIfAbsent(...args),
@@ -300,8 +314,12 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     let now = 0;
     let releaseHead: (() => void) | undefined;
     let signalHead: (() => void) | undefined;
-    const headStarted = new Promise<void>((resolve) => { signalHead = resolve; });
-    const headGate = new Promise<void>((resolve) => { releaseHead = resolve; });
+    const headStarted = new Promise<void>((resolve) => {
+      signalHead = resolve;
+    });
+    const headGate = new Promise<void>((resolve) => {
+      releaseHead = resolve;
+    });
     const backing = new MemoryOpaqueStore();
     let failDelete = true;
     const store: OpaqueStore = {

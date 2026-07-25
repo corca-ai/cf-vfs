@@ -1,7 +1,7 @@
-import { InteractiveShell } from "../src/shell/interactive.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
-import { VfsDurableObject } from "../src/vfs/durable-object.js";
+import { InteractiveShell } from "../src/shell/interactive.js";
 import type { ExecuteTextResult, ShellExecution } from "../src/shell/types.js";
+import { VfsDurableObject } from "../src/vfs/durable-object.js";
 
 interface ReplEnvironment {
   REPL_VFS: DurableObjectNamespace<ReplWorkspace>;

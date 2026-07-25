@@ -2,14 +2,14 @@ import { VfsError } from "../core/errors.js";
 import { normalizePath } from "../core/path.js";
 import { bodyToStream } from "../vfs/streams.js";
 import type { ByteBody } from "../vfs/types.js";
-import { expandScalarWord, expandWord, type ExpansionRuntime } from "./expand.js";
+import { type ExpansionRuntime, expandScalarWord, expandWord } from "./expand.js";
 import { shellInput } from "./input.js";
-import { sinkFromWritable } from "./pipe.js";
 import type { Redirection } from "./parser.js";
+import { sinkFromWritable } from "./pipe.js";
 import type {
   ShellBudget,
-  ShellFileSystem,
   ShellFileDescriptors,
+  ShellFileSystem,
   ShellSession,
   ShellSink,
 } from "./types.js";
@@ -89,6 +89,12 @@ async function targetPath(
   return normalizePath(values[0], session.cwd);
 }
 
+export interface AppliedRedirections {
+  fds: ShellFileDescriptors;
+  redirected: ReadonlySet<1 | 2>;
+  inputRedirected: boolean;
+}
+
 export async function applyRedirections(
   redirections: readonly Redirection[],
   initial: ShellFileDescriptors,
@@ -97,11 +103,7 @@ export async function applyRedirections(
   budget: ShellBudget,
   cancelReplacedInput: boolean,
   runtime: ExpansionRuntime,
-): Promise<{
-  fds: ShellFileDescriptors;
-  redirected: ReadonlySet<1 | 2>;
-  inputRedirected: boolean;
-}> {
+): Promise<AppliedRedirections> {
   const fds: ShellFileDescriptors = { 0: initial[0], 1: initial[1], 2: initial[2] };
   const redirected = new Set<1 | 2>();
   let inputRedirected = false;
@@ -115,7 +117,13 @@ export async function applyRedirections(
         continue;
       }
       if (redirection.operator === "<<<") {
-        const value = await expandScalarWord(redirection.target, session, fileSystem, budget, runtime);
+        const value = await expandScalarWord(
+          redirection.target,
+          session,
+          fileSystem,
+          budget,
+          runtime,
+        );
         if (cancelReplacedInput || inputRedirected) {
           await fds[0].cancel(new VfsError("EPIPE", "pipeline input was replaced by redirection"));
         }
@@ -124,7 +132,13 @@ export async function applyRedirections(
         continue;
       }
       if ("document" in redirection) {
-        const value = await expandScalarWord(redirection.document, session, fileSystem, budget, runtime);
+        const value = await expandScalarWord(
+          redirection.document,
+          session,
+          fileSystem,
+          budget,
+          runtime,
+        );
         if (cancelReplacedInput || inputRedirected) {
           await fds[0].cancel(new VfsError("EPIPE", "pipeline input was replaced by redirection"));
         }

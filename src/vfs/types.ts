@@ -149,7 +149,11 @@ export interface OpaqueObjectMetadata {
 }
 
 export interface OpaqueStore {
-  putIfAbsent(key: string, body: ByteBody, metadata?: { contentType?: string }): Promise<OpaqueObjectMetadata>;
+  putIfAbsent(
+    key: string,
+    body: ByteBody,
+    metadata?: { contentType?: string },
+  ): Promise<OpaqueObjectMetadata>;
   head(key: string): Promise<OpaqueObjectMetadata | null>;
   getStream(key: string, range?: ByteRange): Promise<ReadableStream<Uint8Array> | null>;
   delete(keys: string | readonly string[]): Promise<void>;

@@ -41,9 +41,10 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
 export function cloneShellSession(session: ShellSession): ShellSession {
   return {
     cwd: session.cwd,
-    env: session.env instanceof ShellEnvironment
-      ? session.env.clone()
-      : new ShellEnvironment(session.env),
+    env:
+      session.env instanceof ShellEnvironment
+        ? session.env.clone()
+        : new ShellEnvironment(session.env),
     args: [...session.args],
     lastExitCode: session.lastExitCode,
     exitRequested: false,

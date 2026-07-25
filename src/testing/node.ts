@@ -1,8 +1,4 @@
-import {
-  DatabaseSync,
-  type SQLInputValue,
-  type SQLOutputValue,
-} from "node:sqlite";
+import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
 import {
   SqlFileSystem,
   type SqlFileSystemOptions,
@@ -45,9 +41,7 @@ function outputValue(value: SQLOutputValue): SqlStorageValue {
 }
 
 function outputRow(row: Record<string, SQLOutputValue>): VfsSqlRow {
-  return Object.fromEntries(
-    Object.entries(row).map(([name, value]) => [name, outputValue(value)]),
-  );
+  return Object.fromEntries(Object.entries(row).map(([name, value]) => [name, outputValue(value)]));
 }
 
 function integerPragma(database: DatabaseSync, name: string): number {
@@ -65,18 +59,12 @@ class NodeSqlStorage implements VfsSqlStorage {
   constructor(private readonly database: DatabaseSync) {}
 
   get databaseSize(): number {
-    return integerPragma(this.database, "page_count")
-      * integerPragma(this.database, "page_size");
+    return integerPragma(this.database, "page_count") * integerPragma(this.database, "page_size");
   }
 
-  exec<Row extends VfsSqlRow>(
-    query: string,
-    ...bindings: VfsSqlBinding[]
-  ): VfsSqlCursor<Row> {
+  exec<Row extends VfsSqlRow>(query: string, ...bindings: VfsSqlBinding[]): VfsSqlCursor<Row> {
     const statement = this.database.prepare(query);
-    const rows = statement
-      .all(...bindings.map(inputValue))
-      .map(outputRow) as Row[];
+    const rows = statement.all(...bindings.map(inputValue)).map(outputRow) as Row[];
     return new ArrayCursor(rows);
   }
 }

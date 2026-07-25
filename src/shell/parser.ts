@@ -1,5 +1,5 @@
 import { VfsError } from "../core/errors.js";
-import { ArithmeticSyntaxError, parseArithmetic, type ArithmeticNode } from "./arithmetic.js";
+import { type ArithmeticNode, ArithmeticSyntaxError, parseArithmetic } from "./arithmetic.js";
 
 export const BASH_COMPATIBILITY_VERSION = 4 as const;
 
@@ -45,21 +45,21 @@ interface AdvancedParameterExpansionBase {
 export type ParameterExpansion =
   | BasicParameterExpansion
   | (AdvancedParameterExpansionBase & {
-    kind: "remove";
-    removalOperator: "#" | "##" | "%" | "%%";
-    pattern: ShellWord;
-  })
+      kind: "remove";
+      removalOperator: "#" | "##" | "%" | "%%";
+      pattern: ShellWord;
+    })
   | (AdvancedParameterExpansionBase & {
-    kind: "replace";
-    all: boolean;
-    pattern: ShellWord;
-    replacement: ShellWord;
-  })
+      kind: "replace";
+      all: boolean;
+      pattern: ShellWord;
+      replacement: ShellWord;
+    })
   | (AdvancedParameterExpansionBase & {
-    kind: "substring";
-    offset: ShellWord;
-    substringLength?: ShellWord;
-  });
+      kind: "substring";
+      offset: ShellWord;
+      substringLength?: ShellWord;
+    });
 
 export interface ParameterWordPart {
   kind: "parameter";
@@ -153,25 +153,33 @@ export interface ArithmeticCommandNode {
 
 export type ConditionalUnaryOperator = "-n" | "-z" | "-e" | "-f" | "-d";
 export type ConditionalBinaryOperator =
-  | "==" | "!=" | "<" | ">"
-  | "-eq" | "-ne" | "-lt" | "-le" | "-gt" | "-ge";
+  | "=="
+  | "!="
+  | "<"
+  | ">"
+  | "-eq"
+  | "-ne"
+  | "-lt"
+  | "-le"
+  | "-gt"
+  | "-ge";
 
 export type ConditionalExpression =
   | { type: "conditional-word"; word: ShellWord }
   | { type: "conditional-unary"; operator: ConditionalUnaryOperator; operand: ShellWord }
   | {
-    type: "conditional-binary";
-    operator: ConditionalBinaryOperator;
-    left: ShellWord;
-    right: ShellWord;
-  }
+      type: "conditional-binary";
+      operator: ConditionalBinaryOperator;
+      left: ShellWord;
+      right: ShellWord;
+    }
   | { type: "conditional-not"; expression: ConditionalExpression }
   | {
-    type: "conditional-boolean";
-    operator: "&&" | "||";
-    left: ConditionalExpression;
-    right: ConditionalExpression;
-  }
+      type: "conditional-boolean";
+      operator: "&&" | "||";
+      left: ConditionalExpression;
+      right: ConditionalExpression;
+    }
   | { type: "conditional-group"; expression: ConditionalExpression };
 
 export interface DoubleBracketCommandNode {
@@ -181,8 +189,14 @@ export interface DoubleBracketCommandNode {
   sourceOffset: number;
 }
 
-export type CompoundCommandNode = GroupCommandNode | IfCommandNode | LoopCommandNode
-  | ForCommandNode | CaseCommandNode | ArithmeticCommandNode | DoubleBracketCommandNode;
+export type CompoundCommandNode =
+  | GroupCommandNode
+  | IfCommandNode
+  | LoopCommandNode
+  | ForCommandNode
+  | CaseCommandNode
+  | ArithmeticCommandNode
+  | DoubleBracketCommandNode;
 
 export interface FunctionDefinitionNode {
   type: "function-definition";
@@ -211,8 +225,24 @@ export interface ScriptNode {
   nodeCount: number;
 }
 
-type Operator = ";" | "\n" | "&&" | "||" | "|" | "!" | "&" | "(" | ")"
-  | "{" | "}" | ";;" | PathRedirectionOperator | "2>&1" | "<<" | "<<-" | "<<<";
+type Operator =
+  | ";"
+  | "\n"
+  | "&&"
+  | "||"
+  | "|"
+  | "!"
+  | "&"
+  | "("
+  | ")"
+  | "{"
+  | "}"
+  | ";;"
+  | PathRedirectionOperator
+  | "2>&1"
+  | "<<"
+  | "<<-"
+  | "<<<";
 type OperatorToken = {
   type: "operator";
   value: Operator;
@@ -233,13 +263,42 @@ const REDIRECTIONS = new Set<Operator>([
   "<<<",
 ]);
 const UNSUPPORTED_RESERVED = new Set([
-  "then", "elif", "else", "fi", "do", "done", "in", "esac",
-  "select", "function", "time", "coproc", "[[", "]]",
+  "then",
+  "elif",
+  "else",
+  "fi",
+  "do",
+  "done",
+  "in",
+  "esac",
+  "select",
+  "function",
+  "time",
+  "coproc",
+  "[[",
+  "]]",
 ]);
 
 const UNSUPPORTED_CONDITIONAL_UNARY = new Set([
-  "-a", "-b", "-c", "-g", "-h", "-k", "-L", "-N", "-O", "-p", "-r", "-R",
-  "-s", "-S", "-t", "-u", "-v", "-w", "-x",
+  "-a",
+  "-b",
+  "-c",
+  "-g",
+  "-h",
+  "-k",
+  "-L",
+  "-N",
+  "-O",
+  "-p",
+  "-r",
+  "-R",
+  "-s",
+  "-S",
+  "-t",
+  "-u",
+  "-v",
+  "-w",
+  "-x",
 ]);
 
 function conditionalUnaryOperator(value: string | undefined): ConditionalUnaryOperator | undefined {
@@ -249,14 +308,24 @@ function conditionalUnaryOperator(value: string | undefined): ConditionalUnaryOp
   return undefined;
 }
 
-function conditionalBinaryOperator(token: Token | undefined): ConditionalBinaryOperator | undefined {
+function conditionalBinaryOperator(
+  token: Token | undefined,
+): ConditionalBinaryOperator | undefined {
   if (token?.type === "operator" && (token.value === "<" || token.value === ">")) {
     return token.value;
   }
   if (token?.type !== "word") return undefined;
   const value = staticWord(token.word);
-  if (value === "==" || value === "!=" || value === "-eq" || value === "-ne"
-    || value === "-lt" || value === "-le" || value === "-gt" || value === "-ge") {
+  if (
+    value === "==" ||
+    value === "!=" ||
+    value === "-eq" ||
+    value === "-ne" ||
+    value === "-lt" ||
+    value === "-le" ||
+    value === "-gt" ||
+    value === "-ge"
+  ) {
     return value;
   }
   return undefined;
@@ -305,7 +374,7 @@ function topLevelDelimiters(
   const offsets: number[] = [];
   let braces = 0;
   let parentheses = 0;
-  let quote: "'" | "\"" | undefined;
+  let quote: "'" | '"' | undefined;
   for (let index = 0; index < source.length; index += 1) {
     if ((index & 0xfff) === 0) checkDeadline();
     const character = source[index];
@@ -317,7 +386,7 @@ function topLevelDelimiters(
       if (character === quote) quote = undefined;
       continue;
     }
-    if (character === "'" || character === "\"") {
+    if (character === "'" || character === '"') {
       quote = character;
       continue;
     }
@@ -358,12 +427,14 @@ class ParseContext {
     this.check();
     this.nodes += count;
     this.accountNodes(count);
-    if (this.nodes > this.maximumNodes) throw new VfsError("E2BIG", "shell AST node limit exceeded");
+    if (this.nodes > this.maximumNodes)
+      throw new VfsError("E2BIG", "shell AST node limit exceeded");
   }
 
   depth(value: number): void {
     this.check();
-    if (value > this.maximumDepth) throw new VfsError("E2BIG", "shell nesting depth limit exceeded");
+    if (value > this.maximumDepth)
+      throw new VfsError("E2BIG", "shell nesting depth limit exceeded");
   }
 
   checkDeadline(): void {
@@ -384,8 +455,9 @@ function isBoundary(value: string | undefined): boolean {
 }
 
 function staticWord(word: ShellWord | undefined): string | undefined {
-  if (word === undefined || word.parts.some((part) => part.kind !== "literal" || part.quoted)) return undefined;
-  return word.parts.map((part) => part.kind === "literal" ? part.value : "").join("");
+  if (word === undefined || word.parts.some((part) => part.kind !== "literal" || part.quoted))
+    return undefined;
+  return word.parts.map((part) => (part.kind === "literal" ? part.value : "")).join("");
 }
 
 function literalWordValue(word: ShellWord): { value: string; quoted: boolean } {
@@ -408,17 +480,39 @@ function assignmentName(parts: readonly WordPart[]): string | undefined {
 }
 
 function operatorAt(source: string, offset: number, atBoundary: boolean): Operator | null {
-  for (const candidate of ["2>&1", "<<<", "<<-", "&&", "||", ";;", "2>>", ">>", "<<", "2>"] as const) {
+  for (const candidate of [
+    "2>&1",
+    "<<<",
+    "<<-",
+    "&&",
+    "||",
+    ";;",
+    "2>>",
+    ">>",
+    "<<",
+    "2>",
+  ] as const) {
     if (!source.startsWith(candidate, offset)) continue;
-    if ((candidate === "2>&1" || candidate === "2>>" || candidate === "2>") && !atBoundary) continue;
+    if ((candidate === "2>&1" || candidate === "2>>" || candidate === "2>") && !atBoundary)
+      continue;
     const next = source[offset + candidate.length];
     if (candidate === "2>&1" && !isBoundary(next)) continue;
     return candidate;
   }
   const character = source[offset];
-  if (character === ";" || character === "\n" || character === "|" || character === "&"
-    || character === ">" || character === "<" || character === "(" || character === ")") return character;
-  if ((character === "{" || character === "}") && atBoundary && isBoundary(source[offset + 1])) return character;
+  if (
+    character === ";" ||
+    character === "\n" ||
+    character === "|" ||
+    character === "&" ||
+    character === ">" ||
+    character === "<" ||
+    character === "(" ||
+    character === ")"
+  )
+    return character;
+  if ((character === "{" || character === "}") && atBoundary && isBoundary(source[offset + 1]))
+    return character;
   if (character === "!" && atBoundary && isBoundary(source[offset + 1])) return character;
   return null;
 }
@@ -469,8 +563,14 @@ class Lexer {
         this.tokens.push(this.readArithmeticCommand());
         continue;
       }
-      if (this.source.startsWith("2>&", this.offset) && operatorAt(this.source, this.offset, true) === null) {
-        throw this.error("arbitrary file descriptors are not supported by this language version", this.offset);
+      if (
+        this.source.startsWith("2>&", this.offset) &&
+        operatorAt(this.source, this.offset, true) === null
+      ) {
+        throw this.error(
+          "arbitrary file descriptors are not supported by this language version",
+          this.offset,
+        );
       }
       const operator = operatorAt(this.source, this.offset, true);
       if (operator !== null) {
@@ -529,7 +629,10 @@ class Lexer {
     return incompleteShellSyntaxError(`${message} at byte ${this.absoluteOffset(offset)}`);
   }
 
-  private parseArithmetic(source: string, sourceOffset: number): ReturnType<typeof parseArithmetic> {
+  private parseArithmetic(
+    source: string,
+    sourceOffset: number,
+  ): ReturnType<typeof parseArithmetic> {
     try {
       return parseArithmetic(source, this.context.remainingNodes(), this.context.maximumDepth);
     } catch (error) {
@@ -543,7 +646,11 @@ class Lexer {
 
   private append(parts: WordPart[], part: WordPart): void {
     const previous = parts.at(-1);
-    if (part.kind === "literal" && previous?.kind === "literal" && previous.quoted === part.quoted) {
+    if (
+      part.kind === "literal" &&
+      previous?.kind === "literal" &&
+      previous.quoted === part.quoted
+    ) {
       previous.value += part.value;
     } else parts.push(part);
   }
@@ -561,8 +668,9 @@ class Lexer {
       const character = this.source[this.offset];
       if (character === undefined) break;
       if (stopAtWhitespace && (isHorizontalWhitespace(character) || character === "\n")) break;
-      if (stopAtWhitespace && operatorAt(this.source, this.offset, parts.length === 0) !== null) break;
-      if (literalQuotes && (character === "'" || character === "\"")) {
+      if (stopAtWhitespace && operatorAt(this.source, this.offset, parts.length === 0) !== null)
+        break;
+      if (literalQuotes && (character === "'" || character === '"')) {
         this.append(parts, { kind: "literal", value: character, quoted: true });
         this.offset += 1;
         continue;
@@ -581,7 +689,7 @@ class Lexer {
         this.append(parts, { kind: "literal", value, quoted: true });
         continue;
       }
-      if (character === "\"") {
+      if (character === '"') {
         this.readDoubleQuoted(parts, delimiterMode);
         continue;
       }
@@ -590,9 +698,8 @@ class Lexer {
         if (next === undefined) throw this.incompleteError("unterminated escape", this.offset);
         this.offset += 2;
         if (next !== "\n") {
-          const value = literalQuotes && next !== "$" && next !== "\\" && next !== "`"
-            ? `\\${next}`
-            : next;
+          const value =
+            literalQuotes && next !== "$" && next !== "\\" && next !== "`" ? `\\${next}` : next;
           this.append(parts, { kind: "literal", value, quoted: true });
         }
         continue;
@@ -601,8 +708,11 @@ class Lexer {
         throw this.error("backtick command substitution is not supported; use $(...)", this.offset);
       }
       if (character === "$" && !delimiterMode) {
-        if (this.source[this.offset + 1] === "'" || this.source[this.offset + 1] === "\"") {
-          throw this.error("locale and ANSI-C quotes are not supported by this language version", this.offset);
+        if (this.source[this.offset + 1] === "'" || this.source[this.offset + 1] === '"') {
+          throw this.error(
+            "locale and ANSI-C quotes are not supported by this language version",
+            this.offset,
+          );
         }
         const expansion = this.readExpansion(inheritedQuoted);
         if (expansion !== undefined) {
@@ -615,12 +725,18 @@ class Lexer {
     }
     if (parts.length === 0) throw this.error("expected word", start);
     const unquoted = parts.every((part) => part.kind === "literal" && !part.quoted)
-      ? parts.map((part) => part.kind === "literal" ? part.value : "").join("")
+      ? parts.map((part) => (part.kind === "literal" ? part.value : "")).join("")
       : undefined;
     const adjacentOperator = operatorAt(this.source, this.offset, false);
-    if (unquoted !== undefined && /^[0-9]+$/u.test(unquoted)
-      && (adjacentOperator === "<" || adjacentOperator === ">" || adjacentOperator === ">>")) {
-      throw this.error("arbitrary file descriptors are not supported by this language version", start);
+    if (
+      unquoted !== undefined &&
+      /^[0-9]+$/u.test(unquoted) &&
+      (adjacentOperator === "<" || adjacentOperator === ">" || adjacentOperator === ">>")
+    ) {
+      throw this.error(
+        "arbitrary file descriptors are not supported by this language version",
+        start,
+      );
     }
     const name = assignmentName(parts);
     return {
@@ -633,14 +749,14 @@ class Lexer {
   private readDoubleQuoted(parts: WordPart[], delimiterMode: boolean): void {
     const start = this.offset++;
     const before = parts.length;
-    while (this.offset < this.source.length && this.source[this.offset] !== "\"") {
+    while (this.offset < this.source.length && this.source[this.offset] !== '"') {
       this.checkOffset(this.offset);
       const character = this.source[this.offset];
       if (character === "\\") {
         const next = this.source[this.offset + 1];
         if (next === undefined) throw this.incompleteError("unterminated escape", this.offset);
         this.offset += 2;
-        if (next === "$" || next === "\"" || next === "\\" || next === "\n") {
+        if (next === "$" || next === '"' || next === "\\" || next === "\n") {
           if (next !== "\n") this.append(parts, { kind: "literal", value: next, quoted: true });
         } else this.append(parts, { kind: "literal", value: `\\${next}`, quoted: true });
         continue;
@@ -658,7 +774,7 @@ class Lexer {
       this.append(parts, { kind: "literal", value: character ?? "", quoted: true });
       this.offset += 1;
     }
-    if (this.source[this.offset] !== "\"") {
+    if (this.source[this.offset] !== '"') {
       throw this.incompleteError("unterminated double quote", start);
     }
     this.offset += 1;
@@ -704,7 +820,9 @@ class Lexer {
       length = true;
       this.offset += 1;
     }
-    const name = /^(?:[A-Za-z_][A-Za-z0-9_]*|[?#@]|[0-9]+)/u.exec(this.source.slice(this.offset))?.[0];
+    const name = /^(?:[A-Za-z_][A-Za-z0-9_]*|[?#@]|[0-9]+)/u.exec(
+      this.source.slice(this.offset),
+    )?.[0];
     if (name === undefined) throw this.error("invalid parameter expansion", start);
     this.offset += name.length;
     if (this.source[this.offset] === "}") {
@@ -712,8 +830,9 @@ class Lexer {
       return { name, length };
     }
     if (length) throw this.error("parameter length expansion does not accept an operator", start);
-    const operator = ([":-", ":=", ":+", ":?", "-", "=", "+", "?"] as const)
-      .find((candidate) => this.source.startsWith(candidate, this.offset));
+    const operator = ([":-", ":=", ":+", ":?", "-", "=", "+", "?"] as const).find((candidate) =>
+      this.source.startsWith(candidate, this.offset),
+    );
     if (operator !== undefined) {
       this.offset += operator.length;
       const operandStart = this.offset;
@@ -730,8 +849,9 @@ class Lexer {
     if (name === "@") {
       throw this.error("array-style parameter operations are not supported", start);
     }
-    const removal = (["##", "%%", "#", "%"] as const)
-      .find((candidate) => this.source.startsWith(candidate, this.offset));
+    const removal = (["##", "%%", "#", "%"] as const).find((candidate) =>
+      this.source.startsWith(candidate, this.offset),
+    );
     if (removal !== undefined) {
       this.offset += removal.length;
       const patternStart = this.offset;
@@ -751,11 +871,7 @@ class Lexer {
       const patternStart = this.offset;
       const close = this.findParameterClose();
       const contents = this.source.slice(patternStart, close);
-      const separator = topLevelDelimiters(
-        contents,
-        "/",
-        () => this.context.checkDeadline(),
-      )[0];
+      const separator = topLevelDelimiters(contents, "/", () => this.context.checkDeadline())[0];
       const patternSource = separator === undefined ? contents : contents.slice(0, separator);
       const replacementSource = separator === undefined ? "" : contents.slice(separator + 1);
       if (patternSource.startsWith("#") || patternSource.startsWith("%")) {
@@ -767,7 +883,8 @@ class Lexer {
         this.absoluteOffset(patternStart),
         this.depth + 1,
       );
-      const replacementStart = patternStart + (separator ?? contents.length) + (separator === undefined ? 0 : 1);
+      const replacementStart =
+        patternStart + (separator ?? contents.length) + (separator === undefined ? 0 : 1);
       const replacement = parseExpansionWord(
         replacementSource,
         this.context,
@@ -782,11 +899,7 @@ class Lexer {
       const offsetStart = this.offset;
       const close = this.findParameterClose();
       const contents = this.source.slice(offsetStart, close);
-      const separators = topLevelDelimiters(
-        contents,
-        ":",
-        () => this.context.checkDeadline(),
-      );
+      const separators = topLevelDelimiters(contents, ":", () => this.context.checkDeadline());
       if (separators.length > 1) {
         throw this.error("substring expansion accepts at most one length", offsetStart);
       }
@@ -803,14 +916,15 @@ class Lexer {
         this.depth + 1,
       );
       const lengthStart = offsetStart + (separator ?? contents.length) + 1;
-      const substringLength = lengthSource === undefined
-        ? undefined
-        : parseExpansionWord(
-          lengthSource,
-          this.context,
-          this.absoluteOffset(lengthStart),
-          this.depth + 1,
-        );
+      const substringLength =
+        lengthSource === undefined
+          ? undefined
+          : parseExpansionWord(
+              lengthSource,
+              this.context,
+              this.absoluteOffset(lengthStart),
+              this.depth + 1,
+            );
       this.offset = close + 1;
       return {
         kind: "substring",
@@ -826,7 +940,7 @@ class Lexer {
   private findParameterClose(): number {
     let braces = 0;
     let parentheses = 0;
-    let quote: "'" | "\"" | undefined;
+    let quote: "'" | '"' | undefined;
     for (let index = this.offset; index < this.source.length; index += 1) {
       this.checkOffset(index);
       const character = this.source[index];
@@ -838,7 +952,7 @@ class Lexer {
         if (character === quote) quote = undefined;
         continue;
       }
-      if (character === "'" || character === "\"") {
+      if (character === "'" || character === '"') {
         quote = character;
         continue;
       }
@@ -897,7 +1011,7 @@ class Lexer {
     };
 
     let depth = 1;
-    let quote: "'" | "\"" | undefined;
+    let quote: "'" | '"' | undefined;
     let index = contentStart;
     for (; index < this.source.length; index += 1) {
       this.checkOffset(index);
@@ -910,7 +1024,7 @@ class Lexer {
         if (character === quote) quote = undefined;
         continue;
       }
-      if (character === "'" || character === "\"") {
+      if (character === "'" || character === '"') {
         quote = character;
         continue;
       }
@@ -939,10 +1053,7 @@ class Lexer {
     throw this.incompleteError("unterminated command substitution", start);
   }
 
-  private readArithmeticBody(
-    kind: "expansion" | "command",
-    contentStart: number,
-  ): ArithmeticNode {
+  private readArithmeticBody(kind: "expansion" | "command", contentStart: number): ArithmeticNode {
     const start = this.offset;
     let parentheses = 0;
     let index = contentStart;
@@ -1008,7 +1119,10 @@ class Lexer {
       }
       const body = lines.join("");
       item.token.document = item.quoted
-        ? { parts: [{ kind: "literal", value: body, quoted: true }], sourceOffset: item.token.offset }
+        ? {
+            parts: [{ kind: "literal", value: body, quoted: true }],
+            sourceOffset: item.token.offset,
+          }
         : parseHereDocumentWord(body, this.context, item.token.offset, this.depth + 1);
     }
   }
@@ -1021,7 +1135,8 @@ function parseExpansionWord(
   depth: number,
 ): ShellWord {
   context.depth(depth);
-  if (source.length === 0) return { parts: [{ kind: "literal", value: "", quoted: false }], sourceOffset: baseByteOffset };
+  if (source.length === 0)
+    return { parts: [{ kind: "literal", value: "", quoted: false }], sourceOffset: baseByteOffset };
   const lexer = new Lexer(source, context, baseByteOffset, depth);
   return lexer.standaloneWord(false);
 }
@@ -1033,7 +1148,8 @@ function parseHereDocumentWord(
   depth: number,
 ): ShellWord {
   context.depth(depth);
-  if (source.length === 0) return { parts: [{ kind: "literal", value: "", quoted: true }], sourceOffset: baseByteOffset };
+  if (source.length === 0)
+    return { parts: [{ kind: "literal", value: "", quoted: true }], sourceOffset: baseByteOffset };
   const lexer = new Lexer(source, context, baseByteOffset, depth);
   return lexer.standaloneHereDocumentWord();
 }
@@ -1213,9 +1329,14 @@ class Parser {
     if (value === "while" || value === "until") return this.loopCommand(value === "until");
     if (value === "for") return this.forCommand();
     if (value === "case") return this.caseCommand();
-    if (value !== undefined && /^[A-Za-z_][A-Za-z0-9_]*$/u.test(value)
-      && this.peek(1)?.type === "operator" && this.peekOperatorAt(1) === "("
-      && this.peek(2)?.type === "operator" && this.peekOperatorAt(2) === ")") {
+    if (
+      value !== undefined &&
+      /^[A-Za-z_][A-Za-z0-9_]*$/u.test(value) &&
+      this.peek(1)?.type === "operator" &&
+      this.peekOperatorAt(1) === "(" &&
+      this.peek(2)?.type === "operator" &&
+      this.peekOperatorAt(2) === ")"
+    ) {
       return this.functionDefinition(value);
     }
     return this.simpleCommand();
@@ -1250,11 +1371,7 @@ class Parser {
     return this.withDepth(() => {
       const sourceOffset = this.takeWordOffset();
       const branches: IfCommandNode["branches"] = [];
-      let condition = this.requiredList(
-        { words: new Set(["then"]) },
-        "if condition",
-        true,
-      );
+      let condition = this.requiredList({ words: new Set(["then"]) }, "if condition", true);
       this.expectWord("then");
       while (true) {
         const body = this.requiredList(
@@ -1264,28 +1381,21 @@ class Parser {
         );
         branches.push({ condition, body });
         const next = this.peek();
-        if (next?.type !== "word") throw next === undefined
-          ? incompleteShellSyntaxError("expected fi at end of script")
-          : this.tokenError("expected elif, else, or fi", next);
+        if (next?.type !== "word")
+          throw next === undefined
+            ? incompleteShellSyntaxError("expected fi at end of script")
+            : this.tokenError("expected elif, else, or fi", next);
         const keyword = staticWord(next.word);
         if (keyword === "elif") {
           this.take();
-          condition = this.requiredList(
-            { words: new Set(["then"]) },
-            "elif condition",
-            true,
-          );
+          condition = this.requiredList({ words: new Set(["then"]) }, "elif condition", true);
           this.expectWord("then");
           continue;
         }
         let alternate: ScriptNode | undefined;
         if (keyword === "else") {
           this.take();
-          alternate = this.requiredList(
-            { words: new Set(["fi"]) },
-            "else branch",
-            true,
-          );
+          alternate = this.requiredList({ words: new Set(["fi"]) }, "else branch", true);
         }
         this.expectWord("fi");
         const redirections = this.redirections();
@@ -1345,11 +1455,7 @@ class Parser {
       }
       this.skipSeparators();
       this.expectWord("do");
-      const body = this.requiredList(
-        { words: new Set(["done"]) },
-        "for body",
-        true,
-      );
+      const body = this.requiredList({ words: new Set(["done"]) }, "for body", true);
       this.expectWord("done");
       const redirections = this.redirections();
       this.add();
@@ -1402,7 +1508,8 @@ class Parser {
 
   private arithmeticCommand(): ArithmeticCommandNode {
     const token = this.take();
-    if (token.type !== "arithmetic-command") throw this.tokenError("expected arithmetic command", token);
+    if (token.type !== "arithmetic-command")
+      throw this.tokenError("expected arithmetic command", token);
     const redirections = this.redirections();
     this.add();
     return {
@@ -1495,8 +1602,11 @@ class Parser {
 
   private conditionalTest(): ConditionalExpression {
     const first = this.peek();
-    if (first === undefined || this.conditionalEnd()
-      || (first.type === "operator" && first.value === ")")) {
+    if (
+      first === undefined ||
+      this.conditionalEnd() ||
+      (first.type === "operator" && first.value === ")")
+    ) {
       if (first === undefined) {
         throw incompleteShellSyntaxError("[[ expression is missing at end of script");
       }
@@ -1512,7 +1622,10 @@ class Parser {
       return { type: "conditional-unary", operator: unary, operand };
     }
     if (staticLeft !== undefined && UNSUPPORTED_CONDITIONAL_UNARY.has(staticLeft)) {
-      throw new VfsError("EINVAL", `unsupported [[ unary operator ${staticLeft} at byte ${left.sourceOffset}`);
+      throw new VfsError(
+        "EINVAL",
+        `unsupported [[ unary operator ${staticLeft} at byte ${left.sourceOffset}`,
+      );
     }
 
     const operatorToken = this.peek();
@@ -1523,10 +1636,16 @@ class Parser {
       this.add();
       return { type: "conditional-binary", operator, left, right };
     }
-    if (operatorToken !== undefined
-      && !this.conditionalEnd()
-      && !(operatorToken.type === "operator"
-        && (operatorToken.value === "&&" || operatorToken.value === "||" || operatorToken.value === ")"))) {
+    if (
+      operatorToken !== undefined &&
+      !this.conditionalEnd() &&
+      !(
+        operatorToken.type === "operator" &&
+        (operatorToken.value === "&&" ||
+          operatorToken.value === "||" ||
+          operatorToken.value === ")")
+      )
+    ) {
       throw this.tokenError(
         `unsupported [[ operator ${this.conditionalTokenValue(operatorToken)}`,
         operatorToken,
@@ -1566,7 +1685,10 @@ class Parser {
     this.skipNewlines();
     const body = this.command();
     if (body.type === "command" || body.type === "function-definition") {
-      throw new VfsError("EINVAL", `function body must be a compound command at byte ${sourceOffset}`);
+      throw new VfsError(
+        "EINVAL",
+        `function body must be a compound command at byte ${sourceOffset}`,
+      );
     }
     this.add();
     return { type: "function-definition", name, body, sourceOffset };
@@ -1575,7 +1697,8 @@ class Parser {
   private simpleCommand(): SimpleCommandNode {
     this.add();
     const first = this.peek();
-    const sourceOffset = first === undefined ? 0 : first.type === "word" ? first.word.sourceOffset : first.offset;
+    const sourceOffset =
+      first === undefined ? 0 : first.type === "word" ? first.word.sourceOffset : first.offset;
     const words: ShellWord[] = [];
     const redirections: Redirection[] = [];
     while (true) {
@@ -1600,15 +1723,24 @@ class Parser {
     const commandWord = words.find((word) => word.assignmentName === undefined);
     const rawCommand = staticWord(commandWord);
     if (rawCommand !== undefined && UNSUPPORTED_RESERVED.has(rawCommand)) {
-      throw new VfsError("EINVAL", `reserved syntax ${rawCommand} is not supported at byte ${commandWord?.sourceOffset ?? sourceOffset}`);
+      throw new VfsError(
+        "EINVAL",
+        `reserved syntax ${rawCommand} is not supported at byte ${commandWord?.sourceOffset ?? sourceOffset}`,
+      );
     }
     if (rawCommand === "[[" || rawCommand === "]]" || /\[[^\]]*\]=/u.test(rawCommand ?? "")) {
-      throw new VfsError("EINVAL", `array and extended-test syntax is not supported at byte ${commandWord?.sourceOffset ?? sourceOffset}`);
+      throw new VfsError(
+        "EINVAL",
+        `array and extended-test syntax is not supported at byte ${commandWord?.sourceOffset ?? sourceOffset}`,
+      );
     }
     for (const word of words) {
       const raw = staticWord(word);
       if (raw !== undefined && /\{[^{}]*,[^{}]*\}/u.test(raw)) {
-        throw new VfsError("EINVAL", `brace expansion is not supported at byte ${word.sourceOffset}`);
+        throw new VfsError(
+          "EINVAL",
+          `brace expansion is not supported at byte ${word.sourceOffset}`,
+        );
       }
     }
     return { type: "command", words, redirections, sourceOffset };
@@ -1631,11 +1763,13 @@ class Parser {
     const target = this.take();
     if (target.type !== "word") throw this.tokenError("redirection requires a word", target);
     if (token.value === "<<" || token.value === "<<-") {
-      if (token.document === undefined) throw this.tokenError("here-document body is missing", token);
+      if (token.document === undefined)
+        throw this.tokenError("here-document body is missing", token);
       return { operator: token.value, document: token.document };
     }
     if (token.value === "<<<") return { operator: "<<<", target: target.word };
-    if (!PATH_REDIRECTIONS.has(token.value)) throw this.tokenError("unsupported redirection", token);
+    if (!PATH_REDIRECTIONS.has(token.value))
+      throw this.tokenError("unsupported redirection", token);
     return { operator: token.value as PathRedirectionOperator, target: target.word };
   }
 
@@ -1708,7 +1842,9 @@ function validateConditionalDepth(
   maximumDepth: number,
   depth: number,
 ): void {
-  const pending: Array<{ expression: ConditionalExpression; depth: number }> = [{ expression, depth }];
+  const pending: Array<{ expression: ConditionalExpression; depth: number }> = [
+    { expression, depth },
+  ];
   while (pending.length > 0) {
     const current = pending.pop();
     if (current === undefined) break;

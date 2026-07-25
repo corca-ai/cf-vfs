@@ -123,21 +123,13 @@ export class ScopedFileSystem implements ShellFileSystem {
     return this.#inner.readFile(path);
   }
 
-  writeFile(
-    path: string,
-    body: ByteBody,
-    options?: WriteFileOptions,
-  ): Promise<WriteResult> {
+  writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult> {
     this.write(path);
     this.#budget.mutation();
     return this.#inner.writeFile(path, body, options);
   }
 
-  appendFile(
-    path: string,
-    body: ByteBody,
-    options?: AppendFileOptions,
-  ): Promise<WriteResult> {
+  appendFile(path: string, body: ByteBody, options?: AppendFileOptions): Promise<WriteResult> {
     this.write(path);
     this.#budget.mutation();
     return this.#inner.appendFile(path, body, options);
@@ -164,9 +156,8 @@ export class ScopedFileSystem implements ShellFileSystem {
 
   remove(path: string, options?: RemoveOptions): Promise<RemoveResult> {
     this.write(path);
-    const count = options?.recursive === true
-      ? this.#inner.find({ path, includeRoot: true }).length
-      : 1;
+    const count =
+      options?.recursive === true ? this.#inner.find({ path, includeRoot: true }).length : 1;
     this.#budget.mutation(Math.max(1, count));
     return this.#inner.remove(path, options);
   }
@@ -186,5 +177,4 @@ export class ScopedFileSystem implements ShellFileSystem {
     this.#budget.mutation(Math.max(1, count));
     return this.#inner.copy(from, to, options);
   }
-
 }

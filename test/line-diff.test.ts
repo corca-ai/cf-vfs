@@ -7,13 +7,13 @@ describe("line diff", () => {
 
     expect(diff.changes).toBe(2);
     expect(renderLineDiff("/before", "/after", diff)).toBe(
-      "--- /before\n"
-      + "+++ /after\n"
-      + "@@ -1,1 +1,1 @@\n"
-      + "-old\n"
-      + "\\ No newline at end of file\n"
-      + "+new\n"
-      + "\\ No newline at end of file\n",
+      "--- /before\n" +
+        "+++ /after\n" +
+        "@@ -1,1 +1,1 @@\n" +
+        "-old\n" +
+        "\\ No newline at end of file\n" +
+        "+new\n" +
+        "\\ No newline at end of file\n",
     );
   });
 
@@ -28,8 +28,6 @@ describe("line diff", () => {
     const before = "before\n".repeat(1000);
     const after = "after\n".repeat(1000);
 
-    expect(() => createLineDiff(before, after)).toThrowError(
-      /comparison cells; limit is 1000000/,
-    );
+    expect(() => createLineDiff(before, after)).toThrowError(/comparison cells; limit is 1000000/);
   });
 });

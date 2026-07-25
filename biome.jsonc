@@ -1,0 +1,73 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.5/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": [
+      "**/*.ts",
+      "**/*.mjs",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/.wrangler",
+      "!worker-configuration.d.ts",
+      "!bench/worker-configuration.d.ts",
+      "!scripts"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always",
+      "bracketSpacing": true
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "correctness": {
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error",
+        "noUnusedFunctionParameters": "error"
+      },
+      "style": {
+        "useConst": "error",
+        "useNodejsImportProtocol": "error",
+        "noParameterAssign": "off",
+        "useImportType": "error",
+        "useExportType": "error"
+      },
+      "suspicious": {
+        "noExplicitAny": "error",
+        // `${...}` appears in ordinary strings throughout the parser, the
+        // expander, and their tests because it is Bash syntax being matched,
+        // not a JavaScript template literal that was mis-quoted.
+        "noTemplateCurlyInString": "off"
+      },
+      "complexity": {
+        // The parser, expander, and SQL core are deliberately large state
+        // machines; cognitive-complexity ceilings would only invite splitting
+        // them into less readable pieces.
+        "noExcessiveCognitiveComplexity": "off",
+        // tsconfig sets noPropertyAccessFromIndexSignature, so bracket access
+        // on an index signature is required rather than stylistic.
+        "useLiteralKeys": "off"
+      },
+      "performance": {
+        "noDelete": "error"
+      }
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": { "source": { "organizeImports": "on" } }
+  }
+}

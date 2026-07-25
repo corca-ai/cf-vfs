@@ -1,7 +1,7 @@
 import { VfsError } from "../core/errors.js";
 import type {
-  ByteBody,
   BeginOpaqueUploadOptions,
+  ByteBody,
   CommitOpaqueUploadOptions,
   OpaqueFileStat,
   OpaqueStore,
@@ -34,9 +34,7 @@ export async function putOpaque(
       ...(reservation.contentType === undefined ? {} : { contentType: reservation.contentType }),
     });
     return await coordinator.commitOpaqueUpload(reservation.uploadId, {
-      ...(options.verifiedSha256 === undefined
-        ? {}
-        : { verifiedSha256: options.verifiedSha256 }),
+      ...(options.verifiedSha256 === undefined ? {} : { verifiedSha256: options.verifiedSha256 }),
     });
   } catch (error) {
     await coordinator.abortOpaqueUpload(reservation.uploadId);

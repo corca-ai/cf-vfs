@@ -11,6 +11,7 @@ import {
 } from "../core/path.js";
 import { collectInlineBytes, InFlightByteBudget } from "./buffering.js";
 import {
+  type CommonFileSystemOptions,
   DEFAULT_READ_LEASE_MS,
   DEFAULT_UPLOAD_TTL_MS,
   DEFAULT_VERIFY_LEASE_MS,
@@ -19,38 +20,37 @@ import {
   MAX_READ_LEASE_MS,
   NEVER_MUTATED_TOKEN,
   resolveFileSystemLimits,
-  type CommonFileSystemOptions,
   validatePositiveInteger,
 } from "./config.js";
 import { rechunk, streamFromChunks } from "./streams.js";
-import {
-  type AppendFileOptions,
-  type BeginOpaqueUploadOptions,
-  type ByteBody,
-  type CommitOpaqueUploadOptions,
-  type CopyOptions,
-  type CopyResult,
-  type EntryPage,
-  type FindOptions,
-  type GarbageDrainResult,
-  type InlineFileStat,
-  type InlineReadResult,
-  type MetadataUpdateOptions,
-  type MoveOptions,
-  type MoveResult,
-  type OpaqueFileStat,
-  type OpaqueObjectMetadata,
-  type OpaqueReadLease,
-  type OpaqueStore,
-  type OpaqueUploadReservation,
-  type PageOptions,
-  type RemoveOptions,
-  type RemoveResult,
-  type TouchOptions,
-  type VfsStat,
-  type VirtualFileSystem,
-  type WriteFileOptions,
-  type WriteResult,
+import type {
+  AppendFileOptions,
+  BeginOpaqueUploadOptions,
+  ByteBody,
+  CommitOpaqueUploadOptions,
+  CopyOptions,
+  CopyResult,
+  EntryPage,
+  FindOptions,
+  GarbageDrainResult,
+  InlineFileStat,
+  InlineReadResult,
+  MetadataUpdateOptions,
+  MoveOptions,
+  MoveResult,
+  OpaqueFileStat,
+  OpaqueObjectMetadata,
+  OpaqueReadLease,
+  OpaqueStore,
+  OpaqueUploadReservation,
+  PageOptions,
+  RemoveOptions,
+  RemoveResult,
+  TouchOptions,
+  VfsStat,
+  VirtualFileSystem,
+  WriteFileOptions,
+  WriteResult,
 } from "./types.js";
 
 const DEFAULT_MAX_DATABASE_BYTES = 10_000_000_000;
@@ -73,10 +73,7 @@ export interface VfsSqlCursor<Row extends VfsSqlRow> {
 
 export interface VfsSqlStorage {
   readonly databaseSize: number;
-  exec<Row extends VfsSqlRow>(
-    query: string,
-    ...bindings: VfsSqlBinding[]
-  ): VfsSqlCursor<Row>;
+  exec<Row extends VfsSqlRow>(query: string, ...bindings: VfsSqlBinding[]): VfsSqlCursor<Row>;
 }
 
 export interface SqlFileSystemStorage {
@@ -190,10 +187,10 @@ function parseEntry(row: SqlRow, mutationEpoch: string): EntryRow {
     invalidColumn("content_class", "inline, opaque, or null");
   }
   if (
-    (kind === "directory" && (contentClass !== null || opaqueObjectId !== null))
-    || (kind === "file" && contentClass === null)
-    || (contentClass === "inline" && opaqueObjectId !== null)
-    || (contentClass === "opaque" && opaqueObjectId === null)
+    (kind === "directory" && (contentClass !== null || opaqueObjectId !== null)) ||
+    (kind === "file" && contentClass === null) ||
+    (contentClass === "inline" && opaqueObjectId !== null) ||
+    (contentClass === "opaque" && opaqueObjectId === null)
   ) {
     throw new VfsError("EIO", "invalid SQLite entry state", stringColumn(row, "path"));
   }
@@ -210,10 +207,7 @@ function parseEntry(row: SqlRow, mutationEpoch: string): EntryRow {
     createdAtMs: integerColumn(row, "created_at_ms"),
     modifiedAtMs: integerColumn(row, "modified_at_ms"),
     revision: integerColumn(row, "revision"),
-    mutationToken: formatMutationToken(
-      mutationEpoch,
-      integerColumn(row, "mutation_version"),
-    ),
+    mutationToken: formatMutationToken(mutationEpoch, integerColumn(row, "mutation_version")),
   };
 }
 
@@ -309,8 +303,8 @@ export class SqlFileSystem implements VirtualFileSystem {
     this.maxEntries = limits.maxEntries;
     this.inFlightBytes = new InFlightByteBudget(limits.maxInFlightBufferedBytes);
     this.maxDatabaseBytes = options.maxDatabaseBytes ?? DEFAULT_MAX_DATABASE_BYTES;
-    this.minDatabaseHeadroomBytes = options.minDatabaseHeadroomBytes
-      ?? DEFAULT_DATABASE_HEADROOM_BYTES;
+    this.minDatabaseHeadroomBytes =
+      options.minDatabaseHeadroomBytes ?? DEFAULT_DATABASE_HEADROOM_BYTES;
     this.uploadSettlementGraceMs = limits.uploadSettlementGraceMs;
     this.receiptRetentionMs = limits.receiptRetentionMs;
     this.opaqueStore = options.opaqueStore;
@@ -321,7 +315,8 @@ export class SqlFileSystem implements VirtualFileSystem {
     for (const [name, value] of [
       ["maxDatabaseBytes", this.maxDatabaseBytes],
       ["minDatabaseHeadroomBytes", this.minDatabaseHeadroomBytes],
-    ] as const) validatePositiveInteger(value, name);
+    ] as const)
+      validatePositiveInteger(value, name);
     this.mutationEpoch = this.migrate();
   }
 
@@ -355,9 +350,9 @@ export class SqlFileSystem implements VirtualFileSystem {
         );
       `);
       const currentVersion = integerColumn(
-        this.sql.exec<SqlRow>(
-          "SELECT COALESCE(MAX(version), 0) AS version FROM vfs_schema_migrations",
-        ).one(),
+        this.sql
+          .exec<SqlRow>("SELECT COALESCE(MAX(version), 0) AS version FROM vfs_schema_migrations")
+          .one(),
         "version",
       );
       if (currentVersion < 1) {
@@ -496,9 +491,7 @@ export class SqlFileSystem implements VirtualFileSystem {
            ) VALUES ('/', '/', '/', 'directory', NULL, NULL, 0, ?, 0, 0, 1)`,
           DIRECTORY_MODE,
         );
-        this.sql.exec(
-          "INSERT INTO vfs_usage (singleton, inline_bytes, entries) VALUES (1, 0, 1)",
-        );
+        this.sql.exec("INSERT INTO vfs_usage (singleton, inline_bytes, entries) VALUES (1, 0, 1)");
         this.sql.exec(
           "INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (1, ?)",
           now,
@@ -506,9 +499,7 @@ export class SqlFileSystem implements VirtualFileSystem {
         migrated = true;
       }
       return stringColumn(
-        this.sql.exec<SqlRow>(
-          "SELECT mutation_epoch FROM vfs_state WHERE singleton = 1",
-        ).one(),
+        this.sql.exec<SqlRow>("SELECT mutation_epoch FROM vfs_state WHERE singleton = 1").one(),
         "mutation_epoch",
       );
     });
@@ -517,18 +508,22 @@ export class SqlFileSystem implements VirtualFileSystem {
   }
 
   private rows(query: string, ...bindings: SqlStorageValue[]): EntryRow[] {
-    return this.sql.exec<SqlRow>(query, ...bindings).toArray()
+    return this.sql
+      .exec<SqlRow>(query, ...bindings)
+      .toArray()
       .map((row) => parseEntry(row, this.mutationEpoch));
   }
 
   private oneEntry(path: string): EntryRow | null {
-    const row = firstRow(this.sql.exec<SqlRow>(
-      `SELECT ${ENTRY_COLUMNS}
+    const row = firstRow(
+      this.sql.exec<SqlRow>(
+        `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e INDEXED BY vfs_entries_path
        CROSS JOIN vfs_path_versions p
        WHERE e.path = ? AND p.path = e.path`,
-      path,
-    ));
+        path,
+      ),
+    );
     return row === undefined ? null : parseEntry(row, this.mutationEpoch);
   }
 
@@ -548,11 +543,7 @@ export class SqlFileSystem implements VirtualFileSystem {
     const row = this.requireEntry(path);
     if (row.kind === "directory") throw new VfsError("EISDIR", "is a directory", path);
     if (row.contentClass !== "inline") {
-      throw new VfsError(
-        "ENOTSUP",
-        "opaque R2 content is not available to shell commands",
-        path,
-      );
+      throw new VfsError("ENOTSUP", "opaque R2 content is not available to shell commands", path);
     }
     return row;
   }
@@ -570,10 +561,9 @@ export class SqlFileSystem implements VirtualFileSystem {
   }
 
   private tokenFor(path: string): string {
-    const current = firstRow(this.sql.exec<SqlRow>(
-      "SELECT version FROM vfs_path_versions WHERE path = ?",
-      path,
-    ));
+    const current = firstRow(
+      this.sql.exec<SqlRow>("SELECT version FROM vfs_path_versions WHERE path = ?", path),
+    );
     if (current !== undefined) {
       return formatMutationToken(this.mutationEpoch, integerColumn(current, "version"));
     }
@@ -582,12 +572,14 @@ export class SqlFileSystem implements VirtualFileSystem {
 
   private publishPathVersion(path: string): number {
     return integerColumn(
-      this.sql.exec<SqlRow>(
-        `INSERT INTO vfs_path_versions (path, version) VALUES (?, 1)
+      this.sql
+        .exec<SqlRow>(
+          `INSERT INTO vfs_path_versions (path, version) VALUES (?, 1)
          ON CONFLICT(path) DO UPDATE SET version = vfs_path_versions.version + 1
          RETURNING version`,
-        path,
-      ).one(),
+          path,
+        )
+        .one(),
       "version",
     );
   }
@@ -610,9 +602,9 @@ export class SqlFileSystem implements VirtualFileSystem {
   }
 
   private usage(): { inlineBytes: number; entries: number } {
-    const row = this.sql.exec<SqlRow>(
-      "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
-    ).one();
+    const row = this.sql
+      .exec<SqlRow>("SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1")
+      .one();
     return {
       inlineBytes: integerColumn(row, "inline_bytes"),
       entries: integerColumn(row, "entries"),
@@ -644,16 +636,18 @@ export class SqlFileSystem implements VirtualFileSystem {
 
   private subtreeSummary(path: string): { entries: number; inlineBytes: number } {
     const range = descendantRange(path);
-    const row = this.sql.exec<SqlRow>(
-      `SELECT COUNT(*) AS entries,
+    const row = this.sql
+      .exec<SqlRow>(
+        `SELECT COUNT(*) AS entries,
               COALESCE(SUM(CASE WHEN content_class = 'inline' THEN size_bytes ELSE 0 END), 0)
                 AS inline_bytes
        FROM vfs_entries
        WHERE path = ? OR (path >= ? AND path < ?)`,
-      path,
-      range.lower,
-      range.upper,
-    ).one();
+        path,
+        range.lower,
+        range.upper,
+      )
+      .one();
     return {
       entries: integerColumn(row, "entries"),
       inlineBytes: integerColumn(row, "inline_bytes"),
@@ -673,10 +667,7 @@ export class SqlFileSystem implements VirtualFileSystem {
     );
   }
 
-  private publishTranslatedSubtreeVersions(
-    source: string,
-    target: string,
-  ): void {
+  private publishTranslatedSubtreeVersions(source: string, target: string): void {
     const range = descendantRange(source);
     this.sql.exec(
       `INSERT INTO vfs_path_versions (path, version)
@@ -693,19 +684,21 @@ export class SqlFileSystem implements VirtualFileSystem {
 
   private createDirectory(path: string, now: number, mode = DIRECTORY_MODE): EntryRow {
     const token = this.bumpToken(path);
-    const inserted = this.sql.exec<SqlRow>(
-      `INSERT INTO vfs_entries (
+    const inserted = this.sql
+      .exec<SqlRow>(
+        `INSERT INTO vfs_entries (
          path, parent_path, name, kind, content_class, opaque_object_id,
          size_bytes, mode, created_at_ms, modified_at_ms, revision
        ) VALUES (?, ?, ?, 'directory', NULL, NULL, 0, ?, ?, ?, 1)
        RETURNING id`,
-      path,
-      dirname(path),
-      basename(path),
-      mode,
-      now,
-      now,
-    ).one();
+        path,
+        dirname(path),
+        basename(path),
+        mode,
+        now,
+        now,
+      )
+      .one();
     const id = integerColumn(inserted, "id");
     this.updateUsage(0, 1);
     return {
@@ -741,12 +734,7 @@ export class SqlFileSystem implements VirtualFileSystem {
   }
 
   private collectInline(body: ByteBody) {
-    return collectInlineBytes(
-      body,
-      this.maxInlineFileBytes,
-      this.chunkBytes,
-      this.inFlightBytes,
-    );
+    return collectInlineBytes(body, this.maxInlineFileBytes, this.chunkBytes, this.inFlightBytes);
   }
 
   private useBuffered<T>(
@@ -811,7 +799,7 @@ export class SqlFileSystem implements VirtualFileSystem {
     const page = rows.slice(0, limit);
     return {
       entries: page.map(rowToStat),
-      nextCursor: rows.length > limit ? page.at(-1)?.path ?? null : null,
+      nextCursor: rows.length > limit ? (page.at(-1)?.path ?? null) : null,
       scanned: page.length,
     };
   }
@@ -839,37 +827,41 @@ export class SqlFileSystem implements VirtualFileSystem {
     validatePositiveInteger(limit, "limit");
     const range = descendantRange(root);
     const cursor = options.cursor ?? (root === "/" ? "" : root);
-    const includeRoot = options.cursor === undefined
-      && (rootEntry.kind === "file" || (options.includeRoot ?? false));
+    const includeRoot =
+      options.cursor === undefined && (rootEntry.kind === "file" || (options.includeRoot ?? false));
     const namePattern = options.name === undefined ? undefined : globToRegExp(options.name);
-    const pathPattern = options.pathGlob === undefined
-      ? undefined
-      : globToRegExp(options.pathGlob);
-    const descendants = rootEntry.kind === "file" ? [] : this.rows(
-      `SELECT ${ENTRY_COLUMNS}
+    const pathPattern = options.pathGlob === undefined ? undefined : globToRegExp(options.pathGlob);
+    const descendants =
+      rootEntry.kind === "file"
+        ? []
+        : this.rows(
+            `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e INDEXED BY vfs_entries_path
        CROSS JOIN vfs_path_versions p
        WHERE e.path >= ? AND e.path < ? AND e.path > ? AND e.path <> ?
          AND p.path = e.path
        ORDER BY e.path LIMIT ?`,
-      range.lower,
-      range.upper,
-      cursor,
-      root,
-      limit + (includeRoot ? 0 : 1),
-    );
+            range.lower,
+            range.upper,
+            cursor,
+            root,
+            limit + (includeRoot ? 0 : 1),
+          );
     const scannedRows = (includeRoot ? [rootEntry, ...descendants] : descendants).slice(0, limit);
-    const entries = scannedRows.filter((row) => {
-      if (options.maxDepth !== undefined && depthFrom(root, row.path) > options.maxDepth) return false;
-      if (options.type !== undefined && row.kind !== options.type) return false;
-      if (namePattern !== undefined && !namePattern.test(row.name)) return false;
-      if (pathPattern !== undefined && !pathPattern.test(row.path)) return false;
-      return true;
-    }).map(rowToStat);
+    const entries = scannedRows
+      .filter((row) => {
+        if (options.maxDepth !== undefined && depthFrom(root, row.path) > options.maxDepth)
+          return false;
+        if (options.type !== undefined && row.kind !== options.type) return false;
+        if (namePattern !== undefined && !namePattern.test(row.name)) return false;
+        if (pathPattern !== undefined && !pathPattern.test(row.path)) return false;
+        return true;
+      })
+      .map(rowToStat);
     const hasMore = descendants.length + (includeRoot ? 1 : 0) > limit;
     return {
       entries,
-      nextCursor: hasMore ? scannedRows.at(-1)?.path ?? null : null,
+      nextCursor: hasMore ? (scannedRows.at(-1)?.path ?? null) : null,
       scanned: scannedRows.length,
     };
   }
@@ -877,11 +869,14 @@ export class SqlFileSystem implements VirtualFileSystem {
   readFile(path: string): InlineReadResult {
     const normalized = this.normalizeAccessPath(path);
     const entry = this.requireInline(normalized);
-    const chunks = this.sql.exec<SqlRow>(
-      `SELECT body FROM vfs_inline_chunks
+    const chunks = this.sql
+      .exec<SqlRow>(
+        `SELECT body FROM vfs_inline_chunks
        WHERE entry_id = ? ORDER BY chunk_index`,
-      entry.id,
-    ).toArray().map((row) => new Uint8Array(blobColumn(row, "body")).slice());
+        entry.id,
+      )
+      .toArray()
+      .map((row) => new Uint8Array(blobColumn(row, "body")).slice());
     const sizeBytes = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
     this.inFlightBytes.acquire(sizeBytes);
     return {
@@ -893,24 +888,28 @@ export class SqlFileSystem implements VirtualFileSystem {
   }
 
   private opaqueObject(id: number): OpaqueObjectRow | null {
-    const row = firstRow(this.sql.exec<SqlRow>(
-      `SELECT id, r2_key, size_bytes, etag, r2_version, verified_sha256,
+    const row = firstRow(
+      this.sql.exec<SqlRow>(
+        `SELECT id, r2_key, size_bytes, etag, r2_version, verified_sha256,
               content_type, retain_until_ms
        FROM vfs_opaque_objects WHERE id = ?`,
-      id,
-    ));
+        id,
+      ),
+    );
     return row === undefined ? null : parseOpaqueObject(row);
   }
 
   private upload(id: string): UploadRow | null {
-    const row = firstRow(this.sql.exec<SqlRow>(
-      `SELECT id, path, expected_mutation_token, r2_key, state,
+    const row = firstRow(
+      this.sql.exec<SqlRow>(
+        `SELECT id, path, expected_mutation_token, r2_key, state,
               verification_token, expected_size_bytes, expires_at_ms,
               verification_lease_until_ms, create_parents, mode,
               content_type, receipt_json
        FROM vfs_upload_sessions WHERE id = ?`,
-      id,
-    ));
+        id,
+      ),
+    );
     return row === undefined ? null : parseUpload(row);
   }
 
@@ -936,10 +935,12 @@ export class SqlFileSystem implements VirtualFileSystem {
   }
 
   private queueObjectIfUnreferenced(objectId: number, now: number): boolean {
-    const referenced = firstRow(this.sql.exec<SqlRow>(
-      "SELECT 1 AS present FROM vfs_entries WHERE opaque_object_id = ? LIMIT 1",
-      objectId,
-    ));
+    const referenced = firstRow(
+      this.sql.exec<SqlRow>(
+        "SELECT 1 AS present FROM vfs_entries WHERE opaque_object_id = ? LIMIT 1",
+        objectId,
+      ),
+    );
     if (referenced !== undefined) return false;
     const object = this.opaqueObject(objectId);
     if (object === null) return false;
@@ -958,16 +959,18 @@ export class SqlFileSystem implements VirtualFileSystem {
     if (bumpPath) this.bumpToken(path);
     this.updateUsage(entry.contentClass === "inline" ? -entry.sizeBytes : 0, -1);
     if (
-      entry.contentClass === "opaque"
-      && entry.opaqueObjectId !== null
-      && this.queueObjectIfUnreferenced(entry.opaqueObjectId, now)
-    ) return 1;
+      entry.contentClass === "opaque" &&
+      entry.opaqueObjectId !== null &&
+      this.queueObjectIfUnreferenced(entry.opaqueObjectId, now)
+    )
+      return 1;
     return 0;
   }
 
   private async scheduleGarbageAlarm(): Promise<void> {
-    const row = this.sql.exec<SqlRow>(
-      `SELECT MIN(due) AS due FROM (
+    const row = this.sql
+      .exec<SqlRow>(
+        `SELECT MIN(due) AS due FROM (
          SELECT MAX(not_before_ms, next_attempt_at_ms) AS due FROM vfs_gc_queue
          UNION ALL
          SELECT expires_at_ms AS due FROM vfs_upload_sessions WHERE state = 'open'
@@ -977,10 +980,11 @@ export class SqlFileSystem implements VirtualFileSystem {
          UNION ALL
          SELECT expires_at_ms AS due FROM vfs_upload_sessions WHERE state = 'committed'
        )`,
-    ).one();
+      )
+      .one();
     const due = nullableIntegerColumn(row, "due");
     if (due === null) {
-      if (await this.storage.getAlarm() !== null) await this.storage.deleteAlarm();
+      if ((await this.storage.getAlarm()) !== null) await this.storage.deleteAlarm();
       return;
     }
     const current = await this.storage.getAlarm();
@@ -1007,25 +1011,28 @@ export class SqlFileSystem implements VirtualFileSystem {
     const buffered = await this.collectInline(body);
 
     let queued = false;
-    const result = this.useBuffered(buffered, (chunks) => this.transaction(() => {
-      const sizeBytes = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
-      const current = this.oneEntry(normalized);
-      if (this.tokenFor(normalized) !== capturedToken) {
-        throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
-      }
-      this.validateGuard(normalized, current, options);
-      if (current?.kind === "directory") throw new VfsError("EISDIR", "is a directory", normalized);
-      const previousInlineBytes = current?.contentClass === "inline" ? current.sizeBytes : 0;
-      const inlineDelta = sizeBytes - previousInlineBytes;
-      const now = this.now();
-      this.ensureParents(normalized, options.createParents ?? false, now);
-      this.assertCapacity(inlineDelta, current === null ? 1 : 0, normalized);
-      const token = this.bumpToken(normalized);
-      if (current?.contentClass === "inline") {
-        this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", current.id);
-      }
-      const written = this.sql.exec<SqlRow>(
-        `INSERT INTO vfs_entries (
+    const result = this.useBuffered(buffered, (chunks) =>
+      this.transaction(() => {
+        const sizeBytes = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+        const current = this.oneEntry(normalized);
+        if (this.tokenFor(normalized) !== capturedToken) {
+          throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
+        }
+        this.validateGuard(normalized, current, options);
+        if (current?.kind === "directory")
+          throw new VfsError("EISDIR", "is a directory", normalized);
+        const previousInlineBytes = current?.contentClass === "inline" ? current.sizeBytes : 0;
+        const inlineDelta = sizeBytes - previousInlineBytes;
+        const now = this.now();
+        this.ensureParents(normalized, options.createParents ?? false, now);
+        this.assertCapacity(inlineDelta, current === null ? 1 : 0, normalized);
+        const token = this.bumpToken(normalized);
+        if (current?.contentClass === "inline") {
+          this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", current.id);
+        }
+        const written = this.sql
+          .exec<SqlRow>(
+            `INSERT INTO vfs_entries (
            id, path, parent_path, name, kind, content_class, opaque_object_id,
            size_bytes, mode, created_at_ms, modified_at_ms, revision
          ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, ?, ?, ?, ?, 1)
@@ -1035,38 +1042,41 @@ export class SqlFileSystem implements VirtualFileSystem {
            modified_at_ms = excluded.modified_at_ms,
            revision = vfs_entries.revision + 1
          RETURNING id, revision`,
-        current?.id ?? null,
-        normalized,
-        dirname(normalized),
-        basename(normalized),
-        sizeBytes,
-        options.mode ?? current?.mode ?? FILE_MODE,
-        current?.createdAtMs ?? now,
-        now,
-      ).one();
-      const entryId = integerColumn(written, "id");
-      for (const [index, chunk] of chunks.entries()) {
-        this.sql.exec(
-          "INSERT INTO vfs_inline_chunks (entry_id, chunk_index, body) VALUES (?, ?, ?)",
-          entryId,
-          index,
-          chunk,
-        );
-      }
-      this.updateUsage(inlineDelta, current === null ? 1 : 0);
-      if (
-        current?.contentClass === "opaque"
-        && current.opaqueObjectId !== null
-        && this.queueObjectIfUnreferenced(current.opaqueObjectId, now)
-      ) queued = true;
-      return {
-        path: normalized,
-        revision: integerColumn(written, "revision"),
-        mutationToken: token,
-        sizeBytes,
-        created: current === null,
-      };
-    }));
+            current?.id ?? null,
+            normalized,
+            dirname(normalized),
+            basename(normalized),
+            sizeBytes,
+            options.mode ?? current?.mode ?? FILE_MODE,
+            current?.createdAtMs ?? now,
+            now,
+          )
+          .one();
+        const entryId = integerColumn(written, "id");
+        for (const [index, chunk] of chunks.entries()) {
+          this.sql.exec(
+            "INSERT INTO vfs_inline_chunks (entry_id, chunk_index, body) VALUES (?, ?, ?)",
+            entryId,
+            index,
+            chunk,
+          );
+        }
+        this.updateUsage(inlineDelta, current === null ? 1 : 0);
+        if (
+          current?.contentClass === "opaque" &&
+          current.opaqueObjectId !== null &&
+          this.queueObjectIfUnreferenced(current.opaqueObjectId, now)
+        )
+          queued = true;
+        return {
+          path: normalized,
+          revision: integerColumn(written, "revision"),
+          mutationToken: token,
+          sizeBytes,
+          created: current === null,
+        };
+      }),
+    );
     if (queued) await this.scheduleGarbageAlarm();
     return result;
   }
@@ -1084,85 +1094,87 @@ export class SqlFileSystem implements VirtualFileSystem {
     return this.useBuffered(buffered, (suffixChunks) => {
       const suffixBytes = suffixChunks.reduce((total, chunk) => total + chunk.byteLength, 0);
       return this.transaction(() => {
-      const current = this.requireInline(normalized);
-      if (current.mutationToken !== capturedToken) {
-        throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
-      }
-      this.validateGuard(normalized, current, options);
-      if (suffixBytes === 0) {
+        const current = this.requireInline(normalized);
+        if (current.mutationToken !== capturedToken) {
+          throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
+        }
+        this.validateGuard(normalized, current, options);
+        if (suffixBytes === 0) {
+          return {
+            path: normalized,
+            revision: current.revision,
+            mutationToken: capturedToken,
+            sizeBytes: current.sizeBytes,
+            created: false,
+          };
+        }
+        const sizeBytes = current.sizeBytes + suffixBytes;
+        if (sizeBytes > this.maxInlineFileBytes) {
+          throw new VfsError(
+            "EFBIG",
+            `inline content exceeds the ${this.maxInlineFileBytes}-byte limit`,
+            normalized,
+          );
+        }
+        this.assertCapacity(suffixBytes, 0, normalized);
+        const lastChunk = firstRow(
+          this.sql.exec<SqlRow>(
+            `SELECT chunk_index, body FROM vfs_inline_chunks
+         WHERE entry_id = ? ORDER BY chunk_index DESC LIMIT 1`,
+            current.id,
+          ),
+        );
+        let firstChunkIndex = 0;
+        let chunks = suffixChunks;
+        if (lastChunk === undefined) {
+          if (current.sizeBytes !== 0) {
+            throw new VfsError("EIO", "inline file is missing stored chunks", normalized);
+          }
+        } else {
+          const lastChunkIndex = integerColumn(lastChunk, "chunk_index");
+          const tail = new Uint8Array(blobColumn(lastChunk, "body"));
+          const expectedLastChunkIndex = Math.floor((current.sizeBytes - 1) / this.chunkBytes);
+          const expectedTailBytes = current.sizeBytes - expectedLastChunkIndex * this.chunkBytes;
+          if (
+            current.sizeBytes === 0 ||
+            lastChunkIndex !== expectedLastChunkIndex ||
+            tail.byteLength !== expectedTailBytes
+          ) {
+            throw new VfsError("EIO", "inline file chunks do not match its size", normalized);
+          }
+          if (tail.byteLength === this.chunkBytes) {
+            firstChunkIndex = lastChunkIndex + 1;
+          } else {
+            firstChunkIndex = lastChunkIndex;
+            chunks = rechunk([tail, ...suffixChunks], this.chunkBytes);
+          }
+        }
+        for (const [offset, chunk] of chunks.entries()) {
+          this.sql.exec(
+            `INSERT INTO vfs_inline_chunks (entry_id, chunk_index, body) VALUES (?, ?, ?)
+           ON CONFLICT(entry_id, chunk_index) DO UPDATE SET body = excluded.body`,
+            current.id,
+            firstChunkIndex + offset,
+            chunk,
+          );
+        }
+        const now = this.now();
+        const token = this.bumpToken(normalized);
+        this.sql.exec(
+          `UPDATE vfs_entries SET size_bytes = ?, modified_at_ms = ?, revision = revision + 1
+         WHERE id = ?`,
+          sizeBytes,
+          now,
+          current.id,
+        );
+        this.updateUsage(suffixBytes, 0);
         return {
           path: normalized,
-          revision: current.revision,
-          mutationToken: capturedToken,
-          sizeBytes: current.sizeBytes,
+          revision: current.revision + 1,
+          mutationToken: token,
+          sizeBytes,
           created: false,
         };
-      }
-      const sizeBytes = current.sizeBytes + suffixBytes;
-      if (sizeBytes > this.maxInlineFileBytes) {
-        throw new VfsError(
-          "EFBIG",
-          `inline content exceeds the ${this.maxInlineFileBytes}-byte limit`,
-          normalized,
-        );
-      }
-      this.assertCapacity(suffixBytes, 0, normalized);
-      const lastChunk = firstRow(this.sql.exec<SqlRow>(
-        `SELECT chunk_index, body FROM vfs_inline_chunks
-         WHERE entry_id = ? ORDER BY chunk_index DESC LIMIT 1`,
-        current.id,
-      ));
-      let firstChunkIndex = 0;
-      let chunks = suffixChunks;
-      if (lastChunk === undefined) {
-        if (current.sizeBytes !== 0) {
-          throw new VfsError("EIO", "inline file is missing stored chunks", normalized);
-        }
-      } else {
-        const lastChunkIndex = integerColumn(lastChunk, "chunk_index");
-        const tail = new Uint8Array(blobColumn(lastChunk, "body"));
-        const expectedLastChunkIndex = Math.floor((current.sizeBytes - 1) / this.chunkBytes);
-        const expectedTailBytes = current.sizeBytes - expectedLastChunkIndex * this.chunkBytes;
-        if (
-          current.sizeBytes === 0
-          || lastChunkIndex !== expectedLastChunkIndex
-          || tail.byteLength !== expectedTailBytes
-        ) {
-          throw new VfsError("EIO", "inline file chunks do not match its size", normalized);
-        }
-        if (tail.byteLength === this.chunkBytes) {
-          firstChunkIndex = lastChunkIndex + 1;
-        } else {
-          firstChunkIndex = lastChunkIndex;
-          chunks = rechunk([tail, ...suffixChunks], this.chunkBytes);
-        }
-      }
-      for (const [offset, chunk] of chunks.entries()) {
-        this.sql.exec(
-          `INSERT INTO vfs_inline_chunks (entry_id, chunk_index, body) VALUES (?, ?, ?)
-           ON CONFLICT(entry_id, chunk_index) DO UPDATE SET body = excluded.body`,
-          current.id,
-          firstChunkIndex + offset,
-          chunk,
-        );
-      }
-      const now = this.now();
-      const token = this.bumpToken(normalized);
-      this.sql.exec(
-        `UPDATE vfs_entries SET size_bytes = ?, modified_at_ms = ?, revision = revision + 1
-         WHERE id = ?`,
-        sizeBytes,
-        now,
-        current.id,
-      );
-      this.updateUsage(suffixBytes, 0);
-      return {
-        path: normalized,
-        revision: current.revision + 1,
-        mutationToken: token,
-        sizeBytes,
-        created: false,
-      };
       });
     });
   }
@@ -1255,13 +1267,19 @@ export class SqlFileSystem implements VirtualFileSystem {
     const result = this.transaction(() => {
       const root = this.requireEntry(normalized);
       const range = descendantRange(normalized);
-      const hasDescendants = firstRow(this.sql.exec<SqlRow>(
-        `SELECT 1 AS present FROM vfs_entries
+      const hasDescendants = firstRow(
+        this.sql.exec<SqlRow>(
+          `SELECT 1 AS present FROM vfs_entries
          WHERE path >= ? AND path < ? LIMIT 1`,
-        range.lower,
-        range.upper,
-      ));
-      if (root.kind === "directory" && hasDescendants !== undefined && !(options.recursive ?? false)) {
+          range.lower,
+          range.upper,
+        ),
+      );
+      if (
+        root.kind === "directory" &&
+        hasDescendants !== undefined &&
+        !(options.recursive ?? false)
+      ) {
         throw new VfsError("ENOTEMPTY", "directory is not empty", normalized);
       }
       const summary = this.subtreeSummary(normalized);
@@ -1299,10 +1317,7 @@ export class SqlFileSystem implements VirtualFileSystem {
         range.lower,
         range.upper,
       );
-      queued = integerColumn(
-        this.sql.exec<SqlRow>("SELECT changes() AS value").one(),
-        "value",
-      );
+      queued = integerColumn(this.sql.exec<SqlRow>("SELECT changes() AS value").one(), "value");
       this.sql.exec(
         `DELETE FROM vfs_inline_chunks
          WHERE entry_id IN (
@@ -1358,11 +1373,14 @@ export class SqlFileSystem implements VirtualFileSystem {
         throw new VfsError("EEXIST", "destination exists", target);
       }
       if (destination !== null && destination.kind === "directory") {
-        const children = firstRow(this.sql.exec<SqlRow>(
-          "SELECT 1 AS present FROM vfs_entries WHERE parent_path = ? LIMIT 1",
-          target,
-        ));
-        if (children !== undefined) throw new VfsError("ENOTEMPTY", "directory is not empty", target);
+        const children = firstRow(
+          this.sql.exec<SqlRow>(
+            "SELECT 1 AS present FROM vfs_entries WHERE parent_path = ? LIMIT 1",
+            target,
+          ),
+        );
+        if (children !== undefined)
+          throw new VfsError("ENOTEMPTY", "directory is not empty", target);
       }
       if (destination !== null && destination.kind !== sourceEntry.kind) {
         throw new VfsError(
@@ -1431,19 +1449,20 @@ export class SqlFileSystem implements VirtualFileSystem {
         throw new VfsError("EEXIST", "destination exists", target);
       }
       if (destination !== null && destination.kind === "directory") {
-        const child = firstRow(this.sql.exec<SqlRow>(
-          "SELECT 1 AS present FROM vfs_entries WHERE parent_path = ? LIMIT 1",
-          target,
-        ));
+        const child = firstRow(
+          this.sql.exec<SqlRow>(
+            "SELECT 1 AS present FROM vfs_entries WHERE parent_path = ? LIMIT 1",
+            target,
+          ),
+        );
         if (child !== undefined) throw new VfsError("ENOTEMPTY", "directory is not empty", target);
       }
       const now = this.now();
       this.ensureParents(target, options.createParents ?? false, now);
       const sourceRange = descendantRange(source);
       const summary = this.subtreeSummary(source);
-      const replacedInlineBytes = destination?.contentClass === "inline"
-        ? destination.sizeBytes
-        : 0;
+      const replacedInlineBytes =
+        destination?.contentClass === "inline" ? destination.sizeBytes : 0;
       this.assertCapacity(
         summary.inlineBytes - replacedInlineBytes,
         summary.entries - (destination === null ? 0 : 1),
@@ -1521,8 +1540,8 @@ export class SqlFileSystem implements VirtualFileSystem {
     const existing = this.oneEntry(normalized);
     if (existing?.kind === "directory") throw new VfsError("EISDIR", "is a directory", normalized);
     if (
-      options.expectedSizeBytes !== undefined
-      && (!Number.isSafeInteger(options.expectedSizeBytes) || options.expectedSizeBytes < 0)
+      options.expectedSizeBytes !== undefined &&
+      (!Number.isSafeInteger(options.expectedSizeBytes) || options.expectedSizeBytes < 0)
     ) {
       throw new VfsError("EINVAL", "expectedSizeBytes must be a non-negative safe integer");
     }
@@ -1579,22 +1598,19 @@ export class SqlFileSystem implements VirtualFileSystem {
     }
     const receipt = parsed as Readonly<Record<string, unknown>>;
     const strings = ["path", "parentPath", "name", "mutationToken"] as const;
-    const integers = [
-      "sizeBytes",
-      "mode",
-      "createdAtMs",
-      "modifiedAtMs",
-      "revision",
-    ] as const;
+    const integers = ["sizeBytes", "mode", "createdAtMs", "modifiedAtMs", "revision"] as const;
     if (
-      receipt["kind"] !== "file"
-      || receipt["contentClass"] !== "opaque"
-      || strings.some((field) => typeof receipt[field] !== "string")
-      || integers.some((field) => !Number.isSafeInteger(receipt[field]) || (receipt[field] as number) < 0)
-      || (receipt["revision"] as number) < 1
-      || (receipt["contentType"] !== undefined && typeof receipt["contentType"] !== "string")
-      || (receipt["verifiedSha256"] !== undefined && typeof receipt["verifiedSha256"] !== "string")
-    ) throw new VfsError("EIO", "invalid committed upload receipt", path);
+      receipt["kind"] !== "file" ||
+      receipt["contentClass"] !== "opaque" ||
+      strings.some((field) => typeof receipt[field] !== "string") ||
+      integers.some(
+        (field) => !Number.isSafeInteger(receipt[field]) || (receipt[field] as number) < 0,
+      ) ||
+      (receipt["revision"] as number) < 1 ||
+      (receipt["contentType"] !== undefined && typeof receipt["contentType"] !== "string") ||
+      (receipt["verifiedSha256"] !== undefined && typeof receipt["verifiedSha256"] !== "string")
+    )
+      throw new VfsError("EIO", "invalid committed upload receipt", path);
     return receipt as unknown as OpaqueFileStat;
   }
 
@@ -1607,11 +1623,12 @@ export class SqlFileSystem implements VirtualFileSystem {
     return this.transaction(() => {
       const session = this.upload(uploadId);
       if (
-        session === null
-        || session.state !== "verifying"
-        || session.objectKey !== objectKey
-        || session.verificationToken !== verificationToken
-      ) return false;
+        session === null ||
+        session.state !== "verifying" ||
+        session.objectKey !== objectKey ||
+        session.verificationToken !== verificationToken
+      )
+        return false;
       this.sql.exec(
         `UPDATE vfs_upload_sessions SET
            state = 'garbage', verification_token = NULL,
@@ -1650,10 +1667,8 @@ export class SqlFileSystem implements VirtualFileSystem {
         this.queueUploadGarbage(session, now);
         return { expired: session } as const;
       }
-      if (
-        session.state === "verifying"
-        && (session.verificationLeaseUntilMs ?? 0) > now
-      ) throw new VfsError("EAGAIN", "upload verification is already in progress", session.path);
+      if (session.state === "verifying" && (session.verificationLeaseUntilMs ?? 0) > now)
+        throw new VfsError("EAGAIN", "upload verification is already in progress", session.path);
       const verificationToken = this.newToken();
       this.sql.exec(
         `UPDATE vfs_upload_sessions SET
@@ -1694,48 +1709,64 @@ export class SqlFileSystem implements VirtualFileSystem {
       throw error;
     }
     if (metadata === null) {
-      if (!this.markUploadGarbage(
-        uploadId,
-        started.session.objectKey,
-        started.verificationToken,
-        this.now(),
-      )) throw new VfsError("EREVISION", "upload verification lease was lost", started.session.path);
+      if (
+        !this.markUploadGarbage(
+          uploadId,
+          started.session.objectKey,
+          started.verificationToken,
+          this.now(),
+        )
+      )
+        throw new VfsError("EREVISION", "upload verification lease was lost", started.session.path);
       await this.scheduleGarbageAlarm();
       throw new VfsError("EIO", "uploaded R2 object is missing", started.session.path);
     }
     if (metadata.key !== started.session.objectKey) {
-      if (!this.markUploadGarbage(
-        uploadId,
-        started.session.objectKey,
-        started.verificationToken,
-        this.now(),
-      )) throw new VfsError("EREVISION", "upload verification lease was lost", started.session.path);
+      if (
+        !this.markUploadGarbage(
+          uploadId,
+          started.session.objectKey,
+          started.verificationToken,
+          this.now(),
+        )
+      )
+        throw new VfsError("EREVISION", "upload verification lease was lost", started.session.path);
       await this.scheduleGarbageAlarm();
-      throw new VfsError("EIO", "object store returned metadata for the wrong key", started.session.path);
+      throw new VfsError(
+        "EIO",
+        "object store returned metadata for the wrong key",
+        started.session.path,
+      );
     }
     if (
-      started.session.expectedSizeBytes !== null
-      && metadata.sizeBytes !== started.session.expectedSizeBytes
+      started.session.expectedSizeBytes !== null &&
+      metadata.sizeBytes !== started.session.expectedSizeBytes
     ) {
-      if (!this.markUploadGarbage(
-        uploadId,
-        started.session.objectKey,
-        started.verificationToken,
-        this.now(),
-      )) throw new VfsError("EREVISION", "upload verification lease was lost", started.session.path);
+      if (
+        !this.markUploadGarbage(
+          uploadId,
+          started.session.objectKey,
+          started.verificationToken,
+          this.now(),
+        )
+      )
+        throw new VfsError("EREVISION", "upload verification lease was lost", started.session.path);
       await this.scheduleGarbageAlarm();
       throw new VfsError("EIO", "uploaded R2 object size does not match", started.session.path);
     }
     if (
-      options.verifiedSha256 !== undefined
-      && options.verifiedSha256 !== metadata.verifiedSha256
+      options.verifiedSha256 !== undefined &&
+      options.verifiedSha256 !== metadata.verifiedSha256
     ) {
-      if (!this.markUploadGarbage(
-        uploadId,
-        started.session.objectKey,
-        started.verificationToken,
-        this.now(),
-      )) throw new VfsError("EREVISION", "upload verification lease was lost", started.session.path);
+      if (
+        !this.markUploadGarbage(
+          uploadId,
+          started.session.objectKey,
+          started.verificationToken,
+          this.now(),
+        )
+      )
+        throw new VfsError("EREVISION", "upload verification lease was lost", started.session.path);
       await this.scheduleGarbageAlarm();
       throw new VfsError(
         "EINVAL",
@@ -1747,10 +1778,11 @@ export class SqlFileSystem implements VirtualFileSystem {
     const committed = this.transaction(() => {
       const session = this.upload(uploadId);
       if (
-        session === null
-        || session.state !== "verifying"
-        || session.verificationToken !== started.verificationToken
-      ) throw new VfsError("EREVISION", "upload verification lease was lost", started.session.path);
+        session === null ||
+        session.state !== "verifying" ||
+        session.verificationToken !== started.verificationToken
+      )
+        throw new VfsError("EREVISION", "upload verification lease was lost", started.session.path);
       if (this.tokenFor(session.path) !== session.expectedMutationToken) {
         this.sql.exec(
           `UPDATE vfs_upload_sessions SET
@@ -1763,7 +1795,8 @@ export class SqlFileSystem implements VirtualFileSystem {
         return { stale: true, path: session.path } as const;
       }
       const existing = this.oneEntry(session.path);
-      if (existing?.kind === "directory") throw new VfsError("EISDIR", "is a directory", session.path);
+      if (existing?.kind === "directory")
+        throw new VfsError("EISDIR", "is a directory", session.path);
       const now = this.now();
       this.ensureParents(session.path, session.createParents, now);
       this.assertCapacity(
@@ -1771,20 +1804,22 @@ export class SqlFileSystem implements VirtualFileSystem {
         existing === null ? 1 : 0,
         session.path,
       );
-      const insertedObject = this.sql.exec<SqlRow>(
-        `INSERT INTO vfs_opaque_objects (
+      const insertedObject = this.sql
+        .exec<SqlRow>(
+          `INSERT INTO vfs_opaque_objects (
            r2_key, size_bytes, etag, r2_version, verified_sha256,
            content_type, retain_until_ms, created_at_ms
          ) VALUES (?, ?, ?, ?, ?, ?, 0, ?)
          RETURNING id`,
-        metadata.key,
-        metadata.sizeBytes,
-        metadata.etag,
-        metadata.version,
-        metadata.verifiedSha256 ?? null,
-        session.contentType ?? metadata.contentType ?? null,
-        now,
-      ).one();
+          metadata.key,
+          metadata.sizeBytes,
+          metadata.etag,
+          metadata.version,
+          metadata.verifiedSha256 ?? null,
+          session.contentType ?? metadata.contentType ?? null,
+          now,
+        )
+        .one();
       const objectId = integerColumn(insertedObject, "id");
       if (existing?.contentClass === "inline") {
         this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", existing.id);
@@ -1818,17 +1853,18 @@ export class SqlFileSystem implements VirtualFileSystem {
         this.queueObjectIfUnreferenced(existing.opaqueObjectId, now);
       }
       const baseStat = rowToStat(this.requireEntry(session.path));
-      const stat = baseStat.kind === "file" && baseStat.contentClass === "opaque"
-        ? {
-            ...baseStat,
-            ...(session.contentType ?? metadata.contentType) === undefined
-              ? {}
-              : { contentType: session.contentType ?? metadata.contentType },
-            ...(metadata.verifiedSha256 === undefined
-              ? {}
-              : { verifiedSha256: metadata.verifiedSha256 }),
-          }
-        : baseStat;
+      const stat =
+        baseStat.kind === "file" && baseStat.contentClass === "opaque"
+          ? {
+              ...baseStat,
+              ...((session.contentType ?? metadata.contentType) === undefined
+                ? {}
+                : { contentType: session.contentType ?? metadata.contentType }),
+              ...(metadata.verifiedSha256 === undefined
+                ? {}
+                : { verifiedSha256: metadata.verifiedSha256 }),
+            }
+          : baseStat;
       if (stat.kind !== "file" || stat.contentClass !== "opaque") {
         throw new VfsError("EIO", "committed entry is not opaque", session.path);
       }
@@ -1882,7 +1918,8 @@ export class SqlFileSystem implements VirtualFileSystem {
         throw new VfsError("ENOTSUP", "file is not opaque", normalized);
       }
       const object = this.opaqueObject(entry.opaqueObjectId);
-      if (object === null) throw new VfsError("EIO", "opaque object metadata is missing", normalized);
+      if (object === null)
+        throw new VfsError("EIO", "opaque object metadata is missing", normalized);
       const leaseExpiresAtMs = this.now() + Math.min(leaseMs, MAX_READ_LEASE_MS);
       this.sql.exec(
         `UPDATE vfs_opaque_objects
@@ -1904,15 +1941,17 @@ export class SqlFileSystem implements VirtualFileSystem {
     const batchLimit = Math.min(limit, MAX_GC_BATCH);
     const now = this.now();
     const keys = this.transaction(() => {
-      const expired = this.sql.exec<SqlRow>(
-        `SELECT id, r2_key FROM vfs_upload_sessions
+      const expired = this.sql
+        .exec<SqlRow>(
+          `SELECT id, r2_key FROM vfs_upload_sessions
          WHERE (state = 'open' AND expires_at_ms <= ?)
             OR (state = 'verifying' AND verification_lease_until_ms <= ?)
          LIMIT ?`,
-        now,
-        now,
-        batchLimit,
-      ).toArray();
+          now,
+          now,
+          batchLimit,
+        )
+        .toArray();
       for (const row of expired) {
         const id = stringColumn(row, "id");
         this.sql.exec(
@@ -1929,14 +1968,17 @@ export class SqlFileSystem implements VirtualFileSystem {
         "DELETE FROM vfs_upload_sessions WHERE state = 'committed' AND expires_at_ms <= ?",
         now,
       );
-      return this.sql.exec<SqlRow>(
-        `SELECT r2_key FROM vfs_gc_queue
+      return this.sql
+        .exec<SqlRow>(
+          `SELECT r2_key FROM vfs_gc_queue
          WHERE not_before_ms <= ? AND next_attempt_at_ms <= ?
          ORDER BY next_attempt_at_ms, not_before_ms LIMIT ?`,
-        now,
-        now,
-        batchLimit,
-      ).toArray().map((row) => stringColumn(row, "r2_key"));
+          now,
+          now,
+          batchLimit,
+        )
+        .toArray()
+        .map((row) => stringColumn(row, "r2_key"));
     });
     if (store === undefined || keys.length === 0) {
       await this.scheduleGarbageAlarm();
@@ -1961,10 +2003,9 @@ export class SqlFileSystem implements VirtualFileSystem {
       const message = error instanceof Error ? error.message : String(error);
       this.transaction(() => {
         for (const key of keys) {
-          const row = firstRow(this.sql.exec<SqlRow>(
-            "SELECT attempts FROM vfs_gc_queue WHERE r2_key = ?",
-            key,
-          ));
+          const row = firstRow(
+            this.sql.exec<SqlRow>("SELECT attempts FROM vfs_gc_queue WHERE r2_key = ?", key),
+          );
           const attempts = row === undefined ? 1 : integerColumn(row, "attempts") + 1;
           const backoff = Math.min(2 ** Math.min(attempts, 12) * 1000, 60 * 60 * 1000);
           this.sql.exec(
