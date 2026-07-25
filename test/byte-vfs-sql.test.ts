@@ -262,10 +262,15 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
   });
 
   it("shares opaque objects without copying bodies and deletes only the last reference", async () => {
+    // A read lease pushes the object's retention deadline into the future, and
+    // GC only collects a key once that deadline has passed. Advance an injected
+    // clock rather than assuming real time elapses between the two calls.
+    let now = 1_000;
     const store = new MemoryOpaqueStore();
-    const fileSystem = createTestFileSystem({ opaqueStore: store });
+    const fileSystem = createTestFileSystem({ opaqueStore: store, now: () => now });
     const stat = await putOpaque(fileSystem, store, "/asset", new Uint8Array([1, 2, 3]));
     const lease = fileSystem.resolveOpaqueRead("/asset", 1);
+    expect(lease.leaseExpiresAtMs).toBe(now + 1);
 
     expect(stat).toMatchObject({ contentClass: "opaque", sizeBytes: 3 });
     expect(await fileSystem.copy("/asset", "/copy")).toMatchObject({
@@ -275,6 +280,12 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     expect((await fileSystem.remove("/asset")).opaqueObjectsQueuedForDeletion).toBe(0);
     expect(store.has(lease.object.key)).toBe(true);
     expect((await fileSystem.remove("/copy")).opaqueObjectsQueuedForDeletion).toBe(1);
+
+    // Still inside the lease: the name is gone but the body is retained.
+    await fileSystem.drainGarbage();
+    expect(store.has(lease.object.key)).toBe(true);
+
+    now = lease.leaseExpiresAtMs;
     await fileSystem.drainGarbage();
     expect(store.has(lease.object.key)).toBe(false);
   });
