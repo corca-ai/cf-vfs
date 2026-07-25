@@ -612,7 +612,9 @@ Which commands follow a link and which act on it is the POSIX split, and it is
 the part worth reading twice. `cat`, `test -f`, `chmod`, and a redirection
 follow it, so writing through a link writes the target and leaves the link
 alone. `rm`, `mv`, `mkdir`, and `ln -sf` act on the link itself, so removing a
-link to a directory leaves the directory. `stat`, `ls -l`, `ls -d`, `file`,
+link to a directory leaves the directory, and a dangling or cyclic link can
+still be removed and renamed — it is the link being named, not what it fails
+to reach. `stat`, `ls -l`, `ls -d`, `file`,
 `find`, and `test -L` report the link, with `stat -L` following instead. `ls`
 without `-l` or `-d` lists through a link to a directory, as `ls` does. `cp`
 follows a named link but `cp -r` and `cp -P` copy the link itself, because a
@@ -628,6 +630,17 @@ write resolves the path first and checks the roots against what it resolved to,
 so `EACCES` is reported at the moment of access. `lstat` and `readlink` are
 checked against where the link lives instead, because they answer questions
 about the link and not about its target.
+
+A pattern expands through a link when the link is named literally, so
+`echo /link/*` and `cd /link; echo *` both work. A wildcard that would have to
+match the link's own name does not expand through it; that is declared, as is
+the rule that `..` is collapsed before any link is followed.
+
+`ln -s` names an existing directory as its destination the way `mv` and `cp`
+do, linking inside it. `cp -p` preserves the metadata of whatever it copied —
+the target when it followed the link, the link when it did not — and never
+restates a copied link, whose mode is fixed and whose `setMetadata` would
+follow.
 
 Resolution is bounded at forty hops. Past that the path is refused with
 `ELOOP`, whether it is a cycle or merely a long chain — the two cannot be told

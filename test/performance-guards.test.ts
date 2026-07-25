@@ -116,6 +116,44 @@ describe("common-path SQL cost", () => {
     expect(meter.rows).toBeLessThanOrEqual(210);
   });
 
+  it("does not make an unrelated path cost more once a link exists", async () => {
+    const { fileSystem, meter } = meteredFileSystem();
+    fileSystem.mkdir("/many", true);
+    for (let index = 0; index < 200; index += 1) {
+      await fileSystem.writeFile(`/many/file-${index}`, "x");
+    }
+    const shell = new Shell({ fileSystem, commands: defaultShellCommands });
+    meter.reset();
+    expect((await shell.executeText({ script: "ls /many | wc -l" })).exitCode).toBe(0);
+    const withoutLinks = meter.statements;
+    expect(withoutLinks).toBeGreaterThan(0);
+
+    // A link elsewhere in the namespace must not change what this costs.
+    // Resolution asks whether any link exists before doing any work, and an
+    // operation that resolves keeps the row it landed on rather than looking
+    // the same path up again.
+    fileSystem.symlink("/elsewhere", "/many");
+    meter.reset();
+    const linked = await shell.executeText({ script: "ls /many | wc -l" });
+    expect(linked.exitCode).toBe(0);
+    expect(linked.stdout).toBe("200\n");
+    expect(meter.statements).toBe(withoutLinks);
+
+    // Reading through the link costs a fixed amount more — one lookup per hop
+    // for each path `ls` resolves — and nothing that grows with the namespace.
+    // Doubling the directory must not change the count.
+    meter.reset();
+    expect((await shell.executeText({ script: "ls /elsewhere | wc -l" })).stdout).toBe("200\n");
+    const throughLink = meter.statements;
+    expect(throughLink).toBeGreaterThan(withoutLinks);
+    for (let index = 200; index < 400; index += 1) {
+      await fileSystem.writeFile(`/many/file-${index}`, "x");
+    }
+    meter.reset();
+    expect((await shell.executeText({ script: "ls /elsewhere | wc -l" })).stdout).toBe("400\n");
+    expect(meter.statements).toBe(throughLink);
+  });
+
   it("charges no storage work to applet resolution", async () => {
     const { fileSystem, meter } = meteredFileSystem();
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });

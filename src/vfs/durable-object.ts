@@ -33,6 +33,7 @@ import type {
   MetadataUpdateOptions,
   MoveOptions,
   MoveResult,
+  MutationTokenOptions,
   OpaqueFileStat,
   OpaqueReadLease,
   OpaqueUploadReservation,
@@ -82,8 +83,8 @@ export abstract class VfsDurableObject<Environment> extends DurableObject<Enviro
     return this.fileSystem.realpath(rpcString(path, "path"), rpcFollowOptions(options));
   }
 
-  getMutationToken(path: string): string {
-    return this.fileSystem.getMutationToken(rpcString(path, "path"));
+  getMutationToken(path: string, options?: MutationTokenOptions): string {
+    return this.fileSystem.getMutationToken(rpcString(path, "path"), rpcFollowOptions(options));
   }
 
   listPage(path: string, options?: PageOptions): EntryPage {

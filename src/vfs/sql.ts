@@ -41,6 +41,7 @@ import type {
   MetadataUpdateOptions,
   MoveOptions,
   MoveResult,
+  MutationTokenOptions,
   OpaqueFileStat,
   OpaqueObjectMetadata,
   OpaqueReadLease,
@@ -122,6 +123,18 @@ const ENTRIES_SCHEMA = `
  * it, and dropping it takes them along. Re-running one definition is what keeps
  * a migrated database enforcing exactly what a fresh one does.
  */
+/**
+ * The row-shape guards SQLite enforces rather than JavaScript.
+ *
+ * Recreated wholesale by the version-2 rebuild, because `ALTER TABLE ...
+ * RENAME` does two different things to them. The four attached to the entry
+ * table follow it to its temporary name and are dropped with it. The two
+ * attached to `vfs_opaque_objects` and `vfs_inline_chunks` survive — but
+ * SQLite rewrites their bodies to reference the renamed table, leaving them
+ * guarding a table that no longer exists. Dropping all six by name and
+ * reinstalling this one definition is what keeps a migrated database enforcing
+ * exactly what a fresh one does.
+ */
 const ENTRY_TRIGGERS = `
         CREATE TRIGGER vfs_opaque_entry_insert_guard
           BEFORE INSERT ON vfs_entries
@@ -135,19 +148,6 @@ const ENTRY_TRIGGERS = `
             SELECT 1 FROM vfs_opaque_objects WHERE id = NEW.opaque_object_id
           )
           BEGIN SELECT RAISE(ABORT, 'opaque object does not exist'); END;
-        CREATE TRIGGER vfs_opaque_object_delete_guard
-          BEFORE DELETE ON vfs_opaque_objects
-          WHEN EXISTS (
-            SELECT 1 FROM vfs_entries WHERE opaque_object_id = OLD.id
-          )
-          BEGIN SELECT RAISE(ABORT, 'opaque object is still referenced'); END;
-        CREATE TRIGGER vfs_inline_chunk_insert_guard
-          BEFORE INSERT ON vfs_inline_chunks
-          WHEN NOT EXISTS (
-            SELECT 1 FROM vfs_entries
-            WHERE id = NEW.entry_id AND content_class = 'inline'
-          )
-          BEGIN SELECT RAISE(ABORT, 'inline chunk has no inline entry'); END;
         CREATE TRIGGER vfs_inline_entry_delete_guard
           BEFORE DELETE ON vfs_entries
           WHEN EXISTS (
@@ -161,7 +161,27 @@ const ENTRY_TRIGGERS = `
               SELECT 1 FROM vfs_inline_chunks WHERE entry_id = OLD.id
             )
           BEGIN SELECT RAISE(ABORT, 'inline entry still has chunks'); END;
-`;
+        CREATE TRIGGER vfs_opaque_object_delete_guard
+          BEFORE DELETE ON vfs_opaque_objects
+          WHEN EXISTS (
+            SELECT 1 FROM vfs_entries WHERE opaque_object_id = OLD.id
+          )
+          BEGIN SELECT RAISE(ABORT, 'opaque object is still referenced'); END;
+        CREATE TRIGGER vfs_inline_chunk_insert_guard
+          BEFORE INSERT ON vfs_inline_chunks
+          WHEN NOT EXISTS (
+            SELECT 1 FROM vfs_entries
+            WHERE id = NEW.entry_id AND content_class = 'inline'
+          )
+          BEGIN SELECT RAISE(ABORT, 'inline chunk has no inline entry'); END;`;
+
+const DROP_ENTRY_TRIGGERS = `
+        DROP TRIGGER IF EXISTS vfs_opaque_entry_insert_guard;
+        DROP TRIGGER IF EXISTS vfs_opaque_entry_update_guard;
+        DROP TRIGGER IF EXISTS vfs_inline_entry_delete_guard;
+        DROP TRIGGER IF EXISTS vfs_inline_entry_update_guard;
+        DROP TRIGGER IF EXISTS vfs_opaque_object_delete_guard;
+        DROP TRIGGER IF EXISTS vfs_inline_chunk_insert_guard;`;
 
 const ENTRY_COLUMNS = `
   e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,
@@ -613,6 +633,7 @@ ${ENTRY_TRIGGERS}
         // database uses, so a migrated database and a new one cannot differ.
         if (currentVersion === 1) {
           this.storage.execBatch(`
+${DROP_ENTRY_TRIGGERS}
         ALTER TABLE vfs_entries RENAME TO vfs_entries_v1;
         DROP INDEX vfs_entries_path;
         DROP INDEX vfs_entries_parent_name;
@@ -722,23 +743,46 @@ ${ENTRY_TRIGGERS}
   private resolveEntry(
     input: string,
     follow: boolean,
-  ): { path: string; row: EntryRow | null; hops: number } {
+  ): { path: string; row: EntryRow | null; followed: string[] } {
     let path = input;
+    // The links crossed on the way, so a guard can cover the whole chain
+    // rather than only where it currently ends.
+    const followed: string[] = [];
     for (let hops = 0; hops <= MAX_SYMLINK_HOPS; hops += 1) {
       const row = this.oneEntry(path);
       if (row === null) {
-        if (this.links() === 0) return { path, row: null, hops };
+        if (this.links() === 0) return { path, row: null, followed };
         const ancestor = this.linkAncestor(path);
-        if (ancestor === null) return { path, row: null, hops };
+        if (ancestor === null) return { path, row: null, followed };
+        followed.push(ancestor.path);
         path = normalizePath(
           `${this.linkDestination(ancestor)}/${path.slice(ancestor.path.length)}`,
         );
         continue;
       }
-      if (row.kind !== "symlink" || !follow) return { path, row, hops };
+      if (row.kind !== "symlink" || !follow) return { path, row, followed };
+      followed.push(row.path);
       path = this.linkDestination(row);
     }
     throw new VfsError("ELOOP", "too many levels of symbolic links", input);
+  }
+
+  /**
+   * The token a guard is taken and checked against.
+   *
+   * A path that crosses a link means whatever the link currently says, so each
+   * link's own version is part of what the caller reserved. Without them,
+   * repointing a link between the read and the write is invisible whenever the
+   * old and new targets happen to share a version — the exact ABA the token
+   * exists to catch.
+   */
+  private guardToken(path: string): string {
+    const normalized = normalizePath(path);
+    if (this.links() === 0) return this.tokenFor(normalized);
+    const resolved = this.resolveEntry(normalized, true);
+    const base = this.tokenFor(resolved.path);
+    if (resolved.followed.length === 0) return base;
+    return [base, ...resolved.followed.map((link) => this.tokenFor(link))].join("|");
   }
 
   /**
@@ -752,15 +796,13 @@ ${ENTRY_TRIGGERS}
     const normalized = normalizePath(path);
     if (this.links() === 0) return normalized;
     const resolved = this.resolveEntry(normalized, options.follow !== false);
-    if (resolved.row !== null) return resolved.path;
-    // The final component is absent. Carry on from where resolution stopped
-    // rather than from the written path: a dangling link has already been
-    // followed by this point, and starting over would undo that and canonicalize
-    // the link to itself.
-    const parent = dirname(resolved.path);
-    if (parent === resolved.path) return resolved.path;
-    const canonicalParent = this.realpath(parent, options);
-    return normalizePath(`${canonicalParent}/${basename(resolved.path)}`);
+    // Already canonical, present or not: `resolveEntry` substitutes every link
+    // ancestor before it gives up, so an absent final component is reported
+    // under a path whose parents have all been resolved. Recursing on the
+    // parent to "finish the job" would redo that walk once per component, and
+    // the hop bound does not apply to depth — a four-thousand-byte path is
+    // legal and would cost seconds of uninterruptible CPU.
+    return resolved.path;
   }
 
   private oneResolved(path: string, follow = true): EntryRow | null {
@@ -773,14 +815,17 @@ ${ENTRY_TRIGGERS}
     return row;
   }
 
-  private requireDirectory(path: string): EntryRow {
-    const row = this.requireEntry(path);
+  private requireDirectory(path: string, resolved?: EntryRow | null): EntryRow {
+    // The row resolution already landed on, when the caller has it.
+    const row = resolved ?? this.requireEntry(path);
     if (row.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", path);
     return row;
   }
 
-  private requireInline(path: string): EntryRow {
-    const row = this.requireEntry(path);
+  private requireInline(path: string, resolved?: EntryRow | null): EntryRow {
+    // The row resolution already landed on, when the caller has it: looking it
+    // up again would resolve the same path a second time.
+    const row = resolved ?? this.requireEntry(path);
     if (row.kind === "directory") throw new VfsError("EISDIR", "is a directory", path);
     if (row.contentClass !== "inline") {
       throw new VfsError("ENOTSUP", "opaque R2 content is not available to shell commands", path);
@@ -798,26 +843,53 @@ ${ENTRY_TRIGGERS}
    * `followTerminal` is false for the operations that act on a link rather than
    * through it — `rm`, `mv`, `cp`, and `mkdir` name the link itself.
    */
+  /**
+   * Resolves a path to a canonical one and keeps the entry it landed on.
+   *
+   * Returning the row rather than only the path is what lets a caller act on a
+   * link it asked not to follow. Looking the path up again afterwards would
+   * resolve it a second time — with the follow flag lost — and a `rm` of a
+   * dangling or cyclic link would fail on the target that is not there.
+   *
+   * `followTerminal` is false for the operations that name a link rather than
+   * reach through it: `rm`, `mv`, `cp -P`, `mkdir`, and `ln -sf`.
+   */
+  private resolveAccess(
+    path: string,
+    allowMissingDirectory = false,
+    followTerminal = true,
+  ): { path: string; row: EntryRow | null } {
+    // A trailing slash asserts that the path names a directory, so the link is
+    // followed even when the caller asked not to follow one: `rm dirlink/` is
+    // a question about the directory, not about the link.
+    const requiresDirectory = pathRequiresDirectory(path);
+    const normalized = normalizePath(path);
+    // With no links there is nothing to resolve and no row to fetch, so this
+    // costs exactly what it did before links existed: nothing.
+    const resolved =
+      this.links() === 0
+        ? { path: normalized, row: null }
+        : this.resolveEntry(normalized, followTerminal || requiresDirectory);
+    if (requiresDirectory && resolved.row === null && resolved.path !== "/") {
+      resolved.row = this.oneEntry(resolved.path);
+    }
+    if (!requiresDirectory || resolved.path === "/") return resolved;
+    if (resolved.row === null) {
+      if (allowMissingDirectory) return resolved;
+      throw new VfsError("ENOENT", "no such directory", resolved.path);
+    }
+    if (resolved.row.kind !== "directory") {
+      throw new VfsError("ENOTDIR", "not a directory", resolved.path);
+    }
+    return resolved;
+  }
+
   private normalizeAccessPath(
     path: string,
     allowMissingDirectory = false,
     followTerminal = true,
   ): string {
-    // A trailing slash asserts that the path names a directory, so the link is
-    // followed even when the caller asked not to follow one: `rm dirlink/` is
-    // a question about the directory, not about the link.
-    const requiresDirectory = pathRequiresDirectory(path);
-    const normalized = this.realpath(normalizePath(path), {
-      follow: followTerminal || requiresDirectory,
-    });
-    if (!requiresDirectory || normalized === "/") return normalized;
-    const entry = this.oneEntry(normalized);
-    if (entry === null) {
-      if (allowMissingDirectory) return normalized;
-      throw new VfsError("ENOENT", "no such directory", normalized);
-    }
-    if (entry.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", normalized);
-    return normalized;
+    return this.resolveAccess(path, allowMissingDirectory, followTerminal).path;
   }
 
   private tokenFor(path: string): string {
@@ -852,11 +924,17 @@ ${ENTRY_TRIGGERS}
     path: string,
     entry: EntryRow | null,
     guard: { ifRevision?: number; ifMutationToken?: string },
+    written?: string,
   ): void {
     if (guard.ifRevision !== undefined && entry?.revision !== guard.ifRevision) {
       throw new VfsError("EREVISION", "file revision does not match", path);
     }
-    if (guard.ifMutationToken !== undefined && this.tokenFor(path) !== guard.ifMutationToken) {
+    if (guard.ifMutationToken === undefined) return;
+    // Checked against the path the caller named, not the one it resolved to,
+    // so the token covers every link crossed on the way. `getMutationToken`
+    // composes it the same way from the same written path.
+    const current = written === undefined ? this.tokenFor(path) : this.guardToken(written);
+    if (current !== guard.ifMutationToken) {
       throw new VfsError("EREVISION", "path mutation token does not match", path);
     }
   }
@@ -1126,13 +1204,21 @@ ${ENTRY_TRIGGERS}
     };
   }
 
-  getMutationToken(path: string): string {
-    return this.transaction(() => this.tokenFor(normalizePath(path)));
+  getMutationToken(path: string, options: MutationTokenOptions = {}): string {
+    // Resolved by default, so the token belongs to the row the matching write
+    // would guard. Reading it from the written path would return the link's
+    // version and never match the target's.
+    return this.transaction(() =>
+      options.follow === false
+        ? this.tokenFor(this.normalizeAccessPath(path, true, false))
+        : this.guardToken(path),
+    );
   }
 
   list(path: string): VfsStat[] {
-    const normalized = this.normalizeAccessPath(path);
-    this.requireDirectory(normalized);
+    const access = this.resolveAccess(path);
+    const normalized = access.path;
+    this.requireDirectory(normalized, access.row);
     return this.rows(
       `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e INDEXED BY vfs_entries_parent_name
@@ -1144,8 +1230,9 @@ ${ENTRY_TRIGGERS}
   }
 
   listPage(path: string, options: PageOptions = {}): EntryPage {
-    const normalized = this.normalizeAccessPath(path);
-    this.requireDirectory(normalized);
+    const access = this.resolveAccess(path);
+    const normalized = access.path;
+    this.requireDirectory(normalized, access.row);
     const limit = options.limit ?? 1000;
     validatePositiveInteger(limit, "limit");
     const rows = this.rows(
@@ -1230,14 +1317,19 @@ ${ENTRY_TRIGGERS}
   }
 
   countSubtree(path: string): number {
-    const normalized = this.normalizeAccessPath(path);
-    this.requireEntry(normalized);
-    return this.subtreeSummary(normalized).entries;
+    // A link names one entry and has no subtree, so the count does not follow
+    // it. The callers are budget accounting for `rm`, `mv`, and `cp`, all of
+    // which act on the link; following would also make a dangling one throw.
+    const access = this.resolveAccess(path, false, false);
+    const entry = access.row ?? this.requireEntry(access.path, false);
+    if (entry.kind === "symlink") return 1;
+    return this.subtreeSummary(access.path).entries;
   }
 
   readFile(path: string): InlineReadResult {
-    const normalized = this.normalizeAccessPath(path);
-    const entry = this.requireInline(normalized);
+    const access = this.resolveAccess(path);
+    const normalized = access.path;
+    const entry = this.requireInline(normalized, access.row);
     const chunks = this.sql
       .exec<SqlRow>(
         `SELECT body FROM vfs_inline_chunks
@@ -1376,7 +1468,7 @@ ${ENTRY_TRIGGERS}
       throw new VfsError("ENOENT", "no such file", normalized);
     }
     if (before?.kind === "directory") throw new VfsError("EISDIR", "is a directory", normalized);
-    this.validateGuard(normalized, before, options);
+    this.validateGuard(normalized, before, options, path);
     const capturedToken = this.tokenFor(normalized);
     const buffered = await this.collectInline(body);
 
@@ -1388,7 +1480,7 @@ ${ENTRY_TRIGGERS}
         if (this.tokenFor(normalized) !== capturedToken) {
           throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
         }
-        this.validateGuard(normalized, current, options);
+        this.validateGuard(normalized, current, options, path);
         if (current?.kind === "directory")
           throw new VfsError("EISDIR", "is a directory", normalized);
         const previousInlineBytes = current?.contentClass === "inline" ? current.sizeBytes : 0;
@@ -1458,7 +1550,7 @@ ${ENTRY_TRIGGERS}
   ): Promise<WriteResult> {
     const normalized = this.normalizeAccessPath(path);
     const before = this.requireInline(normalized);
-    this.validateGuard(normalized, before, options);
+    this.validateGuard(normalized, before, options, path);
     const capturedToken = before.mutationToken;
     const buffered = await this.collectInline(body);
     return this.useBuffered(buffered, (suffixChunks) => {
@@ -1468,7 +1560,7 @@ ${ENTRY_TRIGGERS}
         if (current.mutationToken !== capturedToken) {
           throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
         }
-        this.validateGuard(normalized, current, options);
+        this.validateGuard(normalized, current, options, path);
         if (suffixBytes === 0) {
           return {
             path: normalized,
@@ -1709,11 +1801,14 @@ ${ENTRY_TRIGGERS}
   async remove(path: string, options: RemoveOptions = {}): Promise<RemoveResult> {
     // `rm link` removes the link. Following it would delete the target and
     // leave the link behind, which is the opposite of what was asked.
-    const normalized = this.normalizeAccessPath(path, false, false);
+    const access = this.resolveAccess(path, false, false);
+    const normalized = access.path;
     if (normalized === "/") throw new VfsError("EINVAL", "cannot remove root", normalized);
     let queued = 0;
     const result = this.transaction(() => {
-      const root = this.requireEntry(normalized);
+      // The row resolution already landed on, so a link whose target is
+      // missing or cyclic is still removable — it is the link being removed.
+      const root = access.row ?? this.requireEntry(normalized, false);
       const range = descendantRange(normalized);
       const hasDescendants = firstRow(
         this.sql.exec<SqlRow>(
@@ -1809,7 +1904,8 @@ ${ENTRY_TRIGGERS}
 
   async move(from: string, to: string, options: MoveOptions = {}): Promise<MoveResult> {
     // Both ends name the link itself: renaming a link moves the link.
-    const source = this.normalizeAccessPath(from, false, false);
+    const sourceAccess = this.resolveAccess(from, false, false);
+    const source = sourceAccess.path;
     const target = this.normalizeAccessPath(to, true, false);
     if (source === "/") throw new VfsError("EINVAL", "cannot move root", source);
     if (source === target) return { from: source, to: target, moved: 1, replaced: false };
@@ -1818,7 +1914,7 @@ ${ENTRY_TRIGGERS}
     }
     let queued = 0;
     const result = this.transaction(() => {
-      const sourceEntry = this.requireEntry(source);
+      const sourceEntry = sourceAccess.row ?? this.requireEntry(source, false);
       this.requireDirectory(dirname(target));
       const destination = this.oneEntry(target);
       if (destination !== null && !(options.replace ?? false)) {
@@ -1834,7 +1930,14 @@ ${ENTRY_TRIGGERS}
         if (children !== undefined)
           throw new VfsError("ENOTEMPTY", "directory is not empty", target);
       }
-      if (destination !== null && destination.kind !== sourceEntry.kind) {
+      // A directory and a non-directory cannot replace each other. A link can
+      // be replaced by anything and can replace anything that is not a
+      // directory, because it is one entry holding text — `mv file link`
+      // replaces the link, as it does elsewhere.
+      const directoryMismatch =
+        destination !== null &&
+        (destination.kind === "directory") !== (sourceEntry.kind === "directory");
+      if (directoryMismatch && destination !== null) {
         throw new VfsError(
           destination.kind === "directory" ? "EISDIR" : "ENOTDIR",
           "source and destination kinds differ",
@@ -1886,14 +1989,15 @@ ${ENTRY_TRIGGERS}
     // would turn one entry into a second copy of a possibly enormous file, and
     // a recursive copy would do that for every link in the subtree. Only the
     // named source can be dereferenced, and only when asked.
-    const source = this.normalizeAccessPath(from, false, options.dereference ?? false);
+    const sourceAccess = this.resolveAccess(from, false, options.dereference ?? false);
+    const source = sourceAccess.path;
     const target = this.normalizeAccessPath(to, true, false);
     if (source === target) {
       throw new VfsError("EINVAL", "source and destination are the same path", target);
     }
     let queued = 0;
     const result = this.transaction(() => {
-      const sourceEntry = this.requireEntry(source);
+      const sourceEntry = sourceAccess.row ?? this.requireEntry(source, false);
       if (sourceEntry.kind === "directory" && !(options.recursive ?? false)) {
         throw new VfsError("EISDIR", "recursive copy is required for directories", source);
       }

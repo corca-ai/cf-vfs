@@ -1,5 +1,5 @@
 import { VfsError } from "../core/errors.js";
-import { compareUtf8, dirname, normalizePath } from "../core/path.js";
+import { compareUtf8, normalizePath } from "../core/path.js";
 import { codePointLength } from "../core/unicode.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 import { ShellNounsetError } from "./errors.js";
@@ -130,15 +130,27 @@ async function glob(
   const absolutePattern = normalizePath(pattern, session.cwd);
   const firstMeta = firstGlobMeta(absolutePattern);
   const escapedPrefix = firstMeta < 0 ? absolutePattern : absolutePattern.slice(0, firstMeta);
-  const prefix = unescapeGlob(escapedPrefix);
-  const prefixPath = prefix.endsWith("/") && prefix !== "/" ? prefix.slice(0, -1) : prefix;
-  let root = dirname(prefixPath);
-  try {
-    const prefixStat = fileSystem.stat(prefix);
-    if (prefixStat.kind === "directory") root = prefix;
-  } catch {
-    // A non-wildcard prefix may end in a partial filename.
-  }
+  // The last separator before the first wildcard, measured in the escaped
+  // pattern so the two stay in step when the prefix contains an escape. It has
+  // to be a separator rather than wherever the literal prefix happens to end:
+  // `/g/.*` has the literal prefix `/g/.`, which normalizes to a directory but
+  // is not a component boundary, and splitting there would drop the dot.
+  const rootEnd = Math.max(escapedPrefix.lastIndexOf("/"), 0);
+  const writtenRoot = rootEnd === 0 ? "/" : unescapeGlob(absolutePattern.slice(0, rootEnd));
+  // The rows are stored under canonical paths, so the pattern has to be asked
+  // in canonical terms — otherwise a pattern under a link, or any pattern at
+  // all from a working directory reached through one, matches nothing.
+  const root = fileSystem.realpath(writtenRoot);
+  const suffix = absolutePattern.slice(rootEnd);
+  const canonicalPattern = root === "/" ? suffix || "/" : `${root}${suffix}`;
+  // Results come back canonical and are reported the way they were asked for,
+  // so a link stays visible in the expansion instead of being replaced by what
+  // it points at.
+  const written = (path: string): string => {
+    if (root === writtenRoot) return path;
+    const tail = root === "/" ? path : path.slice(root.length);
+    return writtenRoot === "/" ? tail : `${writtenRoot}${tail}`;
+  };
   const matches: string[] = [];
   let cursor: string | undefined;
   try {
@@ -147,13 +159,13 @@ async function glob(
       const page = fileSystem.findPage({
         path: root,
         includeRoot: false,
-        pathGlob: absolutePattern,
+        pathGlob: canonicalPattern,
         ...(cursor === undefined ? {} : { cursor }),
         limit: Math.min(1000, remaining + 1),
       });
       budget.step(page.scanned);
       for (const entry of page.entries) {
-        if (!containsDotSegment(absolutePattern, entry.path)) matches.push(entry.path);
+        if (!containsDotSegment(canonicalPattern, entry.path)) matches.push(written(entry.path));
       }
       if (matches.length > budget.limits.maxGlobMatches) break;
       cursor = page.nextCursor ?? undefined;

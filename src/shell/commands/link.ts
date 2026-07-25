@@ -1,29 +1,28 @@
 import { VfsError } from "../../core/errors.js";
+import { dirname } from "../../core/path.js";
 import {
   type AppletSpecWithOptions,
   appletUsageError,
   defineApplet,
   parseAppletOptions,
 } from "./applet.js";
-import { commandPath, writeText } from "./helpers.js";
+import { commandPath, destinationPath, writeText } from "./helpers.js";
 
 const LN = {
   name: "ln",
-  usage: "-s TARGET LINK",
+  usage: "-s [-f] TARGET LINK",
   summary: "creates a symbolic link",
   options: {
     short: {
       s: { name: "symbolic" },
       f: { name: "force" },
-      n: { name: "no-dereference" },
     },
     long: {
       symbolic: { name: "symbolic" },
       force: { name: "force" },
-      "no-dereference": { name: "no-dereference" },
     },
   },
-} as const satisfies AppletSpecWithOptions<"symbolic" | "force" | "no-dereference">;
+} as const satisfies AppletSpecWithOptions<"symbolic" | "force">;
 
 const READLINK = {
   name: "readlink",
@@ -46,6 +45,11 @@ const READLINK = {
  * The target is stored exactly as given. It is not resolved, not required to
  * exist, and not rewritten to an absolute path — a relative target is what
  * makes a tree relocatable, and resolving it here would silently destroy that.
+ *
+ * `-n` is absent rather than accepted and ignored: this profile never
+ * dereferences an existing link at the destination, so the behaviour GNU's
+ * `-n` selects is the only behaviour there is, and an option that changes
+ * nothing reads as one that does.
  */
 export const lnCommand = /* @__PURE__ */ defineApplet(LN, async (context, argv) => {
   const parsed = parseAppletOptions(LN, argv);
@@ -61,7 +65,9 @@ export const lnCommand = /* @__PURE__ */ defineApplet(LN, async (context, argv) 
   // target's own basename, as GNU does.
   const linkName = name ?? target.split("/").pop() ?? "";
   if (linkName === "") throw appletUsageError(LN, "requires a link name");
-  const path = commandPath(context, linkName);
+  // An existing directory as the destination means "inside it", the way `mv`
+  // and `cp` read the same operand.
+  const path = destinationPath(context, target, linkName);
   context.budget.mutation();
   context.fileSystem.symlink(path, target, { replace: has("force") });
   return 0;
@@ -89,14 +95,24 @@ export const readlinkCommand = /* @__PURE__ */ defineApplet(
       const path = commandPath(context, operand);
       context.budget.step();
       try {
-        const value = canonicalize
-          ? context.fileSystem.realpath(path)
-          : context.fileSystem.readlink(path);
+        let value: string;
+        if (canonicalize) {
+          // Only the final component may be absent. GNU refuses a missing
+          // parent, and so must this, or `readlink -f` would happily echo back
+          // a path that could never exist.
+          context.fileSystem.stat(dirname(path));
+          value = context.fileSystem.realpath(path);
+        } else {
+          value = context.fileSystem.readlink(path);
+        }
         await writeText(fds[1], `${value}\n`);
       } catch (error) {
         // A path that is not a link, or is not there, is reported by the status
         // alone. GNU prints nothing here either.
-        if (error instanceof VfsError && (error.code === "EINVAL" || error.code === "ENOENT")) {
+        if (
+          error instanceof VfsError &&
+          (error.code === "EINVAL" || error.code === "ENOENT" || error.code === "ENOTDIR")
+        ) {
           failed = true;
           continue;
         }

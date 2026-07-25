@@ -1,6 +1,6 @@
 import { VfsError } from "../../core/errors.js";
 import { splitLinesPreservingEndings } from "../../core/lines.js";
-import { normalizePath } from "../../core/path.js";
+import { basename, normalizePath } from "../../core/path.js";
 import type { EntryPage, InlineReadResult } from "../../vfs/types.js";
 import type { ShellCommandContext, ShellSink } from "../types.js";
 
@@ -143,12 +143,16 @@ export async function* recursiveInputs(
       yield { name: path, stream: context.fileSystem.readFile(normalized).stream };
       continue;
     }
-    const display = (entry: string): string => displayPath(path, normalized, entry);
+    // The walk returns canonical paths, so the prefix being replaced has to be
+    // the canonical root: slicing by the written one eats a separator when a
+    // link's name is longer than what it points at.
+    const root = context.fileSystem.realpath(normalized);
+    const display = (entry: string): string => displayPath(path, root, entry);
     let cursor: string | null = null;
     do {
       context.budget.step();
       const page: EntryPage = context.fileSystem.findPage({
-        path: normalized,
+        path: root,
         type: "file",
         ...(cursor === null ? {} : { cursor }),
       });
@@ -183,6 +187,24 @@ export async function* recursiveInputs(
  * absolute path it resolved to, because that is what the caller named and what
  * every other tool prints.
  */
+/**
+ * Where an operand that may name a directory actually writes.
+ *
+ * `mv a b`, `cp a b`, and `ln -s a b` all mean "inside b" when b is an
+ * existing directory, and "at b" otherwise. Deciding that once keeps the three
+ * from drifting apart.
+ */
+export function destinationPath(
+  context: ShellCommandContext,
+  source: string,
+  targetValue: string,
+): string {
+  const target = commandPath(context, targetValue);
+  const stat = context.fileSystem.inspectWriteTarget(target);
+  if (stat === null) return target;
+  return stat.kind === "directory" ? `${target === "/" ? "" : target}/${basename(source)}` : target;
+}
+
 export function displayPath(operand: string, resolved: string, entry: string): string {
   if (entry === resolved) return operand;
   const suffix = resolved === "/" ? entry : entry.slice(resolved.length);

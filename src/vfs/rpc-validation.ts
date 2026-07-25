@@ -25,6 +25,7 @@ interface UnknownRecord extends Readonly<Record<string, unknown>> {
   readonly pathGlob?: unknown;
   readonly type?: unknown;
   readonly createParents?: unknown;
+  readonly dereference?: unknown;
   readonly follow?: unknown;
   readonly disposition?: unknown;
   readonly ifRevision?: unknown;
@@ -123,8 +124,8 @@ export function rpcFindOptions(value: unknown): FindOptions {
     "options",
   );
   const type = optionalString(input.type, "options.type");
-  if (type !== undefined && type !== "file" && type !== "directory") {
-    throw new VfsError("EINVAL", "options.type must be file or directory");
+  if (type !== undefined && type !== "file" && type !== "directory" && type !== "symlink") {
+    throw new VfsError("EINVAL", "options.type must be file, directory, or symlink");
   }
   return {
     path: rpcString(input.path, "options.path"),
@@ -190,9 +191,9 @@ export function rpcSymlinkOptions(value: unknown): SymlinkOptions | undefined {
   keys(input, ["createParents", "ifMutationToken", "replace"], "options");
   const createParents = optionalBoolean(input.createParents, "options.createParents");
   const replace = optionalBoolean(input.replace, "options.replace");
-  const guard = guardOptions(input);
+  const ifMutationToken = optionalString(input.ifMutationToken, "options.ifMutationToken");
   return {
-    ...(guard.ifMutationToken === undefined ? {} : { ifMutationToken: guard.ifMutationToken }),
+    ...(ifMutationToken === undefined ? {} : { ifMutationToken }),
     ...(createParents === undefined ? {} : { createParents }),
     ...(replace === undefined ? {} : { replace }),
   };
@@ -247,14 +248,16 @@ export function rpcMoveOptions(value: unknown): MoveOptions | undefined {
 export function rpcCopyOptions(value: unknown): CopyOptions | undefined {
   if (value === undefined) return undefined;
   const input = record(value, "options");
-  keys(input, ["replace", "recursive", "createParents"], "options");
+  keys(input, ["replace", "recursive", "createParents", "dereference"], "options");
   const replace = optionalBoolean(input.replace, "options.replace");
   const recursive = optionalBoolean(input.recursive, "options.recursive");
   const createParents = optionalBoolean(input.createParents, "options.createParents");
+  const dereference = optionalBoolean(input.dereference, "options.dereference");
   return {
     ...(replace === undefined ? {} : { replace }),
     ...(recursive === undefined ? {} : { recursive }),
     ...(createParents === undefined ? {} : { createParents }),
+    ...(dereference === undefined ? {} : { dereference }),
   };
 }
 

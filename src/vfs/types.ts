@@ -227,8 +227,20 @@ export interface SymlinkOptions {
   replace?: boolean;
 }
 
+export interface MutationTokenOptions {
+  /**
+   * Reads the token of the link itself rather than of what it points at.
+   *
+   * The default follows, so a token pairs with the write that would use it:
+   * `writeFile` resolves the path, and a guard read from the unresolved one
+   * would be a version of a different row and never match. Pass `false` when
+   * the guarded change is to the link — replacing it with `symlink`.
+   */
+  follow?: boolean;
+}
+
 export interface VirtualFileSystem {
-  getMutationToken(path: string): string;
+  getMutationToken(path: string, options?: MutationTokenOptions): string;
   /** Resolves symbolic links in every component, as `stat(2)` does. */
   stat(path: string): VfsStat;
   /**

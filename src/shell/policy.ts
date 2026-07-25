@@ -11,6 +11,7 @@ import type {
   MetadataUpdateOptions,
   MoveOptions,
   MoveResult,
+  MutationTokenOptions,
   PageOptions,
   RemoveOptions,
   RemoveResult,
@@ -73,25 +74,50 @@ export class ScopedFileSystem implements ShellFileSystem {
    * every entry in a readable directory. Everything on the way to the link is
    * still resolved, so an escaping directory link cannot be used to reach one.
    */
-  private readLink(path: string): void {
-    const resolved = this.#resolved(path, false);
-    if (!allowed(path, this.#policy.readRoots) || !allowed(resolved, this.#policy.readRoots)) {
-      throw new VfsError("EACCES", "path is outside the readable roots", normalizePath(path));
+  /**
+   * Checks one set of roots against both the written and the resolved path.
+   *
+   * Resolving costs a lookup, so it is skipped entirely when the session
+   * declares no roots — there is nothing to be outside of, and that is the
+   * common case. When roots do exist the resolved form is the one that
+   * decides, because a link inside a root can name anything at all.
+   */
+  #check(
+    path: string,
+    roots: readonly string[] | undefined,
+    detail: string,
+    follow: boolean,
+  ): void {
+    if (roots === undefined) return;
+    if (!allowed(path, roots) || !allowed(this.#resolved(path, follow), roots)) {
+      throw new VfsError("EACCES", detail, normalizePath(path));
     }
+  }
+
+  /**
+   * Checks an operation that acts on a link rather than through it.
+   *
+   * `lstat` and `readlink` answer questions about the link itself, so the
+   * check is about where the link lives, not where it points — refusing them
+   * would be inconsistent with `ls -l`, which shows the same target text for
+   * every entry in a readable directory. Everything on the way to the link is
+   * still resolved, so an escaping directory link cannot be used to reach one.
+   */
+  private readLink(path: string): void {
+    this.#check(path, this.#policy.readRoots, "path is outside the readable roots", false);
   }
 
   private read(path: string): void {
-    const resolved = this.#resolved(path);
-    if (!allowed(path, this.#policy.readRoots) || !allowed(resolved, this.#policy.readRoots)) {
-      throw new VfsError("EACCES", "path is outside the readable roots", normalizePath(path));
-    }
+    this.#check(path, this.#policy.readRoots, "path is outside the readable roots", true);
   }
 
   private write(path: string): void {
-    const resolved = this.#resolved(path);
-    if (!allowed(path, this.#policy.writeRoots) || !allowed(resolved, this.#policy.writeRoots)) {
-      throw new VfsError("EACCES", "path is outside the writable roots", normalizePath(path));
-    }
+    this.#check(path, this.#policy.writeRoots, "path is outside the writable roots", true);
+  }
+
+  /** Checks an operation that names a link: `rm`, `mv`, and `cp -P`. */
+  private writeLink(path: string): void {
+    this.#check(path, this.#policy.writeRoots, "path is outside the writable roots", false);
   }
 
   private missingDirectoryCount(path: string, recursive: boolean): number {
@@ -113,14 +139,16 @@ export class ScopedFileSystem implements ShellFileSystem {
     return missing;
   }
 
-  getMutationToken(path: string) {
-    const resolved = this.#resolved(path);
-    const scoped = (candidate: string): boolean =>
-      allowed(candidate, this.#policy.readRoots) || allowed(candidate, this.#policy.writeRoots);
-    if (!scoped(path) || !scoped(resolved)) {
-      throw new VfsError("EACCES", "path is outside the scoped roots", normalizePath(path));
+  getMutationToken(path: string, options?: MutationTokenOptions) {
+    const { readRoots, writeRoots } = this.#policy;
+    if (readRoots !== undefined || writeRoots !== undefined) {
+      const scoped = (candidate: string): boolean =>
+        allowed(candidate, readRoots) || allowed(candidate, writeRoots);
+      if (!scoped(path) || !scoped(this.#resolved(path, options?.follow !== false))) {
+        throw new VfsError("EACCES", "path is outside the scoped roots", normalizePath(path));
+      }
     }
-    return this.#inner.getMutationToken(path);
+    return this.#inner.getMutationToken(path, options);
   }
 
   lstat(path: string) {
@@ -226,22 +254,28 @@ export class ScopedFileSystem implements ShellFileSystem {
   }
 
   remove(path: string, options?: RemoveOptions): Promise<RemoveResult> {
-    this.write(path);
+    // Names the link, so the check is about where the link lives. Checking
+    // where it points would make a link out of the roots impossible to delete
+    // once created, which is a dead end rather than a protection.
+    this.writeLink(path);
     const count = options?.recursive === true ? this.#inner.countSubtree(path) : 1;
     this.#budget.mutation(Math.max(1, count));
     return this.#inner.remove(path, options);
   }
 
   move(from: string, to: string, options?: MoveOptions): Promise<MoveResult> {
-    this.write(from);
-    this.write(to);
+    this.writeLink(from);
+    this.writeLink(to);
     this.#budget.mutation(Math.max(1, this.#inner.countSubtree(from)));
     return this.#inner.move(from, to, options);
   }
 
   copy(from: string, to: string, options?: CopyOptions): Promise<CopyResult> {
-    this.read(from);
-    this.write(to);
+    // A copy that dereferences reads through the link, so it is checked
+    // against what it reaches; one that copies the link only copies its text.
+    if (options?.dereference === true) this.read(from);
+    else this.readLink(from);
+    this.writeLink(to);
     this.#budget.mutation(Math.max(1, this.#inner.countSubtree(from)));
     return this.#inner.copy(from, to, options);
   }

@@ -10,7 +10,14 @@ import {
   parseAppletOptions,
 } from "./applet.js";
 import { modeString } from "./format.js";
-import { BufferedTextWriter, commandPath, displayPath, pipeToSink, writeText } from "./helpers.js";
+import {
+  BufferedTextWriter,
+  commandPath,
+  destinationPath,
+  displayPath,
+  pipeToSink,
+  writeText,
+} from "./helpers.js";
 
 /** Paths one `-exec ... +` invocation may carry. */
 const FIND_EXEC_BATCH = 256;
@@ -282,17 +289,6 @@ export const rmdirCommand = /* @__PURE__ */ defineApplet(RMDIR, async (context, 
   return 0;
 });
 
-function destinationPath(
-  context: Parameters<typeof commandPath>[0],
-  source: string,
-  targetValue: string,
-): string {
-  const target = commandPath(context, targetValue);
-  const stat = context.fileSystem.inspectWriteTarget(target);
-  if (stat === null) return target;
-  return stat.kind === "directory" ? `${target === "/" ? "" : target}/${basename(source)}` : target;
-}
-
 export const mvCommand = /* @__PURE__ */ defineApplet(MV, async (context, argv) => {
   const parsed = parseAppletOptions(MV, argv);
   const replace = parsed.options.some((option) => option.name === "force");
@@ -317,14 +313,22 @@ export const cpCommand = /* @__PURE__ */ defineApplet(CP, async (context, argv) 
   // A named link is copied through, as GNU does; `-r` and `-P` copy the link
   // itself, because a subtree full of dereferenced links is a different tree.
   const dereference = !recursive && !noDereference;
-  const preserved = preserve ? context.fileSystem.lstat(source) : undefined;
+  // The metadata of what was copied, which is the target when the copy
+  // followed the link and the link itself when it did not.
+  const preserved = preserve
+    ? dereference
+      ? context.fileSystem.stat(source)
+      : context.fileSystem.lstat(source)
+    : undefined;
   await context.fileSystem.copy(source, target, { replace, recursive, dereference });
   // Mode bits and the modification time are what this namespace has to
   // preserve; there is no owner, group, or access time behind them. A copy
   // carries each entry's own bits already but stamps every entry with the
   // current time, so the named target is restated here. Descendants of a
   // recursive copy keep the copy's time, which is a declared divergence.
-  if (preserved !== undefined) {
+  // A copied link is skipped: its mode is fixed, and `setMetadata` follows, so
+  // restating it would stamp whatever it points at instead.
+  if (preserved !== undefined && preserved.kind !== "symlink") {
     context.fileSystem.setMetadata(target, {
       mode: preserved.mode,
       modifiedAtMs: preserved.modifiedAtMs,

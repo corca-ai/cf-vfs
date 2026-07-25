@@ -165,6 +165,27 @@
       "oracle": "coreutils",
       "summary": "a link may name any path, including one outside the shell's roots; the refusal happens when it is followed",
       "reason": "Checking the target at creation would freeze the policy that was in force when the link was made, and a link is text rather than an access. Every read and write resolves the path first and checks the roots against what it resolved to, so a link out of the roots is created happily and refused with EACCES the moment anything follows it."
+    },
+    {
+      "id": "glob-does-not-cross-a-link-matched-by-a-wildcard",
+      "command": "glob",
+      "oracle": "bash",
+      "summary": "a pattern whose literal prefix is a link expands normally, but a wildcard that would match a link name does not expand through it: `/li*/a.txt` finds nothing where `/link/a.txt` does",
+      "reason": "A pattern is answered with one indexed range query against canonical paths, after canonicalizing the literal prefix. Expanding a wildcard through a link would mean globbing component by component and resolving each match before continuing, which turns one query into one per component per candidate \u2014 unbounded work for a pattern that is one character longer. The common forms (`/link/*`, and any pattern from a working directory reached through a link) resolve correctly."
+    },
+    {
+      "id": "a-trailing-slash-is-not-an-assertion-about-the-path",
+      "command": "cat, rm, find",
+      "oracle": "coreutils",
+      "summary": "a trailing slash is normalized away by the shell, so `cat filelink/` reads the file and `rm -r dirlink/` removes the link",
+      "reason": "Paths are canonical Unicode strings normalized once at the shell boundary, before any command sees them, which is what makes path handling uniform across every utility. The filesystem does honour a trailing slash \u2014 `stat` and the conditional predicates take the unnormalized form \u2014 but a command operand has already lost it. Making every operand carry the distinction would push path syntax into each utility rather than keeping it in one place."
+    },
+    {
+      "id": "dot-dot-is-collapsed-before-a-link-is-followed",
+      "command": "cd, realpath, cat",
+      "oracle": "coreutils",
+      "summary": "`link/..` names the directory holding the link, not the parent of what it points at",
+      "reason": "Paths are normalized once, at the boundary, before anything is looked up \u2014 that is what makes `..` mean the same thing to every utility and keeps path handling out of each one. Resolving `..` against the target instead would mean interleaving normalization with lookups, so a path's meaning would depend on what happened to exist while it was being read. Bash's own `cd -L` behaves this way for the same reason."
     }
   ],
   "cases": [

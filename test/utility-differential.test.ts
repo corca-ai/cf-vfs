@@ -79,6 +79,37 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     // The named target keeps its mode; a descendant's timestamp is the copy's.
     expect(result.stdout).toBe("604\n");
   },
+  "glob-does-not-cross-a-link-matched-by-a-wildcard": async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/dir/a.txt", "1\n", { createParents: true });
+    await harness.fileSystem.writeFile("/dir/b.txt", "2\n");
+    harness.fileSystem.symlink("/link", "/dir");
+    // The forms that matter resolve: a literal prefix through a link, and any
+    // pattern from a working directory reached through one.
+    expect((await harness.run("echo /link/*")).stdout).toBe("/link/a.txt /link/b.txt\n");
+    expect((await harness.run("cd /link; echo *")).stdout).toBe("a.txt b.txt\n");
+    // A wildcard that would have to match the link's own name does not.
+    expect((await harness.run("echo /li*/a.txt")).stdout).toBe("/li*/a.txt\n");
+  },
+  "a-trailing-slash-is-not-an-assertion-about-the-path": async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/real.txt", "body\n");
+    harness.fileSystem.symlink("/filelink", "/real.txt");
+    // GNU refuses this with ENOTDIR; the slash is gone before `cat` sees it.
+    expect((await harness.run("cat /filelink/")).stdout).toBe("body\n");
+    // The filesystem itself does honour the distinction.
+    expect(() => harness.fileSystem.stat("/filelink/")).toThrowError(/not a directory/u);
+  },
+  "dot-dot-is-collapsed-before-a-link-is-followed": async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/x/y/here.txt", "near\n", { createParents: true });
+    await harness.fileSystem.writeFile("/deep.txt", "far\n");
+    harness.fileSystem.symlink("/x/y/l", "/");
+    // GNU resolves `..` against `/`, reaching nothing; here it cancels the
+    // link lexically and names `/x/y`.
+    expect(harness.fileSystem.realpath("/x/y/l/..")).toBe("/x/y");
+    expect((await harness.run("cat /x/y/l/../here.txt")).stdout).toBe("near\n");
+  },
   "hard-links-are-not-supported": async () => {
     const harness = createBashHarness();
     await harness.fileSystem.writeFile("/real.txt", "x\n");
