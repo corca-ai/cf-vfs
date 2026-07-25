@@ -1,5 +1,6 @@
 import { VfsError } from "../core/errors.js";
 import { DEFAULT_SHELL_LIMITS } from "./budget.js";
+import { type CompletionLimits, type CompletionResult, completeShellLine } from "./completion.js";
 import { isIncompleteShellSyntaxError, parseShellScript } from "./parser.js";
 import { createShellSession, prepareShellSessionUnit } from "./session.js";
 import { Shell } from "./shell.js";
@@ -72,6 +73,40 @@ export class InteractiveShell extends Shell {
 
   get isClosed(): boolean {
     return this.closed;
+  }
+
+  /**
+   * Offers what could come next at the cursor of a partly typed line.
+   *
+   * Runs against this session's working directory and environment, so a
+   * completion reflects where the user actually is. The registry is the one
+   * this shell was built with — completion never widens it.
+   *
+   * Bounded by construction: candidates returned, namespace entries examined,
+   * and the length of a word worth working on all have caps, and the result
+   * says what it scanned and whether a cap stopped it.
+   */
+  complete(line: string, cursor: number, limits?: Partial<CompletionLimits>): CompletionResult {
+    const source = this.completionSource(this.session);
+    return completeShellLine(line, cursor, {
+      commands: source.commands,
+      appletDirectories: source.appletDirectories,
+      fileSystem: source.fileSystem,
+      cwd: this.session.cwd,
+      env: Object.fromEntries(this.session.env),
+      ...(limits === undefined ? {} : { limits }),
+    });
+  }
+
+  /**
+   * Sets one variable in this session's environment.
+   *
+   * For values a host learns after the session started and a script can only
+   * read as a variable — `COLUMNS` and `LINES` are the reason this exists.
+   * Nothing here implies a terminal: it is one string a script may read.
+   */
+  setEnv(name: string, value: string): void {
+    this.session.env.set(name, value);
   }
 
   snapshot(): InteractiveShellSnapshot {
