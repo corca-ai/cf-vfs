@@ -50,6 +50,9 @@ const DEVICE_MODE = 0o020000 | 0o666;
 const DEVICE_DIRECTORY_MODE = 0o040755;
 
 /** `/dev` and `/dev/fd`, which exist so the paths under them have a parent. */
+/** The reserved root, which is a child of `/` that no row holds. */
+const DEVICE_ROOT = "/dev";
+
 const DEVICE_DIRECTORIES: Readonly<Record<string, readonly string[]>> = {
   "/dev": ["fd", "null", "stderr", "stdin", "stdout"],
   "/dev/fd": ["0", "1", "2"],
@@ -297,30 +300,101 @@ export class DeviceFileSystem implements ShellFileSystem {
 
   list(path: string): VfsStat[] {
     const at = this.#at(path);
-    if (at === undefined) return this.#inner.list(path);
-    if (at.device !== undefined) throw new VfsError("ENOTDIR", "not a directory", at.path);
-    const names = DEVICE_DIRECTORIES[at.path] ?? [];
-    return names.map((name) => {
-      const child = at.path === "/" ? `/${name}` : `${at.path}/${name}`;
-      return this.#statAt(child) ?? directoryStat(child);
-    });
+    if (at !== undefined) {
+      if (at.device !== undefined) throw new VfsError("ENOTDIR", "not a directory", at.path);
+      const names = DEVICE_DIRECTORIES[at.path] ?? [];
+      return names.map((name) => {
+        const child = at.path === "/" ? `/${name}` : `${at.path}/${name}`;
+        return this.#statAt(child) ?? directoryStat(child);
+      });
+    }
+    const entries = this.#inner.list(path);
+    if (normalizePath(path) !== "/") return entries;
+    // `/dev` is a child of the root that no row holds. Leaving it out here
+    // while answering for it everywhere else is exactly the disagreement the
+    // reservation exists to prevent: it would be a directory you can enter,
+    // stat, and read, but never see.
+    return [...entries, directoryStat(DEVICE_ROOT)].sort((left, right) =>
+      left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
+    );
   }
 
   listPage(path: string, options?: PageOptions): EntryPage {
     const at = this.#at(path);
-    if (at === undefined) return this.#inner.listPage(path, options);
-    return { entries: this.list(path), nextCursor: null, scanned: 0 };
+    if (at !== undefined) {
+      return { entries: this.list(path), nextCursor: null, scanned: 0 };
+    }
+    const page = this.#inner.listPage(path, options);
+    const cursor = options?.cursor ?? "";
+    // The cursor is the last path returned and the order is by path, so the
+    // synthetic entry belongs in exactly one page: the first one that has not
+    // already passed it. Injecting it anywhere else would return it twice or
+    // not at all.
+    if (normalizePath(path) !== "/" || cursor >= DEVICE_ROOT) return page;
+    const limit = options?.limit ?? page.entries.length + 1;
+    const merged = [...page.entries, directoryStat(DEVICE_ROOT)].sort((left, right) =>
+      left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
+    );
+    const kept = merged.slice(0, limit);
+    // An entry pushed off the end is not lost: the cursor now points at the
+    // last one kept, so the next page starts with it.
+    const truncated = kept.length < merged.length;
+    return {
+      entries: kept,
+      nextCursor: truncated ? (kept.at(-1)?.path ?? null) : page.nextCursor,
+      scanned: page.scanned,
+    };
   }
 
   find(options: FindOptions): VfsStat[] {
-    return this.#at(options.path) === undefined
-      ? this.#inner.find(options)
-      : this.#findHere(options);
+    if (this.#at(options.path) !== undefined) return this.#findHere(options);
+    const entries = this.#inner.find(options);
+    const root = this.#deviceRootFor(options);
+    return root === undefined
+      ? entries
+      : [...entries, root].sort((left, right) =>
+          left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
+        );
   }
 
   findPage(options: FindOptions): EntryPage {
-    if (this.#at(options.path) === undefined) return this.#inner.findPage(options);
-    return { entries: this.#findHere(options), nextCursor: null, scanned: 0 };
+    if (this.#at(options.path) !== undefined) {
+      return { entries: this.#findHere(options), nextCursor: null, scanned: 0 };
+    }
+    const page = this.#inner.findPage(options);
+    const root = this.#deviceRootFor(options);
+    const cursor = options.cursor ?? "";
+    if (root === undefined || cursor >= DEVICE_ROOT) return page;
+    const limit = options.limit ?? page.entries.length + 1;
+    const merged = [...page.entries, root].sort((left, right) =>
+      left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
+    );
+    const kept = merged.slice(0, limit);
+    return {
+      entries: kept,
+      nextCursor: kept.length < merged.length ? (kept.at(-1)?.path ?? null) : page.nextCursor,
+      scanned: page.scanned,
+    };
+  }
+
+  /**
+   * The `/dev` entry a walk of the root should report, if this walk should.
+   *
+   * A traversal reports `/dev` itself, because `find / -maxdepth 1` and `ls /`
+   * are the same question and must not answer differently. It does not report
+   * what is inside: those are descriptor paths a recursive reader cannot open,
+   * so `grep -r /` would collect errors rather than results. Naming `/dev`
+   * directly still lists them.
+   */
+  #deviceRootFor(options: FindOptions): VfsStat | undefined {
+    if (normalizePath(options.path) !== "/") return undefined;
+    if ((options.maxDepth ?? Number.POSITIVE_INFINITY) < 1) return undefined;
+    if (options.type !== undefined && options.type !== "directory") return undefined;
+    if (options.name !== undefined && !matchesGlob("dev", options.name)) return undefined;
+    if (options.pathGlob !== undefined && !matchesGlob(DEVICE_ROOT, options.pathGlob)) {
+      return undefined;
+    }
+    return directoryStat(DEVICE_ROOT);
   }
 
   #findHere(options: FindOptions): VfsStat[] {
