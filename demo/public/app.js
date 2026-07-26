@@ -1,3 +1,5 @@
+import { redrawSequence, submitSequence } from "./line-block.js";
+
 (() => {
   "use strict";
 
@@ -249,13 +251,29 @@
     );
   }
 
+  /**
+   * Rows below the block's first row that the cursor currently sits on.
+   *
+   * A line longer than the terminal is wide occupies several rows, and a redraw
+   * has to start from the first of them. Without this the redraw began wherever
+   * the cursor happened to be — the last row — and every keystroke left the rows
+   * above it behind and wrote another copy underneath.
+   */
+  let cursorRow = 0;
+
   function redrawLine() {
     // Every path that changes the line redraws it, so this is the one place
     // that has to notice — an in-flight completion answer is stale from here.
     edits += 1;
-    terminal.write(`\r\x1b[2K${promptAnsi}${line}`);
-    const distance = line.length - cursor;
-    if (distance > 0) terminal.write(`\x1b[${distance}D`);
+    const next = redrawSequence({
+      prompt: promptAnsi,
+      line,
+      cursor,
+      columns: terminal.cols,
+      cursorRow,
+    });
+    cursorRow = next.cursorRow;
+    terminal.write(next.sequence);
   }
 
   function showPrompt(cwd, continuation) {
@@ -263,6 +281,7 @@
     promptAnsi = buildPrompt(cwd, continuation);
     line = "";
     cursor = 0;
+    cursorRow = 0;
     running = false;
     terminal.write(promptAnsi);
     drainQueuedLine();
@@ -280,7 +299,10 @@
 
   function submitLine(value = line) {
     if (running || !connected) return;
-    terminal.write(`\r\x1b[2K${promptAnsi}${value}\r\n`);
+    // Same block, same rule: go back to its first row and replace all of it,
+    // or a wrapped line is echoed on top of its own leftovers.
+    terminal.write(submitSequence({ prompt: promptAnsi, line: value, cursorRow }));
+    cursorRow = 0;
     if (value.length > 0) {
       if (history[history.length - 1] !== value) history.push(value);
       if (history.length > 250) history.shift();
