@@ -226,6 +226,17 @@ The R2-backed implementation lives behind its own subpath and is excluded from
 every bundle preset, including the one that imports every applet — an
 inline-only shell carries none of it.
 
+That shape is the pattern rather than a one-off, and anything that reaches
+outside the namespace belongs behind the same seam. A capability is structural,
+so a shell that never uses one never names it and never links its
+implementation. The host supplies it explicitly, which is what keeps the
+binding, the credential, and the authorization decision on the host's side of
+the boundary — see [credentials stay outside the
+shell](operations.md#credentials-stay-outside-the-shell). A session policy
+gates it separately from the host's decision to offer it at all. The R2 reader
+is the only capability that exists today; a second one is a question about what
+the host can do, answered in the host's own code rather than in the shell's.
+
 ### Where body-dependent execution happens
 
 **In the namespace Durable Object, using a leased R2 stream — not in a caller

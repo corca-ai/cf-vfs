@@ -37,6 +37,30 @@ upload, lease, GC, or R2 body method. Treat scripts, positional arguments,
 environment variables, and uploaded bytes as separate inputs. Put dynamic
 values in positional arguments instead of interpolating source.
 
+### Credentials stay outside the shell
+
+Anything the shell cannot reach on its own arrives as a host-supplied
+capability: a small structural interface the host implements and a command only
+calls. The host keeps the binding, the credential, and the decision; the shell
+gets a function. `ShellContentReader` is the one such capability today — the
+host holds the bucket and the shell holds `open(path)`.
+
+That seam is what keeps a secret out of the environment a script can read. A
+host authorizing a capability attaches, scopes, or signs the credential inside
+its own implementation, so nothing carrying it is ever in `env`, in the
+arguments, or on the filesystem — and `env`, `set`, and a readable `/proc`-style
+path cannot print what was never put there. Passing the same credential as an
+environment variable would also work, and is the thing to avoid: `ShellPolicy`
+bounds which paths and which commands, not what a command does with a variable
+it is allowed to read.
+
+Two limits are worth stating rather than discovering. A capability bounds what
+a session can ask for, not what comes back: a call the host authorizes can
+still return a secret in its response, and that response is ordinary bytes once
+it is in the shell. And a capability is not a policy — authorize it on the host
+*and* gate it per session, the way `opaqueContent` does, so that adding it to a
+host is not a decision about every session running there.
+
 ## Execution budgets
 
 Every execution owns one shared budget across all pipeline stages. Defaults:
