@@ -1,7 +1,7 @@
 import { VfsError } from "../../core/errors.js";
 import { createLineDiff, renderLineDiff } from "../../core/line-diff.js";
 import { compareUtf8 } from "../../core/path.js";
-import { compilePosixRegex } from "../../core/posix-regex.js";
+import { compilePosixRegex, type PosixRegex } from "../../core/posix-regex.js";
 import { applyUnifiedPatch } from "../../core/unified-patch.js";
 import type { ByteRange } from "../../vfs/types.js";
 import {
@@ -45,7 +45,7 @@ const SORT = {
 
 const GREP = {
   name: "grep",
-  usage: "[-cinvFElqrRh] PATTERN [PATH...]",
+  usage: "[-cinvoFElqrRh] PATTERN [PATH...]",
   summary: "prints records matching a pattern",
   options: {
     short: {
@@ -60,6 +60,7 @@ const GREP = {
       r: { name: "recursive" },
       R: { name: "recursive" },
       h: { name: "no-filename" },
+      o: { name: "only-matching" },
     },
   },
 } as const satisfies AppletSpecWithOptions<
@@ -73,6 +74,7 @@ const GREP = {
   | "quiet"
   | "recursive"
   | "no-filename"
+  | "only-matching"
 >;
 
 /** Shared by `head` and `tail`, which accept the same option spellings. */
@@ -322,6 +324,38 @@ export const sortCommand = /* @__PURE__ */ defineApplet(SORT, async (context, ar
   }
 });
 
+/**
+ * Every matched part of `line`, left to right.
+ *
+ * An empty match cannot be printed and cannot advance the scan, so it is
+ * stepped over — `grep -oE "X*"` reports the `X` runs and not the nothing
+ * between them, which is what GNU grep does.
+ */
+function* matchedParts(
+  line: string,
+  regular: PosixRegex | undefined,
+  needle: string,
+  ignoreCase: boolean,
+): Generator<string> {
+  if (regular === undefined) {
+    // Fixed search compares folded text but reports the line's own, so `-i`
+    // shows what was there rather than what was compared.
+    const haystack = ignoreCase ? asciiLower(line) : line;
+    if (needle === "") return;
+    for (let at = haystack.indexOf(needle); at !== -1; at = haystack.indexOf(needle, at + 1)) {
+      yield line.slice(at, at + needle.length);
+      at += needle.length - 1;
+    }
+    return;
+  }
+  for (let from = 0; from <= line.length; ) {
+    const match = regular.exec(line, from);
+    if (match === undefined) return;
+    if (match.end > match.index) yield line.slice(match.index, match.end);
+    from = match.end > match.index ? match.end : match.index + 1;
+  }
+}
+
 function asciiLower(value: string): string {
   return value.replace(/[A-Z]/gu, (character) => character.toLowerCase());
 }
@@ -352,6 +386,7 @@ export const grepCommand = /* @__PURE__ */ defineApplet(GREP, async (context, ar
   const quiet = has("quiet");
   const recursive = has("recursive");
   const noFilename = has("no-filename");
+  const onlyMatching = has("only-matching");
   if (fixed && extended) throw appletUsageError(GREP, "specify at most one of -F and -E");
   const values = [...parsed.operands];
   const pattern = values.shift();
@@ -408,6 +443,15 @@ export const grepCommand = /* @__PURE__ */ defineApplet(GREP, async (context, ar
         if (quiet || filesWithMatches) break;
         if (count) continue;
         const prefix = `${showName ? `${input.name}:` : ""}${lineNumbers ? `${index}:` : ""}`;
+        if (onlyMatching) {
+          // An inverted line is reported for what it does not contain, so there
+          // is no part of it to print.
+          if (invert) continue;
+          for (const part of matchedParts(candidate, regular, needle, ignoreCase)) {
+            await output.write(`${prefix}${part}\n`);
+          }
+          continue;
+        }
         await output.write(`${prefix}${line}${line.endsWith("\n") ? "" : "\n"}`);
       }
       if (quiet && matches > 0) break;
