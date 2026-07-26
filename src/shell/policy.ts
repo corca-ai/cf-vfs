@@ -23,6 +23,7 @@ import type {
   WriteFileOptions,
   WriteResult,
 } from "../vfs/types.js";
+import { ShellRefusalError } from "./errors.js";
 import type { ShellBudget, ShellFileSystem, ShellPolicy } from "./types.js";
 
 function allowed(path: string, roots: readonly string[] | undefined): boolean {
@@ -100,7 +101,7 @@ export class ScopedFileSystem implements ShellFileSystem {
   ): void {
     if (roots === undefined) return;
     if (!allowed(path, roots) || !allowed(this.#resolved(path, follow), roots)) {
-      throw new VfsError("EACCES", detail, normalizePath(path));
+      throw new ShellRefusalError(detail, normalizePath(path));
     }
   }
 
@@ -162,7 +163,7 @@ export class ScopedFileSystem implements ShellFileSystem {
       const scoped = (candidate: string): boolean =>
         allowed(candidate, readRoots) || allowed(candidate, writeRoots);
       if (!scoped(path) || !scoped(this.#resolved(path, options?.follow !== false))) {
-        throw new VfsError("EACCES", "path is outside the scoped roots", normalizePath(path));
+        throw new ShellRefusalError("path is outside the scoped roots", normalizePath(path));
       }
     }
     return this.#inner.getMutationToken(path, options);

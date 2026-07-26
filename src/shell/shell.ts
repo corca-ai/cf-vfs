@@ -21,7 +21,7 @@ import { isCharacterDevice, isRegularFile } from "./commands/format.js";
 import { type ShellContentReader, scopedContentReader } from "./content.js";
 import { ReservedPathFileSystem } from "./devices.js";
 import { optindGeneration } from "./environment.js";
-import { ShellNounsetError } from "./errors.js";
+import { ShellNounsetError, ShellRefusalError } from "./errors.js";
 import { emitShellEvent, type ShellEventSink } from "./events.js";
 import {
   type ExpansionRuntime,
@@ -31,6 +31,7 @@ import {
   expandWords,
   matchesCasePattern,
 } from "./expand.js";
+import type { ShellIdentityResolver, ShellIdentitySource } from "./identity.js";
 import { shellInput } from "./input.js";
 import type { ShellNetwork } from "./network.js";
 import {
@@ -88,7 +89,7 @@ function statusFor(error: VfsError): number {
     ? 1
     : error.code === "EINVAL"
       ? 2
-      : error.code === "EACCES" || error.code === "ENOEXEC"
+      : error instanceof ShellRefusalError || error.code === "ENOEXEC"
         ? 126
         : 1;
 }
@@ -136,6 +137,7 @@ interface Runtime {
   fileSystem: ShellFileSystem;
   content: ShellContentReader | undefined;
   network: ShellNetwork | undefined;
+  identities: ShellIdentitySource | undefined;
   budget: ShellBudget;
   policy: ShellPolicy;
   signal: AbortSignal;
@@ -429,7 +431,11 @@ type ScriptProbe =
   | { readonly kind: "unusable"; readonly error: VfsError };
 
 function unusable(code: "ENOEXEC" | "EACCES", message: string, path: string): ScriptProbe {
-  return { kind: "unusable", error: new VfsError(code, message, path) };
+  return {
+    kind: "unusable",
+    error:
+      code === "EACCES" ? new ShellRefusalError(message, path) : new VfsError(code, message, path),
+  };
 }
 
 /** Stats a candidate, mapping "nothing there" and "not readable" to a probe. */
@@ -444,7 +450,17 @@ function classifyCandidate(
     if (error.code === "ENOENT" || error.code === "ENOTDIR") return { probe: { kind: "absent" } };
     // A path outside the readable roots supplies nothing to a search, and is
     // worth reporting when it was named explicitly.
-    if (error.code === "EACCES") return { probe: { kind: "denied", error } };
+    if (error.code === "EACCES") {
+      return {
+        probe: {
+          kind: "denied",
+          error:
+            error instanceof ShellRefusalError
+              ? error
+              : new ShellRefusalError(error.message, error.path),
+        },
+      };
+    }
     throw error;
   }
 }
@@ -882,7 +898,9 @@ async function executeSimpleCommand(
         command === undefined
           ? allowed.includes(SHELL_PROFILE_COMMAND)
           : allowed.includes(canonicalName);
-      if (!permitted) throw new VfsError("EACCES", `command is not allowed: ${canonicalName}`);
+      if (!permitted) {
+        throw new ShellRefusalError(`command is not allowed: ${canonicalName}`);
+      }
     }
     let exitCode: number;
     if (definition !== undefined) {
@@ -917,6 +935,7 @@ async function executeSimpleCommand(
         await command.run(
           {
             fileSystem: runtime.fileSystem,
+            ...(runtime.identities === undefined ? {} : { identities: runtime.identities }),
             session,
             signal: runtime.signal,
             budget: runtime.budget,
@@ -1575,6 +1594,7 @@ export class Shell {
   private readonly policy: ShellPolicy;
   private readonly content: ShellContentReader | undefined;
   private readonly network: ShellNetwork | undefined;
+  private readonly identityResolver: ShellIdentityResolver | undefined;
   private readonly limits: ShellLimits;
   private readonly now: () => number;
   private readonly onEvent: ShellEventSink | undefined;
@@ -1585,6 +1605,7 @@ export class Shell {
     this.fileSystem = options.fileSystem;
     this.content = options.content;
     this.network = options.network;
+    this.identityResolver = options.identityResolver;
     this.policy = Object.freeze({
       ...(options.policy?.readRoots === undefined
         ? {}
@@ -1764,6 +1785,10 @@ export class Shell {
     // requiring `/dev` in a session's roots would break `> /dev/null` for
     // every scoped caller while preventing nothing.
     const scoped = this.#reservedView(budget, this.#sessionFileSystem(session));
+    const identities =
+      this.identityResolver === undefined
+        ? undefined
+        : { resolver: this.identityResolver, signal: controller.signal };
     // The reader a host supplies is built over the unscoped filesystem, which
     // is where the lease lives; a session's copy carries the session's roots.
     const content =
@@ -1835,6 +1860,7 @@ export class Shell {
           policy: this.policy,
           content,
           network: this.network,
+          identities,
           signal: controller.signal,
           limits: this.limits,
           parserBudget,

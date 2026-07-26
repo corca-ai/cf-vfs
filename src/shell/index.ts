@@ -11,6 +11,7 @@ export type {
   ShellContentReader,
 } from "./content.js";
 export * from "./events.js";
+export * from "./identity.js";
 export * from "./parser.js";
 export * from "./shell.js";
 export * from "./types.js";

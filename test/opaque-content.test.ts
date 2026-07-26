@@ -149,7 +149,7 @@ describe("opaque content", () => {
       credentials: { uid: 1_000, gid: 1_000 },
     });
     expect(refused).toMatchObject({
-      exitCode: 126,
+      exitCode: 1,
       stderr: expect.stringContaining("permission denied"),
     });
     expect(store.gets).toBe(0);

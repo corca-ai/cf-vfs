@@ -1,6 +1,7 @@
 import type { PosixCredentials, VfsStat, VirtualFileSystem } from "../vfs/types.js";
 import type { OpaqueContentAccess, ShellContentReader } from "./content.js";
 import type { ShellEventSink } from "./events.js";
+import type { ShellIdentityResolver, ShellIdentitySource } from "./identity.js";
 import type { NetworkAccess, ShellNetwork } from "./network.js";
 import type { FunctionDefinitionNode } from "./parser.js";
 
@@ -160,6 +161,8 @@ export interface ShellLimits {
 
 export interface ShellCommandContext {
   fileSystem: ShellFileSystem;
+  /** Host-supplied account-name lookup, cached for this execution. */
+  identities?: ShellIdentitySource | undefined;
   /**
    * Streams an opaque body, when the session was built with the capability.
    *
@@ -335,6 +338,13 @@ export interface ExecuteBytesResult {
 
 export interface ShellOptions {
   fileSystem: VirtualFileSystem;
+  /**
+   * Resolves numeric IDs and account names for presentation-oriented commands.
+   *
+   * The resolver is not an authorization source: filesystem access continues
+   * to use only the execution's numeric credentials.
+   */
+  identityResolver?: ShellIdentityResolver;
   /**
    * The capability that lets streaming commands read opaque R2 bodies.
    *

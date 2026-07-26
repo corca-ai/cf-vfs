@@ -11,9 +11,16 @@ import {
 } from "../../core/path.js";
 import { type PosixPermission, shellModeAllows } from "../access.js";
 import { optindGeneration, setOptindFromGetopts } from "../environment.js";
+import { identityLabel, resolveIdentityNames } from "../identity.js";
 import { readInputRecord } from "../input.js";
 import type { ShellCommandContext } from "../types.js";
-import { type AppletSpec, appletUsageError, defineApplet } from "./applet.js";
+import {
+  type AppletSpec,
+  type AppletSpecWithOptions,
+  appletUsageError,
+  defineApplet,
+  parseAppletOptions,
+} from "./applet.js";
 import { isCharacterDevice, isRegularFile } from "./format.js";
 import { type BufferLease, commandPath, parseInteger, readFileText, writeText } from "./helpers.js";
 
@@ -164,14 +171,22 @@ const BRACKET = {
 
 const ID = {
   name: "id",
-  usage: "[-u|-g|-G]",
-  summary: "prints the numeric execution identity",
-} as const satisfies AppletSpec;
+  usage: "[-u|-g|-G] [-n]",
+  summary: "prints the execution identity",
+  options: {
+    short: {
+      u: { name: "user" },
+      g: { name: "group" },
+      G: { name: "groups" },
+      n: { name: "name" },
+    },
+  },
+} as const satisfies AppletSpecWithOptions<"user" | "group" | "groups" | "name">;
 
 const GROUPS = {
   name: "groups",
   usage: "",
-  summary: "prints the numeric execution groups",
+  summary: "prints the execution groups",
 } as const satisfies AppletSpec;
 
 export const colonCommand = /* @__PURE__ */ defineApplet(COLON, () => 0);
@@ -891,19 +906,57 @@ function executionIdentity(context: ShellCommandContext, spec: AppletSpec) {
   return { credentials, groups };
 }
 
+function annotatedIdentity(id: number, names: ReadonlyMap<number, string> | undefined): string {
+  const name = names?.get(id);
+  return name === undefined ? String(id) : `${id}(${name})`;
+}
+
 export const idCommand = /* @__PURE__ */ defineApplet(ID, async (context, argv, fds) => {
-  if (argv.length > 1 || (argv.length === 1 && !["-u", "-g", "-G"].includes(argv[0] ?? ""))) {
-    throw appletUsageError(ID, "supports only one of -u, -g, or -G");
+  const parsed = parseAppletOptions(ID, argv);
+  if (parsed.operands.length > 0) throw appletUsageError(ID, "user lookup is not supported");
+  const selections = parsed.options.filter(
+    (option) => option.name === "user" || option.name === "group" || option.name === "groups",
+  );
+  if (selections.length > 1) throw appletUsageError(ID, "supports only one of -u, -g, or -G");
+  const names = parsed.options.some((option) => option.name === "name");
+  if (names && selections.length === 0) {
+    throw appletUsageError(ID, "-n requires -u, -g, or -G");
   }
   const { credentials, groups } = executionIdentity(context, ID);
+  const selection = selections[0]?.name;
+  const identityUids =
+    selection === undefined || (selection === "user" && names) ? [credentials.uid] : [];
+  const identityGids =
+    selection === undefined
+      ? groups
+      : names && selection === "group"
+        ? [credentials.gid]
+        : names && selection === "groups"
+          ? groups
+          : [];
+  const identities =
+    context.identities === undefined || (identityUids.length === 0 && identityGids.length === 0)
+      ? undefined
+      : await resolveIdentityNames(context.identities, identityUids, identityGids);
+  const user = identityLabel(identities?.users, credentials.uid);
+  const group = identityLabel(identities?.groups, credentials.gid);
+  const groupValues = groups.map((id) => identityLabel(identities?.groups, id));
   const output =
-    argv[0] === "-u"
-      ? String(credentials.uid)
-      : argv[0] === "-g"
-        ? String(credentials.gid)
-        : argv[0] === "-G"
-          ? groups.join(" ")
-          : `uid=${credentials.uid} gid=${credentials.gid} groups=${groups.join(",")}`;
+    selection === "user"
+      ? names
+        ? user
+        : String(credentials.uid)
+      : selection === "group"
+        ? names
+          ? group
+          : String(credentials.gid)
+        : selection === "groups"
+          ? names
+            ? groupValues.join(" ")
+            : groups.join(" ")
+          : `uid=${annotatedIdentity(credentials.uid, identities?.users)} gid=${annotatedIdentity(credentials.gid, identities?.groups)} groups=${groups
+              .map((id) => annotatedIdentity(id, identities?.groups))
+              .join(",")}`;
   await writeText(fds[1], `${output}\n`);
   return 0;
 });
@@ -911,6 +964,13 @@ export const idCommand = /* @__PURE__ */ defineApplet(ID, async (context, argv, 
 export const groupsCommand = /* @__PURE__ */ defineApplet(GROUPS, async (context, argv, fds) => {
   if (argv.length !== 0) throw appletUsageError(GROUPS, "user-name lookup is not supported");
   const { groups } = executionIdentity(context, GROUPS);
-  await writeText(fds[1], `${groups.join(" ")}\n`);
+  const identities =
+    context.identities === undefined
+      ? undefined
+      : await resolveIdentityNames(context.identities, [], groups);
+  await writeText(
+    fds[1],
+    `${groups.map((id) => identityLabel(identities?.groups, id)).join(" ")}\n`,
+  );
   return 0;
 });

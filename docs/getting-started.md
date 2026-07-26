@@ -94,8 +94,12 @@ Entries created through the raw administration API start as `0:0`, so provision
 each user's writable roots with `setOwnership()` before credential-bound
 execution as shown above.
 Omit `credentials` for the backwards-compatible trusted/admin execution path.
-See [Operations and security](operations.md#posix-execution-identity) for the
-permission model and RPC trust boundary.
+If command output should use account names, configure the host-side
+`ShellIdentityResolver`; keep numeric credentials in the execution request.
+The resolver is a presentation and name-lookup capability, never an
+authorization source. See
+[POSIX execution identity](operations.md#posix-execution-identity) for the
+permission model, resolver, and RPC trust boundary.
 
 Dynamic values belong in positional arguments, not interpolated source:
 

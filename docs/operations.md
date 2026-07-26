@@ -64,11 +64,35 @@ and sticky-directory deletion rules. New entries receive the execution uid and
 effective directory group after `umask`. Uid 0 bypasses DAC but never bypasses
 `ShellPolicy`; the effective permission is the intersection of both.
 
-`id`, `id -u/-g/-G`, and `groups` report numeric execution identity. `chown`
-accepts only `OWNER[:GROUP]` or `:GROUP`: there is intentionally no account-name
-database. Only uid 0 may change an owner; an ordinary owner may change the group
-only to its primary or supplementary groups. Setuid execution, POSIX
-capabilities, ACLs, and user namespaces are outside this profile.
+Numeric IDs remain the authorization source. A host that owns an account
+directory may separately attach a bulk resolver:
+
+```ts
+const shell = new Shell({
+  fileSystem,
+  commands,
+  identityResolver: {
+    resolveIds: (request, signal) => accounts.namesForIds(request, { signal }),
+    resolveNames: (request, signal) => accounts.idsForNames(request, { signal }),
+  },
+});
+```
+
+The resolver may return partial maps. `ls -l`, `stat %U/%G`, `id`, and `groups`
+fall back to numeric IDs for missing display names; numeric-only forms do not
+call it. Named `chown` fails when its mapping is missing. Resolution is
+deduplicated, bulk-called, and cached only for one execution, including misses,
+so account renames are visible to the next execution and no unbounded
+shell-global cache exists. `ShellDurableObjectOptions.identityResolver` accepts
+a filesystem-aware factory inside the object; no resolver function or account
+directory crosses RPC. Account names are bounded to 255 UTF-8 bytes and may not
+contain whitespace/separator, control, colon, or slash characters, preventing a
+resolver response from injecting extra output fields or lines.
+
+Only uid 0 may change an owner; an ordinary owner may change the group only to
+its primary or supplementary groups. Resolver output does not grant either
+permission. Setuid execution, POSIX capabilities, ACLs, and user namespaces are
+outside this profile.
 
 Never derive credentials from `USER`, `HOME`, or another environment variable:
 the script can change them. For an RPC method, authenticate the caller in the
@@ -81,9 +105,11 @@ caller puts in that field.
 Anything the shell cannot reach on its own arrives as a host-supplied
 capability: a small structural interface the host implements and a command only
 calls. The host keeps the binding, the credential, and the decision; the shell
-gets a function. There are two — `ShellContentReader`, where the host holds the
+gets a function. There are three — `ShellContentReader`, where the host holds the
 bucket and the shell holds `open(path)`, and `ShellNetwork`, where the host
-holds whatever authorizes a request and the shell holds `fetch(request)`.
+holds whatever authorizes a request and the shell holds `fetch(request)`, plus
+`ShellIdentityResolver`, where the host retains the account directory and the
+shell receives bulk ID/name mapping methods.
 
 That seam is what keeps a secret out of the environment a script can read. A
 host authorizing a capability attaches, scopes, or signs the credential inside

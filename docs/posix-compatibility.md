@@ -11,9 +11,9 @@ host filesystem access.
 | --- | --- |
 | Paths | `/`-separated canonical Unicode strings with `.`, `..`, repeated-separator, name-length, path-length, and trailing-slash validation. Shell-relative paths resolve from `cwd`. Paths are not arbitrary POSIX byte strings. |
 | Regular files | Inline files contain arbitrary bytes and are limited to 8 MiB. Opaque files are immutable R2 generations whose metadata participates in the namespace but whose bodies are unavailable to shell commands. |
-| Directories | Direct children, recursive traversal, atomic subtree move, recursive copy/remove, keyset pagination, and deterministic UTF-8 ordering are supported. A paginated traversal is mutation-tolerant, not snapshot-isolated. |
+| Directories | Direct children, recursive traversal, atomic subtree move, recursive copy/remove, keyset pagination, and deterministic UTF-8 ordering are supported. A paginated traversal is mutation-tolerant, not snapshot-isolated. Listing conservatively requires both read and search permission because the VFS listing primitive returns entry metadata with each name; unlike Linux, a read-only non-searchable directory does not yield names without metadata. |
 | Metadata | Kind, content class, byte size, numeric owner and group IDs, mode bits, timestamps, revision, and mutation token are available. A link carries its own ownership, revision, and token, separate from its target's. There are no inode, link-count, access-time, or POSIX change-time guarantees. |
-| Modes and identity | The trusted raw VFS is an administration capability and does not enforce DAC. `forCredentials()` and shell executions with host-supplied credentials enforce owner/group/other bits, ancestor search permission, creation/deletion rules, `umask`, setgid-directory inheritance, and sticky directories. IDs are unsigned 32-bit numbers; there is no user/group name database, ACL, capability, or setuid execution model. |
+| Modes and identity | The trusted raw VFS is an administration capability and does not enforce DAC. `forCredentials()` and shell executions with host-supplied credentials enforce owner/group/other bits, ancestor search permission, creation/deletion rules, `umask`, setgid-directory inheritance, and sticky directories. IDs are unsigned 32-bit numbers. There is no built-in user/group database; a host may attach a `ShellIdentityResolver` for bulk name presentation and reverse lookup without changing numeric authorization. ACLs, capabilities, and setuid execution are unsupported. |
 | Concurrency | Whole-file publication and namespace changes are atomic within one DO. Revision and mutation-token guards reject stale work, including absent-path ABA. |
 | Symbolic links | Supported, with the target stored verbatim and a relative one resolved from the link's parent. Resolution follows every component, is bounded at forty hops, and reports `ELOOP` beyond that. `lstat`, `readlink`, `realpath`, and `ln -s` are available; a dangling link is a valid link. |
 | Other links and special files | Hard links, devices, sockets, FIFOs, sparse files, xattrs, and `mmap` are unsupported. A hard link needs an inode identity this namespace does not have, so `ln` without `-s` is a usage error rather than a copy. |
@@ -181,7 +181,8 @@ Deliberate deterministic choices include:
 - the opt-in Linux profile is a cf-vfs environment, not the Filesystem Hierarchy
   Standard. It provides `/etc`, `/home`, `/tmp`, `/var/tmp`, and `/workspace` as
   ordinary directories, resolves `/bin` and `/usr/bin` virtually, and adds no
-  user database, package manager, writable `/bin`, or host process. `/bin/sh`
+  built-in user database, package manager, writable `/bin`, or host process. A
+  host resolver may supply account display names without changing that profile. `/bin/sh`
   and `/bin/bash` name this shell profile and run it, never host Bash;
 - an inline file with an executable mode bit runs as a shell script in an
   isolated child scope. A credential-bound execution selects its effective
@@ -189,8 +190,8 @@ Deliberate deterministic choices include:
   on a regular file. Whatever a shebang names, the only interpreter that can
   exist is this shell profile, so an unsupported one is refused with status
   126 rather than approximated;
-- status 2 is syntax/usage, 126 is policy or access denial, and 127 is
-  command-not-found.
+- status 2 is syntax/usage, an ordinary utility or DAC failure is 1, 126 is
+  shell-policy or executable refusal, and 127 is command-not-found.
 
 Differential fixtures are pinned against `bash:5.3.3` with the same locale and
 timezone. They cover representative supported quoting, assignment and

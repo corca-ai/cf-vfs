@@ -4,6 +4,14 @@ import { basename, dirname, normalizePath } from "../../core/path.js";
 import type { EntryKind, VfsStat } from "../../vfs/types.js";
 import { openContent } from "../content.js";
 import {
+  identityLabel,
+  type ResolvedIdentityIds,
+  type ResolvedIdentityNames,
+  resolveIdentityIds,
+  resolveIdentityNames,
+  type ShellIdentitySource,
+} from "../identity.js";
+import {
   type AppletSpec,
   type AppletSpecWithOptions,
   appletUsageError,
@@ -118,7 +126,7 @@ const FIND = {
 const STAT = {
   name: "stat",
   usage: "[-L] [-c FORMAT] PATH...",
-  summary: "prints size, kind, mode, revision, and mutation token",
+  summary: "prints size, kind, ownership, mode, revision, and mutation token",
   options: {
     short: { c: { name: "format", argument: true }, L: { name: "dereference" } },
     long: { format: { name: "format", argument: true }, dereference: { name: "dereference" } },
@@ -134,7 +142,7 @@ const CHMOD = {
 const CHOWN = {
   name: "chown",
   usage: "OWNER[:GROUP]|:GROUP PATH...",
-  summary: "sets numeric owner and group identifiers",
+  summary: "sets owner and group identifiers",
 } as const satisfies AppletSpec;
 
 const SYMBOLIC_MODE = /^([ugoa]*)([-+=])([rwx]*)$/u;
@@ -475,7 +483,12 @@ export const findCommand = /* @__PURE__ */ defineApplet(FIND, async (context, ar
   return failed ? 1 : 0;
 });
 
-function statText(stat: VfsStat): string {
+function statIdentity(values: ReadonlyMap<number, string> | undefined, id: number): string {
+  const name = values?.get(id);
+  return name === undefined ? String(id) : `${id} (${name})`;
+}
+
+function statText(stat: VfsStat, identities: ResolvedIdentityNames | undefined): string {
   return `${[
     `  File: ${stat.path}`,
     `  Size: ${stat.sizeBytes}`,
@@ -487,8 +500,8 @@ function statText(stat: VfsStat): string {
           : describeKind(stat)
     }`,
     `  Mode: ${stat.mode.toString(8)} (${modeString(stat.mode)})`,
-    ` Owner: ${stat.uid}`,
-    ` Group: ${stat.gid}`,
+    ` Owner: ${statIdentity(identities?.users, stat.uid)}`,
+    ` Group: ${statIdentity(identities?.groups, stat.gid)}`,
     `Revision: ${stat.revision}`,
     `Mutation: ${stat.mutationToken}`,
   ].join("\n")}\n`;
@@ -512,14 +525,29 @@ export const statCommand = /* @__PURE__ */ defineApplet(STAT, async (context, ar
   // GNU reports the link itself unless `-L` is given, so `stat link` says
   // "symbolic link" and does not quietly describe something else.
   const dereference = parsed.options.some((option) => option.name === "dereference");
-  for (const path of parsed.operands) {
+  const entries = parsed.operands.map((path) => {
     const resolved = commandPath(context, path);
     const stat = dereference
       ? context.fileSystem.stat(resolved)
       : context.fileSystem.lstat(resolved);
+    return { path, stat };
+  });
+  const identityFields =
+    format === undefined ? { users: true, groups: true } : statIdentityFields(format);
+  const identities =
+    context.identities !== undefined && (identityFields.users || identityFields.groups)
+      ? await resolveIdentityNames(
+          context.identities,
+          identityFields.users ? entries.map(({ stat }) => stat.uid) : [],
+          identityFields.groups ? entries.map(({ stat }) => stat.gid) : [],
+        )
+      : undefined;
+  for (const { path, stat } of entries) {
     await writeText(
       fds[1],
-      format === undefined ? statText(stat) : `${statFormat(format, stat, path)}\n`,
+      format === undefined
+        ? statText(stat, identities)
+        : `${statFormat(format, stat, path, identities)}\n`,
     );
   }
   return 0;
@@ -535,7 +563,28 @@ function describeKind(stat: VfsStat): string {
 }
 
 /** Expands the `-c` conversions this namespace can answer. */
-function statFormat(format: string, stat: VfsStat, operand: string): string {
+function statIdentityFields(format: string): { users: boolean; groups: boolean } {
+  let users = false;
+  let groups = false;
+  for (let index = 0; index < format.length; index += 1) {
+    if (format[index] === "\\") {
+      index += 1;
+      continue;
+    }
+    if (format[index] !== "%") continue;
+    const conversion = format[++index];
+    if (conversion === "U") users = true;
+    else if (conversion === "G") groups = true;
+  }
+  return { users, groups };
+}
+
+function statFormat(
+  format: string,
+  stat: VfsStat,
+  operand: string,
+  identities: ResolvedIdentityNames | undefined,
+): string {
   let output = "";
   for (let index = 0; index < format.length; index += 1) {
     const character = format[index] ?? "";
@@ -559,6 +608,8 @@ function statFormat(format: string, stat: VfsStat, operand: string): string {
     else if (conversion === "F") output += describeKind(stat);
     else if (conversion === "u") output += String(stat.uid);
     else if (conversion === "g") output += String(stat.gid);
+    else if (conversion === "U") output += identityLabel(identities?.users, stat.uid);
+    else if (conversion === "G") output += identityLabel(identities?.groups, stat.gid);
     else if (conversion === "%") output += "%";
     else throw appletUsageError(STAT, `unsupported conversion %${conversion ?? ""}`);
   }
@@ -585,21 +636,53 @@ export const chmodCommand = /* @__PURE__ */ defineApplet(CHMOD, async (context, 
   return 0;
 });
 
-function parseOwnership(value: string): { uid?: number; gid?: number } {
-  const match = /^(?:(\d+))?(?::(\d+))?$/u.exec(value);
-  if (match === null || (match[1] === undefined && match[2] === undefined)) {
-    throw appletUsageError(CHOWN, "owner and group must be numeric");
+function numericIdentity(part: string, kind: "owner" | "group"): number | undefined {
+  if (!/^\d+$/u.test(part)) return undefined;
+  const id = Number(part);
+  if (!Number.isSafeInteger(id) || id > 0xffff_ffff) {
+    throw appletUsageError(CHOWN, `${kind} is outside the unsigned 32-bit range`);
   }
-  const parse = (part: string | undefined, name: string): number | undefined => {
-    if (part === undefined) return undefined;
-    const id = Number(part);
-    if (!Number.isSafeInteger(id) || id > 0xffff_ffff) {
-      throw appletUsageError(CHOWN, `${name} is outside the unsigned 32-bit range`);
+  return id;
+}
+
+async function parseOwnership(
+  value: string,
+  identities: ShellIdentitySource | undefined,
+): Promise<{ uid?: number; gid?: number }> {
+  const separator = value.indexOf(":");
+  if (separator !== value.lastIndexOf(":")) {
+    throw appletUsageError(CHOWN, "owner and group must contain at most one colon");
+  }
+  const owner = separator < 0 ? value : value.slice(0, separator);
+  const group = separator < 0 ? undefined : value.slice(separator + 1);
+  if (owner.length === 0 && (group === undefined || group.length === 0)) {
+    throw appletUsageError(CHOWN, "requires an owner or group");
+  }
+  const numericUid = owner.length === 0 ? undefined : numericIdentity(owner, "owner");
+  const numericGid =
+    group === undefined || group.length === 0 ? undefined : numericIdentity(group, "group");
+  const userName = owner.length > 0 && numericUid === undefined ? owner : undefined;
+  const groupName =
+    group !== undefined && group.length > 0 && numericGid === undefined ? group : undefined;
+  let resolved: ResolvedIdentityIds | undefined;
+  if (userName !== undefined || groupName !== undefined) {
+    if (identities === undefined) {
+      throw new VfsError("ENOTSUP", "chown: user and group name lookup is not available");
     }
-    return id;
-  };
-  const uid = parse(match[1], "owner");
-  const gid = parse(match[2], "group");
+    resolved = await resolveIdentityIds(
+      identities,
+      userName === undefined ? [] : [userName],
+      groupName === undefined ? [] : [groupName],
+    );
+  }
+  const uid = numericUid ?? (userName === undefined ? undefined : resolved?.users.get(userName));
+  const gid = numericGid ?? (groupName === undefined ? undefined : resolved?.groups.get(groupName));
+  if (userName !== undefined && uid === undefined) {
+    throw new VfsError("ENOENT", `chown: unknown user: ${userName}`);
+  }
+  if (groupName !== undefined && gid === undefined) {
+    throw new VfsError("ENOENT", `chown: unknown group: ${groupName}`);
+  }
   return {
     ...(uid === undefined ? {} : { uid }),
     ...(gid === undefined ? {} : { gid }),
@@ -611,7 +694,7 @@ export const chownCommand = /* @__PURE__ */ defineApplet(CHOWN, async (context, 
   if (owner === undefined || paths.length === 0) {
     throw appletUsageError(CHOWN, "requires an owner and paths");
   }
-  const ownership = parseOwnership(owner);
+  const ownership = await parseOwnership(owner, context.identities);
   for (const path of paths) {
     context.fileSystem.setOwnership(commandPath(context, path), ownership);
   }

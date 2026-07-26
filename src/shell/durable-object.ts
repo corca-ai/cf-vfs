@@ -11,6 +11,7 @@ import {
 import type { PosixCredentials } from "../vfs/types.js";
 import type { ShellContentReader } from "./content.js";
 import type { ShellEvent } from "./events.js";
+import type { ShellIdentityResolver } from "./identity.js";
 import type { ShellNetwork } from "./network.js";
 import { Shell } from "./shell.js";
 import type {
@@ -33,6 +34,11 @@ export interface ShellDurableObjectOptions extends Omit<DurableObjectFileSystemO
    * may use it.
    */
   content?: (fileSystem: DurableObjectFileSystem) => ShellContentReader;
+  /**
+   * Resolves account names outside the filesystem's numeric authorization
+   * model. The factory runs inside the object and is never accepted over RPC.
+   */
+  identityResolver?: (fileSystem: DurableObjectFileSystem) => ShellIdentityResolver;
   /**
    * Lets commands reach outside the namespace.
    *
@@ -149,6 +155,9 @@ export abstract class ShellDurableObject<Environment> extends VfsDurableObject<E
       fileSystem: this.fileSystem,
       commands: options.commands,
       ...(options.content === undefined ? {} : { content: options.content(this.fileSystem) }),
+      ...(options.identityResolver === undefined
+        ? {}
+        : { identityResolver: options.identityResolver(this.fileSystem) }),
       ...(options.network === undefined ? {} : { network: options.network }),
       ...(options.policy === undefined ? {} : { policy: options.policy }),
       ...(options.limits === undefined ? {} : { limits: options.limits }),

@@ -91,6 +91,18 @@ The shell-only preset, which does not carry SQLite, moved from 221,110 to
 five-percent headroom in `bundle-budgets.json`; the increase is the explicit
 cost of making the SQL VFS permission-capable, not an unreviewed budget drift.
 
+Optional account-name resolution remains outside the VFS and therefore leaves
+the raw VFS, R2, and small two-applet command presets unchanged at
+126,520/129,131/15,755 bytes. Against permission-capable commit `97800a8`, the
+standalone name-aware `ls` applet moves from 11,555 to 15,700 bytes (+4,145);
+the one-applet shell executor moves from 223,494 to 224,251 (+757); and the
+default and Linux presets move from 437,181/558,043 to 448,678/569,540
+(+11,497 each). The resolver implementation is asserted absent from presets
+that do not retain an identity-aware applet. A 1,000-entry `ls -l` remains
+three SQL statements and 1,002 returned rows with or without a resolver;
+identity mapping is one deduplicated host call rather than an SQL query or an
+entry-by-entry callback.
+
 Opaque work is payload-size-independent inside the metadata DO. Upload/download
 bytes go directly to R2; the DO performs metadata SQL plus one R2 `HEAD` during
 commit. Recursive copy, move, and remove use a constant number of SQL statements

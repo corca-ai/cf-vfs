@@ -41,9 +41,9 @@ unexpected command/runtime invariant rejects `completed`.
 | Outcome | Status |
 | --- | ---: |
 | success | 0 |
-| false `test`, no `grep` match, `cmp`/`diff` difference | 1 |
+| false `test`, no `grep` match, `cmp`/`diff` difference, utility failure including filesystem permission denial | 1 |
 | syntax or usage error | 2 |
-| command unavailable by policy or access denied | 126 |
+| command unavailable by shell policy or found but not executable | 126 |
 | command not found | 127 |
 
 ## Interactive sessions
@@ -424,10 +424,22 @@ compatibility behavior of asking whether any class carries the bit. They do not
 consult the shell's read and write roots: policy and DAC are independent
 restrictions. `chmod` accepts symbolic clauses as well as an octal mode.
 
-`id`, `id -u/-g/-G`, and `groups` print the numeric identity supplied by the
-host and fail when none was supplied. `chown` accepts numeric
-`OWNER[:GROUP]`/`:GROUP`; the filesystem enforces root-only owner changes and
-limits an ordinary owner to its own groups.
+`id`, `id -u/-g/-G`, and `groups` inspect the numeric authorization identity
+supplied by the host and fail when none was supplied. An optional
+`ShellIdentityResolver` adds display names: plain `id` annotates IDs,
+`id -un/-gn/-Gn` and `groups` print resolved names, and an unresolved display
+name falls back to its numeric ID. The numeric forms never consult the
+resolver. `chown` always accepts numeric `OWNER[:GROUP]`/`:GROUP` and also
+accepts names when the resolver supplies the reverse mapping; the filesystem
+still enforces root-only owner changes and limits an ordinary owner to its own
+groups.
+
+Plain `ls` remains one name per line. Its human-oriented long form is
+`MODE OWNER GROUP SIZE NAME`; `ls -l` resolves owner and group names when the
+host capability is present, while `ls -n` implies the long form and always
+uses numbers. `stat -c %u/%g` is likewise always numeric, and `%U/%G` selects
+resolved names with numeric fallback. The VFS has no inode link count or
+change-time guarantee, so the long form does not invent those Linux columns.
 
 `help` lists the registered commands with their summaries, `help NAME...`
 describes named ones and exits 1 for an unknown one, and `help -s` prints only
@@ -507,8 +519,9 @@ canonical applet names, since an alias in the list matches nothing.
 
 `@corca-ai/cf-vfs/shell/linux` is an opt-in module supplying the locations and
 variables ordinary scripts assume. It is a cf-vfs profile, not Linux and not the
-Filesystem Hierarchy Standard: there is no user database, no package manager, no
-writable `/bin`, and no host process.
+Filesystem Hierarchy Standard: there is no built-in user database, package
+manager, writable `/bin`, or host process. A host may separately attach a
+`ShellIdentityResolver` for account-name presentation.
 
 ### Executable scripts
 
@@ -605,11 +618,11 @@ decides which directory is provisioned; pass the same path as the execution
 
 | Registry group | Available commands and principal options |
 | --- | --- |
-| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd -`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (clustered `-eu/+eu`, `-o/+o errexit`, `-o/+o nounset`, `-o/+o pipefail`), `test`/`[` (`-e -f -d -s -r -w -x`, string and integer comparison), `id -u -g -G`, `groups` |
+| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd -`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (clustered `-eu/+eu`, `-o/+o errexit`, `-o/+o nounset`, `-o/+o pipefail`), `test`/`[` (`-e -f -d -s -r -w -x`, string and integer comparison), `id -u -g -G -n`, `groups` |
 | discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
 | help | `help -s`, from the dedicated `/shell/commands/help` subpath |
 | shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
-| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p -P`, `ls -l -d -a -A -1 -R`, `find -name -type -maxdepth -print -print0 -exec`, `stat -L -c`, `chmod`, `chown`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
+| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p -P`, `ls -l -n -d -a -A -1 -R`, `find -name -type -maxdepth -print -print0 -exec`, `stat -L -c` (`%u/%g/%U/%G` ownership), `chmod`, `chown`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | links | `ln -s -f`, `readlink -f`, from the dedicated `/shell/commands/link` subpath |
 | streaming text/bytes | `cat`, `grep -i -v -n -F -E -c -l -q -r -R -h`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed -n -e -i`, `seq -s -w` |
 | deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, from the dedicated `/shell/commands/system` subpath |
@@ -847,7 +860,8 @@ not a link, which is what makes it usable in a conditional. `readlink -f` and
 A link may name anything, including a path outside the shell's roots. The
 refusal happens when it is followed rather than when it is made: every read and
 write resolves the path first and checks the roots against what it resolved to,
-so `EACCES` is reported at the moment of access. `lstat` and `readlink` are
+so `EACCES` is reported at the moment of access with ordinary utility status 1.
+Shell-policy refusal remains status 126. `lstat` and `readlink` are
 checked against where the link lives instead, because they answer questions
 about the link and not about its target.
 

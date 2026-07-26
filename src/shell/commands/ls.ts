@@ -1,16 +1,18 @@
 import { VfsError } from "../../core/errors.js";
 import type { VfsStat } from "../../vfs/types.js";
+import { identityLabel, type ResolvedIdentityNames, resolveIdentityNames } from "../identity.js";
 import { type AppletSpecWithOptions, defineApplet, parseAppletOptions } from "./applet.js";
 import { modeString } from "./format.js";
 import { BufferedTextWriter, commandPath } from "./helpers.js";
 
 const LS = {
   name: "ls",
-  usage: "[-adlA1R] [PATH...]",
+  usage: "[-adlnA1R] [PATH...]",
   summary: "lists directory entries or a single path",
   options: {
     short: {
       l: { name: "long" },
+      n: { name: "numeric" },
       d: { name: "directory" },
       a: { name: "all" },
       A: { name: "all" },
@@ -19,7 +21,7 @@ const LS = {
     },
   },
 } as const satisfies AppletSpecWithOptions<
-  "long" | "directory" | "all" | "one-per-line" | "recursive"
+  "long" | "numeric" | "directory" | "all" | "one-per-line" | "recursive"
 >;
 
 /**
@@ -32,18 +34,33 @@ const LS = {
  */
 export const lsCommand = /* @__PURE__ */ defineApplet(LS, async (context, argv, fds) => {
   const parsed = parseAppletOptions(LS, argv);
-  const long = parsed.options.some((option) => option.name === "long");
+  const numeric = parsed.options.some((option) => option.name === "numeric");
+  const long = numeric || parsed.options.some((option) => option.name === "long");
   const directory = parsed.options.some((option) => option.name === "directory");
   const recursive = parsed.options.some((option) => option.name === "recursive");
   const paths = parsed.operands.length === 0 ? ["."] : parsed.operands;
   const output = new BufferedTextWriter(context, fds[1]);
-  const format = (entry: VfsStat, name: string): string => {
+  const namesFor = (entries: readonly VfsStat[]): Promise<ResolvedIdentityNames> | undefined =>
+    long && !numeric && context.identities !== undefined
+      ? resolveIdentityNames(
+          context.identities,
+          entries.map((entry) => entry.uid),
+          entries.map((entry) => entry.gid),
+        )
+      : undefined;
+  const format = (
+    entry: VfsStat,
+    name: string,
+    identities: ResolvedIdentityNames | undefined,
+  ): string => {
+    if (!long) return `${name}\n`;
     // The long form names the target, because a link's own size and mode say
     // nothing useful and the target is the thing a reader wants.
     const arrow = entry.kind === "symlink" ? ` -> ${entry.linkTarget}` : "";
-    return long
-      ? `${modeString(entry.mode)} ${entry.uid} ${entry.gid} ${entry.sizeBytes.toString().padStart(8)} ${name}${arrow}\n`
-      : `${name}\n`;
+    const owner = identities === undefined ? entry.uid : identityLabel(identities.users, entry.uid);
+    const group =
+      identities === undefined ? entry.gid : identityLabel(identities.groups, entry.gid);
+    return `${modeString(entry.mode)} ${owner} ${group} ${entry.sizeBytes.toString().padStart(8)} ${name}${arrow}\n`;
   };
   let written = false;
   try {
@@ -52,9 +69,11 @@ export const lsCommand = /* @__PURE__ */ defineApplet(LS, async (context, argv, 
       heading: string | undefined,
     ): Promise<Array<{ path: string; display: string }>> => {
       const entries = context.fileSystem.list(path);
+      const pendingIdentities = namesFor(entries);
+      const identities = pendingIdentities === undefined ? undefined : await pendingIdentities;
       if (heading !== undefined) await output.write(`${written ? "\n" : ""}${heading}:\n`);
       written = true;
-      for (const entry of entries) await output.write(format(entry, entry.name));
+      for (const entry of entries) await output.write(format(entry, entry.name, identities));
       return entries
         .filter((entry) => entry.kind === "directory")
         .map((entry) => ({ path: entry.path, display: `${heading ?? path}/${entry.name}` }));
@@ -87,7 +106,9 @@ export const lsCommand = /* @__PURE__ */ defineApplet(LS, async (context, argv, 
         !directory &&
         (entry.kind === "directory" || (entry.kind === "symlink" && !long && linksToDirectory()));
       if (!listsThrough) {
-        await output.write(format(entry, path));
+        const pendingIdentities = namesFor([entry]);
+        const identities = pendingIdentities === undefined ? undefined : await pendingIdentities;
+        await output.write(format(entry, path, identities));
         written = true;
         continue;
       }
