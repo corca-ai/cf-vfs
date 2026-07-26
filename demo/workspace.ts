@@ -29,8 +29,23 @@ const MAX_PENDING_SOURCE_BYTES = 128 * 1024;
  * rather than presenting a truncated list as the whole answer.
  */
 const MAX_COMPLETION_CANDIDATES = 48;
-const WORKSPACE_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+/**
+ * Which workspace a request lands in: one per country.
+ *
+ * A workspace per visitor is unbounded — every browser that ever loads the page
+ * leaves a Durable Object behind, and nothing here deletes one. Keying on the
+ * country Cloudflare already resolved bounds the set to a couple of hundred and
+ * makes the demo a shared room, which the page says outright rather than
+ * leaving to be discovered.
+ */
+const COUNTRY_PATTERN = /^[A-Z]{2}$/u;
+
+function workspaceFor(request: Request): string {
+  const country = (request as { cf?: { country?: string } }).cf?.country;
+  const upper = typeof country === "string" ? country.toUpperCase() : "";
+  // `T1` is Tor and local development has none at all; both share one room.
+  return `country-${COUNTRY_PATTERN.test(upper) ? upper : "XX"}`;
+}
 
 const SHELL_LIMITS = {
   maxScriptBytes: MAX_PENDING_SOURCE_BYTES,
@@ -156,15 +171,13 @@ export function handleTerminalRequest(
     return new Response("Invalid Origin", { status: 403 });
   }
 
-  const workspaceId = url.searchParams.get("workspace");
-  if (workspaceId === null || !WORKSPACE_PATTERN.test(workspaceId)) {
-    return new Response("Invalid workspace", { status: 400 });
-  }
-  return env.DEMO_WORKSPACES.getByName(workspaceId).fetch(request);
+  return env.DEMO_WORKSPACES.getByName(workspaceFor(request)).fetch(request);
 }
 
 export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
   private readonly sessions = new Map<WebSocket, TerminalSession>();
+  /** The room this object is, so a session can say which one it joined. */
+  private readonly workspaceName: string;
 
   constructor(ctx: DurableObjectState, env: VfsBenchmarkEnv) {
     super(ctx, env, {
@@ -174,6 +187,8 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       maxEntries: 2_048,
       maxInFlightBufferedBytes: 2 * 1024 * 1024,
     });
+    // `getByName` keeps the name on the identifier, which is the room's label.
+    this.workspaceName = ctx.id.name ?? "country-XX";
     ctx.blockConcurrencyWhile(async () => {
       // The Linux profile's directories, created once per workspace. `/bin` and
       // `/usr/bin` are deliberately not among them: they resolve applets
@@ -261,6 +276,7 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
         maxCompletionCandidates: MAX_COMPLETION_CANDIDATES,
       },
       durability: { files: "durable", session: "connection" },
+      workspace: this.workspaceName,
     });
     prompt(server, session);
     return new Response(null, { status: 101, webSocket: client });

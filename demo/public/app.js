@@ -3,34 +3,15 @@ import { redrawSequence, submitSequence } from "./line-block.js";
 (() => {
   "use strict";
 
-  const STORAGE_KEY = "cf-vfs-demo-workspace-v1";
-  const UUID_PATTERN =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const RECONNECT_MIN_MS = 750;
   const RECONNECT_MAX_MS = 8_000;
   const KEEPALIVE_MS = 25_000;
   const encoder = new TextEncoder();
 
-  const stateElement = document.querySelector("#connection-state");
-  const stateLabel = document.querySelector("#connection-label");
-  const workspaceElement = document.querySelector("#workspace-id");
-  const copyWorkspaceButton = document.querySelector("#copy-workspace");
-  const reconnectButton = document.querySelector("#reconnect");
-  const clearButton = document.querySelector("#clear-terminal");
   const terminalElement = document.querySelector("#terminal");
   const terminalSurface = document.querySelector("#terminal-surface");
   const examplesElement = document.querySelector("#examples");
 
-  function workspaceId() {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored !== null && UUID_PATTERN.test(stored)) return stored;
-    const created = crypto.randomUUID();
-    localStorage.setItem(STORAGE_KEY, created);
-    return created;
-  }
-
-  const workspace = workspaceId();
-  workspaceElement.textContent = workspace;
 
   const terminal = new Terminal({
     allowProposedApi: false,
@@ -231,10 +212,15 @@ import { redrawSequence, submitSequence } from "./line-block.js";
   }
   const queuedLines = [];
 
+  /**
+   * The connection has no readout on the page any more.
+   *
+   * Kept as the one place the state is named so the calls that report it stay
+   * where they are: a session that ends or fails still says so in the terminal,
+   * which is where someone typing is already looking.
+   */
   function setConnection(kind, label) {
-    stateElement.classList.remove("online", "offline");
-    if (kind !== "connecting") stateElement.classList.add(kind);
-    stateLabel.textContent = label;
+    if (kind === "offline") writeNotice(label, "203");
   }
 
   function safeCwd(value) {
@@ -494,7 +480,7 @@ import { redrawSequence, submitSequence } from "./line-block.js";
           : "";
       terminal.write(
         "\x1b[1;38;5;114mcf-vfs interactive demo\x1b[0m\r\n" +
-          "\x1b[38;5;244mPersistent SQLite workspace · WebSocket transport · bounded Bash v4\x1b[0m\r\n" +
+          `\x1b[38;5;244mShared workspace \x1b[38;5;150m${message.workspace ?? "country-XX"}\x1b[38;5;244m — everyone in this country types into the same files.\x1b[0m\r\n` +
           durability +
           "\x1b[38;5;244mTab completes · Ctrl-R searches history · Ctrl-W/U/K edit · " +
           "Ctrl-C cancels · Ctrl-D exits\x1b[0m\r\n" +
@@ -552,7 +538,6 @@ import { redrawSequence, submitSequence } from "./line-block.js";
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
     const url = new URL("/ws", location.href);
     url.protocol = protocol;
-    url.searchParams.set("workspace", workspace);
     socket = new WebSocket(url);
 
     socket.addEventListener("open", () => {
@@ -658,30 +643,6 @@ import { redrawSequence, submitSequence } from "./line-block.js";
     examplesElement.append(button);
   }
 
-  copyWorkspaceButton.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(workspace);
-      const previous = workspaceElement.textContent;
-      workspaceElement.textContent = "copied";
-      window.setTimeout(() => {
-        workspaceElement.textContent = previous;
-      }, 1_000);
-    } catch {
-      writeNotice("clipboard access was unavailable", "214");
-    }
-  });
-  reconnectButton.addEventListener("click", () => {
-    manualReconnect = true;
-    socket?.close(1012, "session reconnect requested");
-  });
-  clearButton.addEventListener("click", () => {
-    terminal.clear();
-    if (!running) redrawLine();
-    terminal.focus();
-  });
 
-  if (encoder.encode(workspace).byteLength > 64) {
-    throw new Error("invalid workspace identifier");
-  }
   connect();
 })();
