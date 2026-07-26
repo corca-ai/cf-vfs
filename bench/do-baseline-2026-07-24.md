@@ -41,7 +41,11 @@ including the namespace, mutation-token, usage, and schema structures.
 The current structural ceilings are more reliable regression guards than
 wall-clock values:
 
-| Operation | Current measured work |
+These were current when recorded. Four of them have since been superseded —
+see the [2026-07-26 structural baseline](do-baseline-2026-07-26.md), which also
+records how long they had drifted before anything compared them.
+
+| Operation | Measured work, 2026-07-24 |
 | --- | --- |
 | create 512 small BLOBs | 512 chunks, 6,144 statements, 5,632 rows read, 3,072 rows written |
 | random-read 512 small BLOBs | 1,024 statements, 2,047 rows read, 0 rows written |

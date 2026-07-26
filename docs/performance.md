@@ -8,7 +8,8 @@ regression guards used by the separately scheduled Performance workflow.
 These commands are deliberately excluded from ordinary unit tests and
 `npm run check`. The checked-in
 [Node SQLite baseline](../bench/node-sql-baseline-2026-07-25.md) and
-[Durable Object baseline](../bench/do-baseline-2026-07-24.md) record their
+[Durable Object baseline](../bench/do-baseline-2026-07-24.md) and its
+[structural-cost follow-up](../bench/do-baseline-2026-07-26.md) record their
 environments and interpretation.
 
 ## Structural guards versus wall-clock benchmarks
