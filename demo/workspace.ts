@@ -182,9 +182,14 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
   constructor(ctx: DurableObjectState, env: VfsBenchmarkEnv) {
     super(ctx, env, {
       workspaceId: ctx.id.toString(),
-      maxInlineFileBytes: 1024 * 1024,
-      maxInlineLogicalBytes: 8 * 1024 * 1024,
-      maxEntries: 2_048,
+      // A room shared by a whole country, so it is deliberately small: a
+      // visitor who fills it can only have written fifty kilobytes, and
+      // whoever arrives next can free it by deleting something. The welcome
+      // file and the profile's directories account for well under a kilobyte
+      // of that.
+      maxInlineFileBytes: 16 * 1024,
+      maxInlineLogicalBytes: 50 * 1024,
+      maxEntries: 256,
       maxInFlightBufferedBytes: 2 * 1024 * 1024,
     });
     // `getByName` keeps the name on the identifier, which is the room's label.

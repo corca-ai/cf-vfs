@@ -307,6 +307,22 @@ then publish in one short transaction. Failed collection or a stale guard does
 not mutate the file. `SQLITE_FULL` and proactive headroom exhaustion surface as
 `ENOSPC`; reads and cleanup remain available.
 
+The quotas are constructor options, and a workspace can be made as small as it
+needs to be:
+
+```ts
+new VfsDurableObject(ctx, env, {
+  maxInlineFileBytes: 16 * 1024,      // one file
+  maxInlineLogicalBytes: 50 * 1024,   // everything in the workspace
+  maxEntries: 256,                    // files, directories, and links
+});
+```
+
+A write that would cross one of these fails with `ENOSPC` naming the path and
+the quota, changes nothing, and leaves what is already there readable — so a
+caller that hits a ceiling can delete something and continue rather than
+needing a new workspace. The public demo runs at the numbers above.
+
 Monitor logical inline bytes, entries, `storage.sql.databaseSize`, quota
 failures, stream-limit failures, deadline/idle cancellations, and per-command
 status. The `onEvent` hook above reports all of these except `databaseSize`,
