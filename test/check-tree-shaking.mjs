@@ -199,6 +199,8 @@ const PRESETS = [
     describe: "the interactive session adapter",
     include: [M.shell, M.parser, M.interactive, M.core, M.script],
     exclude: [
+      M.curl,
+      M.network,
       M.fs,
       M.ls,
       M.text,

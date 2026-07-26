@@ -5,6 +5,7 @@ import type { VfsEvent } from "../vfs/events.js";
 import { rpcByteBody, rpcString } from "../vfs/rpc-validation.js";
 import type { ShellContentReader } from "./content.js";
 import type { ShellEvent } from "./events.js";
+import type { ShellNetwork } from "./network.js";
 import { Shell } from "./shell.js";
 import type {
   ExecuteBytesResult,
@@ -26,6 +27,14 @@ export interface ShellDurableObjectOptions extends Omit<DurableObjectFileSystemO
    * may use it.
    */
   content?: (fileSystem: DurableObjectFileSystem) => ShellContentReader;
+  /**
+   * Lets commands reach outside the namespace.
+   *
+   * The other half of the opt-in is `policy.network`, exactly as with the
+   * content reader: an object that has a network still runs sessions that do
+   * not.
+   */
+  network?: ShellNetwork;
   policy?: ShellPolicy;
   limits?: Partial<ShellLimits>;
   /** Observes storage and execution events from this object's single hook. */
@@ -118,6 +127,7 @@ export abstract class ShellDurableObject<Environment> extends VfsDurableObject<E
       fileSystem: this.fileSystem,
       commands: options.commands,
       ...(options.content === undefined ? {} : { content: options.content(this.fileSystem) }),
+      ...(options.network === undefined ? {} : { network: options.network }),
       ...(options.policy === undefined ? {} : { policy: options.policy }),
       ...(options.limits === undefined ? {} : { limits: options.limits }),
       ...(options.onEvent === undefined ? {} : { onEvent: options.onEvent }),

@@ -678,10 +678,12 @@ const shell = new Shell({
       if (url.origin !== "https://api.example.com") {
         return new Response("origin not allowed", { status: 403 });
       }
-      const authorized = new Request(request, {
-        headers: new Headers([...request.headers, ["authorization", `Bearer ${env.TOKEN}`]]),
-      });
-      return fetch(authorized, { redirect: "manual" });
+      // Set rather than append, and after removing what the session sent: a
+      // header the agent can add to is a header the agent controls.
+      const headers = new Headers(request.headers);
+      headers.delete("cookie");
+      headers.set("authorization", `Bearer ${env.TOKEN}`);
+      return fetch(new Request(request, { headers }), { redirect: "manual" });
     },
   },
   policy: { network: "allow" },
@@ -692,6 +694,12 @@ The credential never enters the session — see [credentials stay outside the
 shell](operations.md#credentials-stay-outside-the-shell). That is also why
 there is no `-u`: a credential a session can spell is a credential it can send
 somewhere the host did not intend.
+
+A session sets its own headers with `-H`, and nothing here filters them, so a
+host that cares which value a header carries must set it rather than add to it.
+Appending leaves the agent able to prepend its own — `authorization: Bearer
+theirs, Bearer yours` is what an allowlisted API sees, and which one wins is the
+API's business rather than the host's.
 
 A request arrives with `redirect: "manual"`, and an implementation must keep it
 that way. Following a redirect inside the host turns one authorized request
@@ -712,12 +720,19 @@ payload, save a body, and branch on the result:
 | `-I`, `--head` | `HEAD`, headers only |
 | `-f`, `--fail` | no body and status 22 when the response is 400 or above |
 | `-L`, `--location` | follow redirects, each through the capability again |
+| — | `authorization`, `cookie`, and `proxy-authorization` are dropped when a redirect changes origin |
 | `--max-redirs` | how many, default 20 |
 | `-s`, `-S` | accepted; there is no progress meter to silence |
 
 Exit statuses follow curl where this profile can produce them: 3 for a URL that
 is not one, 7 when the capability throws, 22 for `-f`, and 47 when `-L` runs out
 of redirects. A usage error is 2, as everywhere else here.
+
+Only `http` and `https` can be transferred, and a redirect cannot leave them:
+a `Location: file:///…` is refused here rather than handed to a host that never
+expected to have an opinion about it. Each hop is charged to the execution's
+command budget and races its deadline, so a redirect loop ends where every
+other unbounded thing in this shell ends.
 
 Absent by design: `-u`, cookies, `-F`, `--data-binary`, `-w`, `-k`, and
 compression flags. This is a profile, not a reimplementation, and every one of

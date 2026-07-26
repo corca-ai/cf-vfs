@@ -1,13 +1,14 @@
-import { isVfsError } from "../../core/errors.js";
+import { isVfsError, VfsError } from "../../core/errors.js";
 import type { ShellRequest } from "../network.js";
 import { fetchThrough, redirectTarget } from "../network.js";
+import type { ShellCommandContext } from "../types.js";
 import {
   type AppletSpecWithOptions,
   appletUsageError,
   defineApplet,
   parseAppletOptions,
 } from "./applet.js";
-import { commandPath, parseInteger, pipeToSink, writeText } from "./helpers.js";
+import { commandPath, parseInteger, pipeToSink, readWithAbort, writeText } from "./helpers.js";
 
 const CURL = {
   name: "curl",
@@ -76,6 +77,52 @@ function statusLine(response: Response): string {
 }
 
 /**
+ * Reads a body into memory, charging it to the execution as it arrives.
+ *
+ * `writeFile` accounts for a mutation and not for the bytes moved, so a body
+ * written to a path would otherwise be transfer this execution never paid for.
+ * Charging on the way through is also what stops one: the budget throws, and
+ * the stream is dropped.
+ */
+async function collectBody(
+  context: ShellCommandContext,
+  response: Response,
+  prefix: string,
+): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const encoded = new TextEncoder().encode(prefix);
+  if (encoded.byteLength > 0) {
+    chunks.push(encoded);
+    total = encoded.byteLength;
+    context.budget.io(encoded.byteLength);
+  }
+  const body = response.body;
+  if (body !== null) {
+    const reader = body.getReader();
+    try {
+      for (;;) {
+        const next = await readWithAbort(reader, context.signal);
+        if (next.done) break;
+        context.budget.io(next.value.byteLength);
+        chunks.push(next.value);
+        total += next.value.byteLength;
+      }
+    } finally {
+      reader.releaseLock();
+      await body.cancel().catch(() => undefined);
+    }
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+/**
  * Transfers one URL.
  *
  * A deliberately small profile: enough for an agent to read an endpoint, post a
@@ -120,14 +167,14 @@ export const curlCommand = /* @__PURE__ */ defineApplet(CURL, async (context, ar
   if (body !== undefined && !headers.some(([name]) => name.toLowerCase() === "content-type")) {
     headers.push(["content-type", "application/x-www-form-urlencoded"]);
   }
-  const maxRedirects = has("location")
-    ? (() => {
-        const declared = argumentsFor("max-redirs")[0];
-        return declared === undefined
-          ? DEFAULT_MAX_REDIRECTS
-          : parseInteger(declared, "curl: redirect limit");
-      })()
-    : 0;
+  // Validated whether or not `-L` is present, so a typo is a usage error rather
+  // than something silently ignored.
+  const declaredRedirects = argumentsFor("max-redirs")[0];
+  const redirectLimit =
+    declaredRedirects === undefined
+      ? DEFAULT_MAX_REDIRECTS
+      : parseInteger(declaredRedirects, "curl: redirect limit");
+  const maxRedirects = has("location") ? redirectLimit : 0;
 
   const request: ShellRequest = {
     url,
@@ -141,23 +188,36 @@ export const curlCommand = /* @__PURE__ */ defineApplet(CURL, async (context, ar
     response = await fetchThrough(context.network, context.policy.network, request, {
       maxRedirects,
       signal: context.signal,
+      // Each hop is work the execution asked for, so each meets the same
+      // ceiling every other command does.
+      account: () => context.budget.command(),
     });
   } catch (error) {
-    // A refusal is the host's answer and belongs to the caller as one; anything
-    // else the capability throws is a transfer that did not happen.
-    if (isVfsError(error) && error.code === "ENOTSUP") throw error;
-    if (context.signal.aborted) throw error;
+    // A refusal and a cancellation are the shell's own errors and carry their
+    // own handling. Anything else is a transfer that did not happen, and it has
+    // to become a status here: a host's rejection escaping `executeText` would
+    // be a broken invariant rather than a command that failed.
+    if (isVfsError(error)) throw error;
+    if (context.signal.aborted) {
+      throw new VfsError("ECANCELED", "execution was cancelled", url);
+    }
     const message = error instanceof Error ? error.message : String(error);
     await writeText(fds[2], `curl: (${COULD_NOT_CONNECT}) ${message}\n`);
     return COULD_NOT_CONNECT;
   }
 
-  if (maxRedirects > 0 && redirectTarget(response) !== null) {
+  const discard = async (): Promise<void> => {
+    await response.body?.cancel().catch(() => undefined);
+  };
+
+  if (has("location") && redirectTarget(response) !== null) {
+    await discard();
     await writeText(fds[2], `curl: (${TOO_MANY_REDIRECTS}) maximum redirects followed\n`);
     return TOO_MANY_REDIRECTS;
   }
 
   if (has("fail") && response.status >= 400) {
+    await discard();
     if (!has("silent")) {
       await writeText(
         fds[2],
@@ -168,21 +228,27 @@ export const curlCommand = /* @__PURE__ */ defineApplet(CURL, async (context, ar
   }
 
   const output = argumentsFor("output")[0];
-  if (head || has("include")) {
-    const rendered = statusLine(response);
-    if (output === undefined) await writeText(fds[1], rendered);
-    else if (head) {
-      await context.fileSystem.writeFile(commandPath(context, output), rendered);
+  const rendered = head || has("include") ? statusLine(response) : "";
+  if (output === undefined) {
+    if (rendered !== "") await writeText(fds[1], rendered);
+    if (head) {
+      await discard();
       return 0;
     }
-  }
-  if (head) return 0;
-
-  const stream = response.body;
-  if (output !== undefined) {
-    await context.fileSystem.writeFile(commandPath(context, output), stream ?? new Uint8Array(0));
+    if (response.body !== null) await pipeToSink(context, response.body, fds[1]);
     return 0;
   }
-  if (stream !== null) await pipeToSink(context, stream, fds[1]);
+
+  const path = commandPath(context, output);
+  // Refuse before reading. A body pulled and then discarded because the path
+  // was never writable is bytes spent on nothing.
+  context.fileSystem.assertWritable(path);
+  if (head) {
+    await discard();
+    await context.fileSystem.writeFile(path, rendered);
+    return 0;
+  }
+  const bytes = await collectBody(context, response, rendered);
+  await context.fileSystem.writeFile(path, bytes);
   return 0;
 });

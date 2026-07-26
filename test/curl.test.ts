@@ -215,4 +215,132 @@ describe("curl", () => {
     expect(result.exitCode).not.toBe(0);
     expect(network.seen).toHaveLength(0);
   });
+
+  it("stops a redirect chain when the execution is cancelled", async () => {
+    let hops = 0;
+    const network: ShellNetwork = {
+      async fetch() {
+        hops += 1;
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return new Response("", { status: 302, headers: { location: "/again" } });
+      },
+    };
+    const shell = createBashHarness({
+      extraCommands: [curlCommand],
+      network,
+      policy: { network: "allow" },
+      limits: { deadlineMs: 60 },
+    });
+    const result = await shell.run("curl -L --max-redirs 9007199254740991 https://example.test/");
+    expect(result.exitCode).not.toBe(0);
+    // Without the deadline reaching the loop this runs until the number ends.
+    expect(hops).toBeLessThan(500);
+  });
+
+  it("does not wait forever on a host that never answers", async () => {
+    const network: ShellNetwork = { fetch: () => new Promise<Response>(() => undefined) };
+    const shell = createBashHarness({
+      extraCommands: [curlCommand],
+      network,
+      policy: { network: "allow" },
+      limits: { deadlineMs: 60 },
+    });
+    const result = await shell.run("curl https://example.test/");
+    expect(result.exitCode).not.toBe(0);
+  });
+
+  it("returns a status rather than rejecting when the host throws on abort", async () => {
+    const network: ShellNetwork = {
+      async fetch() {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        throw new DOMException("aborted", "AbortError");
+      },
+    };
+    // A foreign rejection escaping `executeText` would be a broken invariant
+    // rather than a command that failed.
+    const shell = createBashHarness({
+      extraCommands: [curlCommand],
+      network,
+      policy: { network: "allow" },
+      limits: { deadlineMs: 20 },
+    });
+    const result = await shell.run("curl https://example.test/");
+    expect(typeof result.exitCode).toBe("number");
+  });
+
+  it("charges a saved body to the execution's transfer budget", async () => {
+    const network = recordingNetwork(() => new Response(new Uint8Array(64 * 1024)));
+    const shell = createBashHarness({
+      extraCommands: [curlCommand],
+      network,
+      policy: { network: "allow" },
+      limits: { maxTotalIoBytes: 32 * 1024 },
+    });
+    // `writeFile` accounts for a mutation and not for bytes, so without
+    // charging here a saved body would be transfer nobody paid for.
+    const result = await shell.run("curl -o /a.bin https://example.test/");
+    expect(result.exitCode).not.toBe(0);
+  });
+
+  it("refuses a scheme that is not http or https, and a redirect into one", async () => {
+    const network = recordingNetwork(
+      () => new Response("", { status: 302, headers: { location: "file:///etc/passwd" } }),
+    );
+    const direct = await harness(network).run("curl file:///etc/passwd");
+    expect(direct.exitCode).not.toBe(0);
+    expect(network.seen).toHaveLength(0);
+
+    const redirected = await harness(network).run("curl -L https://example.test/");
+    expect(redirected.exitCode).not.toBe(0);
+    expect(redirected.stderr).toContain("unsupported scheme");
+    expect(network.seen).toHaveLength(1);
+  });
+
+  it("drops credentials when a redirect changes origin, and keeps them when it does not", async () => {
+    const away = recordingNetwork((_request, hop) =>
+      hop === 0
+        ? new Response("", { status: 302, headers: { location: "https://elsewhere.test/x" } })
+        : new Response("ok"),
+    );
+    await harness(away).run(
+      "curl -L -H 'Authorization: Bearer AGENT' -H 'X-Kind: keep' https://example.test/",
+    );
+    expect(away.seen[1]?.headers.get("authorization")).toBeNull();
+    expect(away.seen[1]?.headers.get("x-kind")).toBe("keep");
+
+    const within = recordingNetwork((_request, hop) =>
+      hop === 0
+        ? new Response("", { status: 302, headers: { location: "/moved" } })
+        : new Response("ok"),
+    );
+    await harness(within).run("curl -L -H 'Authorization: Bearer AGENT' https://example.test/");
+    expect(within.seen[1]?.headers.get("authorization")).toBe("Bearer AGENT");
+  });
+
+  it("writes headers into the output path with -i, the way curl does", async () => {
+    const network = recordingNetwork(() => new Response("body", { status: 201 }));
+    const shell = harness(network);
+    await shell.run("curl -i -o /out.txt https://example.test/");
+    const saved = await shell.readText("/out.txt");
+    expect(saved).toContain("HTTP/1.1 201");
+    expect(saved.endsWith("body")).toBe(true);
+  });
+
+  it("rejects a redirect limit that is not a number, with or without -L", async () => {
+    const network = recordingNetwork(() => new Response("body"));
+    const result = await harness(network).run("curl --max-redirs abc https://example.test/");
+    expect(result.exitCode).toBe(2);
+    expect(network.seen).toHaveLength(0);
+  });
+
+  it("refuses an output path outside the write roots before transferring", async () => {
+    const network = recordingNetwork(() => new Response("body"));
+    const shell = createBashHarness({
+      extraCommands: [curlCommand],
+      network,
+      policy: { network: "allow", writeRoots: ["/allowed"] },
+    });
+    const result = await shell.run("curl -o /elsewhere.txt https://example.test/");
+    expect(result.exitCode).not.toBe(0);
+  });
 });

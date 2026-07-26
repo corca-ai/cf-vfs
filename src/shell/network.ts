@@ -73,7 +73,48 @@ export interface FetchOptions {
   /** How many redirects to follow. Zero returns the redirect itself. */
   readonly maxRedirects?: number;
   readonly signal?: AbortSignal | undefined;
+  /** Charged once per hop, so a redirect chain meets the execution's limits. */
+  readonly account?: (() => void) | undefined;
 }
+
+/** Schemes a request may name. A redirect cannot leave them. */
+const TRANSFERABLE = new Set(["http:", "https:"]);
+
+/**
+ * Settles when the request does, or when the execution is cancelled.
+ *
+ * A host implementation is free to ignore the signal, and one that hangs would
+ * otherwise hold the execution past its deadline forever. The losing request is
+ * left to finish and its body cancelled; what matters is that the command stops
+ * waiting for it.
+ */
+async function abortable(
+  pending: Promise<Response>,
+  signal: AbortSignal | undefined,
+  url: string,
+): Promise<Response> {
+  if (signal === undefined) return pending;
+  if (signal.aborted) throw new VfsError("ECANCELED", "execution was cancelled", url);
+  let onAbort: () => void = () => undefined;
+  const cancelled = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(new VfsError("ECANCELED", "execution was cancelled", url));
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([pending, cancelled]);
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+    void pending.then(
+      (response) => {
+        if (signal.aborted) void response.body?.cancel().catch(() => undefined);
+      },
+      () => undefined,
+    );
+  }
+}
+
+/** Names that must not follow a request to somewhere it was not sent. */
+const CROSS_ORIGIN_STRIPPED = new Set(["authorization", "cookie", "proxy-authorization"]);
 
 function build(request: ShellRequest, signal: AbortSignal | undefined): Request {
   const headers = new Headers();
@@ -90,17 +131,33 @@ function build(request: ShellRequest, signal: AbortSignal | undefined): Request 
 }
 
 function afterRedirect(request: ShellRequest, location: string, status: number): ShellRequest {
-  const target = new URL(location, request.url).toString();
+  const target = new URL(location, request.url);
+  // `curl` restricts redirect protocols to HTTP and HTTPS by default and the
+  // fetch specification network-errors on anything else. Without this a
+  // `Location: file:///…` would arrive at the capability as a request the host
+  // never expected to have an opinion about.
+  if (!TRANSFERABLE.has(target.protocol)) {
+    throw new VfsError(
+      "ENOTSUP",
+      `redirect to an unsupported scheme: ${target.protocol}`,
+      target.href,
+    );
+  }
   const disposition = REDIRECTS.get(status);
   const toGet = disposition === "to-get" && request.method !== "GET" && request.method !== "HEAD";
-  if (!toGet) return { ...request, url: target };
-  return {
-    url: target,
-    method: "GET",
-    headers: request.headers.filter(
-      ([name]) => name.toLowerCase() !== "content-type" && name.toLowerCase() !== "content-length",
-    ),
-  };
+  // Credentials the caller set were addressed to the origin it named. Real
+  // `curl` and the fetch specification both drop them when the origin changes,
+  // and so must this: an allowed origin that redirects elsewhere must not be
+  // able to collect what was meant for it.
+  const sameOrigin = new URL(request.url).origin === target.origin;
+  const headers = request.headers.filter(
+    ([name]) =>
+      (sameOrigin || !CROSS_ORIGIN_STRIPPED.has(name.toLowerCase())) &&
+      (!toGet ||
+        (name.toLowerCase() !== "content-type" && name.toLowerCase() !== "content-length")),
+  );
+  const next: ShellRequest = { url: target.href, method: toGet ? "GET" : request.method, headers };
+  return toGet || request.body === undefined ? next : { ...next, body: request.body };
 }
 
 /**
@@ -123,12 +180,23 @@ export async function fetchThrough(
   if (network === undefined || (access ?? "off") !== "allow") {
     throw new VfsError("ENOTSUP", "network access is not available to shell commands", request.url);
   }
+  if (!TRANSFERABLE.has(new URL(request.url).protocol)) {
+    throw new VfsError("ENOTSUP", "only http and https can be transferred", request.url);
+  }
   const limit = options.maxRedirects ?? 0;
   let current = request;
   for (let hop = 0; ; hop += 1) {
-    const response = await network.fetch(build(current, options.signal), options.signal);
+    options.account?.();
+    const response = await abortable(
+      network.fetch(build(current, options.signal), options.signal),
+      options.signal,
+      current.url,
+    );
     const location = redirectTarget(response);
     if (location === null || hop >= limit) return response;
+    // Nothing will read the redirect's own body, and on a platform where a
+    // response is a live subrequest, leaving it open leaks one per hop.
+    await response.body?.cancel().catch(() => undefined);
     current = afterRedirect(current, location, response.status);
   }
 }

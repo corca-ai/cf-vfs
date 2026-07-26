@@ -906,7 +906,9 @@ async function executeSimpleCommand(
             budget: runtime.budget,
             policy: runtime.policy,
             ...(runtime.content === undefined ? {} : { content: runtime.content }),
-            ...(runtime.network === undefined ? {} : { network: runtime.network }),
+            ...(runtime.network === undefined || runtime.policy.network !== "allow"
+              ? {}
+              : { network: runtime.network }),
             executeSource: async (source, path, sourceArgs, sourceFds) =>
               await runSourcedUnit(source, path, sourceArgs, session, sourceFds, runtime, context),
             executeCommand: async (commandArgv, commandFds, commandOptions) => {
