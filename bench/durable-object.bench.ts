@@ -444,8 +444,8 @@ describe("Durable Object storage benchmark metrics", () => {
     });
     expect(metrics.populatedStatCost).toEqual({ rowsRead: 2, statements: 1 });
     expect(metrics.overwriteCost).toMatchObject({
-      statements: 9,
-      rowsRead: 16,
+      statements: 8,
+      rowsRead: 14,
       rowsWritten: 5,
     });
     expect(metrics.statQueryPlan.every((detail) => detail.includes("SEARCH"))).toBe(true);

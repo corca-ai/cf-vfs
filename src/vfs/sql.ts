@@ -1159,10 +1159,15 @@ ${ENTRY_TRIGGERS}
       current = dirname(current);
       parent = this.oneResolved(current);
     }
-    // `requireDirectory` follows, so a link to a directory is a fine parent —
-    // but a link to a file, or a dangling one, is not, and the entry created
-    // below would otherwise become a child of something that is not a
-    // directory. That invariant is what lets resolution trust an exact hit.
+    // A link is not a parent, even one that resolves to a directory. The child
+    // is stored naming what stands here, and a link can be repointed or removed
+    // while the child stays — which is how a row ends up under something that
+    // is not a directory. Every caller canonicalizes before it gets here, so a
+    // link at this point means an ancestor changed since, and that is exactly
+    // what has to be refused. Resolution trusting an exact hit rests on this.
+    if (parent !== null && parent.path !== current) {
+      throw new VfsError("ENOTDIR", "not a directory", current);
+    }
     this.requireDirectory(current, parent);
     if (missing.length > 0 && !recursive) {
       throw new VfsError("ENOENT", "parent directory does not exist", dirname(path));
@@ -1538,7 +1543,15 @@ ${ENTRY_TRIGGERS}
         const previousInlineBytes = current?.contentClass === "inline" ? current.sizeBytes : 0;
         const inlineDelta = sizeBytes - previousInlineBytes;
         const now = this.now();
-        this.ensureParents(normalized, options.createParents ?? false, now);
+        // An entry that is already there is proof of its own parent. Nothing
+        // removes or replaces a directory while a child remains, and every
+        // route that could reach the parent must delete the child first, which
+        // bumps its version and so fails the token compared just above.
+        // `touch` reaches the same conclusion by returning early; a write has
+        // to say it, because it goes on to write.
+        if (current === null) {
+          this.ensureParents(normalized, options.createParents ?? false, now);
+        }
         this.assertCapacity(inlineDelta, current === null ? 1 : 0, normalized);
         const token = this.bumpToken(normalized);
         if (current?.contentClass === "inline") {
