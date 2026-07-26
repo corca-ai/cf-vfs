@@ -339,18 +339,65 @@ h1 em {
     #07120f;
 }
 
+#terminal-surface {
+  height: 100%;
+}
+
 #terminal .xterm,
 #terminal .xterm-screen {
   max-width: 100%;
 }
 
-#terminal .xterm {
-  height: 100%;
-}
-
 #terminal .xterm-viewport {
   scrollbar-color: #284a3b transparent;
   scrollbar-width: thin;
+}
+
+.terminal-examples {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  background: #081611;
+}
+
+.examples-label {
+  flex: none;
+  padding-top: 5px;
+  color: var(--dim);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.examples-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.examples-list button {
+  padding: 4px 9px;
+  border: 1px solid rgba(177, 225, 196, 0.16);
+  border-radius: 999px;
+  background: rgba(129, 214, 164, 0.06);
+  color: #b6d9c4;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.examples-list button:hover,
+.examples-list button:focus-visible {
+  border-color: rgba(129, 214, 164, 0.45);
+  background: rgba(129, 214, 164, 0.13);
+  color: #e6f5ec;
 }
 
 .terminal-footer {

@@ -16,6 +16,8 @@
   const reconnectButton = document.querySelector("#reconnect");
   const clearButton = document.querySelector("#clear-terminal");
   const terminalElement = document.querySelector("#terminal");
+  const terminalSurface = document.querySelector("#terminal-surface");
+  const examplesElement = document.querySelector("#examples");
 
   function workspaceId() {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -66,7 +68,7 @@
   });
   const fitAddon = new FitAddon.FitAddon();
   terminal.loadAddon(fitAddon);
-  terminal.open(terminalElement);
+  terminal.open(terminalSurface);
 
   /**
    * Re-measures the grid against the element that holds it.
@@ -104,7 +106,7 @@
   // scrollbar appearing, the footer wrapping, or the card being laid out after
   // this runs all change it without one.
   if (typeof ResizeObserver === "function") {
-    new ResizeObserver(scheduleFit).observe(terminalElement);
+    new ResizeObserver(scheduleFit).observe(terminalSurface);
   }
 
   let socket;
@@ -575,6 +577,48 @@
     send({ type: "resize", columns: terminal.cols, rows: terminal.rows });
   }
   terminalElement.addEventListener("click", () => terminal.focus());
+
+  /**
+   * Commands worth trying, grouped so a reader can see the range rather than a
+   * list of one kind of thing.
+   *
+   * Each is written to run against a workspace nobody has touched, so a visitor
+   * can click them in any order and get the output the label promises.
+   */
+  const EXAMPLES = [
+    ["write a file", "printf 'hello\\nworld\\n' > notes.txt && cat notes.txt"],
+    ["pipeline", "seq 1 20 | grep -E '[13579]$' | wc -l"],
+    ["make a tree", "mkdir -p src/{lib,test} && ls -R src"],
+    ["brace range", "touch part{1..5}.txt && ls part*"],
+    ["find and edit", "sed -i 's/world/shell/' notes.txt && cat notes.txt"],
+    ["what is here", "ls -la / | head"],
+    ["applet directory", "ls /bin | head -12 | tr '\\n' ' '"],
+    ["a device", "echo lost > /dev/null; echo kept"],
+    ["symlink", "ln -s /etc link && readlink link && ls -l link | cut -c1"],
+    ["heredoc", "cat > poem.txt <<'EOF'\nroses are red\nEOF\nwc -l poem.txt"],
+    ["arithmetic", "echo $((2 ** 16)) $((7 % 3))"],
+    ["a loop", "for n in {1..3}; do printf '%s squared is %s\\n' $n $((n * n)); done"],
+    ["fetch a page", "curl -s https://example.com/ | grep -o '<title>[^<]*'"],
+    ["fetch some JSON", "curl -s https://api.github.com/repos/corca-ai/cf-vfs | grep -o '\"stargazers_count\":[0-9]*'"],
+    ["refused origin", "curl -s https://example.net/ ; echo \"exit $?\""],
+    ["refused method", "curl -s -d leak=secret https://example.com/"],
+    ["disk usage", "du -sh / 2>/dev/null; df 2>/dev/null || stat -c '%s %n' notes.txt"],
+  ];
+
+  for (const [label, command] of EXAMPLES) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.title = command;
+    button.addEventListener("click", () => {
+      // Inserted, not submitted: a visitor should get to read and edit it
+      // before it runs. `queuePaste` is the same path a real paste takes, so a
+      // multi-line example arrives exactly as one typed by hand would.
+      queuePaste(command);
+      terminal.focus();
+    });
+    examplesElement.append(button);
+  }
 
   copyWorkspaceButton.addEventListener("click", async () => {
     try {

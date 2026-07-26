@@ -83,7 +83,17 @@
             <span id="connection-label">connecting</span>
           </div>
         </div>
-        <div id="terminal" role="application" aria-label="Terminal input"></div>
+        <div id="terminal">
+          <!-- The fit addon reads its height from this element's parent and its
+               padding from the terminal element, so padding on the measured box
+               is never subtracted. The surface carries the height and no
+               padding, which is the arrangement the addon assumes. -->
+          <div id="terminal-surface" role="application" aria-label="Terminal input"></div>
+        </div>
+        <div class="terminal-examples" aria-label="Example commands">
+          <span class="examples-label">Try</span>
+          <div id="examples" class="examples-list"></div>
+        </div>
         <div class="terminal-footer">
           <div class="workspace">
             <span>workspace</span>
