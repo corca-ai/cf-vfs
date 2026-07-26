@@ -21,6 +21,20 @@ async function averageDuration(
   return elapsed / repeats;
 }
 
+/**
+ * Asserts a duration was measured, without asserting that time passed.
+ *
+ * An operation fast enough to fall inside the clock's resolution reports zero,
+ * and on a shared runner that is a normal reading rather than a broken one —
+ * more so as these operations get cheaper. What is worth guarding is that the
+ * benchmark ran and produced a number; the costs it exists to hold are the
+ * statement and row counts, which do not depend on a clock.
+ */
+function measured(durationMs: number): void {
+  expect(Number.isFinite(durationMs)).toBe(true);
+  expect(durationMs).toBeGreaterThanOrEqual(0);
+}
+
 describe("Durable Object storage benchmark metrics", () => {
   it("records density and random-read costs for 8–12 KiB inline blobs", async () => {
     const stub: DurableObjectStub<TestWorkspaceVfs> = env.VFS_TEST.getByName(
@@ -219,8 +233,8 @@ describe("Durable Object storage benchmark metrics", () => {
     console.info(`DO append benchmark: ${JSON.stringify(results)}`);
     expect(results["1MiB"]?.maxRowsWritten).toBeLessThanOrEqual(6);
     expect(results["8MiB"]?.maxRowsWritten).toBeLessThanOrEqual(6);
-    expect(results["1MiB"]?.durationMs).toBeGreaterThan(0);
-    expect(results["8MiB"]?.durationMs).toBeGreaterThan(0);
+    measured(results["1MiB"]?.durationMs ?? Number.NaN);
+    measured(results["8MiB"]?.durationMs ?? Number.NaN);
   });
 
   it("keeps subtree copy, move, and remove statement counts constant", async () => {
@@ -347,9 +361,9 @@ describe("Durable Object storage benchmark metrics", () => {
 
     console.info(`DO subtree latency: ${JSON.stringify(results)}`);
     for (const result of Object.values(results)) {
-      expect(result.copyMs).toBeGreaterThan(0);
-      expect(result.moveMs).toBeGreaterThan(0);
-      expect(result.removeMs).toBeGreaterThan(0);
+      measured(result.copyMs);
+      measured(result.moveMs);
+      measured(result.removeMs);
     }
   });
 
@@ -449,9 +463,9 @@ describe("Durable Object storage benchmark metrics", () => {
       rowsWritten: 5,
     });
     expect(metrics.statQueryPlan.every((detail) => detail.includes("SEARCH"))).toBe(true);
-    expect(metrics.warmInitializeMs).toBeGreaterThan(0);
-    expect(metrics.statMs).toBeGreaterThan(0);
-    expect(metrics.overwriteMs).toBeGreaterThan(0);
-    expect(metrics.globFindMs).toBeGreaterThan(0);
+    measured(metrics.warmInitializeMs);
+    measured(metrics.statMs);
+    measured(metrics.overwriteMs);
+    measured(metrics.globFindMs);
   });
 });
