@@ -1,4 +1,5 @@
 export * from "./core.js";
+export * from "./curl.js";
 export * from "./discovery.js";
 export * from "./fs.js";
 export * from "./help.js";

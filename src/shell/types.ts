@@ -1,6 +1,7 @@
 import type { VfsStat, VirtualFileSystem } from "../vfs/types.js";
 import type { OpaqueContentAccess, ShellContentReader } from "./content.js";
 import type { ShellEventSink } from "./events.js";
+import type { NetworkAccess, ShellNetwork } from "./network.js";
 import type { FunctionDefinitionNode } from "./parser.js";
 
 export type ShellFileSystem = Pick<
@@ -103,6 +104,15 @@ export interface ShellPolicy {
    */
   readonly opaqueContent?: OpaqueContentAccess;
   /**
+   * Whether this session may use the host's network capability.
+   *
+   * `off` — the default — refuses with `ENOTSUP` before a request is built, so
+   * a host that has a network still hands out sessions that do not. Read and
+   * write roots say nothing here: a root bounds which paths a session can name,
+   * and this bounds whether it can reach anything that is not a path.
+   */
+  readonly network?: NetworkAccess;
+  /**
    * Canonical applet names a script may run.
    *
    * A name is matched after the multicall resolver runs, so one entry covers
@@ -152,6 +162,13 @@ export interface ShellCommandContext {
    * any R2 code at all.
    */
   content?: ShellContentReader | undefined;
+  /**
+   * Reaches outside the namespace, when the session was built with it.
+   *
+   * Absent by default, which is what keeps this an isolated environment: a
+   * networked command refuses before anything leaves the object.
+   */
+  network?: ShellNetwork | undefined;
   session: ShellSession;
   signal: AbortSignal;
   budget: ShellBudget;
@@ -314,6 +331,14 @@ export interface ShellOptions {
    * does not silently widen what an existing sandboxed session can read.
    */
   content?: ShellContentReader;
+  /**
+   * The capability that lets commands reach the network.
+   *
+   * Supplying it is the opt-in; `policy.network` decides whether a given
+   * session may use it. Both are required, so adding a network to a host does
+   * not quietly give one to every sandboxed session already running on it.
+   */
+  network?: ShellNetwork;
   commands: readonly ShellCommand[];
   /**
    * How a bare command name reaches an applet.

@@ -72,8 +72,9 @@ second and offers the first from a subpath.
 3. `InteractiveShell`, from `/shell/interactive`, reuses that executor while
    preserving cwd, variables, functions, options, arguments, and status.
 4. `ShellCommand` utilities receive argv, byte streams, a shared budget, and a
-   capability-wrapped filesystem that reads opaque bodies only when the host
-   supplies a content reader and the session's policy allows it.
+   capability-wrapped filesystem. Anything beyond it — an opaque R2 body, a
+   network request — arrives as a capability the host supplies and the
+   session's policy separately allows.
 5. `VfsDurableObject` and `ShellDurableObject` expose the metadata and remote
    execution boundaries. R2 body transfer uses a separate gateway or direct
    binding path.
