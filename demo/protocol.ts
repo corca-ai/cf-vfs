@@ -46,6 +46,8 @@ export interface HelloMessage {
     readonly maxSourceBytes: number;
     readonly maxCompletionCandidates: number;
   };
+  /** The shared room this session joined, as `country-KR`. */
+  readonly workspace: string;
   /**
    * What survives a reconnect, said outright.
    *

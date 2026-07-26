@@ -36,35 +36,9 @@
     <div class="ambient ambient-two" aria-hidden="true"></div>
 
     <main class="shell-page">
-      <header class="topbar">
-        <a class="brand" href="/" aria-label="cf-vfs home">
-          <span class="brand-mark" aria-hidden="true">
-            <span></span><span></span><span></span>
-          </span>
-          <span class="brand-name">cf-vfs</span>
-          <span class="brand-version">Bash v4</span>
-        </a>
-        <div class="topbar-actions">
-          <span class="persistence-pill">
-            <span class="pulse" aria-hidden="true"></span>
-            Durable SQLite
-          </span>
-          <a
-            class="github-link"
-            href="https://github.com/corca-ai/cf-vfs"
-            target="_blank"
-            rel="noreferrer"
-          >View source <span aria-hidden="true">↗</span></a>
-        </div>
-      </header>
 
       <section class="intro" aria-labelledby="page-title">
-        <p class="eyebrow">Cloudflare Durable Objects × WebSocket</p>
-        <h1 id="page-title">A filesystem you can<br><em>actually touch.</em></h1>
-        <p class="lede">
-          Type Bash-compatible commands below. Every file lives in your own
-          SQLite-backed workspace and survives reconnects.
-        </p>
+        <h1 id="page-title">Virtual Filesystem and Container<br><em>based on Durable Object SQL.</em></h1>
       </section>
 
       <section class="terminal-card" aria-label="Interactive cf-vfs terminal">
@@ -73,14 +47,6 @@
             <span class="dot red"></span>
             <span class="dot amber"></span>
             <span class="dot green"></span>
-          </div>
-          <div class="terminal-title">
-            <span class="terminal-glyph" aria-hidden="true">&gt;_</span>
-            interactive session
-          </div>
-          <div class="connection-state" id="connection-state">
-            <span class="state-dot" aria-hidden="true"></span>
-            <span id="connection-label">connecting</span>
           </div>
         </div>
         <div id="terminal">
@@ -94,52 +60,58 @@
           <span class="examples-label">Try</span>
           <div id="examples" class="examples-list"></div>
         </div>
-        <div class="terminal-footer">
-          <div class="workspace">
-            <span>workspace</span>
-            <button id="copy-workspace" type="button" title="Copy workspace ID">
-              <code id="workspace-id">—</code>
-              <span class="copy-icon" aria-hidden="true">⧉</span>
-            </button>
-          </div>
-          <div class="terminal-tools">
-            <button id="reconnect" type="button">Reconnect session</button>
-            <button id="clear-terminal" type="button">Clear screen</button>
-          </div>
-        </div>
       </section>
 
-      <section class="proof-grid" aria-label="Demo properties">
-        <article>
-          <span class="proof-number">01</span>
-          <div>
-            <h2>Write something</h2>
-            <code>printf 'hello\n' &gt; hello.txt</code>
-          </div>
-        </article>
-        <article>
-          <span class="proof-number">02</span>
-          <div>
-            <h2>Reload the page</h2>
-            <p>Your WebSocket session reconnects to the same workspace.</p>
-          </div>
-        </article>
-        <article>
-          <span class="proof-number">03</span>
-          <div>
-            <h2>Read it back</h2>
-            <code>cat hello.txt</code>
-          </div>
-        </article>
-      </section>
+      <p class="notice">
+        Everyone visiting from the same country shares one workspace here, so
+        what you write is what the next person finds — and can change. It is a
+        public whiteboard, not your own.
+      </p>
 
-      <footer class="page-footer">
-        <p>
-          Bounded Bash-compatible runtime — no host processes, no host
-          filesystem, no pretend persistence.
-        </p>
-        <p>Built with cf-vfs · Seoul / Cloudflare edge</p>
-      </footer>
+      <section class="features" aria-label="What this is">
+        <ul>
+          <li>
+            <h2>A sandbox for an agent, without a container</h2>
+            <p>
+              Files and a shell inside one Durable Object. Nothing to build,
+              boot, or clean up — and no machine underneath for anything to
+              escape onto.
+            </p>
+          </li>
+          <li>
+            <h2>Ready the moment you name one</h2>
+            <p>
+              The filesystem is rows in SQLite, so there is no image to pull and
+              nothing kept warm between uses. A workspace starts in milliseconds
+              and costs nothing while idle.
+            </p>
+          </li>
+          <li>
+            <h2>The commands behave like the ones they are named after</h2>
+            <p>
+              Seventy-five of them — <code>grep</code>, <code>sed</code>,
+              <code>jq</code>, <code>find</code> — answering to recordings from
+              real GNU, Bash, and jq. Where this differs on purpose it says so
+              rather than guessing.
+            </p>
+          </li>
+          <li>
+            <h2>A runaway command stops itself</h2>
+            <p>
+              Every run carries ceilings on time, output, memory in flight, and
+              how much it may change. Try
+              <code>while true; do :; done</code> — it ends on its own instead
+              of taking the object with it.
+            </p>
+          </li>
+        </ul>
+        <a
+          class="github-link"
+          href="https://github.com/corca-ai/cf-vfs"
+          target="_blank"
+          rel="noreferrer"
+        >View source <span aria-hidden="true">↗</span></a>
+      </section>
     </main>
   </body>
 </html>
