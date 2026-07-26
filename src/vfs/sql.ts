@@ -429,7 +429,6 @@ export class SqlFileSystem implements VirtualFileSystem {
   private readonly workspaceId: string;
   private readonly onEvent: VfsEventSink | undefined;
   private readonly mutationEpoch: string;
-  /** Set inside a transaction, reported once the commit is durable. */
   /** Non-zero while a transaction body is on the stack. */
   private transactionDepth = 0;
   /**
@@ -441,6 +440,7 @@ export class SqlFileSystem implements VirtualFileSystem {
    * a single write makes twice, and for the total an observer is handed.
    */
   private transactionUsage: { inlineBytes: number; entries: number } | undefined;
+  /** Set inside a transaction, reported once the commit is durable. */
   private pendingUsage: { inlineBytes: number; entries: number } | undefined;
   /**
    * How many links exist, so a namespace without any pays nothing for them.
@@ -789,15 +789,6 @@ ${ENTRY_TRIGGERS}
   }
 
   /**
-   * The token a guard is taken and checked against.
-   *
-   * A path that crosses a link means whatever the link currently says, so each
-   * link's own version is part of what the caller reserved. Without them,
-   * repointing a link between the read and the write is invisible whenever the
-   * old and new targets happen to share a version — the exact ABA the token
-   * exists to catch.
-   */
-  /**
    * The mutation token for `path`, taken from a row already resolved for it.
    *
    * `oneEntry` joins `vfs_path_versions` and `parseEntry` builds the token from
@@ -810,6 +801,15 @@ ${ENTRY_TRIGGERS}
     return entry != null && entry.path === path ? entry.mutationToken : this.tokenFor(path);
   }
 
+  /**
+   * The token a guard is taken and checked against.
+   *
+   * A path that crosses a link means whatever the link currently says, so each
+   * link's own version is part of what the caller reserved. Without them,
+   * repointing a link between the read and the write is invisible whenever the
+   * old and new targets happen to share a version — the exact ABA the token
+   * exists to catch.
+   */
   private guardToken(path: string, entry?: EntryRow | null): string {
     const normalized = normalizePath(path);
     // With no links the guard is the named path's own token, which is what a

@@ -384,6 +384,18 @@ describe("stream-first shell runtime", () => {
     ).toBe("old");
   });
 
+  it("names the operand, not what it resolved to, when a body cannot be read", async () => {
+    const { fileSystem, shell } = createBashHarness();
+    await fileSystem.mkdir("/subdirectory");
+    await fileSystem.symlink("/link", "/subdirectory");
+    // `cat link` is a complaint about `link`. Reading resolves before it
+    // refuses, so the diagnostic has to be restated against what was named.
+    const result = await shell.executeText({ script: "cat /link" });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("/link: is a directory");
+    expect(result.stderr).not.toContain("/subdirectory");
+  });
+
   it("reports an atomic redirection close failure instead of discarding it", async () => {
     const mutateTarget = defineTestApplet("mutate-target", async (context, _argv, fds) => {
       await writeText(fds[1], "new");

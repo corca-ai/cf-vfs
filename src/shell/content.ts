@@ -1,4 +1,4 @@
-import { VfsError } from "../core/errors.js";
+import { isVfsError, VfsError } from "../core/errors.js";
 import type { ByteRange, VfsStat } from "../vfs/types.js";
 import type { ShellFileSystem } from "./types.js";
 
@@ -94,14 +94,30 @@ export async function openContent(
   // and ENOTSUP this would have probed for. Asking first would resolve the
   // path once to decide, and once more to read.
   if (options.reader === undefined || (options.access ?? "metadata") !== "stream") {
-    const inline = fileSystem.readFile(path);
-    return { stat: inline.stat, stream: inline.stream };
+    return openInline(fileSystem, path);
   }
   const stat = fileSystem.stat(path);
   if (stat.kind === "directory") throw new VfsError("EISDIR", "is a directory", path);
-  if (stat.kind !== "file" || stat.contentClass !== "opaque") {
+  if (stat.kind !== "file" || stat.contentClass !== "opaque") return openInline(fileSystem, path);
+  return options.reader.open(path, options.range, options.signal);
+}
+
+/**
+ * Reads an inline body, reporting a refusal against the path the caller named.
+ *
+ * `readFile` resolves links before it refuses, so its `EISDIR` and `ENOTSUP`
+ * name what the path led to. A utility's diagnostic is about its operand —
+ * `cat dirlink` is a complaint about `dirlink` — so those two are restated
+ * here. Every other failure already names the operand and is left alone.
+ */
+function openInline(fileSystem: ShellFileSystem, path: string): ContentBody {
+  try {
     const inline = fileSystem.readFile(path);
     return { stat: inline.stat, stream: inline.stream };
+  } catch (error) {
+    if (isVfsError(error) && (error.code === "EISDIR" || error.code === "ENOTSUP")) {
+      throw new VfsError(error.code, error.message, path);
+    }
+    throw error;
   }
-  return options.reader.open(path, options.range, options.signal);
 }

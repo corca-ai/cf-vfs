@@ -17,6 +17,7 @@ benchmark file so the two columns differ only in the code under test.
 | random-read 512 small BLOBs — rows read | 2,047 | 2,047 | — |
 | 8-byte overwrite — statements | 13 | 9 | −31% |
 | 8-byte overwrite — rows read | 21 | 16 | −24% |
+| 1 MiB overwrite — rows read | 33 | 28 | −15% |
 | subtree copy — statements | 11 | 9 | −18% |
 | subtree move — statements | 8 | 8 | — |
 | subtree remove — statements | 10 | 10 | — |
@@ -43,13 +44,37 @@ What did not change is the pair of reads around the body stream. Between them
 the caller's body is still arriving, another request to the same object can
 run, and re-reading is the guard rather than a repeat of it.
 
+## The recorded costs had drifted, and this reads them again
+
+`npm run bench:do` was already failing on `origin/main`: four of its seven
+checks, because the Performance workflow runs on a weekly schedule rather than
+on a pull request, so nothing compared them for fifty-six commits. What main
+actually measured against what it had recorded:
+
+| Guard | recorded | main measured |
+| --- | ---: | ---: |
+| create 512 files — rows read | 5,632 | 6,144 |
+| 1 MiB overwrite — rows read | ≤ 31 | 33 |
+| subtree statements | `{11, 7, 10}` | `{12, 8, 10}` |
+| 8-byte overwrite — rows read | 19 | 21 |
+
+So the `before` column above is what main *measures*, not what it had written
+down — a diff of the recorded numbers alone would read this change as smaller
+than it is on two rows and would hide that the 1 MiB overwrite guard goes from
+red to green. Every `before` cell was taken by running the benchmark against
+main with this benchmark file.
+
 ## A note on the benchmark itself
 
-The subtree comparison previously ran both sizes through one filesystem
-instance. The symlink count is cached per instance and invalidated by any
-mutation, so the work done for the first size decided whether the second paid
-for a recount — a constant, but one that landed asymmetrically and made the
-comparison partly about cache state. Each size now measures through its own
-instance over the same storage. The recorded move cost moves 7 → 8 for that
-reason alone; it is unchanged by the code in this baseline, and `origin/main`
-measures 8 under the same benchmark.
+The subtree comparison ran both sizes through one filesystem instance. The
+symlink count is cached per instance and invalidated by any mutation, so the
+work done for the first size decided whether the second paid for a recount —
+a constant, but one that landed asymmetrically. That is why main fails its own
+`large === small` assertion at 12 against 11: the guard was reporting cache
+state, not how subtree cost answers entry count. Each size now measures
+through its own instance over the same storage, and the assertion holds again.
+
+The refactor moves the measured copy cost by one — 12 → 11 on main, 10 → 9
+here — because a cold instance is what each size now pays. `move` is 8 on both
+branches under either benchmark; the recorded 7 was simply stale, and this
+change does not affect it.
