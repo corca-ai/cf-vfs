@@ -54,8 +54,8 @@ it cannot pull `node:sqlite` into a Worker bundle.
 
 `src/vfs/sql.ts` owns all filesystem semantics and depends only on a narrow
 synchronous SQL, transaction, database-size, and alarm port.
-`src/vfs/do-sql.ts` maps that port to `DurableObjectStorage`; the Node testing
-adapter maps it to `DatabaseSync(":memory:")` and an in-process alarm slot.
+`DurableObjectStorage` satisfies that port directly; the Node testing adapter
+maps it to `DatabaseSync(":memory:")` and an in-process alarm slot.
 Cloudflare integration tests remain authoritative for platform-specific cursor
 metering, output gates, alarms, RPC, and eviction.
 
@@ -83,8 +83,10 @@ Write behavior:
 1. Collect directly into fixed-size slabs while enforcing file and shared
    in-flight limits.
 2. Capture and later recheck the pathname mutation token.
-3. In one short `transactionSync()`, validate quota and headroom, replace chunk
-   rows, update metadata and usage, and publish one new revision/token.
+3. In one short `transactionSync()`, validate quota and headroom, write chunk
+   rows in batches of at most 33, update metadata and usage, and publish one new
+   revision/token. Three bindings per chunk keep each statement below
+   Cloudflare's 100-parameter ceiling.
 4. Release the buffered-byte reservation before any external await.
 
 Append keeps existing full chunks in place. It reads only the final stored
@@ -156,9 +158,11 @@ the entry — `stat`, `readFile`, `remove`, `move`, `copy` — still costs one
 lookup. An operation that needs only the canonical path, such as
 `getMutationToken`, costs one more, because it has no use for the row. A path
 whose final component is absent costs one further query: a single
-`path IN (…)` over its ancestors, served by a partial index on links alone,
-rather than one query per component. A chain costs one lookup per hop and is
-bounded at forty hops, so a cycle ends in `ELOOP` rather than in a hang.
+`path IN (SELECT value FROM json_each(?))` over its ancestors, served by a
+partial index on links alone, rather than one query per component. Binding the
+whole list as JSON also keeps arbitrarily deep valid paths below the platform's
+SQL-parameter ceiling. A chain costs one lookup per hop and is bounded at forty
+hops, so a cycle ends in `ELOOP` rather than in a hang.
 
 A credential-bound view adds one indexed `IN` query for all ancestor
 directories used by an operation; depth increases returned rows, not statement

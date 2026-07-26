@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { Shell } from "../src/shell/shell.js";
-import type { NodeSqlFileSystem } from "../src/testing/node.js";
+import type { NodeSqlFileSystem, NodeSqlFileSystemOptions } from "../src/testing/node.js";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import { putOpaque } from "../src/vfs/opaque.js";
 import type { OpaqueStore } from "../src/vfs/types.js";
@@ -26,7 +26,10 @@ interface SqlMeter {
   reset(): void;
 }
 
-function meteredFileSystem(): { fileSystem: NodeSqlFileSystem; meter: SqlMeter } {
+function meteredFileSystem(options: Omit<NodeSqlFileSystemOptions, "onStatement"> = {}): {
+  fileSystem: NodeSqlFileSystem;
+  meter: SqlMeter;
+} {
   const meter: SqlMeter = {
     statements: 0,
     rows: 0,
@@ -36,6 +39,7 @@ function meteredFileSystem(): { fileSystem: NodeSqlFileSystem; meter: SqlMeter }
     },
   };
   const fileSystem = createTestFileSystem({
+    ...options,
     onStatement: (_query, rows) => {
       meter.statements += 1;
       meter.rows += rows;
@@ -156,6 +160,67 @@ describe("output slab batching", () => {
 });
 
 describe("common-path SQL cost", () => {
+  it("batches inline chunk writes at the bound-parameter ceiling", async () => {
+    async function statements(chunks: number, append: boolean): Promise<number> {
+      const { fileSystem, meter } = meteredFileSystem({ chunkBytes: 4 });
+      if (append) await fileSystem.writeFile("/body", new Uint8Array(4));
+      meter.reset();
+      if (append) await fileSystem.appendFile("/body", new Uint8Array(chunks * 4));
+      else await fileSystem.writeFile("/body", new Uint8Array(chunks * 4));
+      return meter.statements;
+    }
+
+    const writes = {
+      one: await statements(1, false),
+      thirtyThree: await statements(33, false),
+      thirtyFour: await statements(34, false),
+    };
+    const appends = {
+      one: await statements(1, true),
+      thirtyThree: await statements(33, true),
+      thirtyFour: await statements(34, true),
+    };
+    expect(writes.thirtyThree).toBe(writes.one);
+    expect(writes.thirtyFour).toBe(writes.one + 1);
+    expect(appends.thirtyThree).toBe(appends.one);
+    expect(appends.thirtyFour).toBe(appends.one + 1);
+  });
+
+  it("skips subtree summaries without slowing a rejected directory removal", async () => {
+    async function statements(
+      setup: (fileSystem: NodeSqlFileSystem) => unknown | Promise<unknown>,
+      recursive = false,
+      rejected = false,
+    ): Promise<number> {
+      const { fileSystem, meter } = meteredFileSystem();
+      await setup(fileSystem);
+      meter.reset();
+      const removing = fileSystem.remove("/target", { recursive });
+      if (rejected) await expect(removing).rejects.toMatchObject({ code: "ENOTEMPTY" });
+      else await removing;
+      return meter.statements;
+    }
+
+    expect({
+      file: await statements((fileSystem) => fileSystem.writeFile("/target", "x")),
+      emptyDirectory: await statements((fileSystem) => fileSystem.mkdir("/target")),
+      recursiveDirectory: await statements(
+        (fileSystem) => fileSystem.mkdir("/target/child", true),
+        true,
+      ),
+      rejectedDirectory: await statements(
+        (fileSystem) => fileSystem.mkdir("/target/child", true),
+        false,
+        true,
+      ),
+    }).toEqual({
+      file: 10,
+      emptyDirectory: 11,
+      recursiveDirectory: 11,
+      rejectedDirectory: 4,
+    });
+  });
+
   it("lists a directory with one traversal rather than one query per entry", async () => {
     const { fileSystem, meter } = meteredFileSystem();
     fileSystem.mkdir("/many", true);

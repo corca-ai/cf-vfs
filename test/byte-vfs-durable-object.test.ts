@@ -957,6 +957,49 @@ describe("byte-oriented Durable Object filesystem", () => {
     });
   });
 
+  it("checks credentials on paths deeper than the SQL binding limit", async () => {
+    const stub = workspace("deep-posix-path");
+    const path = `/${Array.from({ length: 120 }, (_unused, index) => `d${index}`).join("/")}`;
+    const stat = await runInDurableObject(stub, (_instance, state) => {
+      const fileSystem = new DurableObjectFileSystem(state.storage);
+      fileSystem.mkdir(path, true);
+      return fileSystem.forCredentials({ uid: 0, gid: 0 }).stat(path);
+    });
+    expect(stat.path).toBe(path);
+  });
+
+  it("resolves symlinks on paths deeper than the SQL binding limit", async () => {
+    const stub = workspace("deep-symlink-path");
+    const suffix = `/${Array.from({ length: 120 }, (_unused, index) => `d${index}`).join("/")}`;
+    const stat = await runInDurableObject(stub, (_instance, state) => {
+      const fileSystem = new DurableObjectFileSystem(state.storage);
+      fileSystem.mkdir(`/target${suffix}`, true);
+      fileSystem.symlink("/link", "/target");
+      return fileSystem.stat(`/link${suffix}`);
+    });
+    expect(stat.path).toBe(`/target${suffix}`);
+  });
+
+  it("preflights recursive permissions with more than 100 groups", async () => {
+    const stub = workspace("many-posix-groups");
+    const removed = await runInDurableObject(stub, async (_instance, state) => {
+      const fileSystem = new DurableObjectFileSystem(state.storage);
+      fileSystem.mkdir("/home/tree", true);
+      fileSystem.setOwnership("/home", { uid: 1_000, gid: 10 });
+      fileSystem.setMetadata("/home", { mode: 0o040700 });
+      fileSystem.setOwnership("/home/tree", { uid: 1_000, gid: 10 });
+      fileSystem.setMetadata("/home/tree", { mode: 0o040700 });
+      await fileSystem.writeFile("/home/tree/file", "body");
+      const user = fileSystem.forCredentials({
+        uid: 1_000,
+        gid: 10,
+        supplementaryGids: Array.from({ length: 120 }, (_unused, index) => 100 + index),
+      });
+      return user.remove("/home/tree", { recursive: true });
+    });
+    expect(removed).toEqual({ removed: 2, opaqueObjectsQueuedForDeletion: 0 });
+  });
+
   it("preserves an interactive session over the SQLite-backed VFS", async () => {
     const stub = workspace("interactive-shell-rpc");
     await expect(
