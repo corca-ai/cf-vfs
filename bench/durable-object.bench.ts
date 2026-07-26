@@ -166,6 +166,25 @@ describe("Durable Object storage benchmark metrics", () => {
     expect(metrics.estimatedSqlRowUsd).toBeGreaterThan(0);
   });
 
+  it("batches inline chunk statements at 33 rows", async () => {
+    const stub: DurableObjectStub<TestWorkspaceVfs> = env.VFS_TEST.getByName(
+      "storage-benchmark-inline-batches",
+    );
+    const metrics = await runInDurableObject(stub, async (_instance, state) => {
+      const meter = meterSqlStorage(state.storage);
+      const fileSystem = new DurableObjectFileSystem(meter.storage, { chunkBytes: 4 });
+      const statements: Record<string, number> = {};
+      for (const chunks of [1, 33, 34]) {
+        meter.reset();
+        await fileSystem.writeFile(`/body-${chunks}`, new Uint8Array(chunks * 4));
+        statements[String(chunks)] = meter.statements;
+      }
+      return statements;
+    });
+
+    expect(metrics).toEqual({ "1": 10, "33": 10, "34": 11 });
+  });
+
   it("rewrites only the inline tail when appending", async () => {
     const stub: DurableObjectStub<TestWorkspaceVfs> = env.VFS_TEST.getByName(
       "storage-benchmark-inline-append",
@@ -271,7 +290,7 @@ describe("Durable Object storage benchmark metrics", () => {
 
         meter.reset();
         const moved = await fileSystem.move(copy, movedPath);
-        const moveStatements = meter.statements;
+        const moveCost = { statements: meter.statements, rowsRead: meter.rowsRead };
         const movedBody = new TextDecoder().decode(
           await readAllBytes(fileSystem.readFile(`${movedPath}/file-0`).stream, 16),
         );
@@ -285,7 +304,12 @@ describe("Durable Object storage benchmark metrics", () => {
           moved,
           movedBody,
           removed,
-          statements: { copy: copyStatements, move: moveStatements, remove: removeStatements },
+          moveCost,
+          statements: {
+            copy: copyStatements,
+            move: moveCost.statements,
+            remove: removeStatements,
+          },
         };
       };
 
@@ -301,19 +325,21 @@ describe("Durable Object storage benchmark metrics", () => {
       small: {
         copied: { copied: 2, opaqueBodiesCopied: 0 },
         moved: { moved: 2 },
+        moveCost: { statements: 8, rowsRead: 95 },
         movedBody: "abcdefgh",
         removed: { removed: 2 },
       },
       large: {
         copied: { copied: 25, opaqueBodiesCopied: 0 },
         moved: { moved: 25 },
+        moveCost: { statements: 8, rowsRead: 164 },
         movedBody: "abcdefgh",
         removed: { removed: 25 },
       },
       rootPaths: ["/large-source", "/small-source"],
     });
     expect(metrics.large.statements).toEqual(metrics.small.statements);
-    expect(metrics.large.statements).toEqual({ copy: 9, move: 8, remove: 10 });
+    expect(metrics.large.statements).toEqual({ copy: 9, move: 8, remove: 9 });
   });
 
   it("measures subtree latency by entry count", async () => {

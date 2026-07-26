@@ -46,8 +46,10 @@ line, record, and heap budgets bound that materialization.
 Inline VFS reads are intentionally eager. SQLite's synchronous cursor is fully
 consumed into at most 8 MiB before a stream is returned, establishing a stable
 snapshot without holding a cursor or transaction across `await`. Writes collect
-directly into fixed slabs and publish once. Append reads and rewrites only the
-last partial chunk plus newly added chunks; earlier chunks stay inside SQLite.
+directly into fixed slabs and insert up to 33 chunks per statement. Append reads
+and rewrites only the last partial chunk plus newly added chunks in the same
+batches; earlier chunks stay inside SQLite. The batch size uses 99 of
+Cloudflare's 100 bound parameters.
 This is usually faster and simpler than a paged pull protocol at this size, but
 concurrent snapshots and writes are capped by the instance-wide in-flight
 budget.
@@ -141,11 +143,13 @@ The separate workerd storage benchmark meters statements,
 `SqlStorageCursor.rowsRead` and `rowsWritten`, cursor consumption methods,
 `databaseSize`, physical inline chunk count, and amortized local latency. It
 covers 512 randomly read 8–12 KiB BLOBs and their storage amplification,
-a 1 MiB overwrite plus snapshot, 1 MiB and 8 MiB tail-only append, point reads
-and overwrites, filtered scans, warm schema initialization, and set-based
-subtree copy/move/remove at multiple sizes. Cursor metrics are the platform
-billing-oriented values; diagnostic SQL used to inspect a result is
-deliberately outside that meter.
+a 1 MiB overwrite plus snapshot, the 1/33/34-chunk SQL batch boundary, 1 MiB
+and 8 MiB tail-only append, point reads and overwrites, filtered scans, warm
+schema initialization, and set-based subtree copy/move/remove at multiple
+sizes. The subtree guard pins both statements and move rows read so an
+aggregate pre-scan cannot return unnoticed. Cursor metrics are the platform
+billing-oriented values; diagnostic SQL used to inspect a result is deliberately
+outside that meter.
 
 Stable structural guards, rather than tight wall-clock thresholds, fail the
 benchmark when a point query stops fully consuming its cursor, an overwrite

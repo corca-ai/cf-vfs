@@ -266,7 +266,7 @@ export interface VfsSqlStorage {
 
 export interface SqlFileSystemStorage {
   readonly sql: VfsSqlStorage;
-  execBatch(query: string): void;
+  execBatch?(query: string): void;
   transactionSync<Result>(callback: () => Result): Result;
   getAlarm(): Promise<number | null>;
   setAlarm(scheduledTime: number): Promise<void>;
@@ -662,13 +662,12 @@ export class SqlFileSystem implements PosixVirtualFileSystem {
     if (path === "/") ancestors.delete("/");
     if (ancestors.size === 0) return;
     const ordered = [...ancestors];
-    const placeholders = ordered.map(() => "?").join(", ");
     const rows = this.sql
       .exec<SqlRow>(
         `SELECT path, kind, mode, uid, gid
          FROM vfs_entries INDEXED BY vfs_entries_path
-         WHERE path IN (${placeholders})`,
-        ...ordered,
+         WHERE path IN (SELECT value FROM json_each(?))`,
+        JSON.stringify(ordered),
       )
       .toArray();
     if (rows.length !== ordered.length) {
@@ -725,16 +724,16 @@ export class SqlFileSystem implements PosixVirtualFileSystem {
   private permissionExpression(
     alias: string,
     access: PosixAccessContext,
-  ): { sql: string; bindings: number[] } {
+  ): { sql: string; bindings: VfsSqlBinding[] } {
     const groups = [...access.groups];
     return {
       sql: `CASE
         WHEN ${alias}.uid = ? THEN ((${alias}.mode >> 6) & 7)
-        WHEN ${alias}.gid IN (${groups.map(() => "?").join(", ")})
+        WHEN ${alias}.gid IN (SELECT value FROM json_each(?))
           THEN ((${alias}.mode >> 3) & 7)
         ELSE (${alias}.mode & 7)
       END`,
-      bindings: [access.credentials.uid, ...groups],
+      bindings: [access.credentials.uid, JSON.stringify(groups)],
     };
   }
 
@@ -848,6 +847,11 @@ export class SqlFileSystem implements PosixVirtualFileSystem {
     }
   }
 
+  private execBatch(query: string): void {
+    if (this.storage.execBatch === undefined) this.sql.exec(query);
+    else this.storage.execBatch(query);
+  }
+
   private migrate(): string {
     let migrated = false;
     const mutationEpoch = this.transaction(() => {
@@ -865,7 +869,7 @@ export class SqlFileSystem implements PosixVirtualFileSystem {
       );
       const now = this.now();
       if (currentVersion < 1) {
-        this.storage.execBatch(`
+        this.execBatch(`
         CREATE TABLE vfs_state (
           singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
           mutation_epoch TEXT NOT NULL
@@ -952,7 +956,7 @@ ${ENTRY_TRIGGERS}
         // definition comes from `ENTRIES_SCHEMA`, the same text a fresh
         // database uses, so a migrated database and a new one cannot differ.
         if (currentVersion === 1) {
-          this.storage.execBatch(`
+          this.execBatch(`
 ${DROP_ENTRY_TRIGGERS}
         ALTER TABLE vfs_entries RENAME TO vfs_entries_v1;
         DROP INDEX vfs_entries_path;
@@ -983,7 +987,7 @@ ${ENTRY_TRIGGERS}
         // added in place; existing entries become root-owned until a trusted
         // administrator assigns workspace ownership explicitly.
         if (currentVersion === 2) {
-          this.storage.execBatch(`
+          this.execBatch(`
         ALTER TABLE vfs_entries
           ADD COLUMN uid INTEGER NOT NULL DEFAULT 0
           CHECK (uid >= 0 AND uid <= 4294967295);
@@ -1051,16 +1055,16 @@ ${ENTRY_TRIGGERS}
     const ancestors: string[] = [];
     for (let at = dirname(path); at !== "/"; at = dirname(at)) ancestors.push(at);
     if (ancestors.length === 0) return null;
-    const placeholders = ancestors.map(() => "?").join(", ");
     const row = firstRow(
       this.sql.exec<SqlRow>(
         `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e
        CROSS JOIN vfs_path_versions p
-       WHERE e.kind = 'symlink' AND e.path IN (${placeholders}) AND p.path = e.path
+       WHERE e.kind = 'symlink'
+         AND e.path IN (SELECT value FROM json_each(?)) AND p.path = e.path
        ORDER BY length(e.path) ASC
        LIMIT 1`,
-        ...ancestors,
+        JSON.stringify(ancestors),
       ),
     );
     return row === undefined ? null : parseEntry(row, this.mutationEpoch);
@@ -1622,6 +1626,22 @@ ${ENTRY_TRIGGERS}
     }
   }
 
+  /**
+   * Uses at most 99 of Cloudflare's 100 bound parameters per statement:
+   * three values for each of 33 chunk rows.
+   */
+  private writeChunks(entryId: number, firstIndex: number, chunks: readonly Uint8Array[]): void {
+    for (let offset = 0; offset < chunks.length; offset += 33) {
+      const batch = chunks.slice(offset, offset + 33);
+      this.sql.exec(
+        `INSERT INTO vfs_inline_chunks(entry_id, chunk_index, body)
+         VALUES ${batch.map(() => "(?, ?, ?)").join(", ")}
+         ON CONFLICT(entry_id, chunk_index) DO UPDATE SET body = excluded.body`,
+        ...batch.flatMap((body, index) => [entryId, firstIndex + offset + index, body]),
+      );
+    }
+  }
+
   stat(path: string, access?: PosixAccessContext): VfsStat {
     return this.statEntry(path, true, access);
   }
@@ -2128,14 +2148,7 @@ ${ENTRY_TRIGGERS}
           )
           .one();
         const entryId = integerColumn(written, "id");
-        for (const [index, chunk] of chunks.entries()) {
-          this.sql.exec(
-            "INSERT INTO vfs_inline_chunks (entry_id, chunk_index, body) VALUES (?, ?, ?)",
-            entryId,
-            index,
-            chunk,
-          );
-        }
+        this.writeChunks(entryId, 0, chunks);
         this.updateUsage(inlineDelta, current === null ? 1 : 0);
         if (
           current?.contentClass === "opaque" &&
@@ -2237,15 +2250,7 @@ ${ENTRY_TRIGGERS}
             chunks = rechunk([tail, ...suffixChunks], this.chunkBytes);
           }
         }
-        for (const [offset, chunk] of chunks.entries()) {
-          this.sql.exec(
-            `INSERT INTO vfs_inline_chunks (entry_id, chunk_index, body) VALUES (?, ?, ?)
-           ON CONFLICT(entry_id, chunk_index) DO UPDATE SET body = excluded.body`,
-            current.id,
-            firstChunkIndex + offset,
-            chunk,
-          );
-        }
+        this.writeChunks(current.id, firstChunkIndex, chunks);
         const now = this.now();
         const token = this.bumpToken(normalized);
         this.sql.exec(
@@ -2568,26 +2573,31 @@ ${ENTRY_TRIGGERS}
         this.assertStickyRemoval(parent, root, posix, normalized);
       }
       const range = descendantRange(normalized);
-      const hasDescendants = firstRow(
-        this.sql.exec<SqlRow>(
-          `SELECT 1 AS present FROM vfs_entries
-         WHERE path >= ? AND path < ? LIMIT 1`,
-          range.lower,
-          range.upper,
-        ),
-      );
-      if (
-        root.kind === "directory" &&
-        hasDescendants !== undefined &&
-        !(options.recursive ?? false)
-      ) {
-        throw new VfsError("ENOTEMPTY", "directory is not empty", normalized);
+      const recursive = options.recursive ?? false;
+      if (root.kind === "directory" && !recursive) {
+        const hasDescendants = firstRow(
+          this.sql.exec<SqlRow>(
+            `SELECT 1 AS present FROM vfs_entries
+             WHERE path >= ? AND path < ? LIMIT 1`,
+            range.lower,
+            range.upper,
+          ),
+        );
+        if (hasDescendants !== undefined) {
+          throw new VfsError("ENOTEMPTY", "directory is not empty", normalized);
+        }
       }
-      if (root.kind === "directory" && (options.recursive ?? false)) {
+      if (root.kind === "directory" && recursive) {
         this.assertSubtreePermissions(normalized, posix, 0, WRITE_PERMISSION | EXECUTE_PERMISSION);
         this.assertSubtreeSticky(normalized, posix);
       }
-      const summary = this.subtreeSummary(normalized);
+      const summary =
+        root.kind === "directory" && recursive
+          ? this.subtreeSummary(normalized)
+          : {
+              entries: 1,
+              inlineBytes: root.contentClass === "inline" ? root.sizeBytes : 0,
+            };
       const now = this.now();
       this.publishSubtreeVersions(normalized);
       this.sql.exec(
@@ -2723,7 +2733,6 @@ ${ENTRY_TRIGGERS}
           target,
         );
       }
-      const summary = this.subtreeSummary(source);
       const sourceRange = descendantRange(source);
       const now = this.now();
       if (destination !== null) queued += this.removeExact(target, now, false);
@@ -2752,10 +2761,15 @@ ${ENTRY_TRIGGERS}
         sourceRange.lower,
         sourceRange.upper,
       );
+      // Keep this immediately after the UPDATE: changes() reports that statement.
+      const moved = integerColumn(
+        this.sql.exec<SqlRow>("SELECT changes() AS value").one(),
+        "value",
+      );
       return {
         from: source,
         to: target,
-        moved: summary.entries,
+        moved,
         replaced: destination !== null,
       };
     });
