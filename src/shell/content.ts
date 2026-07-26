@@ -89,14 +89,19 @@ export async function openContent(
     readonly signal?: AbortSignal | undefined;
   } = {},
 ): Promise<ContentBody> {
+  // Without a reader, or without permission to stream through one, the only
+  // body that can be served is inline — and `readFile` raises the same EISDIR
+  // and ENOTSUP this would have probed for. Asking first would resolve the
+  // path once to decide, and once more to read.
+  if (options.reader === undefined || (options.access ?? "metadata") !== "stream") {
+    const inline = fileSystem.readFile(path);
+    return { stat: inline.stat, stream: inline.stream };
+  }
   const stat = fileSystem.stat(path);
   if (stat.kind === "directory") throw new VfsError("EISDIR", "is a directory", path);
   if (stat.kind !== "file" || stat.contentClass !== "opaque") {
     const inline = fileSystem.readFile(path);
     return { stat: inline.stat, stream: inline.stream };
-  }
-  if (options.reader === undefined || (options.access ?? "metadata") !== "stream") {
-    throw new VfsError("ENOTSUP", "opaque R2 content is not available to shell commands", path);
   }
   return options.reader.open(path, options.range, options.signal);
 }

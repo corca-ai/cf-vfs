@@ -430,6 +430,17 @@ export class SqlFileSystem implements VirtualFileSystem {
   private readonly onEvent: VfsEventSink | undefined;
   private readonly mutationEpoch: string;
   /** Set inside a transaction, reported once the commit is durable. */
+  /** Non-zero while a transaction body is on the stack. */
+  private transactionDepth = 0;
+  /**
+   * `vfs_usage` as the running transaction has it.
+   *
+   * The row is a singleton that only this transaction can be changing, and a
+   * transaction body never yields, so reading it once and applying each delta
+   * in memory answers exactly what re-reading would — for the capacity checks
+   * a single write makes twice, and for the total an observer is handed.
+   */
+  private transactionUsage: { inlineBytes: number; entries: number } | undefined;
   private pendingUsage: { inlineBytes: number; entries: number } | undefined;
   /**
    * How many links exist, so a namespace without any pays nothing for them.
@@ -509,7 +520,17 @@ export class SqlFileSystem implements VirtualFileSystem {
 
   private transaction<T>(callback: () => T): T {
     try {
-      const result = this.storage.transactionSync(callback);
+      const result = this.storage.transactionSync(() => {
+        this.transactionDepth += 1;
+        try {
+          return callback();
+        } finally {
+          this.transactionDepth -= 1;
+          // A rollback discards the in-memory total along with the row it
+          // mirrored, so the next reader goes back to SQLite either way.
+          if (this.transactionDepth === 0) this.transactionUsage = undefined;
+        }
+      });
       // Report only after the commit succeeded, and never from inside the
       // transaction, where a throwing observer would roll the mutation back.
       const usage = this.pendingUsage;
@@ -776,9 +797,25 @@ ${ENTRY_TRIGGERS}
    * old and new targets happen to share a version — the exact ABA the token
    * exists to catch.
    */
-  private guardToken(path: string): string {
+  /**
+   * The mutation token for `path`, taken from a row already resolved for it.
+   *
+   * `oneEntry` joins `vfs_path_versions` and `parseEntry` builds the token from
+   * that column, so a row in hand carries exactly what `tokenFor` would read.
+   * Callers pass a row only when it was fetched at the same point as the
+   * decision being made — never across an `await`, where re-reading is the
+   * guard rather than a repeat of it.
+   */
+  private tokenOf(path: string, entry: EntryRow | null | undefined): string {
+    return entry != null && entry.path === path ? entry.mutationToken : this.tokenFor(path);
+  }
+
+  private guardToken(path: string, entry?: EntryRow | null): string {
     const normalized = normalizePath(path);
-    if (this.links() === 0) return this.tokenFor(normalized);
+    // With no links the guard is the named path's own token, which is what a
+    // row resolved for that same path holds. With links it also covers every
+    // one crossed, and those have no row here.
+    if (this.links() === 0) return this.tokenOf(normalized, entry);
     const resolved = this.resolveEntry(normalized, true);
     const base = this.tokenFor(resolved.path);
     if (resolved.followed.length === 0) return base;
@@ -933,20 +970,24 @@ ${ENTRY_TRIGGERS}
     // Checked against the path the caller named, not the one it resolved to,
     // so the token covers every link crossed on the way. `getMutationToken`
     // composes it the same way from the same written path.
-    const current = written === undefined ? this.tokenFor(path) : this.guardToken(written);
+    const current =
+      written === undefined ? this.tokenOf(path, entry) : this.guardToken(written, entry);
     if (current !== guard.ifMutationToken) {
       throw new VfsError("EREVISION", "path mutation token does not match", path);
     }
   }
 
   private usage(): { inlineBytes: number; entries: number } {
+    if (this.transactionUsage !== undefined) return this.transactionUsage;
     const row = this.sql
       .exec<SqlRow>("SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1")
       .one();
-    return {
+    const usage = {
       inlineBytes: integerColumn(row, "inline_bytes"),
       entries: integerColumn(row, "entries"),
     };
+    if (this.transactionDepth > 0) this.transactionUsage = usage;
+    return usage;
   }
 
   private updateUsage(inlineDelta: number, entryDelta: number): void {
@@ -957,6 +998,13 @@ ${ENTRY_TRIGGERS}
       inlineDelta,
       entryDelta,
     );
+    const cached = this.transactionUsage;
+    if (cached !== undefined) {
+      this.transactionUsage = {
+        inlineBytes: cached.inlineBytes + inlineDelta,
+        entries: cached.entries + entryDelta,
+      };
+    }
     if (this.onEvent !== undefined) this.pendingUsage = this.usage();
   }
 
@@ -1103,15 +1151,19 @@ ${ENTRY_TRIGGERS}
   private ensureParents(path: string, recursive: boolean, now: number): void {
     const missing: string[] = [];
     let current = dirname(path);
-    while (this.oneResolved(current) === null) {
+    // The walk resolves each candidate; keeping the row it stopped on spares
+    // `requireDirectory` from resolving that same path a second time.
+    let parent = this.oneResolved(current);
+    while (parent === null) {
       missing.unshift(current);
       current = dirname(current);
+      parent = this.oneResolved(current);
     }
     // `requireDirectory` follows, so a link to a directory is a fine parent —
     // but a link to a file, or a dangling one, is not, and the entry created
     // below would otherwise become a child of something that is not a
     // directory. That invariant is what lets resolution trust an exact hit.
-    this.requireDirectory(current);
+    this.requireDirectory(current, parent);
     if (missing.length > 0 && !recursive) {
       throw new VfsError("ENOENT", "parent directory does not exist", dirname(path));
     }
@@ -1469,7 +1521,7 @@ ${ENTRY_TRIGGERS}
     }
     if (before?.kind === "directory") throw new VfsError("EISDIR", "is a directory", normalized);
     this.validateGuard(normalized, before, options, path);
-    const capturedToken = this.tokenFor(normalized);
+    const capturedToken = this.tokenOf(normalized, before);
     const buffered = await this.collectInline(body);
 
     let queued = false;
@@ -1477,7 +1529,7 @@ ${ENTRY_TRIGGERS}
       this.transaction(() => {
         const sizeBytes = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
         const current = this.oneEntry(normalized);
-        if (this.tokenFor(normalized) !== capturedToken) {
+        if (this.tokenOf(normalized, current) !== capturedToken) {
           throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
         }
         this.validateGuard(normalized, current, options, path);

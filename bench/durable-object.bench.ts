@@ -92,8 +92,8 @@ describe("Durable Object storage benchmark metrics", () => {
     expect(metrics.storageAmplification).toBeLessThan(2);
     expect(metrics.checksum).toBeGreaterThan(0);
     expect(metrics.writeCost).toEqual({
-      statements: 6_144,
-      rowsRead: 5_632,
+      statements: 5_120,
+      rowsRead: 4_608,
       rowsWritten: 3_072,
     });
     expect(metrics.readCost).toEqual({
@@ -240,7 +240,13 @@ describe("Durable Object storage benchmark metrics", () => {
         }
       }
 
+      // Each size measures through its own instance over the same storage.
+      // The symlink count is cached per instance and any mutation invalidates
+      // it, so sharing one would let the work done for the first size decide
+      // what the second one pays — making this a comparison of cache state
+      // rather than of how subtree cost answers entry count.
       const mutate = async (size: "small" | "large") => {
+        const fileSystem = new DurableObjectFileSystem(meter.storage, { chunkBytes: 4 });
         const source = `/${size}-source`;
         const copy = `/${size}-copy`;
         const movedPath = `/${size}-moved`;
@@ -293,7 +299,7 @@ describe("Durable Object storage benchmark metrics", () => {
       rootPaths: ["/large-source", "/small-source"],
     });
     expect(metrics.large.statements).toEqual(metrics.small.statements);
-    expect(metrics.large.statements).toEqual({ copy: 11, move: 7, remove: 10 });
+    expect(metrics.large.statements).toEqual({ copy: 9, move: 8, remove: 10 });
   });
 
   it("measures subtree latency by entry count", async () => {
@@ -438,8 +444,8 @@ describe("Durable Object storage benchmark metrics", () => {
     });
     expect(metrics.populatedStatCost).toEqual({ rowsRead: 2, statements: 1 });
     expect(metrics.overwriteCost).toMatchObject({
-      statements: 13,
-      rowsRead: 19,
+      statements: 9,
+      rowsRead: 16,
       rowsWritten: 5,
     });
     expect(metrics.statQueryPlan.every((detail) => detail.includes("SEARCH"))).toBe(true);
