@@ -24,6 +24,8 @@ const M = {
   helpers: "shell/commands/helpers",
   ls: "shell/commands/ls",
   core: "shell/commands/core",
+  curl: "shell/commands/curl",
+  network: "shell/network",
   fs: "shell/commands/fs",
   text: "shell/commands/text",
   xargs: "shell/commands/xargs",
@@ -88,6 +90,8 @@ const PRESETS = [
       M.brace,
       M.completion,
       M.opaqueReader,
+      M.curl,
+      M.network,
       M.interactive,
       M.sql,
     ],
@@ -120,6 +124,8 @@ const PRESETS = [
       M.brace,
       M.completion,
       M.opaqueReader,
+      M.curl,
+      M.network,
       M.interactive,
       M.sql,
       M.r2,
@@ -152,6 +158,8 @@ const PRESETS = [
       M.brace,
       M.completion,
       M.opaqueReader,
+      M.curl,
+      M.network,
       M.r2,
     ],
   },
@@ -166,6 +174,8 @@ const PRESETS = [
     exclude: [
       M.completion,
       M.opaqueReader,
+      M.curl,
+      M.network,
       M.interactive,
       M.fs,
       M.ls,
@@ -231,7 +241,19 @@ const PRESETS = [
     // The opt-in R2 reader must stay out even of the preset that imports every
     // applet: a shell is inline-only until a host hands it the capability. So
     // must completion, which belongs to the interactive layer.
-    exclude: [M.interactive, M.completion, M.linux, M.sql, M.doSql, M.r2, M.opaqueReader],
+    exclude: [
+      M.interactive,
+      M.completion,
+      M.linux,
+      M.sql,
+      M.doSql,
+      M.r2,
+      M.opaqueReader,
+      // Reaching outside the namespace is the host's decision, so even the
+      // preset that imports every applet must not carry the means to.
+      M.curl,
+      M.network,
+    ],
   },
   {
     name: "linux-profile",
@@ -250,7 +272,7 @@ const PRESETS = [
       M.sql,
       M.doSql,
     ],
-    exclude: [M.interactive, M.r2],
+    exclude: [M.interactive, M.r2, M.curl, M.network],
   },
   {
     name: "r2-opaque",
@@ -277,6 +299,8 @@ const PRESETS = [
       M.brace,
       M.completion,
       M.opaqueReader,
+      M.curl,
+      M.network,
       M.interactive,
     ],
   },

@@ -42,8 +42,9 @@ values in positional arguments instead of interpolating source.
 Anything the shell cannot reach on its own arrives as a host-supplied
 capability: a small structural interface the host implements and a command only
 calls. The host keeps the binding, the credential, and the decision; the shell
-gets a function. `ShellContentReader` is the one such capability today — the
-host holds the bucket and the shell holds `open(path)`.
+gets a function. There are two — `ShellContentReader`, where the host holds the
+bucket and the shell holds `open(path)`, and `ShellNetwork`, where the host
+holds whatever authorizes a request and the shell holds `fetch(request)`.
 
 That seam is what keeps a secret out of the environment a script can read. A
 host authorizing a capability attaches, scopes, or signs the credential inside

@@ -196,6 +196,25 @@ positional expansion, control, pipeline, redirection, glob, and status
 behavior. Explicit rejection tests cover syntax deliberately outside Version
 4. Neither suite implies compatibility outside the declared subset.
 
+## The one utility with no oracle
+
+`curl` is compared against nothing. A differential fixture would need a
+network, which is the single thing every other fixture is pinned to exclude —
+the images run with no egress precisely so that a recorded expectation means
+the same thing on every machine and every day.
+
+It is therefore tested against an injected capability that records what it was
+asked for, which is also the shape a host implements. What that covers is the
+contract: which requests are built, that a redirect re-enters the capability,
+that both the capability and the policy are required, and which status each
+failure produces. What it cannot cover is any claim about how real curl behaves
+against a real server.
+
+That is the reason the command lives behind its own subpath, stays out of
+`defaultShellCommands`, and is asserted absent from every bundle preset. A
+consumer who does not import it keeps an environment whose behavior is fully
+determined by its inputs.
+
 ## Utility differential fixtures and declared divergences
 
 Utility behavior is pinned separately against three oracle images recorded by

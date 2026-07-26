@@ -656,6 +656,73 @@ Nothing is materialized: at most one chunk is in flight, and a command that
 stops early stops the read with it. `head -c N` asks the store for N bytes
 rather than the whole body.
 
+### The network capability and `curl`
+
+`curl` is not in `defaultShellCommands`. It lives at
+`@corca-ai/cf-vfs/shell/commands/curl`, and it reaches nothing on its own: every
+request goes through a `ShellNetwork` the host supplies, and the session's
+policy must say `network: "allow"`. Absent either, the command answers
+`ENOTSUP` before a request is built. Both are required for the same reason
+opaque content requires both — giving a host a network is not a decision about
+every session running on it.
+
+```ts
+import { curlCommand } from "@corca-ai/cf-vfs/shell/commands/curl";
+
+const shell = new Shell({
+  fileSystem,
+  commands: [...defaultShellCommands, curlCommand],
+  network: {
+    async fetch(request) {
+      const url = new URL(request.url);
+      if (url.origin !== "https://api.example.com") {
+        return new Response("origin not allowed", { status: 403 });
+      }
+      const authorized = new Request(request, {
+        headers: new Headers([...request.headers, ["authorization", `Bearer ${env.TOKEN}`]]),
+      });
+      return fetch(authorized, { redirect: "manual" });
+    },
+  },
+  policy: { network: "allow" },
+});
+```
+
+The credential never enters the session — see [credentials stay outside the
+shell](operations.md#credentials-stay-outside-the-shell). That is also why
+there is no `-u`: a credential a session can spell is a credential it can send
+somewhere the host did not intend.
+
+A request arrives with `redirect: "manual"`, and an implementation must keep it
+that way. Following a redirect inside the host turns one authorized request
+into an unbounded number of unauthorized ones; returning the redirect lets
+`curl -L` come back through the same method, so the hop after an allowed origin
+is checked like any other.
+
+The option profile is deliberately small — enough to read an endpoint, post a
+payload, save a body, and branch on the result:
+
+| Option | Behavior |
+| --- | --- |
+| `-X`, `--request` | method; otherwise `HEAD` for `-I`, `POST` when `-d` is present, `GET` |
+| `-H`, `--header` | repeatable; `Name: value` |
+| `-d`, `--data` | repeatable, joined with `&`; sets a form content type unless one was given |
+| `-o`, `--output` | write the body to a VFS path instead of standard output |
+| `-i`, `--include` | prefix the body with the status line and headers |
+| `-I`, `--head` | `HEAD`, headers only |
+| `-f`, `--fail` | no body and status 22 when the response is 400 or above |
+| `-L`, `--location` | follow redirects, each through the capability again |
+| `--max-redirs` | how many, default 20 |
+| `-s`, `-S` | accepted; there is no progress meter to silence |
+
+Exit statuses follow curl where this profile can produce them: 3 for a URL that
+is not one, 7 when the capability throws, 22 for `-f`, and 47 when `-L` runs out
+of redirects. A usage error is 2, as everywhere else here.
+
+Absent by design: `-u`, cookies, `-F`, `--data-binary`, `-w`, `-k`, and
+compression flags. This is a profile, not a reimplementation, and every one of
+those is either the host's decision or a shape this environment does not have.
+
 ### Virtual devices
 
 `/dev/null`, `/dev/stdin`, `/dev/stdout`, and `/dev/stderr` exist during a

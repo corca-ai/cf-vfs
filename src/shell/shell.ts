@@ -31,6 +31,7 @@ import {
   matchesCasePattern,
 } from "./expand.js";
 import { shellInput } from "./input.js";
+import type { ShellNetwork } from "./network.js";
 import {
   type AndOrNode,
   type CommandNode,
@@ -133,6 +134,7 @@ interface Runtime {
   now: () => number;
   fileSystem: ShellFileSystem;
   content: ShellContentReader | undefined;
+  network: ShellNetwork | undefined;
   budget: ShellBudget;
   policy: ShellPolicy;
   signal: AbortSignal;
@@ -904,6 +906,7 @@ async function executeSimpleCommand(
             budget: runtime.budget,
             policy: runtime.policy,
             ...(runtime.content === undefined ? {} : { content: runtime.content }),
+            ...(runtime.network === undefined ? {} : { network: runtime.network }),
             executeSource: async (source, path, sourceArgs, sourceFds) =>
               await runSourcedUnit(source, path, sourceArgs, session, sourceFds, runtime, context),
             executeCommand: async (commandArgv, commandFds, commandOptions) => {
@@ -1548,6 +1551,7 @@ export class Shell {
   private readonly fileSystem: ShellOptions["fileSystem"];
   private readonly policy: ShellPolicy;
   private readonly content: ShellContentReader | undefined;
+  private readonly network: ShellNetwork | undefined;
   private readonly limits: ShellLimits;
   private readonly now: () => number;
   private readonly onEvent: ShellEventSink | undefined;
@@ -1557,6 +1561,7 @@ export class Shell {
     this.pathLookup = options.commandResolution === "path";
     this.fileSystem = options.fileSystem;
     this.content = options.content;
+    this.network = options.network;
     this.policy = Object.freeze({
       ...(options.policy?.readRoots === undefined
         ? {}
@@ -1571,6 +1576,7 @@ export class Shell {
       ...(options.policy?.opaqueContent === undefined
         ? {}
         : { opaqueContent: options.policy.opaqueContent }),
+      ...(options.policy?.network === undefined ? {} : { network: options.policy.network }),
       ...(options.policy?.allowedCommands === undefined
         ? {}
         : { allowedCommands: Object.freeze([...options.policy.allowedCommands]) }),
@@ -1793,6 +1799,7 @@ export class Shell {
           budget,
           policy: this.policy,
           content,
+          network: this.network,
           signal: controller.signal,
           limits: this.limits,
           parserBudget,

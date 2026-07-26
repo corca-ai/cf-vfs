@@ -233,9 +233,11 @@ implementation. The host supplies it explicitly, which is what keeps the
 binding, the credential, and the authorization decision on the host's side of
 the boundary — see [credentials stay outside the
 shell](operations.md#credentials-stay-outside-the-shell). A session policy
-gates it separately from the host's decision to offer it at all. The R2 reader
-is the only capability that exists today; a second one is a question about what
-the host can do, answered in the host's own code rather than in the shell's.
+gates it separately from the host's decision to offer it at all. `ShellNetwork`
+is the second instance and behaves the same way: `policy.network` defaults to
+`off`, so a host that has a network still hands out sessions that do not, and
+`curl` is asserted absent from every bundle preset including the one that
+imports every applet.
 
 ### Where body-dependent execution happens
 
