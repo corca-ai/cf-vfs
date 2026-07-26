@@ -24,3 +24,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      # Structural cost — statements and rows read — is a correctness-shaped
+      # property, and it drifted unnoticed for fifty-six commits while this ran
+      # only on a weekly schedule. It takes about five seconds.
+      - run: npm run bench:check
