@@ -1,4 +1,5 @@
 import { VfsError } from "../src/core/errors.js";
+import { curlCommand } from "../src/shell/commands/curl.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { InteractiveInputBuffer, InteractiveShell } from "../src/shell/interactive.js";
 import {
@@ -8,6 +9,7 @@ import {
 } from "../src/shell/linux.js";
 import type { ShellExecution } from "../src/shell/types.js";
 import { VfsDurableObject } from "../src/vfs/durable-object.js";
+import { demoNetwork } from "./network.js";
 import { MAX_MESSAGE_BYTES, parseClientMessage, type ServerMessage } from "./protocol.js";
 
 interface TerminalSession {
@@ -200,7 +202,7 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
     const session: TerminalSession = {
       shell: new InteractiveShell({
         fileSystem: this.fileSystem,
-        commands: defaultShellCommands,
+        commands: [...defaultShellCommands, curlCommand],
         // PATH lookup and the profile's environment are one decision, not two:
         // without `commandResolution` a `PATH` is an ordinary variable and
         // every applet answers to its bare name regardless of it.
@@ -213,7 +215,8 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
           TERM: "xterm-256color",
         },
         limits: SHELL_LIMITS,
-        policy: { maxMutations: SHELL_LIMITS.maxMutations },
+        network: demoNetwork(),
+        policy: { maxMutations: SHELL_LIMITS.maxMutations, network: "allow" },
       }),
       input: new InteractiveInputBuffer({
         limits: {
