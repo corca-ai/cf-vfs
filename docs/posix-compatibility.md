@@ -196,6 +196,19 @@ positional expansion, control, pipeline, redirection, glob, and status
 behavior. Explicit rejection tests cover syntax deliberately outside Version
 4. Neither suite implies compatibility outside the declared subset.
 
+## The one utility with an oracle of its own
+
+`jq` is compared against `ghcr.io/jqlang/jq:1.7.1`, pinned by digest like every
+other oracle, in `test/fixtures/jq-compat.json`. Its image carries no shell —
+`jq` is the entry point — so a case there is an argument vector and an input
+rather than a script, which is why it has its own fixture file and regenerator
+instead of sharing the utility one.
+
+Three divergences are declared and demonstrated: a number written with an
+exponent is re-rendered from its value, `--arg` and `--argjson` must precede
+the filter, and everything outside the declared subset is refused with status 3.
+See [the jq profile](commands.md#the-jq-profile).
+
 ## The one utility with no oracle
 
 `curl` is compared against nothing. A differential fixture would need a

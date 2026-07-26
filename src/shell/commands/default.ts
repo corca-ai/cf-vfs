@@ -44,6 +44,7 @@ import {
   treeCommand,
 } from "./fs.js";
 import { helpCommand } from "./help.js";
+import { jqCommand } from "./jq.js";
 import { lnCommand, readlinkCommand } from "./link.js";
 import { lsCommand } from "./ls.js";
 import { sedCommand } from "./sed.js";
@@ -148,4 +149,5 @@ export const defaultShellCommands = [
   sleepCommand,
   exprCommand,
   xargsCommand,
+  jqCommand,
 ] as const;

@@ -880,6 +880,48 @@ is exactly `{}`, so `-exec mv {} {}.bak ';'` renames rather than writing to a
 file called `{}.bak`. A failing invocation does not stop the walk; as POSIX has
 it, only the `+` form reports it in `find`'s own status.
 
+### The jq profile
+
+`jq` runs a declared subset of the filter language, and refuses the rest where
+it is written — status 3, before any input is read. That is the same stance the
+`sed` profile and the regular-expression subset take, and it is what lets a
+filter this accepts mean here what it means in `jq`.
+
+It is the only language in this shell with an oracle. `jq` is deterministic and
+containerized, so the profile is held to answers recorded from
+`ghcr.io/jqlang/jq:1.7.1` rather than to an argument about what it ought to
+print.
+
+**In the profile.** Paths — `.a`, `.a.b`, `.["k"]`, `.[0]`, `.[-1]`, `.[]`,
+`.a[]`, `.[1:3]`, and a trailing `?`. Composition — `|`, `,`, and `//`.
+Comparison, `and`/`or`, arithmetic on the types `jq` allows it on, and array and
+object construction including `{a}` shorthand and a computed `(expr):` key.
+Builtins: `add`, `all`, `any`, `empty`, `first`, `flatten`, `from_entries`,
+`has`, `join`, `keys`, `keys_unsorted`, `last`, `length`, `map`, `max`, `min`,
+`not`, `range`, `reverse`, `select`, `sort`, `sort_by`, `split`, `to_entries`,
+`tonumber`, `tostring`, `type`, `unique`, `values`. Options: `-c`, `-e`, `-j`,
+`-n`, `-r`, `-s`, `-S`, `--tab`, `--arg`, `--argjson`.
+
+**Refused.** `def`, `reduce`, `foreach`, `try`/`catch`, `label`, `as` bindings,
+recursive descent `..`, string interpolation, format strings such as
+`@base64`, and the regular-expression builtins. The last is deliberate rather
+than pending: `jq` matches with Oniguruma and this repository has a POSIX
+engine, so `test("a+")` would mean two different things under one name.
+
+Two things a JavaScript object cannot do shape the value model. An object
+reorders integer-like keys — `{"2":1,"1":2}` parses with `1` first — so members
+are held in insertion order and print the way they arrived. And `JSON.parse`
+discards how a number was written, so a parsed number carries its own spelling:
+`1.0`, `2.50`, and an integer past a double's reach print back unchanged. A
+number written with an exponent is the declared exception.
+
+Statuses follow `jq`: 3 for a filter this profile refuses, 5 for a failure while
+running one, 1 under `-e` when the last output was `false` or `null`, and 4
+under `-e` when there was no output. A usage error is 2, as everywhere else.
+
+The whole input is read before the first output, so an opaque R2 body is
+`ENOTSUP` for the same reason `sort`'s is.
+
 ### The sed profile
 
 `sed` implements `s`, `p`, and `d`, each optionally selected by a line number,
