@@ -95,7 +95,7 @@ export function selectsShellProfile(line: string): boolean {
   return ENV_INTERPRETER_NAMES.includes(argument);
 }
 
-/** Whether compatibility mode bits mark a path executable. */
+/** Whether any mode class marks a path executable. */
 export function isExecutableMode(mode: number): boolean {
   return (mode & 0o111) !== 0;
 }

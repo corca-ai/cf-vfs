@@ -128,7 +128,13 @@ const STAT = {
 const CHMOD = {
   name: "chmod",
   usage: "OCTAL-MODE|SYMBOLIC-MODE PATH...",
-  summary: "sets the compatibility mode bits of a path",
+  summary: "sets the mode bits of a path",
+} as const satisfies AppletSpec;
+
+const CHOWN = {
+  name: "chown",
+  usage: "OWNER[:GROUP]|:GROUP PATH...",
+  summary: "sets numeric owner and group identifiers",
 } as const satisfies AppletSpec;
 
 const SYMBOLIC_MODE = /^([ugoa]*)([-+=])([rwx]*)$/u;
@@ -325,8 +331,9 @@ export const cpCommand = /* @__PURE__ */ defineApplet(CP, async (context, argv) 
       : context.fileSystem.lstat(source)
     : undefined;
   await context.fileSystem.copy(source, target, { replace, recursive, dereference });
-  // Mode bits and the modification time are what this namespace has to
-  // preserve; there is no owner, group, or access time behind them. A copy
+  // Mode bits and the modification time are the metadata `-p` preserves in
+  // this profile. A credential-bound copy deliberately creates actor-owned
+  // entries rather than attempting privileged ownership preservation. A copy
   // carries each entry's own bits already but stamps every entry with the
   // current time, so the named target is restated here. Descendants of a
   // recursive copy keep the copy's time, which is a declared divergence.
@@ -480,6 +487,8 @@ function statText(stat: VfsStat): string {
           : describeKind(stat)
     }`,
     `  Mode: ${stat.mode.toString(8)} (${modeString(stat.mode)})`,
+    ` Owner: ${stat.uid}`,
+    ` Group: ${stat.gid}`,
     `Revision: ${stat.revision}`,
     `Mutation: ${stat.mutationToken}`,
   ].join("\n")}\n`;
@@ -490,8 +499,8 @@ function statText(stat: VfsStat): string {
  *
  * `-c` selects a machine-stable format so a script can read one field without
  * parsing a human report. The conversions name what this namespace actually
- * has: there is no owner, group, inode, or link count to report, so those
- * spellings are refused rather than filled with a placeholder.
+ * has. Inode and link-count conversions are refused rather than filled with a
+ * placeholder.
  */
 export const statCommand = /* @__PURE__ */ defineApplet(STAT, async (context, argv, fds) => {
   const parsed = parseAppletOptions(STAT, argv);
@@ -548,6 +557,8 @@ function statFormat(format: string, stat: VfsStat, operand: string): string {
     else if (conversion === "a") output += (stat.mode & 0o7777).toString(8);
     else if (conversion === "A") output += modeString(stat.mode);
     else if (conversion === "F") output += describeKind(stat);
+    else if (conversion === "u") output += String(stat.uid);
+    else if (conversion === "g") output += String(stat.gid);
     else if (conversion === "%") output += "%";
     else throw appletUsageError(STAT, `unsupported conversion %${conversion ?? ""}`);
   }
@@ -570,6 +581,39 @@ export const chmodCommand = /* @__PURE__ */ defineApplet(CHMOD, async (context, 
     context.fileSystem.setMetadata(normalized, {
       mode: (stat.kind === "directory" ? 0o040000 : 0o100000) | permission,
     });
+  }
+  return 0;
+});
+
+function parseOwnership(value: string): { uid?: number; gid?: number } {
+  const match = /^(?:(\d+))?(?::(\d+))?$/u.exec(value);
+  if (match === null || (match[1] === undefined && match[2] === undefined)) {
+    throw appletUsageError(CHOWN, "owner and group must be numeric");
+  }
+  const parse = (part: string | undefined, name: string): number | undefined => {
+    if (part === undefined) return undefined;
+    const id = Number(part);
+    if (!Number.isSafeInteger(id) || id > 0xffff_ffff) {
+      throw appletUsageError(CHOWN, `${name} is outside the unsigned 32-bit range`);
+    }
+    return id;
+  };
+  const uid = parse(match[1], "owner");
+  const gid = parse(match[2], "group");
+  return {
+    ...(uid === undefined ? {} : { uid }),
+    ...(gid === undefined ? {} : { gid }),
+  };
+}
+
+export const chownCommand = /* @__PURE__ */ defineApplet(CHOWN, async (context, argv) => {
+  const [owner, ...paths] = argv;
+  if (owner === undefined || paths.length === 0) {
+    throw appletUsageError(CHOWN, "requires an owner and paths");
+  }
+  const ownership = parseOwnership(owner);
+  for (const path of paths) {
+    context.fileSystem.setOwnership(commandPath(context, path), ownership);
   }
   return 0;
 });

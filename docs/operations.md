@@ -8,9 +8,8 @@ serialization boundary. Do not route all customers through one object: long
 parses, scans, or SQL work on an object share its single-threaded execution
 boundary.
 
-Authorization belongs at the application boundary. Mode bits are metadata,
-not access checks. For untrusted source, compose a deliberately small command
-registry and set `ShellPolicy`:
+Authorization begins at the application boundary. For untrusted source,
+compose a deliberately small command registry and set `ShellPolicy`:
 
 ```ts
 const shell = new Shell({
@@ -36,6 +35,46 @@ The shell receives a capability-wrapped `ShellFileSystem`; it has no opaque
 upload, lease, GC, or R2 body method. Treat scripts, positional arguments,
 environment variables, and uploaded bytes as separate inputs. Put dynamic
 values in positional arguments instead of interpolating source.
+
+### POSIX execution identity
+
+The raw `VirtualFileSystem` remains a trusted administration capability. It
+does not apply discretionary-access checks, which lets a host provision and
+repair a workspace. Bind an immutable user view with
+`fileSystem.forCredentials(credentials, { umask })`, or supply the same
+numeric identity to one shell execution:
+
+```ts
+await shell.executeText({
+  script,
+  cwd: "/workspace",
+  credentials: {
+    uid: currentUser.id,
+    gid: currentUser.primaryGroupId,
+    supplementaryGids: currentUser.groupIds,
+  },
+  umask: 0o027,
+});
+```
+
+This activates Linux-style owner/group/other selection, search permission on
+ancestor directories, read/write checks, parent-directory checks for namespace
+changes, owner-only `chmod`, restricted `chown`, setgid-directory inheritance,
+and sticky-directory deletion rules. New entries receive the execution uid and
+effective directory group after `umask`. Uid 0 bypasses DAC but never bypasses
+`ShellPolicy`; the effective permission is the intersection of both.
+
+`id`, `id -u/-g/-G`, and `groups` report numeric execution identity. `chown`
+accepts only `OWNER[:GROUP]` or `:GROUP`: there is intentionally no account-name
+database. Only uid 0 may change an owner; an ordinary owner may change the group
+only to its primary or supplementary groups. Setuid execution, POSIX
+capabilities, ACLs, and user namespaces are outside this profile.
+
+Never derive credentials from `USER`, `HOME`, or another environment variable:
+the script can change them. For an RPC method, authenticate the caller in the
+application and construct `credentials` there. `ShellDurableObject` validates
+the transport shape but does not authenticate an arbitrary identity a remote
+caller puts in that field.
 
 ### Credentials stay outside the shell
 

@@ -195,7 +195,7 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     // Bash expands the unquoted form to /home/cf/d; the quoted form agrees.
     expect(result.stdout).toBe("~/d");
   },
-  "permission-predicates-have-no-user": async () => {
+  "permission-predicates-without-credentials": async () => {
     const harness = createBashHarness({ policy: { writeRoots: ["/allowed"] } });
     await harness.fileSystem.writeFile("/only-owner", "body");
     harness.fileSystem.setMetadata("/only-owner", { mode: 0o100400 });

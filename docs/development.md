@@ -88,10 +88,10 @@ accounting, R2 lifecycle, and shell behavior without duplicating VFS semantics.
 Never retain a SQL cursor or transaction across `await`.
 
 Schema changes use explicit versioning and constraints/triggers that make
-invalid ownership combinations unrepresentable. The pre-deployment `vfs_`
-schema uses integer internal identities and currently requires a fresh
-filesystem; introducing compatibility migrations is a separate product
-decision.
+invalid entry combinations unrepresentable. The pre-deployment `vfs_` schema
+uses integer internal identities. Versions 1 through 3 have compatibility
+migrations; add a migration and a fresh-versus-migrated schema test for every
+further change.
 
 ## Changing the language or runtime
 

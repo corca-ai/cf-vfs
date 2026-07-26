@@ -26,14 +26,6 @@ async function readAll(
 }
 
 /**
- * A version-1 database, as it was before links existed.
- *
- * Copied rather than imported on purpose: the point of the migration test is
- * that a database written by the old code opens correctly under the new code,
- * and reading the shape from the current source would make the test agree with
- * itself no matter what the migration did.
- */
-/**
  * A version-1 database, exactly as the previous release wrote one.
  *
  * The DDL is copied verbatim from `origin/main` rather than imported, because
@@ -201,6 +193,71 @@ const V1_SCHEMA = `
   INSERT INTO vfs_usage (singleton, inline_bytes, entries) VALUES (1, 5, 4);
 `;
 
+/**
+ * The minimal readable shape of a version-2 database.
+ *
+ * `vfs_entries` is copied verbatim from the version-2 release. The fixture
+ * intentionally includes only the other tables touched while opening it and
+ * reading the two seeded entries: this test is specifically for the in-place
+ * version-3 ownership migration, while the fuller version-1 fixture above
+ * covers cross-table data and trigger preservation.
+ */
+const V2_SCHEMA = `
+  CREATE TABLE vfs_schema_migrations (
+    version INTEGER PRIMARY KEY,
+    applied_at_ms INTEGER NOT NULL
+  );
+  CREATE TABLE vfs_state (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    mutation_epoch TEXT NOT NULL
+  );
+  CREATE TABLE vfs_path_versions (
+    path TEXT PRIMARY KEY,
+    version INTEGER NOT NULL CHECK (version >= 1)
+  ) WITHOUT ROWID;
+  CREATE TABLE vfs_entries (
+    id INTEGER PRIMARY KEY,
+    path TEXT NOT NULL,
+    parent_path TEXT NOT NULL,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('directory', 'file', 'symlink')),
+    content_class TEXT CHECK (content_class IN ('inline', 'opaque')),
+    opaque_object_id INTEGER,
+    link_target TEXT,
+    size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+    mode INTEGER NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    modified_at_ms INTEGER NOT NULL,
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    CHECK (
+      (kind = 'directory' AND content_class IS NULL AND opaque_object_id IS NULL
+        AND link_target IS NULL)
+      OR (kind = 'file' AND content_class = 'inline' AND opaque_object_id IS NULL
+        AND link_target IS NULL)
+      OR (kind = 'file' AND content_class = 'opaque' AND opaque_object_id IS NOT NULL
+        AND link_target IS NULL)
+      OR (kind = 'symlink' AND content_class IS NULL AND opaque_object_id IS NULL
+        AND link_target IS NOT NULL AND length(link_target) > 0)
+    )
+  );
+  CREATE UNIQUE INDEX vfs_entries_path ON vfs_entries(path);
+  CREATE UNIQUE INDEX vfs_entries_parent_name ON vfs_entries(parent_path, name);
+  CREATE INDEX vfs_entries_opaque_object
+    ON vfs_entries(opaque_object_id) WHERE opaque_object_id IS NOT NULL;
+  CREATE INDEX vfs_entries_symlink
+    ON vfs_entries(path) WHERE kind = 'symlink';
+
+  INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (1, 0), (2, 0);
+  INSERT INTO vfs_state (singleton, mutation_epoch) VALUES (1, 'epoch-v2');
+  INSERT INTO vfs_path_versions (path, version) VALUES ('/', 1), ('/kept.txt', 7);
+  INSERT INTO vfs_entries (
+    path, parent_path, name, kind, content_class, opaque_object_id, link_target,
+    size_bytes, mode, created_at_ms, modified_at_ms, revision
+  ) VALUES
+    ('/', '/', '/', 'directory', NULL, NULL, NULL, 0, 16877, 0, 0, 1),
+    ('/kept.txt', '/', 'kept.txt', 'file', 'inline', NULL, NULL, 5, 33188, 0, 0, 2);
+`;
+
 function openOver(database: DatabaseSync): SqlFileSystem {
   const sql: VfsSqlStorage = {
     get databaseSize() {
@@ -256,7 +313,7 @@ function openOver(database: DatabaseSync): SqlFileSystem {
  * The part of the schema the migration rebuilds, as SQLite reports it.
  *
  * Scoped to the entry table, its indexes, and the triggers, because those are
- * what version 2 recreates. The other tables are carried across untouched and
+ * what the current migrations recreate. The other tables are carried across untouched and
  * keep whatever text created them, which here is this file's own formatting.
  */
 function schemaOf(database: DatabaseSync): string[] {
@@ -274,8 +331,8 @@ describe("symlink schema", () => {
     const old = new DatabaseSync(":memory:");
     old.exec(V1_SCHEMA);
     const migrated = openOver(old);
-    // The rows that were there survive, and the new column is null for them.
-    expect(migrated.stat("/kept.txt").sizeBytes).toBe(5);
+    // Existing rows survive: links default to no target and ownership to 0:0.
+    expect(migrated.stat("/kept.txt")).toMatchObject({ sizeBytes: 5, uid: 0, gid: 0 });
     expect(migrated.stat("/").kind).toBe("directory");
 
     const fresh = new DatabaseSync(":memory:");
@@ -309,6 +366,34 @@ describe("symlink schema", () => {
     fresh.close();
   });
 
+  it("migrates a version-2 database to root-owned entries in place", () => {
+    const database = new DatabaseSync(":memory:");
+    database.exec(V2_SCHEMA);
+
+    const migrated = openOver(database);
+
+    expect(migrated.stat("/")).toMatchObject({ uid: 0, gid: 0 });
+    expect(migrated.stat("/kept.txt")).toMatchObject({
+      sizeBytes: 5,
+      revision: 2,
+      uid: 0,
+      gid: 0,
+    });
+    expect(migrated.getMutationToken("/kept.txt")).toBe("epoch-v2:7");
+    expect(
+      database
+        .prepare("SELECT GROUP_CONCAT(version, ',') AS versions FROM vfs_schema_migrations")
+        .get()?.["versions"],
+    ).toBe("1,2,3");
+    expect(() =>
+      database.prepare("UPDATE vfs_entries SET uid = -1 WHERE path = '/kept.txt'").run(),
+    ).toThrowError();
+    expect(() =>
+      database.prepare("UPDATE vfs_entries SET gid = 4294967296 WHERE path = '/kept.txt'").run(),
+    ).toThrowError();
+    database.close();
+  });
+
   it("cannot represent an entry that is two things at once", () => {
     const database = new DatabaseSync(":memory:");
     openOver(database);
@@ -317,8 +402,8 @@ describe("symlink schema", () => {
         .prepare(
           `INSERT INTO vfs_entries (
              path, parent_path, name, kind, content_class, opaque_object_id,
-             link_target, size_bytes, mode, created_at_ms, modified_at_ms, revision
-           ) VALUES ('/bad', '/', 'bad', ?, ?, NULL, ?, 0, 0, 0, 0, 1)`,
+             link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
+           ) VALUES ('/bad', '/', 'bad', ?, ?, NULL, ?, 0, 0, 0, 0, 0, 0, 1)`,
         )
         .run(kind, contentClass, target);
     };
@@ -331,6 +416,12 @@ describe("symlink schema", () => {
     expect(() => insert("symlink", null, "")).toThrowError();
     // The valid shape is accepted.
     expect(() => insert("symlink", null, "/t")).not.toThrowError();
+    expect(() =>
+      database.prepare("UPDATE vfs_entries SET uid = -1 WHERE path = '/bad'").run(),
+    ).toThrowError();
+    expect(() =>
+      database.prepare("UPDATE vfs_entries SET gid = 4294967296 WHERE path = '/bad'").run(),
+    ).toThrowError();
     database.close();
   });
 });

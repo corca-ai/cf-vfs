@@ -174,9 +174,9 @@ describe("byte-oriented Durable Object filesystem", () => {
         state.storage.sql.exec(
           `INSERT INTO vfs_entries (
            path, parent_path, name, kind, content_class, opaque_object_id,
-           size_bytes, mode, created_at_ms, modified_at_ms, revision
+           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
          ) VALUES ('/bad', '/', 'bad', 'directory', 'inline', NULL,
-                   0, 16877, 1, 1, 1)`,
+                   0, 16877, 0, 0, 1, 1, 1)`,
         );
       }),
     ).rejects.toThrow();
@@ -249,6 +249,30 @@ describe("byte-oriented Durable Object filesystem", () => {
       }
     });
     expect(error).toMatchObject({ code: "EINVAL" });
+  });
+
+  it("rejects POSIX IDs outside the SQLite uint32 range at the RPC boundary", async () => {
+    const stub = workspace("shell-rpc-posix-id-range");
+    const errors = await runInDurableObject(stub, async (instance) => {
+      const invalidCredentials = [
+        { uid: 0x1_0000_0000, gid: 1 },
+        { uid: 1, gid: 1, supplementaryGids: [0x1_0000_0000] },
+      ];
+      return Promise.all(
+        invalidCredentials.map(async (credentials) => {
+          try {
+            await instance.executeText({ script: "echo unreachable", credentials } as never);
+            return null;
+          } catch (caught) {
+            return caught;
+          }
+        }),
+      );
+    });
+    expect(errors).toEqual([
+      expect.objectContaining({ code: "EINVAL" }),
+      expect.objectContaining({ code: "EINVAL" }),
+    ]);
   });
 
   it("fails writes before the configured SQLite headroom is consumed", async () => {
@@ -913,6 +937,24 @@ describe("byte-oriented Durable Object filesystem", () => {
       script: "mkdir -p /repo; printf world > /repo/name; printf 'hello '; cat /repo/name",
     });
     expect(result).toMatchObject({ exitCode: 0, stdout: "hello world", stderr: "" });
+  });
+
+  it("carries numeric credentials, groups, and umask across shell RPC", async () => {
+    const stub = workspace("shell-posix-identity-rpc");
+    await stub.mkdir("/home");
+    await stub.setOwnership("/home", { uid: 1_000, gid: 10 });
+    await stub.setMetadata("/home", { mode: 0o040700 });
+    const result = await stub.executeText({
+      script: "id; printf body > /home/file; chown :20 /home/file; stat -c '%u:%g:%a' /home/file",
+      credentials: { uid: 1_000, gid: 10, supplementaryGids: [20] },
+      umask: 0o027,
+    });
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: "uid=1000 gid=10 groups=10,20\n1000:20:640\n",
+      stderr: "",
+    });
   });
 
   it("preserves an interactive session over the SQLite-backed VFS", async () => {

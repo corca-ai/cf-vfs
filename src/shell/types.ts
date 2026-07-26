@@ -1,4 +1,4 @@
-import type { VfsStat, VirtualFileSystem } from "../vfs/types.js";
+import type { PosixCredentials, VfsStat, VirtualFileSystem } from "../vfs/types.js";
 import type { OpaqueContentAccess, ShellContentReader } from "./content.js";
 import type { ShellEventSink } from "./events.js";
 import type { NetworkAccess, ShellNetwork } from "./network.js";
@@ -18,6 +18,7 @@ export type ShellFileSystem = Pick<
   | "appendFile"
   | "touch"
   | "setMetadata"
+  | "setOwnership"
   | "mkdir"
   | "remove"
   | "move"
@@ -62,6 +63,10 @@ export interface ShellSession {
   pipefail: boolean;
   errexit?: boolean;
   nounset?: boolean;
+  /** Immutable authorization identity supplied by the host. */
+  credentials?: Readonly<Required<PosixCredentials>>;
+  /** Creation mask for this shell session. */
+  umask: number;
   functions: Map<string, FunctionDefinitionNode>;
   functionDepth: number;
   sourceDepth: number;
@@ -301,6 +306,13 @@ export interface ExecuteStreamOptions {
   args?: readonly string[];
   stdin?: ReadableStream<Uint8Array>;
   signal?: AbortSignal;
+  /**
+   * Numeric authorization identity. When present, the filesystem must support
+   * a POSIX user view; environment variables never substitute for it.
+   */
+  credentials?: PosixCredentials;
+  /** Permission bits removed from newly created files. Defaults to `022`. */
+  umask?: number;
 }
 
 export interface ExecuteTextOptions extends Omit<ExecuteStreamOptions, "stdin"> {

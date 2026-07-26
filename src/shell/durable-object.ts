@@ -2,7 +2,13 @@ import { VfsError } from "../core/errors.js";
 import type { DurableObjectFileSystem, DurableObjectFileSystemOptions } from "../vfs/do-sql.js";
 import { VfsDurableObject } from "../vfs/durable-object.js";
 import type { VfsEvent } from "../vfs/events.js";
-import { rpcByteBody, rpcString } from "../vfs/rpc-validation.js";
+import {
+  rpcByteBody,
+  rpcOptionalNonnegativeInteger,
+  rpcPosixCredentials,
+  rpcString,
+} from "../vfs/rpc-validation.js";
+import type { PosixCredentials } from "../vfs/types.js";
 import type { ShellContentReader } from "./content.js";
 import type { ShellEvent } from "./events.js";
 import type { ShellNetwork } from "./network.js";
@@ -46,6 +52,8 @@ export interface ExecuteToOptions {
   cwd?: string;
   env?: Readonly<Record<string, string>>;
   args?: readonly string[];
+  credentials?: PosixCredentials;
+  umask?: number;
   stdin: ReadableStream<Uint8Array>;
   stdout: WritableStream<Uint8Array>;
   stderr: WritableStream<Uint8Array>;
@@ -60,7 +68,17 @@ function remoteTextOptions(
   }
   const input = value as Readonly<Record<string, unknown>>;
   const extra = Object.keys(input).find(
-    (key) => !["script", "cwd", "env", "args", "stdin", ...additionalKeys].includes(key),
+    (key) =>
+      ![
+        "script",
+        "cwd",
+        "env",
+        "args",
+        "stdin",
+        "credentials",
+        "umask",
+        ...additionalKeys,
+      ].includes(key),
   );
   if (extra !== undefined) throw new VfsError("EINVAL", `options.${extra} is not supported`);
   const env = input["env"];
@@ -85,12 +103,16 @@ function remoteTextOptions(
   ) {
     throw new VfsError("EINVAL", "options.stdin must be text, bytes, or a byte stream");
   }
+  const credentials = rpcPosixCredentials(input["credentials"], "options.credentials");
+  const umask = rpcOptionalNonnegativeInteger(input["umask"], "options.umask");
   return {
     script: rpcString(input["script"], "options.script"),
     ...(input["cwd"] === undefined ? {} : { cwd: rpcString(input["cwd"], "options.cwd") }),
     ...(env === undefined ? {} : { env: env as Readonly<Record<string, string>> }),
     ...(args === undefined ? {} : { args: args as readonly string[] }),
     ...(body === undefined ? {} : { stdin: body }),
+    ...(credentials === undefined ? {} : { credentials }),
+    ...(umask === undefined ? {} : { umask }),
   };
 }
 
@@ -150,6 +172,8 @@ export abstract class ShellDurableObject<Environment> extends VfsDurableObject<E
       ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
       ...(options.env === undefined ? {} : { env: options.env }),
       ...(options.args === undefined ? {} : { args: options.args }),
+      ...(options.credentials === undefined ? {} : { credentials: options.credentials }),
+      ...(options.umask === undefined ? {} : { umask: options.umask }),
     });
     const completed = execution.completed;
     const stdout = execution.stdout.pipeTo(options.stdout);

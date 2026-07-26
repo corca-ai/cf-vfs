@@ -69,13 +69,33 @@ are required; it does not also allocate decoded copies.
 
 ```ts
 const workspace = env.WORKSPACES.getByName(workspaceId);
+await workspace.mkdir("/repo", true);
+await workspace.setOwnership("/repo", {
+  uid: currentUser.id,
+  gid: currentUser.primaryGroupId,
+});
 const result = await workspace.executeText({
   script: `find src -name '*.ts' | sort > files.txt; wc -l files.txt`,
   cwd: "/repo",
   args: [],
   env: {},
+  credentials: {
+    uid: currentUser.id,
+    gid: currentUser.primaryGroupId,
+    supplementaryGids: currentUser.groupIds,
+  },
+  umask: 0o027,
 });
 ```
+
+The application must authenticate `currentUser`; the shell never trusts
+`USER`, `HOME`, or another mutable environment variable as authorization.
+Entries created through the raw administration API start as `0:0`, so provision
+each user's writable roots with `setOwnership()` before credential-bound
+execution as shown above.
+Omit `credentials` for the backwards-compatible trusted/admin execution path.
+See [Operations and security](operations.md#posix-execution-identity) for the
+permission model and RPC trust boundary.
 
 Dynamic values belong in positional arguments, not interpolated source:
 

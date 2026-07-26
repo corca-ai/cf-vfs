@@ -12,8 +12,8 @@ host filesystem access.
 | Paths | `/`-separated canonical Unicode strings with `.`, `..`, repeated-separator, name-length, path-length, and trailing-slash validation. Shell-relative paths resolve from `cwd`. Paths are not arbitrary POSIX byte strings. |
 | Regular files | Inline files contain arbitrary bytes and are limited to 8 MiB. Opaque files are immutable R2 generations whose metadata participates in the namespace but whose bodies are unavailable to shell commands. |
 | Directories | Direct children, recursive traversal, atomic subtree move, recursive copy/remove, keyset pagination, and deterministic UTF-8 ordering are supported. A paginated traversal is mutation-tolerant, not snapshot-isolated. |
-| Metadata | Kind, content class, byte size, mode-shaped bits, timestamps, revision, and mutation token are available. A link carries its own revision and token, separate from its target's. There are no inode, owner, group, link-count, access-time, or POSIX change-time guarantees. |
-| Modes | A default `022`-like result (`0755` directories and `0644` files) and explicit mode updates are metadata only. They do not enforce access. |
+| Metadata | Kind, content class, byte size, numeric owner and group IDs, mode bits, timestamps, revision, and mutation token are available. A link carries its own ownership, revision, and token, separate from its target's. There are no inode, link-count, access-time, or POSIX change-time guarantees. |
+| Modes and identity | The trusted raw VFS is an administration capability and does not enforce DAC. `forCredentials()` and shell executions with host-supplied credentials enforce owner/group/other bits, ancestor search permission, creation/deletion rules, `umask`, setgid-directory inheritance, and sticky directories. IDs are unsigned 32-bit numbers; there is no user/group name database, ACL, capability, or setuid execution model. |
 | Concurrency | Whole-file publication and namespace changes are atomic within one DO. Revision and mutation-token guards reject stale work, including absent-path ABA. |
 | Symbolic links | Supported, with the target stored verbatim and a relative one resolved from the link's parent. Resolution follows every component, is bounded at forty hops, and reports `ELOOP` beyond that. `lstat`, `readlink`, `realpath`, and `ln -s` are available; a dangling link is a valid link. |
 | Other links and special files | Hard links, devices, sockets, FIFOs, sparse files, xattrs, and `mmap` are unsupported. A hard link needs an inode identity this namespace does not have, so `ln` without `-s` is a usage error rather than a copy. |
@@ -113,9 +113,10 @@ Deliberate deterministic choices include:
   home-relative path into a wildcard, and it is charged to the expansion budget
   before it is materialized;
 - `$-` reports only the options this profile spells as short flags;
-- `test -r`, `-w`, and `-x` read compatibility mode bits and ask whether any
-  class carries the bit. There is no user or group, they enforce nothing, and
-  they do not consult the shell's read and write roots;
+- `test -r`, `-w`, and `-x` select the owner, group, or other class when the
+  host supplied execution credentials. Without credentials they retain the
+  compatibility behavior of asking whether any class carries the bit. These
+  predicates do not replace or report the shell's read and write roots;
 - UTF-8 byte ordering rather than host locale collation;
 - documented utility short options may be clustered, required option arguments
   may be attached or separate, and `--` ends utility option parsing; unsupported
@@ -183,12 +184,13 @@ Deliberate deterministic choices include:
   user database, package manager, writable `/bin`, or host process. `/bin/sh`
   and `/bin/bash` name this shell profile and run it, never host Bash;
 - an inline file with an executable mode bit runs as a shell script in an
-  isolated child scope. Mode bits remain compatibility metadata: the executable
-  bit gates script execution and enforces nothing else, and there is no user,
-  group, or access control behind it. Whatever a shebang names, the only
-  interpreter that can exist is this shell profile, so an unsupported one is
-  refused with status 126 rather than approximated;
-- status 2 is syntax/usage, 126 is policy denial, and 127 is command-not-found.
+  isolated child scope. A credential-bound execution selects its effective
+  owner/group/other execute bit; uid 0 still requires at least one execute bit
+  on a regular file. Whatever a shebang names, the only interpreter that can
+  exist is this shell profile, so an unsupported one is refused with status
+  126 rather than approximated;
+- status 2 is syntax/usage, 126 is policy or access denial, and 127 is
+  command-not-found.
 
 Differential fixtures are pinned against `bash:5.3.3` with the same locale and
 timezone. They cover representative supported quoting, assignment and
@@ -255,7 +257,7 @@ Currently declared divergences:
 | `diff` | Output is always the unified format `patch` consumes; the normal, context, and `ed` formats are outside the profile. |
 | `grep`, `sed` | Patterns use JavaScript regular-expression syntax under the Unicode flag, not POSIX basic or extended regular expressions. Literals, `.`, `*`, `^`, `$`, and bracket expressions agree with both and are pinned by fixtures; every other metacharacter differs. `a+` repeats here and is a literal plus under POSIX, while `a\|x` alternates under POSIX and is a literal here. |
 | script execution | An executable file runs only as the cf-vfs shell profile, whatever its shebang names. There is no process runtime to hand a file to, so an unsupported interpreter — including an interpreter argument such as `#!/bin/sh -e` — is status 126 rather than something the file did not ask for. |
-| `test` | `-r`, `-w`, and `-x` report whether any class carries the bit, because there is no user to ask about. That agrees with an unprivileged POSIX user, which the fixtures pin, and differs from a privileged one. They do not consult the shell's read and write roots, and `test -x /bin/cat` is false even though `/bin/cat` runs: an applet path has no namespace entry. |
+| `test` | Without execution credentials, `-r`, `-w`, and `-x` report whether any class carries the bit so existing compatibility fixtures remain deterministic. With credentials they use the selected owner/group/other class. They do not consult the shell's read and write roots, and `test -x /bin/cat` is false even though `/bin/cat` runs: an applet path has no namespace entry. |
 | `$-` | Lists only `e` and `u`. Bash also reports flags for hashing, brace expansion, and invocation mode, none of which exist here. |
 | `cd` | `cd -` with no `OLDPWD`, a bare `cd` with no `HOME`, and an empty operand are usage errors with status 2 rather than Bash's 1. A missing or non-directory target is status 1, as in Bash. `OLDPWD` comes from the working directory the shell tracks, not from `$PWD`, so a reassigned `PWD` cannot desynchronize `cd -`. |
 | `type` | Reports that a name is a function without printing its definition. Bash re-renders the parsed body, which would make the output depend on the formatter rather than on the profile. |

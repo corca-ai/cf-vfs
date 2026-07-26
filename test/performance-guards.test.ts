@@ -116,6 +116,48 @@ describe("common-path SQL cost", () => {
     expect(meter.rows).toBeLessThanOrEqual(210);
   });
 
+  it("adds only fixed-cost credential checks to a directory listing", async () => {
+    const { fileSystem, meter } = meteredFileSystem();
+    fileSystem.mkdir("/many");
+    for (let index = 0; index < 200; index += 1) {
+      await fileSystem.writeFile(`/many/file-${index}`, "x");
+    }
+    const shell = new Shell({ fileSystem, commands: defaultShellCommands });
+
+    meter.reset();
+    expect((await shell.executeText({ script: "ls /many | wc -l" })).stdout).toBe("200\n");
+    const trustedStatements = meter.statements;
+
+    meter.reset();
+    expect(
+      (
+        await shell.executeText({
+          script: "ls /many | wc -l",
+          credentials: { uid: 1_000, gid: 1_000 },
+        })
+      ).stdout,
+    ).toBe("200\n");
+    const credentialStatements = meter.statements;
+    const credentialRows = meter.rows;
+    expect(credentialStatements).toBeGreaterThan(trustedStatements);
+    expect(credentialStatements).toBeLessThanOrEqual(trustedStatements + 2);
+
+    for (let index = 200; index < 400; index += 1) {
+      await fileSystem.writeFile(`/many/file-${index}`, "x");
+    }
+    meter.reset();
+    expect(
+      (
+        await shell.executeText({
+          script: "ls /many | wc -l",
+          credentials: { uid: 1_000, gid: 1_000 },
+        })
+      ).stdout,
+    ).toBe("400\n");
+    expect(meter.statements).toBe(credentialStatements);
+    expect(meter.rows).toBe(credentialRows + 200);
+  });
+
   it("does not make an unrelated path cost more once a link exists", async () => {
     const { fileSystem, meter } = meteredFileSystem();
     fileSystem.mkdir("/many", true);
@@ -260,5 +302,86 @@ describe("common-path SQL cost", () => {
     // A JavaScript directory walk would issue one query per directory.
     expect(meter.statements).toBeGreaterThan(0);
     expect(meter.statements).toBeLessThanOrEqual(4);
+  });
+
+  it("preflights credential permissions once across materialized find pages", async () => {
+    const { fileSystem, meter } = meteredFileSystem();
+    fileSystem.mkdir("/tree");
+    for (let index = 0; index < 1_005; index += 1) {
+      await fileSystem.writeFile(`/tree/file-${index.toString().padStart(4, "0")}`, "x");
+    }
+
+    meter.reset();
+    const entries = fileSystem
+      .forCredentials({ uid: 1_000, gid: 1_000 })
+      .find({ path: "/tree", includeRoot: true });
+    expect(entries).toHaveLength(1_006);
+    // Two result pages cost the same two statements each as the trusted path.
+    // Traversal, root classification, and the set-based permission preflight
+    // are paid once for the whole materializing find(), not once per page.
+    expect(meter.statements).toBe(7);
+  });
+
+  it("keeps credential-bound recursive copy set-based as the subtree grows", async () => {
+    const { fileSystem, meter } = meteredFileSystem();
+    fileSystem.mkdir("/destination");
+    fileSystem.setMetadata("/destination", { mode: 0o040777 });
+    for (let index = 0; index < 20; index += 1) {
+      await fileSystem.writeFile(`/small/dir-${index}/file`, "x", { createParents: true });
+    }
+    for (let index = 0; index < 40; index += 1) {
+      await fileSystem.writeFile(`/large/dir-${index}/file`, "x", { createParents: true });
+    }
+    const user = fileSystem.forCredentials({ uid: 1_000, gid: 1_000 });
+
+    meter.reset();
+    const small = await user.copy("/small", "/destination/small", { recursive: true });
+    const smallStatements = meter.statements;
+    expect(smallStatements).toBe(14);
+
+    // Copy conservatively invalidates the symlink-count cache. Refresh it
+    // outside both measurements so subtree size is the only variable.
+    fileSystem.realpath("/destination/small");
+    meter.reset();
+    const large = await user.copy("/large", "/destination/large", { recursive: true });
+    expect(meter.statements).toBe(smallStatements);
+    expect(large.copied).toBeGreaterThan(small.copied);
+  });
+
+  it("walks a credential-bound creation parent only once per transaction", async () => {
+    async function statements(
+      operation: (fileSystem: ReturnType<NodeSqlFileSystem["forCredentials"]>) => unknown,
+      root = "/home",
+    ): Promise<number> {
+      const { fileSystem, meter } = meteredFileSystem();
+      fileSystem.mkdir(root);
+      fileSystem.setOwnership(root, { uid: 1_000, gid: 1_000 });
+      fileSystem.setMetadata(root, { mode: 0o040700 });
+      const user = fileSystem.forCredentials({
+        uid: 1_000,
+        gid: 1_000,
+        supplementaryGids: [1_001],
+      });
+      meter.reset();
+      await operation(user);
+      return meter.statements;
+    }
+
+    expect({
+      touch: await statements((fileSystem) => fileSystem.touch("/home/touch")),
+      mkdir: await statements((fileSystem) => fileSystem.mkdir("/home/dir")),
+      symlink: await statements((fileSystem) => fileSystem.symlink("/home/link", "/target")),
+      write: await statements((fileSystem) => fileSystem.writeFile("/home/file", "x")),
+      recursiveTouch: await statements(
+        (fileSystem) => fileSystem.touch("/deep/a/b/c/file", { createParents: true }),
+        "/deep",
+      ),
+    }).toEqual({
+      touch: 9,
+      mkdir: 9,
+      symlink: 10,
+      write: 15,
+      recursiveTouch: 21,
+    });
   });
 });

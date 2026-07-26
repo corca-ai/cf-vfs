@@ -104,11 +104,11 @@
       "reason": "Bash also reports `h`, `B`, `c`, and interactivity flags for behavior that does not exist here — hashing, brace expansion, and a command-string invocation mode. Reporting `e` and `u` in a fixed order makes the value a declaration of what is on rather than an imitation of a flag set the runtime does not have."
     },
     {
-      "id": "permission-predicates-have-no-user",
+      "id": "permission-predicates-without-credentials",
       "command": "test",
       "oracle": "bash",
-      "summary": "-r, -w, and -x report whether any class carries the bit, because there is no user to ask about",
-      "reason": "A POSIX shell answers these for the effective user, so the same file gives different answers to different accounts and a privileged account can write a read-only file. There is no user, group, or account here and mode bits enforce nothing, so the predicate reports whether the bit is set for any class. That agrees with an unprivileged POSIX user, which the fixtures pin, and differs from a privileged one. It also does not consult the shell's read and write roots: those refuse the operation, and a predicate that reported them would conflate policy with metadata."
+      "summary": "without host-supplied credentials, -r, -w, and -x report whether any class carries the bit",
+      "reason": "A POSIX shell answers these for the effective user, so the same file gives different answers to different accounts and a privileged account can write a read-only file. The compatibility fixtures intentionally supply no execution credentials, so the predicate retains the legacy answer of whether any class carries the bit. A credential-bound execution instead selects exactly one owner/group/other class. Neither form consults the shell's read and write roots: those refuse the operation, and a predicate that reported them would conflate policy with metadata."
     },
     {
       "id": "tilde-is-not-expanded-inside-a-parameter-word",

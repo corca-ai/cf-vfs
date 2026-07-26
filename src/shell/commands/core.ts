@@ -9,6 +9,7 @@ import {
   normalizePath,
   normalizePathPreservingTrailingSlash,
 } from "../../core/path.js";
+import { type PosixPermission, shellModeAllows } from "../access.js";
 import { optindGeneration, setOptindFromGetopts } from "../environment.js";
 import { readInputRecord } from "../input.js";
 import type { ShellCommandContext } from "../types.js";
@@ -159,6 +160,18 @@ const BRACKET = {
   usage: "EXPRESSION ]",
   summary: "evaluates a bounded conditional expression, requiring a closing ]",
   kind: "builtin",
+} as const satisfies AppletSpec;
+
+const ID = {
+  name: "id",
+  usage: "[-u|-g|-G]",
+  summary: "prints the numeric execution identity",
+} as const satisfies AppletSpec;
+
+const GROUPS = {
+  name: "groups",
+  usage: "",
+  summary: "prints the numeric execution groups",
 } as const satisfies AppletSpec;
 
 export const colonCommand = /* @__PURE__ */ defineApplet(COLON, () => 0);
@@ -783,10 +796,10 @@ const FILE_PREDICATES = ["-e", "-f", "-d", "-s", "-r", "-w", "-x", "-L", "-h", "
 type FilePredicate = (typeof FILE_PREDICATES)[number];
 type PermissionPredicate = "-r" | "-w" | "-x";
 
-const PERMISSION_BITS: Readonly<Record<PermissionPredicate, number>> = {
-  "-r": 0o444,
-  "-w": 0o222,
-  "-x": 0o111,
+const PERMISSION_BITS: Readonly<Record<PermissionPredicate, PosixPermission>> = {
+  "-r": 4,
+  "-w": 2,
+  "-x": 1,
 };
 
 function normalizeTestInteger(value: string): NormalizedDecimalInteger {
@@ -830,10 +843,11 @@ async function evaluateTest(
         }
         if (unary === "-d") return stat.kind === "directory";
         if (unary === "-s") return stat.sizeBytes > 0;
-        // Compatibility mode bits only. There is no user or group here, so a
-        // permission predicate asks whether any class carries the bit; it
-        // enforces nothing and does not consult the shell's read/write roots.
-        return (stat.mode & PERMISSION_BITS[unary as PermissionPredicate]) !== 0;
+        return shellModeAllows(
+          stat,
+          context.session.credentials,
+          PERMISSION_BITS[unary as PermissionPredicate],
+        );
       } catch (error) {
         if (error instanceof VfsError && (error.code === "ENOENT" || error.code === "ENOTDIR")) {
           return false;
@@ -866,4 +880,37 @@ export const testCommand = /* @__PURE__ */ defineApplet(TEST, async (context, ar
 export const bracketCommand = /* @__PURE__ */ defineApplet(BRACKET, async (context, argv) => {
   if (argv.at(-1) !== "]") throw appletUsageError(BRACKET, "missing ]");
   return (await evaluateTest(context, argv.slice(0, -1))) ? 0 : 1;
+});
+
+function executionIdentity(context: ShellCommandContext, spec: AppletSpec) {
+  const credentials = context.session.credentials;
+  if (credentials === undefined) {
+    throw new VfsError("ENOTSUP", `${spec.name} requires execution credentials`);
+  }
+  const groups = [...new Set([credentials.gid, ...credentials.supplementaryGids])];
+  return { credentials, groups };
+}
+
+export const idCommand = /* @__PURE__ */ defineApplet(ID, async (context, argv, fds) => {
+  if (argv.length > 1 || (argv.length === 1 && !["-u", "-g", "-G"].includes(argv[0] ?? ""))) {
+    throw appletUsageError(ID, "supports only one of -u, -g, or -G");
+  }
+  const { credentials, groups } = executionIdentity(context, ID);
+  const output =
+    argv[0] === "-u"
+      ? String(credentials.uid)
+      : argv[0] === "-g"
+        ? String(credentials.gid)
+        : argv[0] === "-G"
+          ? groups.join(" ")
+          : `uid=${credentials.uid} gid=${credentials.gid} groups=${groups.join(",")}`;
+  await writeText(fds[1], `${output}\n`);
+  return 0;
+});
+
+export const groupsCommand = /* @__PURE__ */ defineApplet(GROUPS, async (context, argv, fds) => {
+  if (argv.length !== 0) throw appletUsageError(GROUPS, "user-name lookup is not supported");
+  const { groups } = executionIdentity(context, GROUPS);
+  await writeText(fds[1], `${groups.join(" ")}\n`);
+  return 0;
 });

@@ -98,7 +98,8 @@ headroom, and per-instance materialized bytes are separate limits.
 ## Namespace and ABA protection
 
 `vfs_entries` is the namespace source of truth and uses compact SQLite
-`INTEGER PRIMARY KEY` identities. `vfs_state` owns a random workspace epoch.
+`INTEGER PRIMARY KEY` identities. Each entry stores unsigned numeric `uid` and
+`gid` alongside its mode. `vfs_state` owns a random workspace epoch.
 `vfs_path_versions` owns a monotonic version per path and retains it as a
 tombstone even while that path is absent; the public token combines epoch and
 the path version. A single UPSERT increments an ordinary path mutation.
@@ -158,6 +159,12 @@ whose final component is absent costs one further query: a single
 `path IN (…)` over its ancestors, served by a partial index on links alone,
 rather than one query per component. A chain costs one lookup per hop and is
 bounded at forty hops, so a cycle ends in `ELOOP` rather than in a hang.
+
+A credential-bound view adds one indexed `IN` query for all ancestor
+directories used by an operation; depth increases returned rows, not statement
+count. Recursive permission preflight is one set-based range query rather than
+one lookup per entry. The raw trusted path performs neither query, so enabling
+the feature in the library does not change existing statement counts.
 
 The link and its target are separate paths, so they carry separate revisions
 and mutation tokens: writing the target does not disturb the link's token, and
@@ -356,6 +363,10 @@ the two directly. The rebuild drops and recreates all six entry-shape triggers, 
 to the entry table follow it to its temporary name and are dropped with it,
 while the two attached to `vfs_opaque_objects` and `vfs_inline_chunks` survive
 with their bodies rewritten to reference a table that no longer exists.
+Version 3 adds `uid` and `gid`. Existing version-2 entries migrate as root-owned
+`0:0`; a host can then assign workspace ownership through the trusted raw
+`setOwnership()` capability. A version-1 database rebuilt by version 2 receives
+the current table shape directly.
 The explicit table is intentional because Durable Objects do not support
 [`PRAGMA user_version`](https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/#initialize-storage-and-run-migrations-in-the-constructor).
 A schema change runs `PRAGMA optimize` after its tables and indexes are installed.

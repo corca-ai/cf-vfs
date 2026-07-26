@@ -47,7 +47,11 @@ import type {
   OpaqueReadLease,
   OpaqueStore,
   OpaqueUploadReservation,
+  OwnershipUpdateOptions,
   PageOptions,
+  PosixCredentials,
+  PosixViewOptions,
+  PosixVirtualFileSystem,
   RemoveOptions,
   RemoveResult,
   SymlinkOptions,
@@ -62,6 +66,71 @@ import { MAX_SYMLINK_HOPS, MAX_SYMLINK_TARGET_BYTES } from "./types.js";
 const DEFAULT_MAX_DATABASE_BYTES = 10_000_000_000;
 const DEFAULT_DATABASE_HEADROOM_BYTES = 64 * 1024 * 1024;
 const MAX_GC_BATCH = 100;
+const MAX_POSIX_ID = 0xffff_ffff;
+const DEFAULT_UMASK = 0o022;
+const READ_PERMISSION = 0o4;
+const WRITE_PERMISSION = 0o2;
+const EXECUTE_PERMISSION = 0o1;
+const SETGID_BIT = 0o2000;
+const STICKY_BIT = 0o1000;
+
+interface PosixAccessContext {
+  readonly credentials: Readonly<Required<PosixCredentials>>;
+  readonly groups: ReadonlySet<number>;
+  readonly umask: number;
+}
+
+type PosixMutationOperation =
+  | { readonly kind: "copy"; readonly dereference: boolean }
+  | { readonly kind: "move" }
+  | { readonly kind: "remove-recursive" };
+
+function posixId(value: number, name: string): number {
+  if (!Number.isSafeInteger(value) || value < 0 || value > MAX_POSIX_ID) {
+    throw new VfsError("EINVAL", `${name} must be an integer between 0 and ${MAX_POSIX_ID}`);
+  }
+  return value;
+}
+
+function posixContext(
+  credentials: PosixCredentials,
+  options: PosixViewOptions = {},
+): PosixAccessContext {
+  const uid = posixId(credentials.uid, "credentials.uid");
+  const gid = posixId(credentials.gid, "credentials.gid");
+  const supplementaryGids = [...new Set(credentials.supplementaryGids ?? [])].map((value) =>
+    posixId(value, "credentials.supplementaryGids"),
+  );
+  const umask = options.umask ?? DEFAULT_UMASK;
+  if (!Number.isSafeInteger(umask) || umask < 0 || umask > 0o777) {
+    throw new VfsError("EINVAL", "umask must be an integer between 000 and 777");
+  }
+  return Object.freeze({
+    credentials: Object.freeze({
+      uid,
+      gid,
+      supplementaryGids: Object.freeze(supplementaryGids),
+    }),
+    groups: new Set([gid, ...supplementaryGids]),
+    umask,
+  });
+}
+
+function posixPermissions(
+  entry: Pick<StatBaseForPermissions, "uid" | "gid" | "mode">,
+  access: PosixAccessContext,
+): number {
+  if (access.credentials.uid === 0) return 0o7;
+  if (entry.uid === access.credentials.uid) return (entry.mode >> 6) & 0o7;
+  if (access.groups.has(entry.gid)) return (entry.mode >> 3) & 0o7;
+  return entry.mode & 0o7;
+}
+
+interface StatBaseForPermissions {
+  readonly uid: number;
+  readonly gid: number;
+  readonly mode: number;
+}
 
 /**
  * The entry table and its indexes.
@@ -88,6 +157,8 @@ const ENTRIES_SCHEMA = `
           link_target TEXT,
           size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
           mode INTEGER NOT NULL,
+          uid INTEGER NOT NULL CHECK (uid >= 0 AND uid <= 4294967295),
+          gid INTEGER NOT NULL CHECK (gid >= 0 AND gid <= 4294967295),
           created_at_ms INTEGER NOT NULL,
           modified_at_ms INTEGER NOT NULL,
           revision INTEGER NOT NULL CHECK (revision >= 1),
@@ -114,15 +185,6 @@ const ENTRIES_SCHEMA = `
         CREATE INDEX vfs_entries_symlink
           ON vfs_entries(path) WHERE kind = 'symlink';`;
 
-/**
- * The row-shape guards that SQLite enforces rather than JavaScript.
- *
- * These live beside `ENTRIES_SCHEMA` and are recreated with it, because
- * `ALTER TABLE ... RENAME` rewrites a trigger to follow the table it was
- * attached to: renaming the old entries table out of the way carries these onto
- * it, and dropping it takes them along. Re-running one definition is what keeps
- * a migrated database enforcing exactly what a fresh one does.
- */
 /**
  * The row-shape guards SQLite enforces rather than JavaScript.
  *
@@ -185,7 +247,7 @@ const DROP_ENTRY_TRIGGERS = `
 
 const ENTRY_COLUMNS = `
   e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,
-  e.opaque_object_id, e.link_target, e.size_bytes, e.mode, e.created_at_ms,
+  e.opaque_object_id, e.link_target, e.size_bytes, e.mode, e.uid, e.gid, e.created_at_ms,
   e.modified_at_ms, e.revision, p.version AS mutation_version
 `;
 
@@ -224,10 +286,17 @@ interface EntryRow {
   linkTarget: string | null;
   sizeBytes: number;
   mode: number;
+  uid: number;
+  gid: number;
   createdAtMs: number;
   modifiedAtMs: number;
   revision: number;
   mutationToken: string;
+}
+
+interface CreationParents {
+  readonly existing: EntryRow;
+  readonly missing: readonly string[];
 }
 
 interface OpaqueObjectRow {
@@ -336,6 +405,8 @@ function parseEntry(row: SqlRow, mutationEpoch: string): EntryRow {
     opaqueObjectId,
     sizeBytes: integerColumn(row, "size_bytes"),
     mode: integerColumn(row, "mode"),
+    uid: integerColumn(row, "uid"),
+    gid: integerColumn(row, "gid"),
     createdAtMs: integerColumn(row, "created_at_ms"),
     modifiedAtMs: integerColumn(row, "modified_at_ms"),
     revision: integerColumn(row, "revision"),
@@ -350,6 +421,8 @@ function rowToStat(row: EntryRow): VfsStat {
     name: row.name,
     sizeBytes: row.sizeBytes,
     mode: row.mode,
+    uid: row.uid,
+    gid: row.gid,
     createdAtMs: row.createdAtMs,
     modifiedAtMs: row.modifiedAtMs,
     revision: row.revision,
@@ -411,7 +484,7 @@ function metadataFromObject(row: OpaqueObjectRow): OpaqueObjectMetadata {
   };
 }
 
-export class SqlFileSystem implements VirtualFileSystem {
+export class SqlFileSystem implements PosixVirtualFileSystem {
   private readonly storage: SqlFileSystemStorage;
   private readonly sql: VfsSqlStorage;
   private readonly chunkBytes: number;
@@ -492,6 +565,10 @@ export class SqlFileSystem implements VirtualFileSystem {
     this.symlinkCount = this.countSymlinks();
   }
 
+  forCredentials(credentials: PosixCredentials, options: PosixViewOptions = {}): VirtualFileSystem {
+    return new PosixFileSystemView(this, posixContext(credentials, options));
+  }
+
   private countSymlinks(): number {
     return integerColumn(
       this.sql
@@ -512,6 +589,228 @@ export class SqlFileSystem implements VirtualFileSystem {
 
   private now(): number {
     return this.clock();
+  }
+
+  private assertPermission(
+    entry: Pick<EntryRow, "uid" | "gid" | "mode" | "kind" | "path">,
+    access: PosixAccessContext | undefined,
+    required: number,
+    path = entry.path,
+  ): void {
+    if (access === undefined || required === 0) return;
+    if (
+      access.credentials.uid === 0 &&
+      !(required === EXECUTE_PERMISSION && entry.kind === "file" && (entry.mode & 0o111) === 0)
+    )
+      return;
+    if ((posixPermissions(entry, access) & required) !== required) {
+      throw new VfsError("EACCES", "permission denied", path);
+    }
+  }
+
+  private assertOwner(
+    entry: Pick<EntryRow, "uid" | "path">,
+    access: PosixAccessContext | undefined,
+    path = entry.path,
+  ): void {
+    if (
+      access !== undefined &&
+      access.credentials.uid !== 0 &&
+      access.credentials.uid !== entry.uid
+    ) {
+      throw new VfsError("EPERM", "operation requires the file owner", path);
+    }
+  }
+
+  private assertStickyRemoval(
+    parent: EntryRow,
+    target: EntryRow,
+    access: PosixAccessContext | undefined,
+    path = target.path,
+  ): void {
+    if (
+      access === undefined ||
+      access.credentials.uid === 0 ||
+      (parent.mode & STICKY_BIT) === 0 ||
+      access.credentials.uid === parent.uid ||
+      access.credentials.uid === target.uid
+    )
+      return;
+    throw new VfsError("EPERM", "sticky directory denies removing this entry", path);
+  }
+
+  /**
+   * Checks execute permission on every directory used to reach a canonical
+   * path, plus the written-side ancestors of each followed link.
+   *
+   * All ancestors are fetched by one indexed `IN` query. Depth therefore adds
+   * rows, not statements, and the no-credentials path never calls this helper.
+   */
+  private assertTraverse(
+    path: string,
+    followed: readonly string[],
+    access: PosixAccessContext | undefined,
+  ): void {
+    if (access === undefined) return;
+    const ancestors = new Set<string>();
+    for (const candidate of [path, ...followed]) {
+      for (let parent = dirname(candidate); ; parent = dirname(parent)) {
+        ancestors.add(parent);
+        if (parent === "/") break;
+      }
+    }
+    if (path === "/") ancestors.delete("/");
+    if (ancestors.size === 0) return;
+    const ordered = [...ancestors];
+    const placeholders = ordered.map(() => "?").join(", ");
+    const rows = this.sql
+      .exec<SqlRow>(
+        `SELECT path, kind, mode, uid, gid
+         FROM vfs_entries INDEXED BY vfs_entries_path
+         WHERE path IN (${placeholders})`,
+        ...ordered,
+      )
+      .toArray();
+    if (rows.length !== ordered.length) {
+      throw new VfsError("ENOENT", "an ancestor directory does not exist", path);
+    }
+    for (const row of rows) {
+      const kind = stringColumn(row, "kind");
+      const parent = stringColumn(row, "path");
+      if (kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", parent);
+      this.assertPermission(
+        {
+          path: parent,
+          kind: "directory",
+          mode: integerColumn(row, "mode"),
+          uid: integerColumn(row, "uid"),
+          gid: integerColumn(row, "gid"),
+        },
+        access,
+        EXECUTE_PERMISSION,
+        path,
+      );
+    }
+  }
+
+  private creationMode(
+    mode: number,
+    access: PosixAccessContext | undefined,
+    parent: EntryRow,
+    directory: boolean,
+    intermediate = false,
+  ): number {
+    if (access === undefined) return mode;
+    let permissions = mode & 0o7777 & ~access.umask;
+    // Recursive creation must leave each intermediate directory searchable
+    // and writable by its creator long enough to create the next component.
+    // This is the POSIX `mkdir -p` rule and matters for restrictive umasks.
+    if (directory && intermediate) permissions |= 0o300;
+    if (directory && (parent.mode & SETGID_BIT) !== 0) permissions |= SETGID_BIT;
+    const type = directory ? 0o040000 : 0o100000;
+    return type | permissions;
+  }
+
+  private creationOwner(
+    parent: EntryRow,
+    access: PosixAccessContext | undefined,
+  ): { uid: number; gid: number } {
+    if (access === undefined) return { uid: 0, gid: 0 };
+    return {
+      uid: access.credentials.uid,
+      gid: (parent.mode & SETGID_BIT) !== 0 ? parent.gid : access.credentials.gid,
+    };
+  }
+
+  private permissionExpression(
+    alias: string,
+    access: PosixAccessContext,
+  ): { sql: string; bindings: number[] } {
+    const groups = [...access.groups];
+    return {
+      sql: `CASE
+        WHEN ${alias}.uid = ? THEN ((${alias}.mode >> 6) & 7)
+        WHEN ${alias}.gid IN (${groups.map(() => "?").join(", ")})
+          THEN ((${alias}.mode >> 3) & 7)
+        ELSE (${alias}.mode & 7)
+      END`,
+      bindings: [access.credentials.uid, ...groups],
+    };
+  }
+
+  /**
+   * Conservative recursive semantics: a set operation is atomic, so an
+   * inaccessible descendant rejects the whole operation instead of exposing
+   * or mutating a partial prefix. SQLite performs the preflight in one range
+   * scan and returns at most the first denied path.
+   */
+  private assertSubtreePermissions(
+    path: string,
+    access: PosixAccessContext | undefined,
+    filePermissions: number,
+    directoryPermissions: number,
+  ): void {
+    if (access === undefined || access.credentials.uid === 0) return;
+    const range = descendantRange(path);
+    const expression = this.permissionExpression("e", access);
+    const denied = firstRow(
+      this.sql.exec<SqlRow>(
+        `SELECT e.path
+         FROM vfs_entries e INDEXED BY vfs_entries_path
+         WHERE (e.path = ? OR (e.path >= ? AND e.path < ?))
+           AND (
+             (e.kind = 'directory' AND ((${expression.sql}) & ?) <> ?)
+             OR
+             (e.kind = 'file' AND ((${expression.sql}) & ?) <> ?)
+           )
+         ORDER BY e.path
+         LIMIT 1`,
+        path,
+        range.lower,
+        range.upper,
+        ...expression.bindings,
+        directoryPermissions,
+        directoryPermissions,
+        ...expression.bindings,
+        filePermissions,
+        filePermissions,
+      ),
+    );
+    if (denied !== undefined) {
+      throw new VfsError("EACCES", "permission denied", stringColumn(denied, "path"));
+    }
+  }
+
+  private assertSubtreeSticky(path: string, access: PosixAccessContext | undefined): void {
+    if (access === undefined || access.credentials.uid === 0) return;
+    const range = descendantRange(path);
+    const denied = firstRow(
+      this.sql.exec<SqlRow>(
+        `SELECT child.path
+         FROM vfs_entries child INDEXED BY vfs_entries_path
+         JOIN vfs_entries parent INDEXED BY vfs_entries_path
+           ON parent.path = child.parent_path
+         WHERE (child.path > ? AND child.path >= ? AND child.path < ?)
+           AND (parent.mode & ?) <> 0
+           AND ? <> parent.uid
+           AND ? <> child.uid
+         ORDER BY child.path
+         LIMIT 1`,
+        path,
+        range.lower,
+        range.upper,
+        STICKY_BIT,
+        access.credentials.uid,
+        access.credentials.uid,
+      ),
+    );
+    if (denied !== undefined) {
+      throw new VfsError(
+        "EPERM",
+        "sticky directory denies removing this entry",
+        stringColumn(denied, "path"),
+      );
+    }
   }
 
   private newToken(): string {
@@ -636,8 +935,8 @@ ${ENTRY_TRIGGERS}
         this.sql.exec(
           `INSERT INTO vfs_entries (
              path, parent_path, name, kind, content_class, opaque_object_id,
-             size_bytes, mode, created_at_ms, modified_at_ms, revision
-           ) VALUES ('/', '/', '/', 'directory', NULL, NULL, 0, ?, 0, 0, 1)`,
+             size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
+           ) VALUES ('/', '/', '/', 'directory', NULL, NULL, 0, ?, 0, 0, 0, 0, 1)`,
           DIRECTORY_MODE,
         );
         this.sql.exec("INSERT INTO vfs_usage (singleton, inline_bytes, entries) VALUES (1, 0, 1)");
@@ -662,11 +961,11 @@ ${DROP_ENTRY_TRIGGERS}
 ${ENTRIES_SCHEMA}
         INSERT INTO vfs_entries (
           id, path, parent_path, name, kind, content_class, opaque_object_id,
-          link_target, size_bytes, mode, created_at_ms, modified_at_ms, revision
+          link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
         )
         SELECT
           id, path, parent_path, name, kind, content_class, opaque_object_id,
-          NULL, size_bytes, mode, created_at_ms, modified_at_ms, revision
+          NULL, size_bytes, mode, 0, 0, created_at_ms, modified_at_ms, revision
         FROM vfs_entries_v1;
         DROP TABLE vfs_entries_v1;
 ${ENTRY_TRIGGERS}
@@ -674,6 +973,27 @@ ${ENTRY_TRIGGERS}
         }
         this.sql.exec(
           "INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (2, ?)",
+          now,
+        );
+        migrated = true;
+      }
+      if (currentVersion < 3) {
+        // Databases rebuilt above already use the current entry definition.
+        // Only a database that was already at version 2 needs the two columns
+        // added in place; existing entries become root-owned until a trusted
+        // administrator assigns workspace ownership explicitly.
+        if (currentVersion === 2) {
+          this.storage.execBatch(`
+        ALTER TABLE vfs_entries
+          ADD COLUMN uid INTEGER NOT NULL DEFAULT 0
+          CHECK (uid >= 0 AND uid <= 4294967295);
+        ALTER TABLE vfs_entries
+          ADD COLUMN gid INTEGER NOT NULL DEFAULT 0
+          CHECK (gid >= 0 AND gid <= 4294967295);
+      `);
+        }
+        this.sql.exec(
+          "INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (3, ?)",
           now,
         );
         migrated = true;
@@ -829,10 +1149,14 @@ ${ENTRY_TRIGGERS}
    * needs an answer, and refusing would make the policy check below depend on
    * whether the file happened to be there already.
    */
-  realpath(path: string, options: { follow?: boolean } = {}): string {
+  realpath(path: string, options: { follow?: boolean } = {}, access?: PosixAccessContext): string {
     const normalized = normalizePath(path);
-    if (this.links() === 0) return normalized;
+    if (this.links() === 0) {
+      this.assertTraverse(normalized, [], access);
+      return normalized;
+    }
     const resolved = this.resolveEntry(normalized, options.follow !== false);
+    this.assertTraverse(resolved.path, resolved.followed, access);
     // Already canonical, present or not: `resolveEntry` substitutes every link
     // ancestor before it gives up, so an absent final component is reported
     // under a path whose parents have all been resolved. Recursing on the
@@ -895,7 +1219,7 @@ ${ENTRY_TRIGGERS}
     path: string,
     allowMissingDirectory = false,
     followTerminal = true,
-  ): { path: string; row: EntryRow | null } {
+  ): { path: string; row: EntryRow | null; followed: string[] } {
     // A trailing slash asserts that the path names a directory, so the link is
     // followed even when the caller asked not to follow one: `rm dirlink/` is
     // a question about the directory, not about the link.
@@ -905,7 +1229,7 @@ ${ENTRY_TRIGGERS}
     // costs exactly what it did before links existed: nothing.
     const resolved =
       this.links() === 0
-        ? { path: normalized, row: null }
+        ? { path: normalized, row: null, followed: [] }
         : this.resolveEntry(normalized, followTerminal || requiresDirectory);
     if (requiresDirectory && resolved.row === null && resolved.path !== "/") {
       resolved.row = this.oneEntry(resolved.path);
@@ -1111,19 +1435,36 @@ ${ENTRY_TRIGGERS}
     );
   }
 
-  private createDirectory(path: string, now: number, mode = DIRECTORY_MODE): EntryRow {
+  private createDirectory(
+    path: string,
+    now: number,
+    mode = DIRECTORY_MODE,
+    access?: PosixAccessContext,
+    intermediate = false,
+    knownParent?: EntryRow,
+  ): EntryRow {
+    const parent =
+      access === undefined ? undefined : (knownParent ?? this.requireDirectory(dirname(path)));
+    if (parent !== undefined) {
+      this.assertPermission(parent, access, WRITE_PERMISSION | EXECUTE_PERMISSION, path);
+    }
+    const effectiveMode =
+      parent === undefined ? mode : this.creationMode(mode, access, parent, true, intermediate);
+    const owner = parent === undefined ? { uid: 0, gid: 0 } : this.creationOwner(parent, access);
     const token = this.bumpToken(path);
     const inserted = this.sql
       .exec<SqlRow>(
         `INSERT INTO vfs_entries (
          path, parent_path, name, kind, content_class, opaque_object_id,
-         size_bytes, mode, created_at_ms, modified_at_ms, revision
-       ) VALUES (?, ?, ?, 'directory', NULL, NULL, 0, ?, ?, ?, 1)
+         size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
+       ) VALUES (?, ?, ?, 'directory', NULL, NULL, 0, ?, ?, ?, ?, ?, 1)
        RETURNING id`,
         path,
         dirname(path),
         basename(path),
-        mode,
+        effectiveMode,
+        owner.uid,
+        owner.gid,
         now,
         now,
       )
@@ -1140,7 +1481,9 @@ ${ENTRY_TRIGGERS}
       opaqueObjectId: null,
       linkTarget: null,
       sizeBytes: 0,
-      mode,
+      mode: effectiveMode,
+      uid: owner.uid,
+      gid: owner.gid,
       createdAtMs: now,
       modifiedAtMs: now,
       revision: 1,
@@ -1148,7 +1491,7 @@ ${ENTRY_TRIGGERS}
     };
   }
 
-  private ensureParents(path: string, recursive: boolean, now: number): void {
+  private creationParents(path: string, recursive: boolean): CreationParents {
     const missing: string[] = [];
     let current = dirname(path);
     // The walk resolves each candidate; keeping the row it stopped on spares
@@ -1168,12 +1511,82 @@ ${ENTRY_TRIGGERS}
     if (parent !== null && parent.path !== current) {
       throw new VfsError("ENOTDIR", "not a directory", current);
     }
-    this.requireDirectory(current, parent);
+    const existingParent = this.requireDirectory(current, parent);
     if (missing.length > 0 && !recursive) {
       throw new VfsError("ENOENT", "parent directory does not exist", dirname(path));
     }
-    this.assertCapacity(0, missing.length, path);
-    for (const parent of missing) this.createDirectory(parent, now);
+    return { existing: existingParent, missing };
+  }
+
+  private assertCreationAccess(
+    path: string,
+    followed: readonly string[],
+    access: PosixAccessContext | undefined,
+    parent: EntryRow,
+  ): void {
+    if (access === undefined) return;
+    this.assertTraverse(parent.path, followed, access);
+    this.assertPermission(parent, access, WRITE_PERMISSION | EXECUTE_PERMISSION, path);
+  }
+
+  private prepareParents(
+    path: string,
+    recursive: boolean,
+    now: number,
+    followed: readonly string[],
+    access?: PosixAccessContext,
+  ): EntryRow {
+    const parents = this.creationParents(path, recursive);
+    this.assertCreationAccess(path, followed, access, parents.existing);
+    return this.createMissingParents(path, now, access, parents);
+  }
+
+  private createMissingParents(
+    path: string,
+    now: number,
+    access: PosixAccessContext | undefined,
+    parents: CreationParents,
+  ): EntryRow {
+    this.assertCapacity(0, parents.missing.length, path);
+    let parent = parents.existing;
+    for (const missingParent of parents.missing) {
+      parent = this.createDirectory(missingParent, now, DIRECTORY_MODE, access, true, parent);
+    }
+    return parent;
+  }
+
+  private assertWriteAccess(
+    path: string,
+    entry: EntryRow | null,
+    recursive: boolean,
+    followed: readonly string[],
+    access: PosixAccessContext | undefined,
+  ): void {
+    if (entry === null) {
+      if (access === undefined) return;
+      const parents = this.creationParents(path, recursive);
+      this.assertCreationAccess(path, followed, access, parents.existing);
+      return;
+    }
+    this.assertTraverse(path, followed, access);
+    this.assertPermission(entry, access, WRITE_PERMISSION, path);
+  }
+
+  private assertDestinationReplaceable(
+    destination: EntryRow | null,
+    target: string,
+    replace: boolean,
+  ): void {
+    if (destination === null) return;
+    if (!replace) throw new VfsError("EEXIST", "destination exists", target);
+    if (destination.kind !== "directory") return;
+    const child = firstRow(
+      this.sql.exec<SqlRow>(
+        "SELECT 1 AS present FROM vfs_entries WHERE parent_path = ? LIMIT 1",
+        target,
+      ),
+    );
+    if (child !== undefined) throw new VfsError("ENOTEMPTY", "directory is not empty", target);
   }
 
   private async collectInline(body: ByteBody) {
@@ -1209,17 +1622,20 @@ ${ENTRY_TRIGGERS}
     }
   }
 
-  stat(path: string): VfsStat {
-    return this.statEntry(path, true);
+  stat(path: string, access?: PosixAccessContext): VfsStat {
+    return this.statEntry(path, true, access);
   }
 
   /** Reports a link as itself rather than as what it points at. */
-  lstat(path: string): VfsStat {
-    return this.statEntry(path, false);
+  lstat(path: string, access?: PosixAccessContext): VfsStat {
+    return this.statEntry(path, false, access);
   }
 
-  readlink(path: string): string {
-    const row = this.requireEntry(normalizePath(path), false);
+  readlink(path: string, access?: PosixAccessContext): string {
+    const resolved = this.accessEntry(path, false);
+    this.assertTraverse(resolved.path, resolved.followed, access);
+    const row = resolved.row;
+    if (row === null) throw new VfsError("ENOENT", "no such file or directory", resolved.path);
     if (row.kind !== "symlink" || row.linkTarget === null) {
       throw new VfsError("EINVAL", "not a symbolic link", row.path);
     }
@@ -1233,7 +1649,10 @@ ${ENTRY_TRIGGERS}
    * would double what every read costs as soon as a single link exists
    * anywhere in the namespace.
    */
-  private accessEntry(path: string, follow: boolean): { path: string; row: EntryRow | null } {
+  private accessEntry(
+    path: string,
+    follow: boolean,
+  ): { path: string; row: EntryRow | null; followed: string[] } {
     const requiresDirectory = pathRequiresDirectory(path);
     const resolved = this.resolveEntry(normalizePath(path), follow || requiresDirectory);
     if (requiresDirectory && resolved.row !== null && resolved.row.kind !== "directory") {
@@ -1242,8 +1661,9 @@ ${ENTRY_TRIGGERS}
     return resolved;
   }
 
-  private statEntry(path: string, follow: boolean): VfsStat {
+  private statEntry(path: string, follow: boolean, posix?: PosixAccessContext): VfsStat {
     const access = this.accessEntry(path, follow);
+    this.assertTraverse(access.path, access.followed, posix);
     if (access.row === null) {
       throw new VfsError("ENOENT", "no such file or directory", access.path);
     }
@@ -1261,21 +1681,34 @@ ${ENTRY_TRIGGERS}
     };
   }
 
-  getMutationToken(path: string, options: MutationTokenOptions = {}): string {
+  getMutationToken(
+    path: string,
+    options: MutationTokenOptions = {},
+    access?: PosixAccessContext,
+  ): string {
     // Resolved by default, so the token belongs to the row the matching write
     // would guard. Reading it from the written path would return the link's
     // version and never match the target's.
-    return this.transaction(() =>
-      options.follow === false
-        ? this.tokenFor(this.normalizeAccessPath(path, true, false))
-        : this.guardToken(path),
-    );
+    if (access === undefined) {
+      return this.transaction(() =>
+        options.follow === false
+          ? this.tokenFor(this.normalizeAccessPath(path, true, false))
+          : this.guardToken(path),
+      );
+    }
+    return this.transaction(() => {
+      const resolved = this.resolveAccess(path, true, options.follow !== false);
+      this.assertTraverse(resolved.path, resolved.followed, access);
+      return options.follow === false ? this.tokenFor(resolved.path) : this.guardToken(path);
+    });
   }
 
-  list(path: string): VfsStat[] {
+  list(path: string, posix?: PosixAccessContext): VfsStat[] {
     const access = this.resolveAccess(path);
     const normalized = access.path;
-    this.requireDirectory(normalized, access.row);
+    this.assertTraverse(normalized, access.followed, posix);
+    const directory = this.requireDirectory(normalized, access.row);
+    this.assertPermission(directory, posix, READ_PERMISSION | EXECUTE_PERMISSION, normalized);
     return this.rows(
       `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e INDEXED BY vfs_entries_parent_name
@@ -1286,10 +1719,12 @@ ${ENTRY_TRIGGERS}
     ).map(rowToStat);
   }
 
-  listPage(path: string, options: PageOptions = {}): EntryPage {
+  listPage(path: string, options: PageOptions = {}, posix?: PosixAccessContext): EntryPage {
     const access = this.resolveAccess(path);
     const normalized = access.path;
-    this.requireDirectory(normalized, access.row);
+    this.assertTraverse(normalized, access.followed, posix);
+    const directory = this.requireDirectory(normalized, access.row);
+    this.assertPermission(directory, posix, READ_PERMISSION | EXECUTE_PERMISSION, normalized);
     const limit = options.limit ?? 1000;
     validatePositiveInteger(limit, "limit");
     const rows = this.rows(
@@ -1311,13 +1746,17 @@ ${ENTRY_TRIGGERS}
     };
   }
 
-  find(options: FindOptions): VfsStat[] {
+  find(options: FindOptions, access?: PosixAccessContext): VfsStat[] {
     const maximum = options.limit ?? 10_000;
     const result: VfsStat[] = [];
     let cursor = options.cursor;
+    const effectiveOptions =
+      access === undefined
+        ? options
+        : { ...options, path: this.assertFindAccess(options.path, access) };
     do {
       const page = this.findPage({
-        ...options,
+        ...effectiveOptions,
         ...(cursor === undefined ? {} : { cursor }),
         limit: Math.min(maximum - result.length, 1000),
       });
@@ -1327,9 +1766,28 @@ ${ENTRY_TRIGGERS}
     return result;
   }
 
-  findPage(options: FindOptions): EntryPage {
-    const root = this.normalizeAccessPath(options.path);
-    const rootEntry = this.requireEntry(root);
+  private assertFindAccess(path: string, posix: PosixAccessContext): string {
+    const access = this.resolveAccess(path);
+    const root = access.path;
+    this.assertTraverse(root, access.followed, posix);
+    const rootEntry = access.row ?? this.requireEntry(root);
+    this.assertPermission(
+      rootEntry,
+      posix,
+      rootEntry.kind === "directory" ? READ_PERMISSION | EXECUTE_PERMISSION : 0,
+      root,
+    );
+    if (rootEntry.kind === "directory") {
+      this.assertSubtreePermissions(root, posix, 0, READ_PERMISSION | EXECUTE_PERMISSION);
+    }
+    return root;
+  }
+
+  findPage(options: FindOptions, posix?: PosixAccessContext): EntryPage {
+    const access = this.resolveAccess(options.path);
+    const root = access.path;
+    const rootEntry = access.row ?? this.requireEntry(root);
+    if (posix !== undefined) this.assertFindAccess(options.path, posix);
     const limit = options.limit ?? 1000;
     validatePositiveInteger(limit, "limit");
     const range = descendantRange(root);
@@ -1373,20 +1831,74 @@ ${ENTRY_TRIGGERS}
     };
   }
 
-  countSubtree(path: string): number {
+  countSubtree(path: string, posix?: PosixAccessContext): number {
     // A link names one entry and has no subtree, so the count does not follow
     // it. The callers are budget accounting for `rm`, `mv`, and `cp`, all of
     // which act on the link; following would also make a dangling one throw.
     const access = this.resolveAccess(path, false, false);
+    this.assertTraverse(access.path, access.followed, posix);
     const entry = access.row ?? this.requireEntry(access.path, false);
     if (entry.kind === "symlink") return 1;
+    this.assertSubtreePermissions(access.path, posix, 0, READ_PERMISSION | EXECUTE_PERMISSION);
     return this.subtreeSummary(access.path).entries;
   }
 
-  readFile(path: string): InlineReadResult {
+  /**
+   * Internal shell-budget preflight with the permission semantics of the
+   * mutation it is charging. In particular, rename does not need read access
+   * to a source subtree merely because its entry count is used as a limit.
+   */
+  countPosixMutationSubtree(
+    path: string,
+    operation: PosixMutationOperation,
+    posix?: PosixAccessContext,
+  ): number {
+    const access = this.resolveAccess(
+      path,
+      false,
+      operation.kind === "copy" && operation.dereference,
+    );
+    const entry = access.row ?? this.requireEntry(access.path, false);
+    this.assertTraverse(access.path, access.followed, posix);
+    if (operation.kind === "copy") {
+      if (entry.kind === "file") {
+        this.assertPermission(entry, posix, READ_PERMISSION, access.path);
+      } else if (entry.kind === "directory") {
+        this.assertSubtreePermissions(
+          access.path,
+          posix,
+          READ_PERMISSION,
+          READ_PERMISSION | EXECUTE_PERMISSION,
+        );
+      }
+    } else {
+      const parent = this.requireDirectory(dirname(access.path));
+      this.assertPermission(parent, posix, WRITE_PERMISSION | EXECUTE_PERMISSION, access.path);
+      this.assertStickyRemoval(parent, entry, posix, access.path);
+      if (operation.kind === "remove-recursive" && entry.kind === "directory") {
+        this.assertSubtreePermissions(access.path, posix, 0, WRITE_PERMISSION | EXECUTE_PERMISSION);
+        this.assertSubtreeSticky(access.path, posix);
+      }
+    }
+    return entry.kind === "symlink" ? 1 : this.subtreeSummary(access.path).entries;
+  }
+
+  readFile(path: string, posix?: PosixAccessContext): InlineReadResult {
     const access = this.resolveAccess(path);
     const normalized = access.path;
-    const entry = this.requireInline(normalized, access.row);
+    this.assertTraverse(normalized, access.followed, posix);
+    const entry = access.row ?? this.requireEntry(normalized);
+    if (entry.kind === "directory") {
+      throw new VfsError("EISDIR", "is a directory", normalized);
+    }
+    this.assertPermission(entry, posix, READ_PERMISSION, normalized);
+    if (entry.contentClass !== "inline") {
+      throw new VfsError(
+        "ENOTSUP",
+        "opaque R2 content is not available to shell commands",
+        normalized,
+      );
+    }
     const chunks = this.sql
       .exec<SqlRow>(
         `SELECT body FROM vfs_inline_chunks
@@ -1514,9 +2026,18 @@ ${ENTRY_TRIGGERS}
     path: string,
     body: ByteBody,
     options: WriteFileOptions = {},
+    posix?: PosixAccessContext,
   ): Promise<WriteResult> {
-    const normalized = this.normalizeAccessPath(path, true);
-    const before = this.oneEntry(normalized);
+    const access = this.resolveAccess(path, true);
+    const normalized = access.path;
+    const before = access.row ?? this.oneEntry(normalized);
+    this.assertWriteAccess(
+      normalized,
+      before,
+      options.createParents ?? false,
+      access.followed,
+      posix,
+    );
     const disposition = options.disposition ?? "upsert";
     if (disposition === "create" && before !== null) {
       throw new VfsError("EEXIST", "file or directory already exists", normalized);
@@ -1540,18 +2061,43 @@ ${ENTRY_TRIGGERS}
         this.validateGuard(normalized, current, options, path);
         if (current?.kind === "directory")
           throw new VfsError("EISDIR", "is a directory", normalized);
+        const now = this.now();
+        const parent =
+          current === null
+            ? this.prepareParents(
+                normalized,
+                options.createParents ?? false,
+                now,
+                access.followed,
+                posix,
+              )
+            : undefined;
+        if (current !== null) {
+          this.assertWriteAccess(normalized, current, false, access.followed, posix);
+        }
+        const entryOrParent = parent ?? current ?? this.requireDirectory(dirname(normalized));
         const previousInlineBytes = current?.contentClass === "inline" ? current.sizeBytes : 0;
         const inlineDelta = sizeBytes - previousInlineBytes;
-        const now = this.now();
         // An entry that is already there is proof of its own parent. Nothing
         // removes or replaces a directory while a child remains, and every
         // route that could reach the parent must delete the child first, which
         // bumps its version and so fails the token compared just above.
         // `touch` reaches the same conclusion by returning early; a write has
         // to say it, because it goes on to write.
-        if (current === null) {
-          this.ensureParents(normalized, options.createParents ?? false, now);
-        }
+        const owner =
+          current === null
+            ? posix === undefined
+              ? { uid: 0, gid: 0 }
+              : this.creationOwner(entryOrParent, posix)
+            : { uid: current.uid, gid: current.gid };
+        const mode =
+          current === null
+            ? posix === undefined
+              ? (options.mode ?? FILE_MODE)
+              : this.creationMode(options.mode ?? FILE_MODE, posix, entryOrParent, false)
+            : posix === undefined
+              ? (options.mode ?? current.mode)
+              : current.mode;
         this.assertCapacity(inlineDelta, current === null ? 1 : 0, normalized);
         const token = this.bumpToken(normalized);
         if (current?.contentClass === "inline") {
@@ -1561,8 +2107,8 @@ ${ENTRY_TRIGGERS}
           .exec<SqlRow>(
             `INSERT INTO vfs_entries (
            id, path, parent_path, name, kind, content_class, opaque_object_id,
-           size_bytes, mode, created_at_ms, modified_at_ms, revision
-         ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, ?, ?, ?, ?, 1)
+           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
+         ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, ?, ?, ?, ?, ?, ?, 1)
          ON CONFLICT(path) DO UPDATE SET
            kind = 'file', content_class = 'inline', opaque_object_id = NULL,
            size_bytes = excluded.size_bytes, mode = excluded.mode,
@@ -1574,7 +2120,9 @@ ${ENTRY_TRIGGERS}
             dirname(normalized),
             basename(normalized),
             sizeBytes,
-            options.mode ?? current?.mode ?? FILE_MODE,
+            mode,
+            owner.uid,
+            owner.gid,
             current?.createdAtMs ?? now,
             now,
           )
@@ -1612,9 +2160,13 @@ ${ENTRY_TRIGGERS}
     path: string,
     body: ByteBody,
     options: AppendFileOptions = {},
+    posix?: PosixAccessContext,
   ): Promise<WriteResult> {
-    const normalized = this.normalizeAccessPath(path);
-    const before = this.requireInline(normalized);
+    const access = this.resolveAccess(path);
+    const normalized = access.path;
+    this.assertTraverse(normalized, access.followed, posix);
+    const before = this.requireInline(normalized, access.row);
+    this.assertPermission(before, posix, WRITE_PERMISSION, normalized);
     this.validateGuard(normalized, before, options, path);
     const capturedToken = before.mutationToken;
     const buffered = await this.collectInline(body);
@@ -1626,6 +2178,8 @@ ${ENTRY_TRIGGERS}
           throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
         }
         this.validateGuard(normalized, current, options, path);
+        this.assertTraverse(normalized, access.followed, posix);
+        this.assertPermission(current, posix, WRITE_PERMISSION, normalized);
         if (suffixBytes === 0) {
           return {
             path: normalized,
@@ -1714,10 +2268,24 @@ ${ENTRY_TRIGGERS}
     });
   }
 
-  setMetadata(path: string, options: MetadataUpdateOptions): VfsStat {
-    const normalized = this.normalizeAccessPath(path);
+  setMetadata(
+    path: string,
+    options: MetadataUpdateOptions,
+    posix?: PosixAccessContext,
+    writtenFollowed: readonly string[] = [],
+  ): VfsStat {
+    const access = this.resolveAccess(path);
+    const normalized = access.path;
+    const followed =
+      writtenFollowed.length === 0 ? access.followed : [...writtenFollowed, ...access.followed];
+    this.assertTraverse(normalized, followed, posix);
     return this.transaction(() => {
       const entry = this.requireEntry(normalized);
+      this.assertTraverse(normalized, followed, posix);
+      if (options.mode !== undefined) this.assertOwner(entry, posix, normalized);
+      else if (posix !== undefined && posix.credentials.uid !== entry.uid) {
+        this.assertPermission(entry, posix, WRITE_PERMISSION, normalized);
+      }
       this.validateGuard(normalized, entry, options);
       const token = this.bumpToken(normalized);
       const modifiedAtMs = options.modifiedAtMs ?? this.now();
@@ -1738,28 +2306,110 @@ ${ENTRY_TRIGGERS}
     });
   }
 
-  touch(path: string, options: TouchOptions = {}): VfsStat {
-    const normalized = this.normalizeAccessPath(path, true);
-    const existing = this.oneEntry(normalized);
-    if (existing !== null) return this.setMetadata(normalized, options);
+  setOwnership(path: string, options: OwnershipUpdateOptions, posix?: PosixAccessContext): VfsStat {
+    const access = this.resolveAccess(path);
+    const normalized = access.path;
+    this.assertTraverse(normalized, access.followed, posix);
+    if (options.uid === undefined && options.gid === undefined) {
+      throw new VfsError("EINVAL", "setOwnership requires uid or gid", normalized);
+    }
+    const uid = options.uid === undefined ? undefined : posixId(options.uid, "options.uid");
+    const gid = options.gid === undefined ? undefined : posixId(options.gid, "options.gid");
+    return this.transaction(() => {
+      const entry = this.requireEntry(normalized);
+      this.assertTraverse(normalized, access.followed, posix);
+      if (posix !== undefined && posix.credentials.uid !== 0) {
+        if (uid !== undefined && uid !== entry.uid) {
+          throw new VfsError("EPERM", "only root may change a file owner", normalized);
+        }
+        this.assertOwner(entry, posix, normalized);
+        if (gid !== undefined && !posix.groups.has(gid)) {
+          throw new VfsError("EPERM", "group is not in the current user's groups", normalized);
+        }
+      }
+      this.validateGuard(normalized, entry, options);
+      const token = this.bumpToken(normalized);
+      const modifiedAtMs = this.now();
+      const mode =
+        posix !== undefined &&
+        posix.credentials.uid !== 0 &&
+        (uid !== undefined || gid !== undefined)
+          ? entry.mode & ~0o6000
+          : entry.mode;
+      this.sql.exec(
+        `UPDATE vfs_entries
+         SET uid = ?, gid = ?, mode = ?, modified_at_ms = ?, revision = revision + 1
+         WHERE id = ?`,
+        uid ?? entry.uid,
+        gid ?? entry.gid,
+        mode,
+        modifiedAtMs,
+        entry.id,
+      );
+      return rowToStat({
+        ...entry,
+        uid: uid ?? entry.uid,
+        gid: gid ?? entry.gid,
+        mode,
+        modifiedAtMs,
+        revision: entry.revision + 1,
+        mutationToken: token,
+      });
+    });
+  }
+
+  touch(path: string, options: TouchOptions = {}, posix?: PosixAccessContext): VfsStat {
+    const access = this.resolveAccess(path, true);
+    const normalized = access.path;
+    const existing = access.row ?? this.oneEntry(normalized);
+    if (existing !== null) {
+      // `setMetadata` receives the canonical target below, so retain the
+      // written side of any followed link here. Both sides need search
+      // permission; otherwise `touch hidden/link` could reach an accessible
+      // target through a directory the caller cannot traverse.
+      return this.setMetadata(normalized, options, posix, access.followed);
+    }
     if (options.create === false) {
       throw new VfsError("ENOENT", "no such file or directory", normalized);
     }
     return this.transaction(() => {
+      const parents =
+        posix === undefined
+          ? undefined
+          : this.creationParents(normalized, options.createParents ?? false);
+      if (parents !== undefined) {
+        this.assertCreationAccess(normalized, access.followed, posix, parents.existing);
+      }
       this.validateGuard(normalized, null, options);
       const now = this.now();
-      this.ensureParents(normalized, options.createParents ?? false, now);
+      const parent =
+        parents === undefined
+          ? this.prepareParents(
+              normalized,
+              options.createParents ?? false,
+              now,
+              access.followed,
+              posix,
+            )
+          : this.createMissingParents(normalized, now, posix, parents);
+      const owner = posix === undefined ? { uid: 0, gid: 0 } : this.creationOwner(parent, posix);
+      const mode =
+        posix === undefined
+          ? (options.mode ?? FILE_MODE)
+          : this.creationMode(options.mode ?? FILE_MODE, posix, parent, false);
       this.assertCapacity(0, 1, normalized);
       const token = this.bumpToken(normalized);
       this.sql.exec(
         `INSERT INTO vfs_entries (
            path, parent_path, name, kind, content_class, opaque_object_id,
-           size_bytes, mode, created_at_ms, modified_at_ms, revision
-         ) VALUES (?, ?, ?, 'file', 'inline', NULL, 0, ?, ?, ?, 1)`,
+           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
+         ) VALUES (?, ?, ?, 'file', 'inline', NULL, 0, ?, ?, ?, ?, ?, 1)`,
         normalized,
         dirname(normalized),
         basename(normalized),
-        options.mode ?? FILE_MODE,
+        mode,
+        owner.uid,
+        owner.gid,
         now,
         options.modifiedAtMs ?? now,
       );
@@ -1771,7 +2421,9 @@ ${ENTRY_TRIGGERS}
         kind: "file",
         contentClass: "inline",
         sizeBytes: 0,
-        mode: options.mode ?? FILE_MODE,
+        mode,
+        uid: owner.uid,
+        gid: owner.gid,
         createdAtMs: now,
         modifiedAtMs: options.modifiedAtMs ?? now,
         revision: 1,
@@ -1780,25 +2432,41 @@ ${ENTRY_TRIGGERS}
     });
   }
 
-  mkdir(path: string, recursive = false, mode = DIRECTORY_MODE): VfsStat {
+  mkdir(
+    path: string,
+    recursive = false,
+    mode = DIRECTORY_MODE,
+    posix?: PosixAccessContext,
+  ): VfsStat {
     // An existing link at the path is an existing entry, so `mkdir` reports
     // EEXIST rather than creating a directory at whatever it points at.
-    const normalized = this.normalizeAccessPath(path, true, false);
+    const access = this.resolveAccess(path, true, false);
+    const normalized = access.path;
     return this.transaction(() => {
-      const existing = this.oneEntry(normalized);
+      const existing = access.row ?? this.oneEntry(normalized);
       if (existing !== null) {
-        if (recursive && existing.kind === "directory") return rowToStat(existing);
+        this.assertTraverse(normalized, access.followed, posix);
+        if (recursive && existing.kind === "directory") {
+          this.assertPermission(existing, posix, EXECUTE_PERMISSION, normalized);
+          return rowToStat(existing);
+        }
         throw new VfsError("EEXIST", "file or directory already exists", normalized);
       }
       const now = this.now();
-      this.ensureParents(normalized, recursive, now);
+      const parent = this.prepareParents(normalized, recursive, now, access.followed, posix);
       this.assertCapacity(0, 1, normalized);
-      return rowToStat(this.createDirectory(normalized, now, mode));
+      return rowToStat(this.createDirectory(normalized, now, mode, posix, false, parent));
     });
   }
 
-  symlink(path: string, target: string, options: SymlinkOptions = {}): VfsStat {
-    const normalized = this.normalizeAccessPath(path, true, false);
+  symlink(
+    path: string,
+    target: string,
+    options: SymlinkOptions = {},
+    posix?: PosixAccessContext,
+  ): VfsStat {
+    const access = this.resolveAccess(path, true, false);
+    const normalized = access.path;
     if (normalized === "/") throw new VfsError("EEXIST", "file or directory exists", normalized);
     if (target.length === 0) throw new VfsError("EINVAL", "link target is empty", normalized);
     const bytes = new TextEncoder().encode(target).byteLength;
@@ -1806,7 +2474,7 @@ ${ENTRY_TRIGGERS}
       throw new VfsError("ENAMETOOLONG", "link target is too long", normalized);
     }
     return this.transaction(() => {
-      const existing = this.oneEntry(normalized);
+      const existing = access.row ?? this.oneEntry(normalized);
       if (existing !== null) {
         if (!(options.replace ?? false)) {
           throw new VfsError("EEXIST", "file or directory exists", normalized);
@@ -1821,15 +2489,25 @@ ${ENTRY_TRIGGERS}
           : { ifMutationToken: options.ifMutationToken }),
       });
       const now = this.now();
-      this.ensureParents(normalized, options.createParents ?? false, now);
+      const parent = this.prepareParents(
+        normalized,
+        options.createParents ?? false,
+        now,
+        access.followed,
+        posix,
+      );
+      if (existing !== null && posix !== undefined) {
+        this.assertStickyRemoval(parent, existing, posix, normalized);
+      }
       if (existing !== null) this.removeExact(normalized, now, false);
+      const owner = posix === undefined ? { uid: 0, gid: 0 } : this.creationOwner(parent, posix);
       this.assertCapacity(0, 1, normalized);
       const inserted = this.sql
         .exec<SqlRow>(
           `INSERT INTO vfs_entries (
              path, parent_path, name, kind, content_class, opaque_object_id,
-             link_target, size_bytes, mode, created_at_ms, modified_at_ms, revision
-           ) VALUES (?, ?, ?, 'symlink', NULL, NULL, ?, ?, ?, ?, ?, 1)
+             link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
+           ) VALUES (?, ?, ?, 'symlink', NULL, NULL, ?, ?, ?, ?, ?, ?, ?, 1)
            RETURNING id`,
           normalized,
           dirname(normalized),
@@ -1837,6 +2515,8 @@ ${ENTRY_TRIGGERS}
           target,
           bytes,
           SYMLINK_MODE,
+          owner.uid,
+          owner.gid,
           now,
           now,
         )
@@ -1855,6 +2535,8 @@ ${ENTRY_TRIGGERS}
         linkTarget: target,
         sizeBytes: bytes,
         mode: SYMLINK_MODE,
+        uid: owner.uid,
+        gid: owner.gid,
         createdAtMs: now,
         modifiedAtMs: now,
         revision: 1,
@@ -1863,7 +2545,11 @@ ${ENTRY_TRIGGERS}
     });
   }
 
-  async remove(path: string, options: RemoveOptions = {}): Promise<RemoveResult> {
+  async remove(
+    path: string,
+    options: RemoveOptions = {},
+    posix?: PosixAccessContext,
+  ): Promise<RemoveResult> {
     // `rm link` removes the link. Following it would delete the target and
     // leave the link behind, which is the opposite of what was asked.
     const access = this.resolveAccess(path, false, false);
@@ -1874,6 +2560,12 @@ ${ENTRY_TRIGGERS}
       // The row resolution already landed on, so a link whose target is
       // missing or cyclic is still removable — it is the link being removed.
       const root = access.row ?? this.requireEntry(normalized, false);
+      this.assertTraverse(normalized, access.followed, posix);
+      if (posix !== undefined) {
+        const parent = this.requireDirectory(dirname(normalized));
+        this.assertPermission(parent, posix, WRITE_PERMISSION | EXECUTE_PERMISSION, normalized);
+        this.assertStickyRemoval(parent, root, posix, normalized);
+      }
       const range = descendantRange(normalized);
       const hasDescendants = firstRow(
         this.sql.exec<SqlRow>(
@@ -1889,6 +2581,10 @@ ${ENTRY_TRIGGERS}
         !(options.recursive ?? false)
       ) {
         throw new VfsError("ENOTEMPTY", "directory is not empty", normalized);
+      }
+      if (root.kind === "directory" && (options.recursive ?? false)) {
+        this.assertSubtreePermissions(normalized, posix, 0, WRITE_PERMISSION | EXECUTE_PERMISSION);
+        this.assertSubtreeSticky(normalized, posix);
       }
       const summary = this.subtreeSummary(normalized);
       const now = this.now();
@@ -1967,34 +2663,51 @@ ${ENTRY_TRIGGERS}
     return result;
   }
 
-  async move(from: string, to: string, options: MoveOptions = {}): Promise<MoveResult> {
+  async move(
+    from: string,
+    to: string,
+    options: MoveOptions = {},
+    posix?: PosixAccessContext,
+  ): Promise<MoveResult> {
     // Both ends name the link itself: renaming a link moves the link.
     const sourceAccess = this.resolveAccess(from, false, false);
     const source = sourceAccess.path;
-    const target = this.normalizeAccessPath(to, true, false);
+    const targetAccess = this.resolveAccess(to, true, false);
+    const target = targetAccess.path;
     if (source === "/") throw new VfsError("EINVAL", "cannot move root", source);
-    if (source === target) return { from: source, to: target, moved: 1, replaced: false };
+    if (source === target) {
+      if (posix === undefined) {
+        return { from: source, to: target, moved: 1, replaced: false };
+      }
+      return this.transaction(() => {
+        const entry = sourceAccess.row ?? this.requireEntry(source, false);
+        this.assertTraverse(source, sourceAccess.followed, posix);
+        const parent = this.requireDirectory(dirname(source));
+        this.assertPermission(parent, posix, WRITE_PERMISSION | EXECUTE_PERMISSION, source);
+        this.assertStickyRemoval(parent, entry, posix, source);
+        return { from: source, to: target, moved: 1, replaced: false };
+      });
+    }
     if (isDescendant(source, target)) {
       throw new VfsError("EINVAL", "cannot move a directory into itself", target);
     }
     let queued = 0;
     const result = this.transaction(() => {
       const sourceEntry = sourceAccess.row ?? this.requireEntry(source, false);
-      this.requireDirectory(dirname(target));
-      const destination = this.oneEntry(target);
-      if (destination !== null && !(options.replace ?? false)) {
-        throw new VfsError("EEXIST", "destination exists", target);
+      this.assertTraverse(source, sourceAccess.followed, posix);
+      this.assertTraverse(target, targetAccess.followed, posix);
+      const targetParent = this.requireDirectory(dirname(target));
+      if (posix !== undefined) {
+        const sourceParent = this.requireDirectory(dirname(source));
+        this.assertPermission(sourceParent, posix, WRITE_PERMISSION | EXECUTE_PERMISSION, source);
+        this.assertPermission(targetParent, posix, WRITE_PERMISSION | EXECUTE_PERMISSION, target);
+        this.assertStickyRemoval(sourceParent, sourceEntry, posix, source);
       }
-      if (destination !== null && destination.kind === "directory") {
-        const children = firstRow(
-          this.sql.exec<SqlRow>(
-            "SELECT 1 AS present FROM vfs_entries WHERE parent_path = ? LIMIT 1",
-            target,
-          ),
-        );
-        if (children !== undefined)
-          throw new VfsError("ENOTEMPTY", "directory is not empty", target);
+      const destination = targetAccess.row ?? this.oneEntry(target);
+      if (destination !== null && posix !== undefined) {
+        this.assertStickyRemoval(targetParent, destination, posix, target);
       }
+      this.assertDestinationReplaceable(destination, target, options.replace ?? false);
       // A directory and a non-directory cannot replace each other. A link can
       // be replaced by anything and can replace anything that is not a
       // directory, because it is one entry holding text — `mv file link`
@@ -2049,41 +2762,69 @@ ${ENTRY_TRIGGERS}
     return result;
   }
 
-  async copy(from: string, to: string, options: CopyOptions = {}): Promise<CopyResult> {
+  async copy(
+    from: string,
+    to: string,
+    options: CopyOptions = {},
+    posix?: PosixAccessContext,
+  ): Promise<CopyResult> {
     // A link is copied as a link, target text and all: reading through it
     // would turn one entry into a second copy of a possibly enormous file, and
     // a recursive copy would do that for every link in the subtree. Only the
     // named source can be dereferenced, and only when asked.
     const sourceAccess = this.resolveAccess(from, false, options.dereference ?? false);
     const source = sourceAccess.path;
-    const target = this.normalizeAccessPath(to, true, false);
+    const targetAccess = this.resolveAccess(to, true, false);
+    const target = targetAccess.path;
     if (source === target) {
       throw new VfsError("EINVAL", "source and destination are the same path", target);
     }
     let queued = 0;
     const result = this.transaction(() => {
       const sourceEntry = sourceAccess.row ?? this.requireEntry(source, false);
+      this.assertTraverse(source, sourceAccess.followed, posix);
+      if (sourceEntry.kind === "file") {
+        this.assertPermission(sourceEntry, posix, READ_PERMISSION, source);
+      } else if (sourceEntry.kind === "directory") {
+        this.assertSubtreePermissions(
+          source,
+          posix,
+          READ_PERMISSION,
+          READ_PERMISSION | EXECUTE_PERMISSION,
+        );
+      }
       if (sourceEntry.kind === "directory" && !(options.recursive ?? false)) {
         throw new VfsError("EISDIR", "recursive copy is required for directories", source);
       }
       if (sourceEntry.kind === "directory" && isDescendant(source, target)) {
         throw new VfsError("EINVAL", "cannot copy a directory into itself", target);
       }
-      const destination = this.oneEntry(target);
-      if (destination !== null && !(options.replace ?? false)) {
-        throw new VfsError("EEXIST", "destination exists", target);
+      const parents =
+        posix === undefined
+          ? undefined
+          : this.creationParents(target, options.createParents ?? false);
+      if (parents !== undefined) {
+        this.assertCreationAccess(target, targetAccess.followed, posix, parents.existing);
       }
-      if (destination !== null && destination.kind === "directory") {
-        const child = firstRow(
-          this.sql.exec<SqlRow>(
-            "SELECT 1 AS present FROM vfs_entries WHERE parent_path = ? LIMIT 1",
-            target,
-          ),
-        );
-        if (child !== undefined) throw new VfsError("ENOTEMPTY", "directory is not empty", target);
-      }
+      const destination = targetAccess.row ?? this.oneEntry(target);
+      this.assertDestinationReplaceable(destination, target, options.replace ?? false);
       const now = this.now();
-      this.ensureParents(target, options.createParents ?? false, now);
+      const preparedParent =
+        parents === undefined
+          ? this.prepareParents(
+              target,
+              options.createParents ?? false,
+              now,
+              targetAccess.followed,
+              posix,
+            )
+          : this.createMissingParents(target, now, posix, parents);
+      if (destination !== null && posix !== undefined) {
+        this.assertStickyRemoval(preparedParent, destination, posix, target);
+      }
+      const targetParent = posix === undefined ? undefined : preparedParent;
+      const owner =
+        targetParent === undefined ? { uid: 0, gid: 0 } : this.creationOwner(targetParent, posix);
       const sourceRange = descendantRange(source);
       const summary = this.subtreeSummary(source);
       const replacedInlineBytes =
@@ -2095,10 +2836,11 @@ ${ENTRY_TRIGGERS}
       );
       if (destination !== null) queued += this.removeExact(target, now, false);
       this.publishTranslatedSubtreeVersions(source, target);
-      this.sql.exec(
-        `INSERT INTO vfs_entries (
+      if (posix === undefined) {
+        this.sql.exec(
+          `INSERT INTO vfs_entries (
            path, parent_path, name, kind, content_class, opaque_object_id,
-           link_target, size_bytes, mode, created_at_ms, modified_at_ms, revision
+           link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
          )
          SELECT
            ? || substr(e.path, ?),
@@ -2106,23 +2848,102 @@ ${ENTRY_TRIGGERS}
              ELSE ? || substr(e.parent_path, ?) END,
            CASE WHEN e.path = ? THEN ? ELSE e.name END,
            e.kind, e.content_class, e.opaque_object_id,
-           e.link_target, e.size_bytes, e.mode, ?, ?, 1
+           e.link_target, e.size_bytes, e.mode, e.uid, e.gid, ?, ?, 1
          FROM vfs_entries e
          WHERE e.path = ? OR (e.path >= ? AND e.path < ?)`,
-        target,
-        source.length + 1,
-        source,
-        dirname(target),
-        target,
-        source.length + 1,
-        source,
-        basename(target),
-        now,
-        now,
-        source,
-        sourceRange.lower,
-        sourceRange.upper,
-      );
+          target,
+          source.length + 1,
+          source,
+          dirname(target),
+          target,
+          source.length + 1,
+          source,
+          basename(target),
+          now,
+          now,
+          source,
+          sourceRange.lower,
+          sourceRange.upper,
+        );
+      } else {
+        // A user copy creates actor-owned entries. The recursive CTE carries
+        // the effective mode and group from each copied parent so setgid
+        // inheritance remains correct at every depth without issuing one
+        // statement per entry. The trusted branch above deliberately keeps
+        // its original range-copy query and exact SQL cost.
+        this.sql.exec(
+          `WITH RECURSIVE copied (
+             path, parent_path, name, kind, content_class, opaque_object_id,
+             link_target, size_bytes, copied_mode, copied_uid, copied_gid
+           ) AS (
+             SELECT
+               e.path, e.parent_path, e.name, e.kind, e.content_class,
+               e.opaque_object_id, e.link_target, e.size_bytes,
+               CASE WHEN e.kind = 'symlink' THEN e.mode ELSE
+                 (e.mode & ?) |
+                 CASE WHEN e.kind = 'directory' AND (? & ?) <> 0 THEN ? ELSE 0 END
+               END,
+               ?,
+               ?
+             FROM vfs_entries e INDEXED BY vfs_entries_path
+             WHERE e.path = ?
+             UNION ALL
+             SELECT
+               e.path, e.parent_path, e.name, e.kind, e.content_class,
+               e.opaque_object_id, e.link_target, e.size_bytes,
+               CASE WHEN e.kind = 'symlink' THEN e.mode ELSE
+                 (e.mode & ?) |
+                 CASE
+                   WHEN e.kind = 'directory' AND (parent.copied_mode & ?) <> 0 THEN ?
+                   ELSE 0
+                 END
+               END,
+               ?,
+               CASE
+                 WHEN (parent.copied_mode & ?) <> 0 THEN parent.copied_gid
+                 ELSE ?
+               END
+             FROM vfs_entries e INDEXED BY vfs_entries_parent_name
+             JOIN copied parent ON e.parent_path = parent.path
+           )
+           INSERT INTO vfs_entries (
+             path, parent_path, name, kind, content_class, opaque_object_id,
+             link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
+           )
+           SELECT
+             ? || substr(copied.path, ?),
+             CASE WHEN copied.path = ? THEN ?
+               ELSE ? || substr(copied.parent_path, ?) END,
+             CASE WHEN copied.path = ? THEN ? ELSE copied.name END,
+             copied.kind, copied.content_class, copied.opaque_object_id,
+             copied.link_target, copied.size_bytes,
+             copied.copied_mode, copied.copied_uid, copied.copied_gid, ?, ?, 1
+           FROM copied`,
+          ~posix.umask,
+          targetParent?.mode ?? 0,
+          SETGID_BIT,
+          SETGID_BIT,
+          owner.uid,
+          owner.gid,
+          source,
+          ~posix.umask,
+          SETGID_BIT,
+          SETGID_BIT,
+          posix.credentials.uid,
+          SETGID_BIT,
+          posix.credentials.gid,
+          target,
+          source.length + 1,
+          source,
+          dirname(target),
+          target,
+          source.length + 1,
+          source,
+          basename(target),
+          now,
+          now,
+        );
+      }
       this.sql.exec(
         `INSERT INTO vfs_inline_chunks (entry_id, chunk_index, body)
          SELECT destination.id, chunk.chunk_index, chunk.body
@@ -2233,7 +3054,15 @@ ${ENTRY_TRIGGERS}
     }
     const receipt = parsed as Readonly<Record<string, unknown>>;
     const strings = ["path", "parentPath", "name", "mutationToken"] as const;
-    const integers = ["sizeBytes", "mode", "createdAtMs", "modifiedAtMs", "revision"] as const;
+    const integers = [
+      "sizeBytes",
+      "mode",
+      "uid",
+      "gid",
+      "createdAtMs",
+      "modifiedAtMs",
+      "revision",
+    ] as const;
     if (
       receipt["kind"] !== "file" ||
       receipt["contentClass"] !== "opaque" ||
@@ -2448,7 +3277,7 @@ ${ENTRY_TRIGGERS}
       if (existing?.kind === "directory")
         throw new VfsError("EISDIR", "is a directory", session.path);
       const now = this.now();
-      this.ensureParents(session.path, session.createParents, now);
+      this.prepareParents(session.path, session.createParents, now, []);
       this.assertCapacity(
         existing?.contentClass === "inline" ? -existing.sizeBytes : 0,
         existing === null ? 1 : 0,
@@ -2478,8 +3307,8 @@ ${ENTRY_TRIGGERS}
       this.sql.exec(
         `INSERT INTO vfs_entries (
            id, path, parent_path, name, kind, content_class, opaque_object_id,
-           size_bytes, mode, created_at_ms, modified_at_ms, revision
-         ) VALUES (?, ?, ?, ?, 'file', 'opaque', ?, ?, ?, ?, ?, 1)
+           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
+         ) VALUES (?, ?, ?, ?, 'file', 'opaque', ?, ?, ?, ?, ?, ?, ?, 1)
          ON CONFLICT(path) DO UPDATE SET
            kind = 'file', content_class = 'opaque', opaque_object_id = excluded.opaque_object_id,
            size_bytes = excluded.size_bytes, mode = excluded.mode,
@@ -2492,6 +3321,8 @@ ${ENTRY_TRIGGERS}
         objectId,
         metadata.sizeBytes,
         session.mode ?? existing?.mode ?? FILE_MODE,
+        existing?.uid ?? 0,
+        existing?.gid ?? 0,
         existing?.createdAtMs ?? now,
         now,
       );
@@ -2731,5 +3562,133 @@ ${ENTRY_TRIGGERS}
       this.sql.exec<SqlRow>("SELECT COUNT(*) AS value FROM vfs_gc_queue").one(),
       "value",
     );
+  }
+}
+
+/**
+ * Immutable per-execution view. Access checks are implemented by the shared
+ * SQL engine so the decision and a synchronous mutation stay in one turn; the
+ * wrapper carries only credentials and cannot be retargeted after creation.
+ */
+class PosixFileSystemView implements VirtualFileSystem {
+  constructor(
+    private readonly inner: SqlFileSystem,
+    private readonly access: PosixAccessContext,
+  ) {}
+
+  getMutationToken(path: string, options?: MutationTokenOptions): string {
+    return this.inner.getMutationToken(path, options, this.access);
+  }
+
+  stat(path: string): VfsStat {
+    return this.inner.stat(path, this.access);
+  }
+
+  lstat(path: string): VfsStat {
+    return this.inner.lstat(path, this.access);
+  }
+
+  readlink(path: string): string {
+    return this.inner.readlink(path, this.access);
+  }
+
+  symlink(path: string, target: string, options?: SymlinkOptions): VfsStat {
+    return this.inner.symlink(path, target, options, this.access);
+  }
+
+  realpath(path: string, options?: { follow?: boolean }): string {
+    return this.inner.realpath(path, options, this.access);
+  }
+
+  list(path: string): VfsStat[] {
+    return this.inner.list(path, this.access);
+  }
+
+  listPage(path: string, options?: PageOptions): EntryPage {
+    return this.inner.listPage(path, options, this.access);
+  }
+
+  find(options: FindOptions): VfsStat[] {
+    return this.inner.find(options, this.access);
+  }
+
+  findPage(options: FindOptions): EntryPage {
+    return this.inner.findPage(options, this.access);
+  }
+
+  countSubtree(path: string): number {
+    return this.inner.countSubtree(path, this.access);
+  }
+
+  mutationSubtreeCount(path: string, operation: PosixMutationOperation): number {
+    return this.inner.countPosixMutationSubtree(path, operation, this.access);
+  }
+
+  readFile(path: string): InlineReadResult {
+    return this.inner.readFile(path, this.access);
+  }
+
+  writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult> {
+    return this.inner.writeFile(path, body, options, this.access);
+  }
+
+  appendFile(path: string, body: ByteBody, options?: AppendFileOptions): Promise<WriteResult> {
+    return this.inner.appendFile(path, body, options, this.access);
+  }
+
+  touch(path: string, options?: TouchOptions): VfsStat {
+    return this.inner.touch(path, options, this.access);
+  }
+
+  setMetadata(path: string, options: MetadataUpdateOptions): VfsStat {
+    return this.inner.setMetadata(path, options, this.access);
+  }
+
+  setOwnership(path: string, options: OwnershipUpdateOptions): VfsStat {
+    return this.inner.setOwnership(path, options, this.access);
+  }
+
+  mkdir(path: string, recursive?: boolean, mode?: number): VfsStat {
+    return this.inner.mkdir(path, recursive, mode, this.access);
+  }
+
+  remove(path: string, options?: RemoveOptions): Promise<RemoveResult> {
+    return this.inner.remove(path, options, this.access);
+  }
+
+  move(from: string, to: string, options?: MoveOptions): Promise<MoveResult> {
+    return this.inner.move(from, to, options, this.access);
+  }
+
+  copy(from: string, to: string, options?: CopyOptions): Promise<CopyResult> {
+    return this.inner.copy(from, to, options, this.access);
+  }
+
+  beginOpaqueUpload(): Promise<OpaqueUploadReservation> {
+    return Promise.reject(new VfsError("EPERM", "user views cannot administer opaque uploads"));
+  }
+
+  commitOpaqueUpload(): Promise<OpaqueFileStat> {
+    return Promise.reject(new VfsError("EPERM", "user views cannot administer opaque uploads"));
+  }
+
+  abortOpaqueUpload(): Promise<void> {
+    return Promise.reject(new VfsError("EPERM", "user views cannot administer opaque uploads"));
+  }
+
+  resolveOpaqueRead(path: string, leaseMs?: number): OpaqueReadLease {
+    const stat = this.inner.stat(path, this.access);
+    if (stat.kind !== "file") throw new VfsError("EISDIR", "is a directory", path);
+    if (
+      this.access.credentials.uid !== 0 &&
+      (posixPermissions(stat, this.access) & READ_PERMISSION) === 0
+    ) {
+      throw new VfsError("EACCES", "permission denied", path);
+    }
+    return this.inner.resolveOpaqueRead(path, leaseMs);
+  }
+
+  drainGarbage(): Promise<GarbageDrainResult> {
+    return Promise.reject(new VfsError("EPERM", "user views cannot administer garbage collection"));
   }
 }

@@ -53,10 +53,43 @@ concurrent snapshots and writes are capped by the instance-wide in-flight
 budget.
 
 The shell preserves that property. `rm -r`, `mv`, and `cp -r` charge their
-mutation budget from `countSubtree()` — one indexed range count — rather than
-materializing the subtree through `find()`, so a recursive shell command costs a
-constant number of SQL statements and allocates nothing per entry. The charge is
+mutation budget from one indexed range count rather than materializing the
+subtree through `find()`, so a recursive shell command costs a constant number
+of SQL statements and allocates nothing per entry. A credential-bound view uses
+the permission preflight appropriate to the mutation, so budgeting `mv` does
+not accidentally require read permission on the source subtree. The charge is
 also exact above `find()`'s 10,000-result ceiling.
+
+### POSIX credential cost
+
+The trusted path has a hard zero-overhead SQL requirement. The workerd
+regression suite still records exactly 5,120 statements for 512 small writes,
+8 statements/14 rows read/5 rows written for an overwrite, and 9/8/10
+statements for subtree copy/move/remove. These are the same structural counts
+as before uid/gid and DAC were added.
+
+A credential-bound point or directory operation adds one indexed ancestor
+query per path it resolves. A guarded listing test records exactly two more
+statements than the trusted listing (operand classification and listing each
+check their ancestors); changing the directory from 200 to 400 entries changes
+rows only, not statements. Materializing `find()` permission-preflights once
+across all pages: a 1,006-entry, two-page traversal is pinned at seven
+statements rather than repeating the range preflight per page. A
+credential-bound recursive copy is pinned at 14 statements for both 41-entry
+and 81-entry source trees; its setgid calculation grows in rows, not statement
+round trips. Creating an entry below an existing parent costs 9/9/10/15
+statements for touch/mkdir/symlink/write, and a touch that creates three
+intermediate directories costs 21; each transaction walks its parent chain
+only once.
+
+Ownership columns and the permission engine do increase deployed code size.
+Against the `main` worktree baseline, the raw VFS preset moved from
+99,392 to 126,520 bytes (+27,128), the R2 preset from 102,003 to 129,131 bytes
+(+27,128), and the Linux profile from 525,211 to 558,043 bytes (+32,832).
+The shell-only preset, which does not carry SQLite, moved from 221,110 to
+223,494 bytes (+2,384). These measured values were recorded with the standard
+five-percent headroom in `bundle-budgets.json`; the increase is the explicit
+cost of making the SQL VFS permission-capable, not an unreviewed budget drift.
 
 Opaque work is payload-size-independent inside the metadata DO. Upload/download
 bytes go directly to R2; the DO performs metadata SQL plus one R2 `HEAD` during

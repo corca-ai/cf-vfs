@@ -12,6 +12,7 @@ import {
   rpcMoveOptions,
   rpcOptionalNonnegativeInteger,
   rpcOptionalPositiveInteger,
+  rpcOwnershipOptions,
   rpcPageOptions,
   rpcRemoveOptions,
   rpcString,
@@ -37,6 +38,7 @@ import type {
   OpaqueFileStat,
   OpaqueReadLease,
   OpaqueUploadReservation,
+  OwnershipUpdateOptions,
   PageOptions,
   RemoveOptions,
   RemoveResult,
@@ -133,6 +135,10 @@ export abstract class VfsDurableObject<Environment> extends DurableObject<Enviro
 
   setMetadata(path: string, options: MetadataUpdateOptions): VfsStat {
     return this.fileSystem.setMetadata(rpcString(path, "path"), rpcMetadataOptions(options));
+  }
+
+  setOwnership(path: string, options: OwnershipUpdateOptions): VfsStat {
+    return this.fileSystem.setOwnership(rpcString(path, "path"), rpcOwnershipOptions(options));
   }
 
   mkdir(path: string, recursive?: boolean, mode?: number): VfsStat {

@@ -1,4 +1,5 @@
 import { normalizePath } from "../core/path.js";
+import type { PosixCredentials } from "../vfs/types.js";
 import { ShellEnvironment } from "./environment.js";
 import type { ShellSession } from "./types.js";
 
@@ -6,6 +7,8 @@ export interface ShellSessionOptions {
   cwd?: string;
   env?: Readonly<Record<string, string>>;
   args?: readonly string[];
+  credentials?: PosixCredentials;
+  umask?: number;
 }
 
 export function createShellSession(options: ShellSessionOptions = {}): ShellSession {
@@ -20,6 +23,18 @@ export function createShellSession(options: ShellSessionOptions = {}): ShellSess
     pipefail: false,
     errexit: false,
     nounset: false,
+    ...(options.credentials === undefined
+      ? {}
+      : {
+          credentials: Object.freeze({
+            uid: options.credentials.uid,
+            gid: options.credentials.gid,
+            supplementaryGids: Object.freeze([
+              ...new Set(options.credentials.supplementaryGids ?? []),
+            ]),
+          }),
+        }),
+    umask: options.umask ?? 0o022,
     functions: new Map(),
     functionDepth: 0,
     sourceDepth: 0,
@@ -53,6 +68,8 @@ export function cloneShellSession(session: ShellSession): ShellSession {
     pipefail: session.pipefail,
     errexit: session.errexit === true,
     nounset: session.nounset === true,
+    ...(session.credentials === undefined ? {} : { credentials: session.credentials }),
+    umask: session.umask,
     functions: new Map(session.functions),
     functionDepth: session.functionDepth,
     sourceDepth: session.sourceDepth,

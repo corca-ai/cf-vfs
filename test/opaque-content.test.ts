@@ -137,6 +137,24 @@ describe("opaque content", () => {
     expect((await denied.executeText({ script: "stat -c '%F' /blob.txt" })).exitCode).toBe(0);
   });
 
+  it("checks credential-bound read permission before opening R2", async () => {
+    const store = new ChunkedStore();
+    const { fileSystem } = await withOpaque({ store });
+    fileSystem.setOwnership("/blob.txt", { uid: 1_000, gid: 1_000 });
+    fileSystem.setMetadata("/blob.txt", { mode: 0o100000 });
+    const shell = shellFor(fileSystem, store);
+
+    const refused = await shell.executeText({
+      script: "cat /blob.txt",
+      credentials: { uid: 1_000, gid: 1_000 },
+    });
+    expect(refused).toMatchObject({
+      exitCode: 126,
+      stderr: expect.stringContaining("permission denied"),
+    });
+    expect(store.gets).toBe(0);
+  });
+
   it("keeps the capability inside the session's read roots", async () => {
     const { fileSystem, store } = await withOpaque();
     await fileSystem.mkdir("/allowed", true);

@@ -17,12 +17,32 @@ export const MAX_SYMLINK_HOPS = 40;
 export const MAX_SYMLINK_TARGET_BYTES = 4096;
 export type WriteDisposition = "create" | "replace" | "upsert";
 
+/**
+ * The immutable numeric identity used for POSIX discretionary access checks.
+ *
+ * Names are deliberately absent: `USER`, `LOGNAME`, and any account directory
+ * are presentation data supplied by the host, while authorization is based
+ * only on these numeric credentials.
+ */
+export interface PosixCredentials {
+  readonly uid: number;
+  readonly gid: number;
+  readonly supplementaryGids?: readonly number[];
+}
+
+export interface PosixViewOptions {
+  /** Permission bits removed from newly created entries. Defaults to `022`. */
+  readonly umask?: number;
+}
+
 export interface StatBase {
   path: string;
   parentPath: string;
   name: string;
   sizeBytes: number;
   mode: number;
+  uid: number;
+  gid: number;
   createdAtMs: number;
   modifiedAtMs: number;
   revision: number;
@@ -113,6 +133,13 @@ export interface MetadataUpdateOptions {
   ifMutationToken?: string;
   mode?: number;
   modifiedAtMs?: number;
+}
+
+export interface OwnershipUpdateOptions {
+  ifRevision?: number;
+  ifMutationToken?: string;
+  uid?: number;
+  gid?: number;
 }
 
 export interface TouchOptions extends MetadataUpdateOptions {
@@ -283,6 +310,7 @@ export interface VirtualFileSystem {
   appendFile(path: string, body: ByteBody, options?: AppendFileOptions): Promise<WriteResult>;
   touch(path: string, options?: TouchOptions): VfsStat;
   setMetadata(path: string, options: MetadataUpdateOptions): VfsStat;
+  setOwnership(path: string, options: OwnershipUpdateOptions): VfsStat;
   mkdir(path: string, recursive?: boolean, mode?: number): VfsStat;
   remove(path: string, options?: RemoveOptions): Promise<RemoveResult>;
   move(from: string, to: string, options?: MoveOptions): Promise<MoveResult>;
@@ -298,4 +326,13 @@ export interface VirtualFileSystem {
   abortOpaqueUpload(uploadId: string): Promise<void>;
   resolveOpaqueRead(path: string, leaseMs?: number): OpaqueReadLease;
   drainGarbage(limit?: number): Promise<GarbageDrainResult>;
+}
+
+/**
+ * A filesystem capable of producing an immutable per-user access-controlled
+ * view. The raw `VirtualFileSystem` remains the trusted administration
+ * capability; shells bind this view only when the host supplies credentials.
+ */
+export interface PosixVirtualFileSystem extends VirtualFileSystem {
+  forCredentials(credentials: PosixCredentials, options?: PosixViewOptions): VirtualFileSystem;
 }

@@ -6,7 +6,8 @@ import {
 import { isVfsError, VfsError, type VfsErrorCode } from "../core/errors.js";
 import { compareUtf8, normalizePath, normalizePathPreservingTrailingSlash } from "../core/path.js";
 import { bodyToStream, readAllBytes } from "../vfs/streams.js";
-import type { VfsStat } from "../vfs/types.js";
+import type { PosixVirtualFileSystem, VfsStat, VirtualFileSystem } from "../vfs/types.js";
+import { shellModeAllows } from "./access.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 import { ExecutionBudget, resolveShellLimits } from "./budget.js";
 import {
@@ -449,12 +450,21 @@ function classifyCandidate(
 }
 
 /** Probes one path for an executable VFS script. */
-async function probeExecutableScript(path: string, runtime: Runtime): Promise<ScriptProbe> {
+async function probeExecutableScript(
+  path: string,
+  session: ShellSession,
+  runtime: Runtime,
+): Promise<ScriptProbe> {
   const classified = classifyCandidate(path, runtime);
   if ("probe" in classified) return classified.probe;
   const stat = classified.stat;
   if (stat.kind !== "file") return unusable("ENOEXEC", "is not a regular file", path);
-  if (!isExecutableMode(stat.mode)) return unusable("EACCES", "is not executable", path);
+  if (
+    session.credentials === undefined
+      ? !isExecutableMode(stat.mode)
+      : !shellModeAllows(stat, session.credentials, 1)
+  )
+    return unusable("EACCES", "is not executable", path);
   return await loadScriptSource(path, stat, runtime);
 }
 
@@ -554,7 +564,7 @@ async function resolveExecutableScript(
     // A script-controlled PATH decides how many probes happen, so each one
     // charges a step, which also checks the deadline.
     runtime.budget.step();
-    const probe = await probeExecutableScript(candidate, runtime);
+    const probe = await probeExecutableScript(candidate, session, runtime);
     if (probe.kind === "loaded") {
       return { source: probe.source, release: probe.release, path: candidate };
     }
@@ -606,7 +616,13 @@ async function findExecutablePath(
     const classified = classifyCandidate(candidate, runtime);
     if ("probe" in classified) continue;
     const stat = classified.stat;
-    if (stat.kind === "file" && isExecutableMode(stat.mode)) return candidate;
+    if (
+      stat.kind === "file" &&
+      (session.credentials === undefined
+        ? isExecutableMode(stat.mode)
+        : shellModeAllows(stat, session.credentials, 1))
+    )
+      return candidate;
   }
   return undefined;
 }
@@ -1017,7 +1033,11 @@ function compareConditionalIntegers(left: string, right: string, budget: ShellBu
  * parser's list without deciding its meaning is a type error instead of
  * silently inheriting `-d`.
  */
-function conditionalFileTest(operator: ConditionalUnaryOperator, stat: VfsStat): boolean {
+function conditionalFileTest(
+  operator: ConditionalUnaryOperator,
+  stat: VfsStat,
+  session: ShellSession,
+): boolean {
   switch (operator) {
     case "-e":
       return true;
@@ -1034,13 +1054,14 @@ function conditionalFileTest(operator: ConditionalUnaryOperator, stat: VfsStat):
       return stat.kind === "directory";
     case "-s":
       return stat.sizeBytes > 0;
-    // Compatibility mode bits only; see the `test` profile.
+    // Effective mode bits when credentials exist; compatibility fallback
+    // otherwise. See the `test` profile.
     case "-r":
-      return (stat.mode & 0o444) !== 0;
+      return shellModeAllows(stat, session.credentials, 4);
     case "-w":
-      return (stat.mode & 0o222) !== 0;
+      return shellModeAllows(stat, session.credentials, 2);
     case "-x":
-      return (stat.mode & 0o111) !== 0;
+      return shellModeAllows(stat, session.credentials, 1);
     default:
       throw new VfsError("EINVAL", `[[: unsupported unary operator ${operator}`);
   }
@@ -1105,7 +1126,7 @@ async function evaluateConditional(
           // what it points at, which is why a dangling link fails `-e`.
           const asks = current.operator === "-L" || current.operator === "-h";
           const stat = asks ? runtime.fileSystem.lstat(path) : runtime.fileSystem.stat(path);
-          value = conditionalFileTest(current.operator, stat);
+          value = conditionalFileTest(current.operator, stat, session);
         } catch (error) {
           if (error instanceof VfsError && (error.code === "ENOENT" || error.code === "ENOTDIR")) {
             value = false;
@@ -1646,11 +1667,23 @@ export class Shell {
    * no rows — a row there could be removed while `/bin/cat` kept working —
    * which is why they are reserved here instead of provisioned.
    */
-  #reservedView(budget: ExecutionBudget): ShellFileSystem {
+  #reservedView(
+    budget: ExecutionBudget,
+    fileSystem: VirtualFileSystem = this.fileSystem,
+  ): ShellFileSystem {
     this.#appletListing ??= this.#buildAppletListing();
-    return new ReservedPathFileSystem(new ScopedFileSystem(this.fileSystem, this.policy, budget), {
+    return new ReservedPathFileSystem(new ScopedFileSystem(fileSystem, this.policy, budget), {
       applets: { directories: APPLET_DIRECTORIES, names: this.#appletListing },
     });
+  }
+
+  #sessionFileSystem(session: ShellSession): VirtualFileSystem {
+    if (session.credentials === undefined) return this.fileSystem;
+    const candidate = this.fileSystem as Partial<PosixVirtualFileSystem>;
+    if (typeof candidate.forCredentials !== "function") {
+      throw new VfsError("ENOTSUP", "filesystem does not support POSIX credentials");
+    }
+    return candidate.forCredentials(session.credentials, { umask: session.umask });
   }
 
   /**
@@ -1689,7 +1722,7 @@ export class Shell {
     // any applet does.
     const names = this.#runnableNames(new Set(session.functions.keys()));
     return {
-      fileSystem: this.#reservedView(budget),
+      fileSystem: this.#reservedView(budget, this.#sessionFileSystem(session)),
       commands: names,
       // An absolute applet path resolves before any PATH search, so these
       // spell a runnable command whether or not PATH lookup is enabled.
@@ -1730,7 +1763,7 @@ export class Shell {
     // execution. None of them can name anything the roots protect, so
     // requiring `/dev` in a session's roots would break `> /dev/null` for
     // every scoped caller while preventing nothing.
-    const scoped = this.#reservedView(budget);
+    const scoped = this.#reservedView(budget, this.#sessionFileSystem(session));
     // The reader a host supplies is built over the unscoped filesystem, which
     // is where the lease lives; a session's copy carries the session's roots.
     const content =

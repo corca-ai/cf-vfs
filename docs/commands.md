@@ -43,7 +43,7 @@ unexpected command/runtime invariant rejects `completed`.
 | success | 0 |
 | false `test`, no `grep` match, `cmp`/`diff` difference | 1 |
 | syntax or usage error | 2 |
-| command unavailable by policy | 126 |
+| command unavailable by policy or access denied | 126 |
 | command not found | 127 |
 
 ## Interactive sessions
@@ -314,12 +314,13 @@ and invalid text is a status-2 semantic error. Unlike Bash arithmetic
 conditionals, variable names and arithmetic expressions are not accepted as
 integer operands.
 
-`-e`, `-f`, and `-d` resolve canonical absolute or `cwd`-relative VFS paths.
+File predicates resolve canonical absolute or `cwd`-relative VFS paths.
 An empty or missing path is false. Read-policy denial remains status 126 rather
 than being hidden as false. Opaque R2 entries satisfy `-e` and `-f` from their
-namespace metadata without reading their bodies. Regex `=~`, single `=`, and
-inode, ownership, timestamp-order, device, socket, size, and permission tests
-are rejected as unsupported syntax.
+namespace metadata without reading their bodies. `-r`, `-w`, and `-x` use the
+execution identity when present, as described below. Regex `=~`, single `=`,
+and inode, ownership, timestamp-order, socket, and unsupported special-file
+tests are rejected as unsupported syntax.
 
 ### Version 4 deterministic errexit
 
@@ -416,12 +417,17 @@ reports the options that are on, as `e` and `u` in that order. It lists only wha
 this profile spells as a short flag, so `pipefail` — which has no short form —
 never appears, and neither do Bash's `h`, `B`, and `c`.
 
-`test`, `[`, and `[[ ]]` all offer `-e`, `-f`, `-d`, `-s`, `-r`, `-w`, and `-x`. They
-read compatibility mode bits and report whether *any* class carries the bit,
-because there is no user, group, or account to ask about. They enforce nothing,
-and they do not consult the shell's read and write roots: those refuse an
-operation, and a predicate that reported them would conflate policy with
-metadata. `chmod` accordingly accepts symbolic clauses as well as an octal mode.
+`test`, `[`, and `[[ ]]` all offer `-e`, `-f`, `-d`, `-s`, `-r`, `-w`, and
+`-x`. With host-supplied execution credentials the permission predicates select
+exactly one owner/group/other class; without credentials they preserve the
+compatibility behavior of asking whether any class carries the bit. They do not
+consult the shell's read and write roots: policy and DAC are independent
+restrictions. `chmod` accepts symbolic clauses as well as an octal mode.
+
+`id`, `id -u/-g/-G`, and `groups` print the numeric identity supplied by the
+host and fail when none was supplied. `chown` accepts numeric
+`OWNER[:GROUP]`/`:GROUP`; the filesystem enforces root-only owner changes and
+limits an ordinary owner to its own groups.
 
 `help` lists the registered commands with their summaries, `help NAME...`
 describes named ones and exits 1 for an unknown one, and `help -s` prints only
@@ -506,9 +512,9 @@ writable `/bin`, and no host process.
 
 ### Executable scripts
 
-An inline VFS file whose compatibility mode bits include an executable bit runs
-as a shell script. `chmod +x script.sh` followed by `./script.sh` behaves the
-way it does on Linux, and `sh script.sh` runs a file without requiring the bit.
+An inline VFS file whose effective mode includes an executable bit runs as a
+shell script. `chmod +x script.sh` followed by `./script.sh` behaves the way it
+does on Linux, and `sh script.sh` runs a file without requiring the bit.
 `chmod` accepts an octal mode or comma-separated symbolic clauses matching
 `[ugoa]*[-+=][rwx]*`; `s`, `t`, `X`, and numeric copies such as `u=g` are
 outside the profile and are usage errors.
@@ -599,11 +605,11 @@ decides which directory is provisioned; pass the same path as the execution
 
 | Registry group | Available commands and principal options |
 | --- | --- |
-| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd -`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (clustered `-eu/+eu`, `-o/+o errexit`, `-o/+o nounset`, `-o/+o pipefail`), `test`/`[` (`-e -f -d -s -r -w -x`, string and integer comparison) |
+| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd -`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (clustered `-eu/+eu`, `-o/+o errexit`, `-o/+o nounset`, `-o/+o pipefail`), `test`/`[` (`-e -f -d -s -r -w -x`, string and integer comparison), `id -u -g -G`, `groups` |
 | discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
 | help | `help -s`, from the dedicated `/shell/commands/help` subpath |
 | shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
-| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p -P`, `ls -l -d -a -A -1 -R`, `find -name -type -maxdepth -print -print0 -exec`, `stat -L -c`, `chmod`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
+| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p -P`, `ls -l -d -a -A -1 -R`, `find -name -type -maxdepth -print -print0 -exec`, `stat -L -c`, `chmod`, `chown`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | links | `ln -s -f`, `readlink -f`, from the dedicated `/shell/commands/link` subpath |
 | streaming text/bytes | `cat`, `grep -i -v -n -F -E -c -l -q -r -R -h`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed -n -e -i`, `seq -s -w` |
 | deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, from the dedicated `/shell/commands/system` subpath |
@@ -1053,11 +1059,19 @@ they are not present on `ShellCommandContext.fileSystem`.
 `VirtualFileSystem` operates on bytes and canonical paths:
 
 - `stat`, `list`/`listPage`, `find`/`findPage`, and `countSubtree`;
-- `readFile`, `writeFile`, `appendFile`, `touch`, and `setMetadata`;
+- `readFile`, `writeFile`, `appendFile`, `touch`, `setMetadata`, and
+  `setOwnership`;
 - `mkdir`, `remove`, `move`, and `copy`;
 - `getMutationToken` and optional revision/token guards;
 - `beginOpaqueUpload`, `commitOpaqueUpload`, `abortOpaqueUpload`;
 - `resolveOpaqueRead` and `drainGarbage`.
+
+`SqlFileSystem` implementations also satisfy `PosixVirtualFileSystem`.
+`forCredentials({ uid, gid, supplementaryGids }, { umask })` returns an
+immutable access-controlled `VirtualFileSystem` view. The raw object remains
+the trusted administration capability. The bound view disables opaque upload
+and GC administration; opaque reads still require ordinary read permission and
+the separate shell content capability.
 
 Inline `readFile()` returns a stable bounded stream snapshot. Consume or cancel
 it to release the instance-wide materialization budget. Writes accept strings,

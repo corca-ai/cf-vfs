@@ -13,6 +13,7 @@ import type {
   MoveOptions,
   MoveResult,
   MutationTokenOptions,
+  OwnershipUpdateOptions,
   PageOptions,
   RemoveOptions,
   RemoveResult,
@@ -93,6 +94,8 @@ function deviceStat(path: string, device: ShellDevice): VfsStat {
     contentClass: "inline",
     sizeBytes: 0,
     mode: DEVICE_MODE,
+    uid: 0,
+    gid: 0,
     createdAtMs: 0,
     modifiedAtMs: 0,
     revision: 1,
@@ -127,6 +130,8 @@ function directoryStat(path: string): VfsStat {
     contentClass: null,
     sizeBytes: 0,
     mode: DEVICE_DIRECTORY_MODE,
+    uid: 0,
+    gid: 0,
     createdAtMs: 0,
     modifiedAtMs: 0,
     revision: 1,
@@ -517,6 +522,11 @@ export class ReservedPathFileSystem implements ShellFileSystem {
   setMetadata(path: string, options: MetadataUpdateOptions): VfsStat {
     this.#refuseMutation(path);
     return this.#inner.setMetadata(path, options);
+  }
+
+  setOwnership(path: string, options: OwnershipUpdateOptions): VfsStat {
+    this.#refuseMutation(path);
+    return this.#inner.setOwnership(path, options);
   }
 
   mkdir(path: string, recursive?: boolean, mode?: number): VfsStat {

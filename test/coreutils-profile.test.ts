@@ -419,11 +419,10 @@ describe("listing and metadata", () => {
       stdout: "5 644 regular file\n",
     },
     {
-      name: "refuses a field this namespace does not have",
+      name: "prints numeric ownership",
       files: { "/f": "body\n" },
-      script: "stat -c '%u' /f",
-      exitCode: 2,
-      stderrIncludes: "stat: unsupported conversion %u",
+      script: "stat -c '%u:%g' /f",
+      stdout: "0:0\n",
     },
     {
       name: "preserves mode bits with cp -p",

@@ -28,5 +28,9 @@ export function modeString(mode: number): string {
     type === 0o040000 ? "d" : type === 0o120000 ? "l" : type === CHARACTER_DEVICE_TYPE ? "c" : "-";
   const bits = [0o400, 0o200, 0o100, 0o040, 0o020, 0o010, 0o004, 0o002, 0o001];
   const labels = ["r", "w", "x", "r", "w", "x", "r", "w", "x"];
-  return kind + bits.map((bit, index) => ((mode & bit) !== 0 ? labels[index] : "-")).join("");
+  const permissions = bits.map((bit, index) => ((mode & bit) !== 0 ? labels[index] : "-"));
+  if ((mode & 0o4000) !== 0) permissions[2] = (mode & 0o100) !== 0 ? "s" : "S";
+  if ((mode & 0o2000) !== 0) permissions[5] = (mode & 0o010) !== 0 ? "s" : "S";
+  if ((mode & 0o1000) !== 0) permissions[8] = (mode & 0o001) !== 0 ? "t" : "T";
+  return kind + permissions.join("");
 }

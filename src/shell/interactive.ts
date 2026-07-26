@@ -2,7 +2,11 @@ import { VfsError } from "../core/errors.js";
 import { DEFAULT_SHELL_LIMITS } from "./budget.js";
 import { type CompletionLimits, type CompletionResult, completeShellLine } from "./completion.js";
 import { isIncompleteShellSyntaxError, parseShellScript } from "./parser.js";
-import { createShellSession, prepareShellSessionUnit } from "./session.js";
+import {
+  createShellSession,
+  prepareShellSessionUnit,
+  type ShellSessionOptions,
+} from "./session.js";
 import { Shell } from "./shell.js";
 import type {
   ExecuteBytesResult,
@@ -15,21 +19,29 @@ import type {
   ShellSession,
 } from "./types.js";
 
-export interface InteractiveShellOptions extends ShellOptions {
-  cwd?: string;
-  env?: Readonly<Record<string, string>>;
-  args?: readonly string[];
-}
+export interface InteractiveShellOptions extends ShellOptions, ShellSessionOptions {}
 
-export type InteractiveExecuteStreamOptions = Omit<ExecuteStreamOptions, "cwd" | "env" | "args">;
+export type InteractiveExecuteStreamOptions = Omit<
+  ExecuteStreamOptions,
+  "cwd" | "env" | "args" | "credentials" | "umask"
+>;
 
-export type InteractiveExecuteTextOptions = Omit<ExecuteTextOptions, "cwd" | "env" | "args">;
+export type InteractiveExecuteTextOptions = Omit<
+  ExecuteTextOptions,
+  "cwd" | "env" | "args" | "credentials" | "umask"
+>;
 
 function interactiveUnitOptions<Options extends ExecuteStreamOptions | ExecuteTextOptions>(
   options: Options,
-): Omit<Options, "cwd" | "env" | "args"> {
-  const { cwd, env, args, ...unitOptions } = options;
-  if (cwd !== undefined || env !== undefined || args !== undefined) {
+): Omit<Options, "cwd" | "env" | "args" | "credentials" | "umask"> {
+  const { cwd, env, args, credentials, umask, ...unitOptions } = options;
+  if (
+    cwd !== undefined ||
+    env !== undefined ||
+    args !== undefined ||
+    credentials !== undefined ||
+    umask !== undefined
+  ) {
     throw new VfsError(
       "EINVAL",
       "interactive execution context belongs in the InteractiveShell constructor",
@@ -54,12 +66,14 @@ export class InteractiveShell extends Shell {
   private closed = false;
 
   constructor(options: InteractiveShellOptions) {
-    const { cwd, env, args, ...shellOptions } = options;
+    const { cwd, env, args, credentials, umask, ...shellOptions } = options;
     super(shellOptions);
     this.session = createShellSession({
       ...(cwd === undefined ? {} : { cwd }),
       ...(env === undefined ? {} : { env }),
       ...(args === undefined ? {} : { args }),
+      ...(credentials === undefined ? {} : { credentials }),
+      ...(umask === undefined ? {} : { umask }),
     });
   }
 

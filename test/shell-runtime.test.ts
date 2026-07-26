@@ -124,9 +124,13 @@ describe("stream-first shell runtime", () => {
     expect(result).toEqual({
       exitCode: 0,
       // `ls -d` names the operand as it was written, as GNU does.
-      stdout: ["drwx------        0 /copy/sub\n", "10\n2\n", "1:Alpha\n", "1 2 4\n", "b\n"].join(
-        "",
-      ),
+      stdout: [
+        "drwx------ 0 0        0 /copy/sub\n",
+        "10\n2\n",
+        "1:Alpha\n",
+        "1 2 4\n",
+        "b\n",
+      ].join(""),
       stderr: "",
     });
     expect(() => fileSystem.stat("/copy")).toThrowError(

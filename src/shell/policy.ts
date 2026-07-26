@@ -12,6 +12,7 @@ import type {
   MoveOptions,
   MoveResult,
   MutationTokenOptions,
+  OwnershipUpdateOptions,
   PageOptions,
   RemoveOptions,
   RemoveResult,
@@ -31,6 +32,15 @@ function allowed(path: string, roots: readonly string[] | undefined): boolean {
     const normalizedRoot = normalizePath(root);
     return normalized === normalizedRoot || isDescendant(normalizedRoot, normalized);
   });
+}
+
+type MutationOperation =
+  | { readonly kind: "copy"; readonly dereference: boolean }
+  | { readonly kind: "move" }
+  | { readonly kind: "remove-recursive" };
+
+interface MutationCountingFileSystem {
+  mutationSubtreeCount(path: string, operation: MutationOperation): number;
 }
 
 export class ScopedFileSystem implements ShellFileSystem {
@@ -137,6 +147,13 @@ export class ScopedFileSystem implements ShellFileSystem {
       }
     }
     return missing;
+  }
+
+  private mutationSubtreeCount(path: string, operation: MutationOperation): number {
+    const candidate = this.#inner as VirtualFileSystem & Partial<MutationCountingFileSystem>;
+    return typeof candidate.mutationSubtreeCount === "function"
+      ? candidate.mutationSubtreeCount(path, operation)
+      : this.#inner.countSubtree(path);
   }
 
   getMutationToken(path: string, options?: MutationTokenOptions) {
@@ -254,6 +271,12 @@ export class ScopedFileSystem implements ShellFileSystem {
     return this.#inner.setMetadata(path, options);
   }
 
+  setOwnership(path: string, options: OwnershipUpdateOptions): VfsStat {
+    this.write(path);
+    this.#budget.mutation();
+    return this.#inner.setOwnership(path, options);
+  }
+
   mkdir(path: string, recursive?: boolean, mode?: number): VfsStat {
     this.write(path);
     const mutations = this.missingDirectoryCount(path, recursive === true);
@@ -266,7 +289,10 @@ export class ScopedFileSystem implements ShellFileSystem {
     // where it points would make a link out of the roots impossible to delete
     // once created, which is a dead end rather than a protection.
     this.writeLink(path);
-    const count = options?.recursive === true ? this.#inner.countSubtree(path) : 1;
+    const count =
+      options?.recursive === true
+        ? this.mutationSubtreeCount(path, { kind: "remove-recursive" })
+        : 1;
     this.#budget.mutation(Math.max(1, count));
     return this.#inner.remove(path, options);
   }
@@ -274,7 +300,7 @@ export class ScopedFileSystem implements ShellFileSystem {
   move(from: string, to: string, options?: MoveOptions): Promise<MoveResult> {
     this.writeLink(from);
     this.writeLink(to);
-    this.#budget.mutation(Math.max(1, this.#inner.countSubtree(from)));
+    this.#budget.mutation(Math.max(1, this.mutationSubtreeCount(from, { kind: "move" })));
     return this.#inner.move(from, to, options);
   }
 
@@ -284,7 +310,15 @@ export class ScopedFileSystem implements ShellFileSystem {
     if (options?.dereference === true) this.read(from);
     else this.readLink(from);
     this.writeLink(to);
-    this.#budget.mutation(Math.max(1, this.#inner.countSubtree(from)));
+    this.#budget.mutation(
+      Math.max(
+        1,
+        this.mutationSubtreeCount(from, {
+          kind: "copy",
+          dereference: options?.dereference === true,
+        }),
+      ),
+    );
     return this.#inner.copy(from, to, options);
   }
 }

@@ -8,12 +8,16 @@ import type {
   FindOptions,
   MetadataUpdateOptions,
   MoveOptions,
+  OwnershipUpdateOptions,
   PageOptions,
+  PosixCredentials,
   RemoveOptions,
   SymlinkOptions,
   TouchOptions,
   WriteFileOptions,
 } from "./types.js";
+
+const MAX_POSIX_ID = 0xffff_ffff;
 
 interface UnknownRecord extends Readonly<Record<string, unknown>> {
   readonly path?: unknown;
@@ -82,6 +86,43 @@ export function rpcOptionalPositiveInteger(value: unknown, name: string): number
 
 export function rpcOptionalNonnegativeInteger(value: unknown, name: string): number | undefined {
   return optionalInteger(value, name);
+}
+
+function posixId(value: unknown, name: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) > MAX_POSIX_ID) {
+    throw new VfsError("EINVAL", `${name} must be an integer between 0 and ${MAX_POSIX_ID}`);
+  }
+  return value as number;
+}
+
+function optionalPosixId(value: unknown, name: string): number | undefined {
+  return value === undefined ? undefined : posixId(value, name);
+}
+
+export function rpcPosixCredentials(value: unknown, name: string): PosixCredentials | undefined {
+  if (value === undefined) return undefined;
+  const input = record(value, name);
+  keys(input, ["uid", "gid", "supplementaryGids"], name);
+  const uid = optionalPosixId(input["uid"], `${name}.uid`);
+  const gid = optionalPosixId(input["gid"], `${name}.gid`);
+  if (uid === undefined || gid === undefined) {
+    throw new VfsError("EINVAL", `${name} requires uid and gid`);
+  }
+  const supplementary = input["supplementaryGids"];
+  if (supplementary !== undefined && !Array.isArray(supplementary)) {
+    throw new VfsError("EINVAL", `${name}.supplementaryGids must be an array`);
+  }
+  return {
+    uid,
+    gid,
+    ...(supplementary === undefined
+      ? {}
+      : {
+          supplementaryGids: supplementary.map((entry) =>
+            posixId(entry, `${name}.supplementaryGids`),
+          ),
+        }),
+  };
 }
 
 function guardOptions(input: UnknownRecord): {
@@ -182,6 +223,21 @@ export function rpcMetadataOptions(value: unknown): MetadataUpdateOptions {
     ...guardOptions(input),
     ...(mode === undefined ? {} : { mode }),
     ...(modifiedAtMs === undefined ? {} : { modifiedAtMs }),
+  };
+}
+
+export function rpcOwnershipOptions(value: unknown): OwnershipUpdateOptions {
+  const input = record(value, "options");
+  keys(input, ["ifRevision", "ifMutationToken", "uid", "gid"], "options");
+  const uid = optionalPosixId(input["uid"], "options.uid");
+  const gid = optionalPosixId(input["gid"], "options.gid");
+  if (uid === undefined && gid === undefined) {
+    throw new VfsError("EINVAL", "options.uid or options.gid is required");
+  }
+  return {
+    ...guardOptions(input),
+    ...(uid === undefined ? {} : { uid }),
+    ...(gid === undefined ? {} : { gid }),
   };
 }
 

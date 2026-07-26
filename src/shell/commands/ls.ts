@@ -42,7 +42,7 @@ export const lsCommand = /* @__PURE__ */ defineApplet(LS, async (context, argv, 
     // nothing useful and the target is the thing a reader wants.
     const arrow = entry.kind === "symlink" ? ` -> ${entry.linkTarget}` : "";
     return long
-      ? `${modeString(entry.mode)} ${entry.sizeBytes.toString().padStart(8)} ${name}${arrow}\n`
+      ? `${modeString(entry.mode)} ${entry.uid} ${entry.gid} ${entry.sizeBytes.toString().padStart(8)} ${name}${arrow}\n`
       : `${name}\n`;
   };
   let written = false;

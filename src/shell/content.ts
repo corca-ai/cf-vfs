@@ -96,9 +96,14 @@ export async function openContent(
   if (options.reader === undefined || (options.access ?? "metadata") !== "stream") {
     return openInline(fileSystem, path);
   }
-  const stat = fileSystem.stat(path);
-  if (stat.kind === "directory") throw new VfsError("EISDIR", "is a directory", path);
-  if (stat.kind !== "file" || stat.contentClass !== "opaque") return openInline(fileSystem, path);
+  // `readFile` is also the VFS's ordinary read-permission check. An opaque
+  // entry answers ENOTSUP only after that check, which prevents a separately
+  // supplied R2 reader (built over the trusted raw VFS) from bypassing DAC.
+  try {
+    return openInline(fileSystem, path);
+  } catch (error) {
+    if (!isVfsError(error) || error.code !== "ENOTSUP") throw error;
+  }
   return options.reader.open(path, options.range, options.signal);
 }
 

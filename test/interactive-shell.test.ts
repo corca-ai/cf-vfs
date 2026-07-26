@@ -21,6 +21,31 @@ function createInteractiveShell(): {
 }
 
 describe("InteractiveShell", () => {
+  it("keeps constructor credentials immutable across execution units", async () => {
+    const fileSystem = createTestFileSystem();
+    const shell = new InteractiveShell({
+      fileSystem,
+      commands: defaultShellCommands,
+      credentials: { uid: 1_000, gid: 10, supplementaryGids: [20] },
+      umask: 0o027,
+    });
+
+    await expect(shell.runText({ script: "id -G" })).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: "10 20\n",
+    });
+    await expect(shell.runText({ script: "id -u" })).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: "1000\n",
+    });
+    await expect(
+      shell.executeText({
+        script: "true",
+        credentials: { uid: 0, gid: 0 },
+      }),
+    ).rejects.toMatchObject({ code: "EINVAL" });
+  });
+
   it("preserves cwd, variables, functions, options, and status between source units", async () => {
     const { shell } = createInteractiveShell();
 

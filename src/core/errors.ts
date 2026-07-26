@@ -18,6 +18,7 @@ export const VFS_ERROR_CODES = [
   "ENOSYS",
   "ENOTSUP",
   "EPIPE",
+  "EPERM",
   "ETIMEDOUT",
   "ECANCELED",
   "EREVISION",
