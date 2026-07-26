@@ -65,6 +65,7 @@ const DEFAULT_REGISTRY = [
   "head",
   "help",
   "join",
+  "jq",
   "ln",
   "local",
   "ls",
