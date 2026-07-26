@@ -599,7 +599,13 @@
     ["arithmetic", "echo $((2 ** 16)) $((7 % 3))"],
     ["a loop", "for n in {1..3}; do printf '%s squared is %s\\n' $n $((n * n)); done"],
     ["fetch a page", "curl -s https://example.com/ | grep -o '<title>[^<]*'"],
-    ["fetch some JSON", "curl -s https://api.github.com/repos/corca-ai/cf-vfs | grep -o '\"stargazers_count\":[0-9]*'"],
+    // Not the repository API: unauthenticated GitHub allows sixty requests an
+    // hour per address, and every visitor here shares one. The raw file host
+    // serves content rather than API calls and does not run out.
+    [
+      "fetch some JSON",
+      "curl -s https://raw.githubusercontent.com/corca-ai/cf-vfs/main/package.json | grep -o '\"version\": \"[^\"]*\"'",
+    ],
     ["refused origin", "curl -s https://example.net/ ; echo \"exit $?\""],
     ["refused method", "curl -s -d leak=secret https://example.com/"],
     ["disk usage", "du -sh / 2>/dev/null; df 2>/dev/null || stat -c '%s %n' notes.txt"],
