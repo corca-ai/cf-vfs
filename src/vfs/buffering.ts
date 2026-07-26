@@ -6,6 +6,7 @@ import type { ByteBody } from "./types.js";
 
 export interface BufferedChunksLease {
   readonly chunks: Uint8Array[];
+  readonly sizeBytes: number;
   release(): void;
 }
 
@@ -53,6 +54,7 @@ export async function collectInlineBytes(
     let released = false;
     return {
       chunks: collected.chunks,
+      sizeBytes: collected.sizeBytes,
       release: () => {
         if (released) return;
         released = true;

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { Shell } from "../src/shell/shell.js";
 import type { NodeSqlFileSystem } from "../src/testing/node.js";
+import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
+import { putOpaque } from "../src/vfs/opaque.js";
+import type { OpaqueStore } from "../src/vfs/types.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 
 /**
@@ -39,6 +42,62 @@ function meteredFileSystem(): { fileSystem: NodeSqlFileSystem; meter: SqlMeter }
     },
   });
   return { fileSystem, meter };
+}
+
+async function garbageStatements(
+  count: number,
+  options: { expireUploads?: boolean; failDelete?: boolean } = {},
+): Promise<number> {
+  let now = 0;
+  const meter: SqlMeter = {
+    statements: 0,
+    rows: 0,
+    reset() {
+      meter.statements = 0;
+      meter.rows = 0;
+    },
+  };
+  const backing = new MemoryOpaqueStore();
+  const store: OpaqueStore =
+    options.failDelete === true
+      ? {
+          putIfAbsent: (...args) => backing.putIfAbsent(...args),
+          head: (...args) => backing.head(...args),
+          getStream: (...args) => backing.getStream(...args),
+          delete: () => Promise.reject(new Error("expected delete failure")),
+        }
+      : backing;
+  const fileSystem = createTestFileSystem({
+    opaqueStore: store,
+    now: () => now,
+    uploadSettlementGraceMs: 1,
+    onStatement: (_query, rows) => {
+      meter.statements += 1;
+      meter.rows += rows;
+    },
+  });
+  for (let index = 0; index < count; index += 1) {
+    const path = `/opaque-${index}`;
+    if (options.expireUploads === true) {
+      await fileSystem.beginOpaqueUpload(path, { expiresInMs: 1 });
+    } else {
+      await putOpaque(fileSystem, store, path, "x");
+      await fileSystem.remove(path);
+    }
+  }
+  now = 2;
+  meter.reset();
+  try {
+    await fileSystem.drainGarbage(count);
+  } catch (error) {
+    if (
+      options.failDelete !== true ||
+      !(error instanceof Error) ||
+      error.message !== "expected delete failure"
+    )
+      throw error;
+  }
+  return meter.statements;
 }
 
 async function runChunks(
@@ -379,9 +438,29 @@ describe("common-path SQL cost", () => {
     }).toEqual({
       touch: 9,
       mkdir: 9,
-      symlink: 10,
+      symlink: 9,
       write: 15,
       recursiveTouch: 21,
     });
+  });
+});
+
+describe("garbage-collection SQL cost", () => {
+  it("keeps successful cleanup constant across a full batch", async () => {
+    const one = await garbageStatements(1);
+    expect(one).toBeGreaterThan(0);
+    expect(await garbageStatements(100)).toBe(one);
+  });
+
+  it("keeps failed backoff updates constant across a full batch", async () => {
+    const one = await garbageStatements(1, { failDelete: true });
+    expect(one).toBeGreaterThan(0);
+    expect(await garbageStatements(100, { failDelete: true })).toBe(one);
+  });
+
+  it("expires each upload without re-reading its session", async () => {
+    const one = await garbageStatements(1, { expireUploads: true });
+    expect(one).toBeGreaterThan(0);
+    expect(await garbageStatements(100, { expireUploads: true })).toBeLessThanOrEqual(one + 2 * 99);
   });
 });

@@ -1612,11 +1612,11 @@ ${ENTRY_TRIGGERS}
   }
 
   private useBuffered<T>(
-    buffered: { chunks: Uint8Array[]; release(): void },
-    operation: (chunks: Uint8Array[]) => T,
+    buffered: { chunks: Uint8Array[]; sizeBytes: number; release(): void },
+    operation: (chunks: Uint8Array[], sizeBytes: number) => T,
   ): T {
     try {
-      return operation(buffered.chunks);
+      return operation(buffered.chunks, buffered.sizeBytes);
     } finally {
       buffered.release();
     }
@@ -1965,17 +1965,18 @@ ${ENTRY_TRIGGERS}
   }
 
   private queueObjectIfUnreferenced(objectId: number, now: number): boolean {
-    const referenced = firstRow(
+    const object = firstRow(
       this.sql.exec<SqlRow>(
-        "SELECT 1 AS present FROM vfs_entries WHERE opaque_object_id = ? LIMIT 1",
+        "DELETE FROM vfs_opaque_objects WHERE id=? AND NOT EXISTS(SELECT 1 FROM vfs_entries WHERE opaque_object_id=?) RETURNING r2_key,retain_until_ms",
+        objectId,
         objectId,
       ),
     );
-    if (referenced !== undefined) return false;
-    const object = this.opaqueObject(objectId);
-    if (object === null) return false;
-    this.sql.exec("DELETE FROM vfs_opaque_objects WHERE id = ?", objectId);
-    this.queueGarbage(object.key, Math.max(now, object.retainUntilMs));
+    if (object === undefined) return false;
+    this.queueGarbage(
+      stringColumn(object, "r2_key"),
+      Math.max(now, integerColumn(object, "retain_until_ms")),
+    );
     return true;
   }
 
@@ -2051,9 +2052,8 @@ ${ENTRY_TRIGGERS}
     const buffered = await this.collectInline(body);
 
     let queued = false;
-    const result = this.useBuffered(buffered, (chunks) =>
+    const result = this.useBuffered(buffered, (chunks, sizeBytes) =>
       this.transaction(() => {
-        const sizeBytes = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
         const current = this.oneEntry(normalized);
         if (this.tokenOf(normalized, current) !== capturedToken) {
           throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
@@ -2170,8 +2170,7 @@ ${ENTRY_TRIGGERS}
     this.validateGuard(normalized, before, options, path);
     const capturedToken = before.mutationToken;
     const buffered = await this.collectInline(body);
-    return this.useBuffered(buffered, (suffixChunks) => {
-      const suffixBytes = suffixChunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+    return this.useBuffered(buffered, (suffixChunks, suffixBytes) => {
       return this.transaction(() => {
         const current = this.requireInline(normalized);
         if (current.mutationToken !== capturedToken) {
@@ -2467,6 +2466,8 @@ ${ENTRY_TRIGGERS}
   ): VfsStat {
     const access = this.resolveAccess(path, true, false);
     const normalized = access.path;
+    const parentPath = dirname(normalized);
+    const name = basename(normalized);
     if (normalized === "/") throw new VfsError("EEXIST", "file or directory exists", normalized);
     if (target.length === 0) throw new VfsError("EINVAL", "link target is empty", normalized);
     const bytes = new TextEncoder().encode(target).byteLength;
@@ -2507,11 +2508,11 @@ ${ENTRY_TRIGGERS}
           `INSERT INTO vfs_entries (
              path, parent_path, name, kind, content_class, opaque_object_id,
              link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
-           ) VALUES (?, ?, ?, 'symlink', NULL, NULL, ?, ?, ?, ?, ?, ?, ?, 1)
+          ) VALUES (?, ?, ?, 'symlink', NULL, NULL, ?, ?, ?, ?, ?, ?, ?, 1)
            RETURNING id`,
           normalized,
-          dirname(normalized),
-          basename(normalized),
+          parentPath,
+          name,
           target,
           bytes,
           SYMLINK_MODE,
@@ -2522,13 +2523,13 @@ ${ENTRY_TRIGGERS}
         )
         .one();
       this.updateUsage(0, 1);
-      this.publishPathVersion(normalized);
+      const token = this.bumpToken(normalized);
       this.symlinkCount += 1;
       return rowToStat({
         id: integerColumn(inserted, "id"),
         path: normalized,
-        parentPath: dirname(normalized),
-        name: basename(normalized),
+        parentPath,
+        name,
         kind: "symlink",
         contentClass: null,
         opaqueObjectId: null,
@@ -2540,7 +2541,7 @@ ${ENTRY_TRIGGERS}
         createdAtMs: now,
         modifiedAtMs: now,
         revision: 1,
-        mutationToken: this.tokenFor(normalized),
+        mutationToken: token,
       });
     });
   }
@@ -3304,8 +3305,15 @@ ${ENTRY_TRIGGERS}
         this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", existing.id);
       }
       const token = this.bumpToken(session.path);
-      this.sql.exec(
-        `INSERT INTO vfs_entries (
+      const parentPath = dirname(session.path);
+      const name = basename(session.path);
+      const mode = session.mode ?? existing?.mode ?? FILE_MODE;
+      const uid = existing?.uid ?? 0;
+      const gid = existing?.gid ?? 0;
+      const createdAtMs = existing?.createdAtMs ?? now;
+      const written = this.sql
+        .exec<SqlRow>(
+          `INSERT INTO vfs_entries (
            id, path, parent_path, name, kind, content_class, opaque_object_id,
            size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
          ) VALUES (?, ?, ?, ?, 'file', 'opaque', ?, ?, ?, ?, ?, ?, ?, 1)
@@ -3313,19 +3321,21 @@ ${ENTRY_TRIGGERS}
            kind = 'file', content_class = 'opaque', opaque_object_id = excluded.opaque_object_id,
            size_bytes = excluded.size_bytes, mode = excluded.mode,
            modified_at_ms = excluded.modified_at_ms,
-           revision = vfs_entries.revision + 1`,
-        existing?.id ?? null,
-        session.path,
-        dirname(session.path),
-        basename(session.path),
-        objectId,
-        metadata.sizeBytes,
-        session.mode ?? existing?.mode ?? FILE_MODE,
-        existing?.uid ?? 0,
-        existing?.gid ?? 0,
-        existing?.createdAtMs ?? now,
-        now,
-      );
+           revision = vfs_entries.revision + 1
+         RETURNING revision`,
+          existing?.id ?? null,
+          session.path,
+          parentPath,
+          name,
+          objectId,
+          metadata.sizeBytes,
+          mode,
+          uid,
+          gid,
+          createdAtMs,
+          now,
+        )
+        .one();
       this.updateUsage(
         existing?.contentClass === "inline" ? -existing.sizeBytes : 0,
         existing === null ? 1 : 0,
@@ -3333,22 +3343,26 @@ ${ENTRY_TRIGGERS}
       if (existing?.contentClass === "opaque" && existing.opaqueObjectId !== null) {
         this.queueObjectIfUnreferenced(existing.opaqueObjectId, now);
       }
-      const baseStat = rowToStat(this.requireEntry(session.path));
-      const stat =
-        baseStat.kind === "file" && baseStat.contentClass === "opaque"
-          ? {
-              ...baseStat,
-              ...((session.contentType ?? metadata.contentType) === undefined
-                ? {}
-                : { contentType: session.contentType ?? metadata.contentType }),
-              ...(metadata.verifiedSha256 === undefined
-                ? {}
-                : { verifiedSha256: metadata.verifiedSha256 }),
-            }
-          : baseStat;
-      if (stat.kind !== "file" || stat.contentClass !== "opaque") {
-        throw new VfsError("EIO", "committed entry is not opaque", session.path);
-      }
+      const contentType = session.contentType ?? metadata.contentType;
+      const stat: OpaqueFileStat = {
+        path: session.path,
+        parentPath,
+        name,
+        kind: "file",
+        contentClass: "opaque",
+        sizeBytes: metadata.sizeBytes,
+        mode,
+        uid,
+        gid,
+        createdAtMs,
+        modifiedAtMs: now,
+        revision: integerColumn(written, "revision"),
+        mutationToken: token,
+        ...(contentType === undefined ? {} : { contentType }),
+        ...(metadata.verifiedSha256 === undefined
+          ? {}
+          : { verifiedSha256: metadata.verifiedSha256 }),
+      };
       this.sql.exec(
         `UPDATE vfs_upload_sessions SET
            state = 'committed', verification_token = NULL,
@@ -3358,9 +3372,6 @@ ${ENTRY_TRIGGERS}
         now + this.receiptRetentionMs,
         uploadId,
       );
-      if (token !== stat.mutationToken) {
-        throw new VfsError("EIO", "path token publication failed", session.path);
-      }
       return { stale: false, stat } as const;
     });
     if (committed.stale) {
@@ -3448,10 +3459,7 @@ ${ENTRY_TRIGGERS}
     const keys = this.transaction(() => {
       const expired = this.sql
         .exec<SqlRow>(
-          `SELECT id, r2_key FROM vfs_upload_sessions
-         WHERE (state = 'open' AND expires_at_ms <= ?)
-            OR (state = 'verifying' AND verification_lease_until_ms <= ?)
-         LIMIT ?`,
+          "SELECT id,path,r2_key,expires_at_ms FROM vfs_upload_sessions WHERE(state='open' AND expires_at_ms<=?)OR(state='verifying' AND verification_lease_until_ms<=?)LIMIT ?",
           now,
           now,
           batchLimit,
@@ -3460,21 +3468,19 @@ ${ENTRY_TRIGGERS}
       for (const row of expired) {
         const id = stringColumn(row, "id");
         this.sql.exec(
-          `UPDATE vfs_upload_sessions SET
-             state = 'garbage', verification_token = NULL,
-             verification_lease_until_ms = NULL
-           WHERE id = ?`,
+          "UPDATE vfs_upload_sessions SET state='garbage',verification_token=NULL,verification_lease_until_ms=NULL WHERE id=?",
           id,
         );
-        const session = this.upload(id);
-        if (session !== null) {
-          this.queueUploadGarbage(session, now);
-          expiredSessions.push({
-            uploadId: id,
-            objectKey: session.objectKey,
-            path: session.path,
-          });
-        }
+        const objectKey = stringColumn(row, "r2_key");
+        this.queueGarbage(
+          objectKey,
+          Math.max(now, integerColumn(row, "expires_at_ms") + this.uploadSettlementGraceMs),
+        );
+        expiredSessions.push({
+          uploadId: id,
+          objectKey,
+          path: stringColumn(row, "path"),
+        });
       }
       this.sql.exec(
         "DELETE FROM vfs_upload_sessions WHERE state = 'committed' AND expires_at_ms <= ?",
@@ -3482,9 +3488,7 @@ ${ENTRY_TRIGGERS}
       );
       return this.sql
         .exec<SqlRow>(
-          `SELECT r2_key FROM vfs_gc_queue
-         WHERE not_before_ms <= ? AND next_attempt_at_ms <= ?
-         ORDER BY next_attempt_at_ms, not_before_ms LIMIT ?`,
+          "SELECT r2_key FROM vfs_gc_queue WHERE not_before_ms<=? AND next_attempt_at_ms<=? ORDER BY next_attempt_at_ms,not_before_ms LIMIT ?",
           now,
           now,
           batchLimit,
@@ -3506,36 +3510,28 @@ ${ENTRY_TRIGGERS}
       });
       return { deleted: 0, remaining };
     }
+    const selectedKeys = JSON.stringify(keys);
     try {
       await store.delete(keys);
       this.transaction(() => {
-        for (const key of keys) {
-          this.sql.exec(
-            "DELETE FROM vfs_upload_sessions WHERE state = 'garbage' AND r2_key = ?",
-            key,
-          );
-          this.sql.exec("DELETE FROM vfs_gc_queue WHERE r2_key = ?", key);
-        }
+        this.sql.exec(
+          "DELETE FROM vfs_upload_sessions WHERE state='garbage' AND r2_key IN(SELECT value FROM json_each(?))",
+          selectedKeys,
+        );
+        this.sql.exec(
+          "DELETE FROM vfs_gc_queue WHERE r2_key IN (SELECT value FROM json_each(?))",
+          selectedKeys,
+        );
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.transaction(() => {
-        for (const key of keys) {
-          const row = firstRow(
-            this.sql.exec<SqlRow>("SELECT attempts FROM vfs_gc_queue WHERE r2_key = ?", key),
-          );
-          const attempts = row === undefined ? 1 : integerColumn(row, "attempts") + 1;
-          const backoff = Math.min(2 ** Math.min(attempts, 12) * 1000, 60 * 60 * 1000);
-          this.sql.exec(
-            `UPDATE vfs_gc_queue SET
-               attempts = ?, next_attempt_at_ms = ?, last_error = ?
-             WHERE r2_key = ?`,
-            attempts,
-            now + backoff,
-            message,
-            key,
-          );
-        }
+        this.sql.exec(
+          "UPDATE vfs_gc_queue SET attempts=attempts+1,next_attempt_at_ms=?+MIN((1<<MIN(attempts+1,12))*1000,60*60*1000),last_error=? WHERE r2_key IN(SELECT value FROM json_each(?))",
+          now,
+          message,
+          selectedKeys,
+        );
       });
       await this.scheduleGarbageAlarm();
       emitVfsEvent(this.onEvent, {
