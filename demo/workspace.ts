@@ -9,6 +9,14 @@ import {
 } from "../src/shell/linux.js";
 import type { ShellExecution } from "../src/shell/types.js";
 import { VfsDurableObject } from "../src/vfs/durable-object.js";
+import type { VfsStat } from "../src/vfs/types.js";
+import {
+  DEMO_CREDENTIALS,
+  DEMO_IDENTITY_RESOLVER,
+  DEMO_USER,
+  ensureDemoOwnership,
+  migrateDemoOwnership,
+} from "./identity.js";
 import { demoNetwork } from "./network.js";
 import { MAX_MESSAGE_BYTES, parseClientMessage, type ServerMessage } from "./protocol.js";
 
@@ -19,8 +27,9 @@ interface TerminalSession {
   execution: ShellExecution | undefined;
 }
 
-const DEMO_USER = "demo";
 const DEMO_HOME = `/home/${DEMO_USER}`;
+const DEMO_IDENTITY_VERSION = 1;
+const DEMO_IDENTITY_VERSION_KEY = "demo:identity-version";
 const MAX_PENDING_SOURCE_BYTES = 128 * 1024;
 /**
  * How many candidates one completion answer carries.
@@ -82,6 +91,9 @@ This workspace is backed by a Cloudflare Durable Object and SQLite.
 Files survive WebSocket reconnects and browser reloads.
 
 Try:
+  id
+  groups
+  stat -c '%U:%G %a %n' .
   printf 'hello from cf-vfs\\n' > hello.txt
   cat hello.txt
   mkdir -p notes/2026
@@ -199,12 +211,27 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       // `/usr/bin` are deliberately not among them: they resolve applets
       // without a namespace entry, so a row there would be a directory that
       // could be removed while `/bin/cat` kept working.
-      provisionLinuxFilesystem(this.fileSystem, { user: DEMO_USER });
+      const profileEntries = provisionLinuxFilesystem(this.fileSystem, { user: DEMO_USER });
+      let welcome: VfsStat;
       try {
-        this.fileSystem.stat(`${DEMO_HOME}/README.txt`);
+        welcome = this.fileSystem.stat(`${DEMO_HOME}/README.txt`);
       } catch (error) {
         if (!(error instanceof VfsError) || error.code !== "ENOENT") throw error;
         await this.fileSystem.writeFile(`${DEMO_HOME}/README.txt`, WELCOME_FILE);
+        welcome = this.fileSystem.stat(`${DEMO_HOME}/README.txt`);
+      }
+      // Existing rooms predate POSIX execution identity and their entries are
+      // owned by the raw administration identity. Claim them once before the
+      // first credential-bound session so persistent files remain usable.
+      const identityVersion = await ctx.storage.get<number>(DEMO_IDENTITY_VERSION_KEY);
+      if (identityVersion !== DEMO_IDENTITY_VERSION) {
+        migrateDemoOwnership(this.fileSystem);
+        await ctx.storage.put(DEMO_IDENTITY_VERSION_KEY, DEMO_IDENTITY_VERSION);
+      } else {
+        // Provisioning can recreate a profile path or README a visitor removed.
+        // Those administration writes need the demo identity even after the
+        // legacy whole-tree migration has already run.
+        ensureDemoOwnership(this.fileSystem, [...profileEntries, welcome]);
       }
     });
   }
@@ -234,6 +261,8 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
           // and nothing here claims a terminal.
           TERM: "xterm-256color",
         },
+        credentials: DEMO_CREDENTIALS,
+        identityResolver: DEMO_IDENTITY_RESOLVER,
         limits: SHELL_LIMITS,
         network: demoNetwork(),
         policy: { maxMutations: SHELL_LIMITS.maxMutations, network: "allow" },

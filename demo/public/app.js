@@ -593,6 +593,7 @@ import { redrawSequence, submitSequence } from "./line-block.js";
    * can click them in any order and get the output the label promises.
    */
   const EXAMPLES = [
+    ["identity", "id; groups; stat -c '%U:%G %a %n' . README.txt"],
     ["write a file", "printf 'hello\\nworld\\n' > notes.txt && cat notes.txt"],
     ["pipeline", "seq 1 20 | grep -E '[13579]$' | wc -l"],
     ["make a tree", "mkdir -p src/{lib,test} && ls -R src"],

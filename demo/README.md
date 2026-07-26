@@ -19,6 +19,11 @@ functions, and options live for that connection. The browser sends a bounded
 keepalive while the tab is open. Files live in the Durable Object's SQLite
 storage and survive reconnects, Worker isolate eviction, and page reloads.
 
+The shell executes as numeric account `1000:1000`; `demo/identity.ts` is the
+host-owned account directory that resolves those IDs as `demo:demo`. Existing
+rooms created before credential-bound execution transfer their persisted tree
+to that account once, so enabling DAC does not strand shared files.
+
 Local development:
 
 ```sh
