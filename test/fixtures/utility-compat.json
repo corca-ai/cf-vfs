@@ -101,7 +101,7 @@
       "command": "$-",
       "oracle": "bash",
       "summary": "$- lists only the options this profile spells as short flags",
-      "reason": "Bash also reports `h`, `B`, `c`, and interactivity flags for behavior that does not exist here \u2014 hashing, brace expansion, and a command-string invocation mode. Reporting `e` and `u` in a fixed order makes the value a declaration of what is on rather than an imitation of a flag set the runtime does not have."
+      "reason": "Bash also reports `h`, `B`, `c`, and interactivity flags for behavior that does not exist here — hashing, brace expansion, and a command-string invocation mode. Reporting `e` and `u` in a fixed order makes the value a declaration of what is on rather than an imitation of a flag set the runtime does not have."
     },
     {
       "id": "permission-predicates-have-no-user",
@@ -115,7 +115,7 @@
       "command": "tilde expansion",
       "oracle": "bash",
       "summary": "an unquoted default such as ${X-~/d} keeps the tilde literal",
-      "reason": "Tilde expansion runs on the written word, where quote provenance is still available. A default inside a parameter expansion is produced during that expansion, so treating it as a tilde prefix would mean re-scanning generated text as syntax \u2014 which is exactly what this runtime refuses to do everywhere else. Quoted `\"${X-~/d}\"` agrees with Bash; the unquoted form differs."
+      "reason": "Tilde expansion runs on the written word, where quote provenance is still available. A default inside a parameter expansion is produced during that expansion, so treating it as a tilde prefix would mean re-scanning generated text as syntax — which is exactly what this runtime refuses to do everywhere else. Quoted `\"${X-~/d}\"` agrees with Bash; the unquoted form differs."
     },
     {
       "id": "regexp-subset-is-declared",
@@ -150,7 +150,7 @@
       "command": "ln",
       "oracle": "coreutils",
       "summary": "ln requires -s; a hard link is a usage error rather than a copy",
-      "reason": "A hard link needs an inode identity and a link count separate from the path, and this namespace has neither \u2014 an entry is its path. Making one silently copy would produce two files that agree until the first write and then diverge, which is worse than saying so. Status 2 with the reason named."
+      "reason": "A hard link needs an inode identity and a link count separate from the path, and this namespace has neither — an entry is its path. Making one silently copy would produce two files that agree until the first write and then diverge, which is worse than saying so. Status 2 with the reason named."
     },
     {
       "id": "symlink-resolution-is-bounded-by-a-hop-count",
@@ -171,28 +171,28 @@
       "command": "glob",
       "oracle": "bash",
       "summary": "a pattern whose literal prefix is a link expands normally, but a wildcard that would match a link name does not expand through it: `/li*/a.txt` finds nothing where `/link/a.txt` does",
-      "reason": "A pattern is answered with one indexed range query against canonical paths, after canonicalizing the literal prefix. Expanding a wildcard through a link would mean globbing component by component and resolving each match before continuing, which turns one query into one per component per candidate \u2014 unbounded work for a pattern that is one character longer. The common forms (`/link/*`, and any pattern from a working directory reached through a link) resolve correctly."
+      "reason": "A pattern is answered with one indexed range query against canonical paths, after canonicalizing the literal prefix. Expanding a wildcard through a link would mean globbing component by component and resolving each match before continuing, which turns one query into one per component per candidate — unbounded work for a pattern that is one character longer. The common forms (`/link/*`, and any pattern from a working directory reached through a link) resolve correctly."
     },
     {
       "id": "a-trailing-slash-is-not-an-assertion-about-the-path",
       "command": "cat, rm, find",
       "oracle": "coreutils",
       "summary": "a trailing slash is normalized away by the shell, so `cat filelink/` reads the file and `rm -r dirlink/` removes the link",
-      "reason": "Paths are canonical Unicode strings normalized once at the shell boundary, before any command sees them, which is what makes path handling uniform across every utility. The filesystem does honour a trailing slash \u2014 `stat` and the conditional predicates take the unnormalized form \u2014 but a command operand has already lost it. Making every operand carry the distinction would push path syntax into each utility rather than keeping it in one place."
+      "reason": "Paths are canonical Unicode strings normalized once at the shell boundary, before any command sees them, which is what makes path handling uniform across every utility. The filesystem does honour a trailing slash — `stat` and the conditional predicates take the unnormalized form — but a command operand has already lost it. Making every operand carry the distinction would push path syntax into each utility rather than keeping it in one place."
     },
     {
       "id": "dot-dot-is-collapsed-before-a-link-is-followed",
       "command": "cd, realpath, cat",
       "oracle": "coreutils",
       "summary": "`link/..` names the directory holding the link, not the parent of what it points at",
-      "reason": "Paths are normalized once, at the boundary, before anything is looked up \u2014 that is what makes `..` mean the same thing to every utility and keeps path handling out of each one. Resolving `..` against the target instead would mean interleaving normalization with lookups, so a path's meaning would depend on what happened to exist while it was being read. Bash's own `cd -L` behaves this way for the same reason."
+      "reason": "Paths are normalized once, at the boundary, before anything is looked up — that is what makes `..` mean the same thing to every utility and keeps path handling out of each one. Resolving `..` against the target instead would mean interleaving normalization with lookups, so a path's meaning would depend on what happened to exist while it was being read. Bash's own `cd -L` behaves this way for the same reason."
     },
     {
       "id": "devices-are-read-and-written-but-never-created-or-removed",
       "command": "cp, mv, rm, touch, mkdir, ln",
       "oracle": "coreutils",
       "summary": "`/dev` and the names in it accept reads and writes but refuse every namespace change, so `cp /dev/null f`, `touch /dev/null`, and `rm /dev/null` are errors",
-      "reason": "A device is a name the shell knows, not an entry. The alternative was letting the two views disagree \u2014 a real `/dev/null` would then be read as the device but listed, removed, and moved as a file, and a write to it would be silently discarded. One rule for every operation is worth losing the `cp /dev/null f` truncation idiom, which `> f` already spells."
+      "reason": "A device is a name the shell knows, not an entry. The alternative was letting the two views disagree — a real `/dev/null` would then be read as the device but listed, removed, and moved as a file, and a write to it would be silently discarded. One rule for every operation is worth losing the `cp /dev/null f` truncation idiom, which `> f` already spells."
     },
     {
       "id": "descriptor-paths-are-redirection-targets-not-operands",
@@ -206,7 +206,7 @@
       "command": "sh",
       "oracle": "bash",
       "summary": "a redirection target that expands to other than one word fails with status 2, where Bash uses 1",
-      "reason": "Redirection targets are resolved through the same expansion as any other word, and a field count that is not one is a usage error in this profile's status taxonomy: 2 is syntax and usage, 126 is policy, 127 is not found. Bash spends 1 on redirection failures generally. Brace expansion makes the case easy to write \u2014 `> f{1,2}` \u2014 so the difference is declared rather than left to be discovered."
+      "reason": "Redirection targets are resolved through the same expansion as any other word, and a field count that is not one is a usage error in this profile's status taxonomy: 2 is syntax and usage, 126 is policy, 127 is not found. Bash spends 1 on redirection failures generally. Brace expansion makes the case easy to write — `> f{1,2}` — so the difference is declared rather than left to be discovered."
     }
   ],
   "cases": [
@@ -1681,6 +1681,107 @@
       },
       "script": "ln -s b a; ln -s a b; if cat a 2>err.txt; then echo read; else echo loop-refused; fi; [ -L a ] && echo still-a-link",
       "stdout": "loop-refused\nstill-a-link\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-only-matching",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "aXbXc\nnone\nXX\n"
+      },
+      "script": "grep -o X in.txt",
+      "stdout": "X\nX\nX\nX\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-only-matching-line-numbers",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "aXbXc\nnone\nXX\n"
+      },
+      "script": "grep -on X in.txt",
+      "stdout": "1:X\n1:X\n3:X\n3:X\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-only-matching-two-files",
+      "oracle": "coreutils",
+      "files": {
+        "a.txt": "aXb\n",
+        "b.txt": "Xc\n"
+      },
+      "script": "grep -o X a.txt b.txt",
+      "stdout": "a.txt:X\nb.txt:X\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-only-matching-counts-lines",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "aXbXc\nnone\nXX\n"
+      },
+      "script": "grep -oc X in.txt",
+      "stdout": "2\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-only-matching-inverted-prints-nothing",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "aXbXc\nnone\n"
+      },
+      "script": "grep -ov X in.txt",
+      "stdout": "",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-only-matching-ignore-case-shows-the-text",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "aXbxc\n"
+      },
+      "script": "grep -oi x in.txt",
+      "stdout": "X\nx\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-only-matching-extended",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "aXbXc\nnone\n"
+      },
+      "script": "grep -oE [a-z]+ in.txt",
+      "stdout": "a\nb\nc\nnone\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-only-matching-fixed",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "a.b.c\n"
+      },
+      "script": "grep -oF . in.txt",
+      "stdout": ".\n.\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-only-matching-skips-empty",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "aXbXc\nnone\nXX\n"
+      },
+      "script": "grep -oE X* in.txt",
+      "stdout": "X\nX\nXX\n",
+      "exitCode": 0
+    },
+    {
+      "name": "grep-only-matching-with-files-with-matches",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "aXb\n"
+      },
+      "script": "grep -ol X in.txt",
+      "stdout": "in.txt\n",
       "exitCode": 0
     }
   ]

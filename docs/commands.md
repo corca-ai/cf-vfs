@@ -618,6 +618,13 @@ JavaScript engine, so no JavaScript-only construct can mean something here that
 it does not mean in `grep`: `a+` repeats in an extended expression and is a
 literal plus in a basic one, and `(?:a)` does not open a non-capturing group.
 
+`grep -o` prints the matched parts rather than the lines holding them, one to a
+record, with the file name and `-n` line number repeated on each — which is
+what makes it the way to pull a field out of a response without a parser. An
+empty match is stepped over, so `-oE 'X*'` reports the runs and not the nothing
+between them; `-c` still counts lines, and `-v` prints nothing because a line
+reported for what it lacks has no matched part to show.
+
 The declared subset is literals, `.`, `*`, bracket expressions with ranges and
 POSIX character classes, the anchors `^` and `$`, grouping, alternation, `+`,
 `?`, and the intervals `{n}`, `{n,}`, and `{n,m}` — spelled bare in an extended
