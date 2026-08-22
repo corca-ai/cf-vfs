@@ -159,6 +159,124 @@ export function runVfsConformance(
     ).toBe("new");
   });
 
+  it("conforms: publishes nothing when skipIfUnchanged matches the stored body", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/snapshot", "body");
+    const before = await fileSystem.stat("/snapshot");
+
+    const skipped = await fileSystem.writeFile("/snapshot", "body", { skipIfUnchanged: true });
+
+    // The token it reports is the one still in force, so a caller keeps a
+    // guard it can use rather than having to re-read for one.
+    expect(skipped).toMatchObject({
+      path: "/snapshot",
+      revision: before.revision,
+      mutationToken: before.mutationToken,
+      sizeBytes: 4,
+      created: false,
+    });
+    expect(await fileSystem.stat("/snapshot")).toEqual(before);
+    expect(await readText(fileSystem, "/snapshot")).toBe("body");
+  });
+
+  it("conforms: publishes a differing body under skipIfUnchanged", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/snapshot", "body");
+    const before = await fileSystem.stat("/snapshot");
+
+    // Same length, so the size column cannot decide it and the bodies are
+    // actually compared.
+    const sameLength = await fileSystem.writeFile("/snapshot", "BODY", {
+      skipIfUnchanged: true,
+    });
+    expect(sameLength.revision).toBeGreaterThan(before.revision);
+    expect(sameLength.mutationToken).not.toBe(before.mutationToken);
+    expect(await readText(fileSystem, "/snapshot")).toBe("BODY");
+
+    const different = await fileSystem.writeFile("/snapshot", "longer body", {
+      skipIfUnchanged: true,
+    });
+    expect(different.revision).toBeGreaterThan(sameLength.revision);
+    expect(await readText(fileSystem, "/snapshot")).toBe("longer body");
+  });
+
+  it("conforms: creates an absent path under skipIfUnchanged", async () => {
+    const fileSystem = await factory();
+    const created = await fileSystem.writeFile("/fresh", "body", { skipIfUnchanged: true });
+    expect(created.created).toBe(true);
+    expect(await readText(fileSystem, "/fresh")).toBe("body");
+  });
+
+  it("conforms: still refuses a stale guard when skipIfUnchanged would match", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/guarded-skip", "body");
+    const stale = await fileSystem.getMutationToken("/guarded-skip");
+    await fileSystem.writeFile("/guarded-skip", "other");
+    await fileSystem.writeFile("/guarded-skip", "body");
+
+    // The bytes match again, but the guard is from before the round trip. An
+    // unchanged body must not turn a refusal into a success.
+    const refused = await Promise.resolve()
+      .then(() =>
+        fileSystem.writeFile("/guarded-skip", "body", {
+          skipIfUnchanged: true,
+          ifMutationToken: stale,
+        }),
+      )
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
+    expect(refused).toMatchObject({ code: "EREVISION", path: "/guarded-skip" });
+  });
+
+  it("conforms: keeps disposition and directory refusals under skipIfUnchanged", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/taken", "body");
+    const taken = await Promise.resolve()
+      .then(() =>
+        fileSystem.writeFile("/taken", "body", {
+          skipIfUnchanged: true,
+          disposition: "create",
+        }),
+      )
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
+    expect(taken).toMatchObject({ code: "EEXIST" });
+
+    await fileSystem.mkdir("/directory");
+    const directory = await Promise.resolve()
+      .then(() => fileSystem.writeFile("/directory", "body", { skipIfUnchanged: true }))
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
+    expect(directory).toMatchObject({ code: "EISDIR" });
+  });
+
+  it("conforms: writes when only the requested mode differs", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/moded", "body", { mode: 0o644 });
+    const before = await fileSystem.stat("/moded");
+
+    const unchanged = await fileSystem.writeFile("/moded", "body", {
+      skipIfUnchanged: true,
+      mode: 0o644,
+    });
+    expect(unchanged.revision).toBe(before.revision);
+
+    // The mode is part of what the call asked for, so a body that matches is
+    // not on its own a reason to decline it.
+    const remoded = await fileSystem.writeFile("/moded", "body", {
+      skipIfUnchanged: true,
+      mode: 0o600,
+    });
+    expect(remoded.revision).toBeGreaterThan(before.revision);
+    expect((await fileSystem.stat("/moded")).mode & 0o777).toBe(0o600);
+  });
+
   if (options.negativeMutationRaces !== false)
     it("conforms: rejects copying a path onto itself without changing its contents", async () => {
       const fileSystem = await factory();

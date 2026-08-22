@@ -1627,6 +1627,53 @@ ${ENTRY_TRIGGERS}
   }
 
   /**
+   * Whether the stored inline body is byte-identical to the slabs about to
+   * replace it.
+   *
+   * Callers must already have established that the recorded size matches, and
+   * that ordering is the whole cost model: a body of a different length is
+   * decided from a column already in hand, and only one of the same length
+   * pays for this read of its own chunks. A write that is not asking to skip
+   * never reaches here at all.
+   *
+   * Chunk boundaries are not assumed to line up. Both sides are walked as byte
+   * sequences instead, so a body stored under a different `chunkBytes` than
+   * this instance is configured with still compares correctly rather than
+   * reporting a spurious difference.
+   */
+  private inlineBodyMatches(entryId: number, chunks: readonly Uint8Array[]): boolean {
+    const stored = this.sql
+      .exec<SqlRow>(
+        `SELECT body FROM vfs_inline_chunks
+       WHERE entry_id = ? ORDER BY chunk_index`,
+        entryId,
+      )
+      .toArray();
+    let index = -1;
+    let position = 0;
+    let body = new Uint8Array(0);
+    for (const chunk of chunks) {
+      let offset = 0;
+      while (offset < chunk.byteLength) {
+        while (position >= body.byteLength) {
+          index += 1;
+          const row = stored[index];
+          if (row === undefined) return false;
+          body = new Uint8Array(blobColumn(row, "body"));
+          position = 0;
+        }
+        const span = Math.min(body.byteLength - position, chunk.byteLength - offset);
+        for (let cursor = 0; cursor < span; cursor += 1) {
+          if (body[position + cursor] !== chunk[offset + cursor]) return false;
+        }
+        position += span;
+        offset += span;
+      }
+    }
+    return true;
+  }
+
+  /**
    * Uses at most 99 of Cloudflare's 100 bound parameters per statement:
    * three values for each of 33 chunk rows.
    */
@@ -2112,6 +2159,25 @@ ${ENTRY_TRIGGERS}
             : undefined;
         if (current !== null) {
           this.assertWriteAccess(normalized, current, false, access.followed, posix);
+        }
+        // Last, so that everything a write refuses is still refused: the
+        // disposition, the guard, the directory check, and write permission
+        // have all been decided by the time an unchanged body can return.
+        if (
+          options.skipIfUnchanged === true &&
+          current !== null &&
+          current.contentClass === "inline" &&
+          current.sizeBytes === sizeBytes &&
+          (options.mode === undefined || options.mode === current.mode) &&
+          this.inlineBodyMatches(current.id, chunks)
+        ) {
+          return {
+            path: normalized,
+            revision: current.revision,
+            mutationToken: capturedToken,
+            sizeBytes,
+            created: false,
+          };
         }
         const entryOrParent = parent ?? current ?? this.requireDirectory(dirname(normalized));
         const previousInlineBytes = current?.contentClass === "inline" ? current.sizeBytes : 0;
