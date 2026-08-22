@@ -221,6 +221,46 @@ describe("common-path SQL cost", () => {
     });
   });
 
+  it("costs the same whether or not the change cursor records", async () => {
+    async function statements(recordChanges: boolean): Promise<number> {
+      const { fileSystem, meter } = meteredFileSystem({ recordChanges });
+      await fileSystem.mkdir("/tree/inner", true);
+      for (let index = 0; index < 8; index += 1) {
+        await fileSystem.writeFile(`/tree/inner/f${index}`, "x");
+      }
+      meter.reset();
+      await fileSystem.writeFile("/tree/inner/f0", "y");
+      fileSystem.setMetadata("/tree/inner/f1", { mode: 0o600 });
+      await fileSystem.copy("/tree", "/copy", { recursive: true });
+      await fileSystem.move("/copy", "/moved");
+      await fileSystem.remove("/moved", { recursive: true });
+      return meter.statements;
+    }
+
+    // The sequence rides the UPSERT that already publishes the token and the
+    // counter lives in memory, so recording adds a bound parameter rather than
+    // a statement. A counter row in SQLite would have been a second write on
+    // every one of these, and the equality below is what would catch that.
+    const off = await statements(false);
+    const on = await statements(true);
+    expect(off).toBe(47);
+    expect(on).toBe(off);
+  });
+
+  it("reads a catch-up page with one indexed query", async () => {
+    const { fileSystem, meter } = meteredFileSystem({ recordChanges: true });
+    for (let index = 0; index < 200; index += 1) {
+      await fileSystem.writeFile(`/f${index}`, "x");
+    }
+    meter.reset();
+    const page = fileSystem.changesSince(0, { limit: 50 });
+    expect(page.changes).toHaveLength(50);
+    expect(page.more).toBe(true);
+    // One statement however many entries the page carries: the join reports
+    // whether a path is still there without a lookup per path.
+    expect(meter.statements).toBe(1);
+  });
+
   it("adds no SQL for mutation notification, observed or not", async () => {
     async function statements(observe: boolean): Promise<number> {
       const meter: SqlMeter = {

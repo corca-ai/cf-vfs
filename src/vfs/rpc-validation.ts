@@ -3,6 +3,7 @@ import type {
   AppendFileOptions,
   BeginOpaqueUploadOptions,
   ByteBody,
+  ChangesSinceOptions,
   CommitOpaqueUploadOptions,
   CopyOptions,
   FindOptions,
@@ -156,6 +157,21 @@ export function rpcPageOptions(value: unknown): PageOptions | undefined {
   const cursor = optionalString(input.cursor, "options.cursor");
   const limit = rpcOptionalPositiveInteger(input.limit, "options.limit");
   return { ...(cursor === undefined ? {} : { cursor }), ...(limit === undefined ? {} : { limit }) };
+}
+
+export function rpcNonnegativeInteger(value: unknown, name: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    throw new VfsError("EINVAL", `${name} must be a safe integer >= 0`);
+  }
+  return value as number;
+}
+
+export function rpcChangesSinceOptions(value: unknown): ChangesSinceOptions | undefined {
+  if (value === undefined) return undefined;
+  const input = record(value, "options");
+  keys(input, ["limit"], "options");
+  const limit = rpcOptionalPositiveInteger(input.limit, "options.limit");
+  return limit === undefined ? {} : { limit };
 }
 
 export function rpcFindOptions(value: unknown): FindOptions {

@@ -40,6 +40,17 @@ export interface CommonFileSystemOptions {
    * feed it — and a throwing sink cannot roll back a mutation or mask an error.
    */
   onEvent?: VfsEventSink;
+  /**
+   * Stamps every path change with a workspace sequence, so a caller that was
+   * away can ask what changed with `changesSince()`.
+   *
+   * Off by default because it writes one more column on every mutation path,
+   * and the trusted path is required to cost exactly what it costs without any
+   * optional feature. `onEvent` reports changes as they happen and is the right
+   * tool for a caller that is present; this is for one that was not, and needs
+   * to catch up without re-reading the namespace.
+   */
+  recordChanges?: boolean;
 }
 
 export interface ResolvedFileSystemLimits {

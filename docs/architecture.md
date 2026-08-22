@@ -391,6 +391,13 @@ Version 3 adds `uid` and `gid`. Existing version-2 entries migrate as root-owned
 `0:0`; a host can then assign workspace ownership through the trusted raw
 `setOwnership()` capability. A version-1 database rebuilt by version 2 receives
 the current table shape directly.
+Version 4 adds `change_seq` to `vfs_path_versions` and a partial index over it.
+The column is added by `ALTER TABLE` for every database including one created
+moments earlier, rather than being declared in the version-1 definition, so a
+fresh database and a migrated one describe the table with the same text. Rows
+that predate it keep zero and are never reported: the feed says what changed
+after recording began, and the partial index means a workspace that never
+enables `recordChanges` carries no index entries at all.
 The explicit table is intentional because Durable Objects do not support
 [`PRAGMA user_version`](https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/#initialize-storage-and-run-migrations-in-the-constructor).
 A schema change runs `PRAGMA optimize` after its tables and indexes are installed.

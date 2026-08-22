@@ -95,6 +95,30 @@ export interface EntryPage {
   scanned: number;
 }
 
+/** One path whose content, metadata, or existence changed. */
+export interface WorkspaceChange {
+  readonly path: string;
+  /**
+   * Whether anything is at the path now.
+   *
+   * `false` covers removal and the source side of a move, which are the same
+   * fact to a caller holding a view: nothing is there any more.
+   */
+  readonly present: boolean;
+}
+
+export interface ChangePage {
+  readonly changes: WorkspaceChange[];
+  /** The sequence to resume from, whether or not anything changed. */
+  readonly cursor: number;
+  /** Set when a limit ended the page and another call returns more. */
+  readonly more: boolean;
+}
+
+export interface ChangesSinceOptions {
+  limit?: number;
+}
+
 export type ByteBody =
   | ReadableStream<Uint8Array>
   | Uint8Array
@@ -330,6 +354,34 @@ export interface VirtualFileSystem {
    * any size.
    */
   countSubtree(path: string): number;
+  /**
+   * Reports every path that changed after `since`, for a caller that was away.
+   *
+   * Requires `recordChanges`. It answers what a mutation token cannot: a token
+   * says whether one path a caller already names has changed, never which
+   * paths did.
+   *
+   * `since = 0` reports everything that changed after recording was enabled,
+   * not the whole namespace — paths that predate it are not invented. A caller
+   * with no state therefore **takes a cursor first and reads the namespace
+   * second**: anything that changes during that read carries a later sequence
+   * and is replayed on the next call. Reading first and taking a cursor after
+   * would lose whatever happened in between.
+   *
+   * The feed is collapsed rather than a log: one entry per path however many
+   * times it changed, holding what is true now. That is what a caller
+   * rebuilding a view wants, and it is why the history costs one column on
+   * rows that already exist rather than a row per change.
+   *
+   * A rename therefore arrives as an absent path and a present one, with
+   * nothing pairing them — the live `vfs.mutation` event expresses a move and
+   * this cannot. A caller that must follow a document across a rename it did
+   * not observe has to record moves itself while it is connected.
+   *
+   * Not available on a credential-bound view: the feed reports paths without
+   * regard to what a user can see.
+   */
+  changesSince(since: number, options?: ChangesSinceOptions): ChangePage;
   readFile(path: string): InlineReadResult;
   writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult>;
   appendFile(path: string, body: ByteBody, options?: AppendFileOptions): Promise<WriteResult>;

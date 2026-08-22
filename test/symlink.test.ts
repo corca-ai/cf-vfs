@@ -384,7 +384,7 @@ describe("symlink schema", () => {
       database
         .prepare("SELECT GROUP_CONCAT(version, ',') AS versions FROM vfs_schema_migrations")
         .get()?.["versions"],
-    ).toBe("1,2,3");
+    ).toBe("1,2,3,4");
     expect(() =>
       database.prepare("UPDATE vfs_entries SET uid = -1 WHERE path = '/kept.txt'").run(),
     ).toThrowError();
@@ -392,6 +392,39 @@ describe("symlink schema", () => {
       database.prepare("UPDATE vfs_entries SET gid = 4294967296 WHERE path = '/kept.txt'").run(),
     ).toThrowError();
     database.close();
+  });
+
+  it("describes the change cursor identically whether fresh or migrated", () => {
+    // Version 4 alters `vfs_path_versions` unconditionally rather than adding
+    // the column to the version-1 definition, so both paths reach the same
+    // `sqlite_master` text. Declaring it inline for a fresh database would
+    // leave the two describing the same table differently.
+    function cursorSchema(database: DatabaseSync): unknown[] {
+      return database
+        .prepare(
+          `SELECT type, name, sql FROM sqlite_master
+           WHERE name LIKE 'vfs_path_%' ORDER BY type, name`,
+        )
+        .all();
+    }
+
+    const upgraded = new DatabaseSync(":memory:");
+    upgraded.exec(V1_SCHEMA);
+    openOver(upgraded);
+
+    const fresh = new DatabaseSync(":memory:");
+    openOver(fresh);
+
+    expect(cursorSchema(upgraded)).toEqual(cursorSchema(fresh));
+    // Every path recorded before the cursor existed starts at zero, so a
+    // caller reading from zero is told about all of them.
+    expect(
+      upgraded.prepare("SELECT COUNT(*) AS n FROM vfs_path_versions WHERE change_seq = 0").get()?.[
+        "n"
+      ],
+    ).toBeGreaterThan(0);
+    upgraded.close();
+    fresh.close();
   });
 
   it("cannot represent an entry that is two things at once", () => {

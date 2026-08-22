@@ -767,6 +767,35 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(observed.moved).toEqual(["move /first -> /second"]);
   });
 
+  it("resumes the change sequence after the object is evicted", async () => {
+    const stub = workspace("change-cursor-eviction");
+    const before = await runInDurableObject(stub, async (_instance, state) => {
+      const fileSystem = new DurableObjectFileSystem(state.storage, {
+        workspaceId: "change-cursor",
+        recordChanges: true,
+      });
+      await fileSystem.writeFile("/a", "one");
+      return fileSystem.changesSince(0).cursor;
+    });
+    expect(before).toBeGreaterThan(0);
+
+    await evictDurableObject(stub);
+
+    // A revived object holds no counter, so it has to read the highest
+    // sequence back out of SQLite. Restarting from zero would hand a caller
+    // sequences it has already seen and silently drop the changes between.
+    const after = await runInDurableObject(stub, async (_instance, state) => {
+      const fileSystem = new DurableObjectFileSystem(state.storage, {
+        workspaceId: "change-cursor",
+        recordChanges: true,
+      });
+      await fileSystem.writeFile("/b", "two");
+      return fileSystem.changesSince(before);
+    });
+    expect(after.changes).toEqual([{ path: "/b", present: true }]);
+    expect(after.cursor).toBeGreaterThan(before);
+  });
+
   describe("sharing the alarm with a composing host", () => {
     /** Reads the maintenance time the filesystem would want to be woken at. */
     async function uploadExpiry(

@@ -211,6 +211,115 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
         expect(() => fileSystem.stat("/second")).toThrow();
       });
 
+      it("catches a caller up on what changed while it was away", async () => {
+        const fileSystem = createTestFileSystem({ recordChanges: true });
+        await fileSystem.writeFile("/a", "one");
+        await fileSystem.writeFile("/b", "two");
+        const seen = fileSystem.changesSince(0).cursor;
+
+        await fileSystem.writeFile("/a", "changed");
+        await fileSystem.writeFile("/c", "new");
+        await fileSystem.remove("/b");
+
+        const page = fileSystem.changesSince(seen);
+        expect(page.more).toBe(false);
+        expect(page.changes).toEqual([
+          { path: "/a", present: true },
+          { path: "/c", present: true },
+          { path: "/b", present: false },
+        ]);
+        // Resuming from the reported cursor reports nothing further, and the
+        // cursor stands still rather than rewinding.
+        const quiet = fileSystem.changesSince(page.cursor);
+        expect(quiet.changes).toEqual([]);
+        expect(quiet.cursor).toBe(page.cursor);
+      });
+
+      it("reports from zero only what changed after recording began", async () => {
+        const fileSystem = createTestFileSystem({ recordChanges: true });
+        await fileSystem.writeFile("/a/b", "x", { createParents: true });
+        const paths = fileSystem.changesSince(0).changes.map((change) => change.path);
+        expect(paths).toEqual(["/a", "/a/b"]);
+        // The root predates the cursor and is not reported, which is why a
+        // caller takes a cursor first and then reads the namespace: anything
+        // that changes during that read is replayed from the cursor.
+        expect(paths).not.toContain("/");
+      });
+
+      it("collapses repeated changes to one entry per path", async () => {
+        const fileSystem = createTestFileSystem({ recordChanges: true });
+        await fileSystem.writeFile("/a", "one");
+        const seen = fileSystem.changesSince(0).cursor;
+        for (let index = 0; index < 5; index += 1) {
+          await fileSystem.writeFile("/a", `body ${index}`);
+        }
+        expect(fileSystem.changesSince(seen).changes).toEqual([{ path: "/a", present: true }]);
+      });
+
+      it("gives every path a set-based change the same sequence", async () => {
+        const fileSystem = createTestFileSystem({ recordChanges: true });
+        await fileSystem.mkdir("/tree/inner", true);
+        for (let index = 0; index < 4; index += 1) {
+          await fileSystem.writeFile(`/tree/inner/f${index}`, "x");
+        }
+        const seen = fileSystem.changesSince(0).cursor;
+
+        await fileSystem.move("/tree", "/moved");
+        const page = fileSystem.changesSince(seen);
+        // Six paths gone and six arrived, and a caller can take the whole move
+        // as one step because the sequence does not split it.
+        expect(page.changes.filter((change) => !change.present).map((c) => c.path)).toEqual([
+          "/tree",
+          "/tree/inner",
+          "/tree/inner/f0",
+          "/tree/inner/f1",
+          "/tree/inner/f2",
+          "/tree/inner/f3",
+        ]);
+        expect(page.changes.filter((change) => change.present).map((c) => c.path)).toEqual([
+          "/moved",
+          "/moved/inner",
+          "/moved/inner/f0",
+          "/moved/inner/f1",
+          "/moved/inner/f2",
+          "/moved/inner/f3",
+        ]);
+      });
+
+      it("pages a large catch-up rather than materializing it", async () => {
+        const fileSystem = createTestFileSystem({ recordChanges: true });
+        for (let index = 0; index < 30; index += 1) {
+          await fileSystem.writeFile(`/f${index}`, "x");
+        }
+        const collected: string[] = [];
+        let cursor = 0;
+        for (;;) {
+          const page = fileSystem.changesSince(cursor, { limit: 7 });
+          collected.push(...page.changes.map((change) => change.path));
+          cursor = page.cursor;
+          if (!page.more) break;
+        }
+        expect(collected).toHaveLength(30);
+        expect(new Set(collected).size).toBe(30);
+      });
+
+      it("refuses the feed when it was not enabled, and to a bound view", async () => {
+        const off = createTestFileSystem();
+        expect(() => off.changesSince(0)).toThrow(
+          expect.objectContaining({ code: "ENOTSUP" }) as Error,
+        );
+
+        const on = createTestFileSystem({ recordChanges: true });
+        expect(() => on.forCredentials({ uid: 1000, gid: 1000 }).changesSince(0)).toThrow(
+          expect.objectContaining({ code: "EPERM" }) as Error,
+        );
+        expect(() => on.changesSince(-1)).toThrow(
+          expect.objectContaining({ code: "EINVAL" }) as Error,
+        );
+      });
+    });
+
+    describe("mutation notification (continued)", () => {
       it("keeps a throwing observer from changing the mutation", async () => {
         const fileSystem = createTestFileSystem({
           onEvent: (event) => {
