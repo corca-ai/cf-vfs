@@ -728,6 +728,86 @@ describe("byte-oriented Durable Object filesystem", () => {
     });
   });
 
+  describe("sharing the alarm with a composing host", () => {
+    /** Reads the maintenance time the filesystem would want to be woken at. */
+    async function uploadExpiry(
+      stub: DurableObjectStub<TestWorkspaceVfs>,
+      uploadId: string,
+    ): Promise<number> {
+      return runInDurableObject(
+        stub,
+        (_instance, state) =>
+          state.storage.sql
+            .exec<{
+              expires_at_ms: number;
+            }>("SELECT expires_at_ms FROM vfs_upload_sessions WHERE id = ?", uploadId)
+            .one().expires_at_ms,
+      );
+    }
+
+    it("leaves an earlier host alarm in place when maintenance is due later", async () => {
+      const stub = workspace("alarm-host-earlier");
+      const hostAlarm = Date.now() + 60_000;
+      await runInDurableObject(stub, (_instance, state) => state.storage.setAlarm(hostAlarm));
+
+      // Due an hour out, so the filesystem would previously have overwritten
+      // the host's alarm with its own later time and stopped the host's timer.
+      await stub.beginOpaqueUpload("/late", { expiresInMs: 3_600_000 });
+
+      expect(await runInDurableObject(stub, (_instance, state) => state.storage.getAlarm())).toBe(
+        hostAlarm,
+      );
+    });
+
+    it("arms its own earlier time without waiting for a later host alarm", async () => {
+      const stub = workspace("alarm-maintenance-earlier");
+      const hostAlarm = Date.now() + 3_600_000;
+      await runInDurableObject(stub, (_instance, state) => state.storage.setAlarm(hostAlarm));
+
+      const upload = await stub.beginOpaqueUpload("/soon", { expiresInMs: 60_000 });
+      const due = await uploadExpiry(stub, upload.uploadId);
+
+      expect(due).toBeLessThan(hostAlarm);
+      expect(await runInDurableObject(stub, (_instance, state) => state.storage.getAlarm())).toBe(
+        due,
+      );
+    });
+
+    it("does not delete a host alarm when no maintenance is due", async () => {
+      const stub = workspace("alarm-nothing-due");
+      const hostAlarm = Date.now() + 60_000;
+      await runInDurableObject(stub, (_instance, state) => state.storage.setAlarm(hostAlarm));
+
+      // Nothing is queued, so this reschedules with a null due time — the path
+      // that used to clear whatever alarm happened to be set.
+      await expect(stub.drainGarbage()).resolves.toMatchObject({ deleted: 0, remaining: 0 });
+
+      expect(await runInDurableObject(stub, (_instance, state) => state.storage.getAlarm())).toBe(
+        hostAlarm,
+      );
+    });
+
+    it("re-arms maintenance after the host's earlier alarm fires", async () => {
+      const stub = workspace("alarm-rearm-after-host");
+      const upload = await stub.beginOpaqueUpload("/later", { expiresInMs: 3_600_000 });
+      const due = await uploadExpiry(stub, upload.uploadId);
+      const hostAlarm = Date.now() + 60_000;
+      await runInDurableObject(stub, (_instance, state) => state.storage.setAlarm(hostAlarm));
+      expect(await runInDurableObject(stub, (_instance, state) => state.storage.getAlarm())).toBe(
+        hostAlarm,
+      );
+
+      // The host's alarm fires first and its handler runs maintenance, which is
+      // what re-arms the filesystem's own later time. Deferring to the host is
+      // only safe because every exit from drainGarbage() reschedules.
+      expect(await runDurableObjectAlarm(stub)).toBe(true);
+
+      expect(await runInDurableObject(stub, (_instance, state) => state.storage.getAlarm())).toBe(
+        due,
+      );
+    });
+  });
+
   it("retries GC when R2 deletes the object but its success response is lost", async () => {
     const stub = workspace("opaque-gc-lost-response");
     const result = await runInDurableObject(stub, async (_instance, state) => {

@@ -2019,6 +2019,27 @@ ${ENTRY_TRIGGERS}
     return 0;
   }
 
+  /**
+   * Arms the maintenance alarm without taking the object's alarm away from its
+   * host.
+   *
+   * One Durable Object has one alarm, and the documented composition — this
+   * filesystem held by a host class that owns `alarm()` — means the slot is
+   * shared. There is no way to ask whether the alarm currently set is this
+   * filesystem's own, so the rule is earliest-wins in both directions: an
+   * existing alarm is never moved later, and no alarm is ever deleted.
+   *
+   * Deleting is the one that has to go even though it looks safe. Maintenance
+   * work disappears while a host timer is pending far more often than the
+   * reverse, and clearing it there stops a timer whose owner has no way to
+   * discover that it stopped. What it costs instead is one spurious wake-up:
+   * the alarm fires, finds nothing due, and re-arms to whatever is next.
+   *
+   * Leaving an earlier host alarm in place also means maintenance is not armed
+   * until something re-arms it, which is why every exit from `drainGarbage()`
+   * calls this. A host that owns `alarm()` must run maintenance from it, as
+   * `VfsDurableObject` does and the README shows.
+   */
   private async scheduleGarbageAlarm(): Promise<void> {
     const row = this.sql
       .exec<SqlRow>(
@@ -2035,12 +2056,9 @@ ${ENTRY_TRIGGERS}
       )
       .one();
     const due = nullableIntegerColumn(row, "due");
-    if (due === null) {
-      if ((await this.storage.getAlarm()) !== null) await this.storage.deleteAlarm();
-      return;
-    }
+    if (due === null) return;
     const current = await this.storage.getAlarm();
-    if (current !== due) await this.storage.setAlarm(due);
+    if (current === null || due < current) await this.storage.setAlarm(due);
   }
 
   async writeFile(
