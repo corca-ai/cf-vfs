@@ -4,7 +4,7 @@ import { Shell } from "../src/shell/shell.js";
 import type { NodeSqlFileSystem, NodeSqlFileSystemOptions } from "../src/testing/node.js";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import { putOpaque } from "../src/vfs/opaque.js";
-import type { OpaqueStore } from "../src/vfs/types.js";
+import type { OpaqueStore, WriteFileOptions } from "../src/vfs/types.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 
 /**
@@ -219,6 +219,34 @@ describe("common-path SQL cost", () => {
       recursiveDirectory: 11,
       rejectedDirectory: 4,
     });
+  });
+
+  it("charges skipIfUnchanged only where it can decide something", async () => {
+    async function statements(body: string, options: WriteFileOptions): Promise<number> {
+      const { fileSystem, meter } = meteredFileSystem();
+      await fileSystem.writeFile("/snapshot", "body");
+      meter.reset();
+      await fileSystem.writeFile("/snapshot", body, options);
+      return meter.statements;
+    }
+
+    const off = await statements("body", {});
+    const measured = {
+      off,
+      // The size column already in hand decides a different length, so the
+      // bodies are never read and the option costs nothing here.
+      sizeDiffers: await statements("longer body", { skipIfUnchanged: true }),
+      // One read of the entry's own chunks, and then the ordinary write.
+      sameSizeDiffers: await statements("BODY", { skipIfUnchanged: true }),
+      // The same read, and then nothing at all.
+      unchanged: await statements("body", { skipIfUnchanged: true }),
+    };
+
+    // Exact on every arm: an upper bound alone would be satisfied by a meter
+    // that stopped observing, and the `off` arm is what proves an optional
+    // feature added no statements to the path that does not use it.
+    expect(measured).toEqual({ off: 10, sizeDiffers: 10, sameSizeDiffers: 11, unchanged: 5 });
+    expect(measured.unchanged).toBeLessThan(measured.off);
   });
 
   it("lists a directory with one traversal rather than one query per entry", async () => {

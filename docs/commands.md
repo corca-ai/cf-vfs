@@ -1090,6 +1090,30 @@ the separate shell content capability.
 Inline `readFile()` returns a stable bounded stream snapshot. Consume or cancel
 it to release the instance-wide materialization budget. Writes accept strings,
 buffers, typed views, or byte streams and publish once after normal collection.
+
+`writeFile(path, body, { skipIfUnchanged: true })` publishes nothing when the
+body is already exactly what is stored, and reports the revision and token that
+are already in force so the caller keeps a usable guard. It is for a caller
+that writes a derived snapshot back into the namespace — a document flushed on
+a timer, a rendered artifact, a mirrored file — where the cost worth avoiding
+is not the write but the revision bump, which invalidates every other holder's
+optimistic guard on that path.
+
+Everything a write validates still applies, in the same order: the disposition,
+a revision or token guard, the directory check, and write permission are all
+decided before an unchanged body can return, so a stale guard fails exactly as
+it would have. A skipped write does not advance `modifiedAtMs` and emits no
+usage event, because nothing was committed. Only an inline body is compared —
+an opaque entry is always replaced, since deciding otherwise would mean reading
+an R2 body inside the namespace transaction — and a `mode` differing from the
+current one writes, because the mode is part of what the call asked for.
+
+The comparison is ordered so it can only charge where it can decide something.
+A body of a different length is settled from a size column already in hand and
+reads nothing; only one of the same length costs a single read of the entry's
+own chunks. Measured on the guard: an overwrite is 10 statements with the
+option off *and* with it on against a differing length, 11 when a same-length
+body has to be compared and then written, and 5 when the write is skipped.
 Metadata queries, inline snapshots, `touch`, `setMetadata`, `mkdir`, and opaque
 read-lease resolution are synchronous local operations. Stream ingestion, R2
 verification, garbage-alarm scheduling, and garbage draining return promises.

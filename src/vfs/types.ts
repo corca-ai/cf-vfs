@@ -113,6 +113,31 @@ export interface WriteFileOptions {
   ifRevision?: number;
   ifMutationToken?: string;
   mode?: number;
+  /**
+   * Publishes nothing when the body is already exactly what is stored.
+   *
+   * For a caller that writes a derived snapshot back into the namespace — a
+   * document flushed on a timer, a rendered artifact, a mirrored file. Without
+   * it, republishing identical bytes still spends a transaction and still
+   * bumps the revision, which invalidates every other holder's optimistic
+   * guard on that path. The churn, not the write, is what costs.
+   *
+   * A skipped write reports the revision and token that are already there, so
+   * the caller keeps a guard it can use. Nothing else changes either:
+   * `modifiedAtMs` is not advanced, no usage event is emitted, and the entry
+   * keeps the identity it had.
+   *
+   * Everything else a write validates still applies. The disposition, the
+   * revision or token guard, the directory check, and write permission are all
+   * enforced first, so a stale guard fails exactly as it would have and this
+   * never turns a refusal into a success.
+   *
+   * Only an inline body can be compared. An opaque entry is always replaced,
+   * because deciding otherwise would mean reading an R2 body inside the
+   * namespace transaction. A `mode` that differs from the current one also
+   * writes, since the mode is part of what the call was asking for.
+   */
+  skipIfUnchanged?: boolean;
 }
 
 export interface AppendFileOptions {

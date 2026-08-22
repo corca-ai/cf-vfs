@@ -35,6 +35,7 @@ interface UnknownRecord extends Readonly<Record<string, unknown>> {
   readonly ifRevision?: unknown;
   readonly ifMutationToken?: unknown;
   readonly mode?: unknown;
+  readonly skipIfUnchanged?: unknown;
   readonly modifiedAtMs?: unknown;
   readonly create?: unknown;
   readonly recursive?: unknown;
@@ -190,13 +191,18 @@ export function rpcFindOptions(value: unknown): FindOptions {
 export function rpcWriteOptions(value: unknown): WriteFileOptions | undefined {
   if (value === undefined) return undefined;
   const input = record(value, "options");
-  keys(input, ["createParents", "disposition", "ifRevision", "ifMutationToken", "mode"], "options");
+  keys(
+    input,
+    ["createParents", "disposition", "ifRevision", "ifMutationToken", "mode", "skipIfUnchanged"],
+    "options",
+  );
   const disposition = optionalString(input.disposition, "options.disposition");
   if (disposition !== undefined && !["create", "replace", "upsert"].includes(disposition)) {
     throw new VfsError("EINVAL", "options.disposition is invalid");
   }
   const createParents = optionalBoolean(input.createParents, "options.createParents");
   const mode = optionalInteger(input.mode, "options.mode");
+  const skipIfUnchanged = optionalBoolean(input.skipIfUnchanged, "options.skipIfUnchanged");
   return {
     ...guardOptions(input),
     ...(createParents === undefined ? {} : { createParents }),
@@ -204,6 +210,7 @@ export function rpcWriteOptions(value: unknown): WriteFileOptions | undefined {
       ? {}
       : { disposition: disposition as Exclude<WriteFileOptions["disposition"], undefined> }),
     ...(mode === undefined ? {} : { mode }),
+    ...(skipIfUnchanged === undefined ? {} : { skipIfUnchanged }),
   };
 }
 
