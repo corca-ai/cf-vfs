@@ -26,6 +26,12 @@ benchmark file so the two columns differ only in the code under test.
 Reads were already close to minimal, which is why the read rows do not move:
 the work removed was a write asking again for what it had just been told.
 
+> **Superseded on one row.** Subtree remove is 9 statements as of #86, not the
+> 10 recorded above. The table is left as measured on 2026-07-26 because it is
+> a dated record of what this change did; the guard in
+> `bench/durable-object.bench.ts` carries the current numbers and is what a
+> reader should trust for today's cost.
+
 ## What changed
 
 **A row already carries its mutation token.** The entry query joins

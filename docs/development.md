@@ -7,6 +7,7 @@ src/core/             path, glob, error, diff, and patch primitives
 src/vfs/              byte VFS contract, SQL core/adapters, streams, opaque lifecycle
 src/shell/            parser, expansion, FDs, pipes, redirection, policy, budgets
 src/shell/commands/   argv-based built-ins and utilities
+src/collab/           document registry, write-through view, and edit derivation
 src/storage/          Cloudflare R2 and SQL compatibility entry points
 src/testing/          Node in-memory SQLite and deterministic R2 adapters
 test/                 Node SQLite, workerd, package, docs, and bundle checks

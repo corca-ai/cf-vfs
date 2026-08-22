@@ -54,7 +54,22 @@ const M = {
   sql: "vfs/sql",
   doSql: "vfs/do-sql",
   r2: "storage/r2",
+  collab: "collab/index",
+  collabFs: "collab/filesystem",
+  collabRegistry: "collab/registry",
+  collabEdits: "collab/edits",
 };
+
+/**
+ * Modules no preset may reach, whatever it imports.
+ *
+ * The collaboration layer exists for a person at an editor, and the core is
+ * the VFS and the non-interactive shell — so a consumer that never asks for it
+ * must not carry a byte of it, including the preset that imports every applet.
+ * Asserted once here rather than in eight exclude lists, because a list is
+ * something a new preset can be added without.
+ */
+const NEVER_BUNDLED = [M.collab, M.collabFs, M.collabRegistry, M.collabEdits];
 
 /**
  * Maps a source-map entry to a library module id, or `undefined` for the
@@ -378,7 +393,7 @@ for (const preset of PRESETS) {
   for (const module of preset.include) {
     assert(reachable.has(module), `${preset.name} bundle is missing ${module}`);
   }
-  for (const module of preset.exclude) {
+  for (const module of [...preset.exclude, ...NEVER_BUNDLED]) {
     assert(!reachable.has(module), `${preset.name} bundle reaches ${module}`);
   }
   for (const text of FORBIDDEN_TEXT) {
