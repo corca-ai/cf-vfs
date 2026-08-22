@@ -1073,6 +1073,7 @@ they are not present on `ShellCommandContext.fileSystem`.
 `VirtualFileSystem` operates on bytes and canonical paths:
 
 - `stat`, `list`/`listPage`, `find`/`findPage`, and `countSubtree`;
+- `changesSince`, when the filesystem was built with `recordChanges`;
 - `readFile`, `writeFile`, `appendFile`, `touch`, `setMetadata`, and
   `setOwnership`;
 - `mkdir`, `remove`, `move`, and `copy`;

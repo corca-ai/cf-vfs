@@ -354,9 +354,70 @@ One call can report several changes. Creating parents publishes each directory
 it had to make, because each is a change a view has to reflect. Treat the
 notification as one change per event, not one event per call.
 
-The events are volatile. A consumer that disconnects and returns cannot ask
-what it missed; a mutation token answers whether one path changed, never what
-changed. Plan for a full re-read on reconnect.
+The events are volatile: a consumer that was not connected did not receive
+them. For that case, enable the change cursor below.
+
+### Catching up after a disconnect
+
+`recordChanges` stamps every path change with a workspace sequence, and
+`changesSince(cursor)` reports what changed after it:
+
+```ts
+const { changes, cursor, more } = workspace.changesSince(lastSeen, { limit: 500 });
+for (const change of changes) {
+  if (change.present) refetch(change.path);
+  else drop(change.path);
+}
+```
+
+It is off by default. A workspace that never enables it stamps nothing, and
+because the index is partial — `WHERE change_seq > 0` — it carries no index
+entries either. Enabled, the sequence rides the same UPSERT that already
+publishes the token and the counter is held in memory, so recording adds a
+bound parameter rather than a statement: the metered mutation paths cost the
+same either way.
+
+**Take a cursor before reading, not after.** `changesSince(0)` reports what
+changed after recording was enabled, not the whole namespace — paths that
+predate it are not invented. A consumer with no state should read the cursor
+first, then walk the namespace; anything that changes during the walk carries a
+later sequence and is replayed on the next call. Reading first and taking a
+cursor after loses whatever happened in between.
+
+The feed is collapsed: one entry per path however many times it changed,
+holding what is true now. That is what a consumer rebuilding a view wants, and
+it is why the history costs one column on rows that already exist rather than a
+row per change. It also means the feed cannot be replayed as a sequence of
+operations — it says where things ended up.
+
+**A rename arrives as an absent path and a present one, with nothing pairing
+them.** The live `vfs.mutation` event expresses a move; a collapsed feed
+structurally cannot. A consumer that must follow an open document across a
+rename it did not observe has to record moves itself while it is connected —
+every move reaches it as an event, and its own table can hold them. Without
+that, a reconnecting client closes the old path and opens the new one, which
+loses the association but not the content.
+
+Pages are bounded (1,000 by default, 10,000 maximum). Continue while `more` is
+set, resuming from the returned `cursor`; the cursor stands still rather than
+rewinding when nothing changed. `changesSince` is not available on a
+credential-bound view: the feed reports paths without regard to what a user can
+see, so it stays with the trusted capability.
+
+### Durability of an acknowledged change
+
+A write is durable when its call resolves — the transaction has committed and
+Cloudflare's output gate holds outbound messages until it has.
+
+An application layered on top may acknowledge earlier than that. A collaborative
+editor that accepts an edit into memory and publishes it to the filesystem on a
+timer has acknowledged something the filesystem has not yet been told about, and
+an eviction between the two loses it. That is the application's contract to
+state, not this library's, and it is worth stating explicitly to whoever builds
+on it: say what a client may assume when its edit is accepted, and how much can
+be lost between flushes. `vfs.mutation` fires only after the commit, so it is a
+sound signal for "this is now durable" and an unsound one for "this was
+accepted".
 
 `shell.command` is one event per command; sample or filter it under load.
 Cloudflare bills SQLite rows read/written and stored data, so pair these events

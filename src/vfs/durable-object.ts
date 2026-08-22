@@ -4,12 +4,14 @@ import {
   rpcAppendOptions,
   rpcBeginUploadOptions,
   rpcByteBody,
+  rpcChangesSinceOptions,
   rpcCommitUploadOptions,
   rpcCopyOptions,
   rpcFindOptions,
   rpcFollowOptions,
   rpcMetadataOptions,
   rpcMoveOptions,
+  rpcNonnegativeInteger,
   rpcOptionalNonnegativeInteger,
   rpcOptionalPositiveInteger,
   rpcOwnershipOptions,
@@ -24,6 +26,8 @@ import type {
   AppendFileOptions,
   BeginOpaqueUploadOptions,
   ByteBody,
+  ChangePage,
+  ChangesSinceOptions,
   CommitOpaqueUploadOptions,
   CopyOptions,
   CopyResult,
@@ -107,6 +111,13 @@ export abstract class VfsDurableObject<Environment> extends DurableObject<Enviro
 
   countSubtree(path: string): number {
     return this.fileSystem.countSubtree(rpcString(path, "path"));
+  }
+
+  changesSince(since: number, options?: ChangesSinceOptions): ChangePage {
+    return this.fileSystem.changesSince(
+      rpcNonnegativeInteger(since, "since"),
+      rpcChangesSinceOptions(options),
+    );
   }
 
   readFile(path: string): InlineReadResult {

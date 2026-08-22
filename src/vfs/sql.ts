@@ -35,6 +35,8 @@ import type {
   AppendFileOptions,
   BeginOpaqueUploadOptions,
   ByteBody,
+  ChangePage,
+  ChangesSinceOptions,
   CommitOpaqueUploadOptions,
   CopyOptions,
   CopyResult,
@@ -72,6 +74,15 @@ import { MAX_SYMLINK_HOPS, MAX_SYMLINK_TARGET_BYTES } from "./types.js";
 const DEFAULT_MAX_DATABASE_BYTES = 10_000_000_000;
 const DEFAULT_DATABASE_HEADROOM_BYTES = 64 * 1024 * 1024;
 const MAX_GC_BATCH = 100;
+/**
+ * How many changes one catch-up page carries.
+ *
+ * Bounded for the same reason a listing is: `since = 0` over a large workspace
+ * is every path that has ever existed, and a caller resuming from a cursor
+ * should page through it rather than materialize it.
+ */
+const DEFAULT_CHANGE_PAGE = 1000;
+const MAX_CHANGE_PAGE = 10_000;
 const MAX_POSIX_ID = 0xffff_ffff;
 const DEFAULT_UMASK = 0o022;
 const READ_PERMISSION = 0o4;
@@ -556,6 +567,20 @@ export class SqlFileSystem implements PosixVirtualFileSystem {
    * the recompute at all.
    */
   private symlinkCountStale = false;
+  private readonly recordChanges: boolean;
+  /**
+   * The last sequence handed out, read from SQLite once and then kept here.
+   *
+   * The Durable Object owns its database outright and runs single-threaded, so
+   * an in-memory counter cannot race another writer, and reading the maximum
+   * again on the next start is what makes it monotonic across eviction. Keeping
+   * it here rather than in a row is what makes the feature cost no statement
+   * per mutation: a counter row would be a second write on every change.
+   *
+   * A rolled-back transaction leaves its number unused. A gap is harmless
+   * because a caller only ever compares against a sequence it was given.
+   */
+  private lastChangeSeq: number | undefined;
 
   constructor(storage: SqlFileSystemStorage, options: SqlFileSystemOptions = {}) {
     const limits = resolveFileSystemLimits(options);
@@ -576,6 +601,7 @@ export class SqlFileSystem implements PosixVirtualFileSystem {
     this.clock = options.now ?? Date.now;
     this.createId = options.createId ?? (() => crypto.randomUUID());
     this.workspaceId = options.workspaceId ?? "workspace";
+    this.recordChanges = options.recordChanges ?? false;
 
     for (const [name, value] of [
       ["maxDatabaseBytes", this.maxDatabaseBytes],
@@ -1037,6 +1063,30 @@ ${ENTRY_TRIGGERS}
         );
         migrated = true;
       }
+      if (currentVersion < 4) {
+        // Unconditional, including for a database created moments ago by the
+        // version-1 branch above. Adding the column there instead would leave
+        // a fresh database describing the table one way and a migrated one
+        // another, which is exactly the drift the shared definitions elsewhere
+        // exist to prevent. Every path recorded before this starts at zero and
+        // is therefore never reported: the feed says what changed after
+        // recording began, and inventing changes for a namespace that was
+        // already there would make the first page a full listing wearing a
+        // cursor's clothes. The index is partial for the same reason — a
+        // workspace with the cursor off stamps nothing and carries no index
+        // entries at all.
+        this.execBatch(`
+        ALTER TABLE vfs_path_versions
+          ADD COLUMN change_seq INTEGER NOT NULL DEFAULT 0;
+        CREATE INDEX vfs_path_changes
+          ON vfs_path_versions(change_seq) WHERE change_seq > 0;
+      `);
+        this.sql.exec(
+          "INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (4, ?)",
+          now,
+        );
+        migrated = true;
+      }
       return stringColumn(
         this.sql.exec<SqlRow>("SELECT mutation_epoch FROM vfs_state WHERE singleton = 1").one(),
         "mutation_epoch",
@@ -1302,14 +1352,43 @@ ${ENTRY_TRIGGERS}
     return NEVER_MUTATED_TOKEN;
   }
 
+  /**
+   * The sequence to stamp the change being published with.
+   *
+   * Zero when the cursor is off, which is also the value every row already
+   * carries, so the stamped statement is the same statement either way and the
+   * feature adds no work to a workspace that has not asked for it.
+   *
+   * Read from SQLite once per instance and then kept in memory. One number is
+   * handed out per publication rather than per row, so every path a set-based
+   * mutation touches shares a sequence and a reader sees one change rather
+   * than a burst that has to be reassembled.
+   */
+  private nextChangeSeq(): number {
+    if (!this.recordChanges) return 0;
+    if (this.lastChangeSeq === undefined) {
+      this.lastChangeSeq = integerColumn(
+        this.sql
+          .exec<SqlRow>("SELECT COALESCE(MAX(change_seq), 0) AS seq FROM vfs_path_versions")
+          .one(),
+        "seq",
+      );
+    }
+    this.lastChangeSeq += 1;
+    return this.lastChangeSeq;
+  }
+
   private publishPathVersion(path: string): number {
     return integerColumn(
       this.sql
         .exec<SqlRow>(
-          `INSERT INTO vfs_path_versions (path, version) VALUES (?, 1)
-         ON CONFLICT(path) DO UPDATE SET version = vfs_path_versions.version + 1
+          `INSERT INTO vfs_path_versions (path, version, change_seq) VALUES (?, 1, ?)
+         ON CONFLICT(path) DO UPDATE SET
+           version = vfs_path_versions.version + 1,
+           change_seq = excluded.change_seq
          RETURNING version`,
           path,
+          this.nextChangeSeq(),
         )
         .one(),
       "version",
@@ -1470,10 +1549,13 @@ ${ENTRY_TRIGGERS}
   private publishSubtreeVersions(path: string): void {
     const range = descendantRange(path);
     this.sql.exec(
-      `INSERT INTO vfs_path_versions (path, version)
-       SELECT path, 1 FROM vfs_entries
+      `INSERT INTO vfs_path_versions (path, version, change_seq)
+       SELECT path, 1, ? FROM vfs_entries
        WHERE path = ? OR (path >= ? AND path < ?)
-       ON CONFLICT(path) DO UPDATE SET version = vfs_path_versions.version + 1`,
+       ON CONFLICT(path) DO UPDATE SET
+         version = vfs_path_versions.version + 1,
+         change_seq = excluded.change_seq`,
+      this.nextChangeSeq(),
       path,
       range.lower,
       range.upper,
@@ -1483,12 +1565,15 @@ ${ENTRY_TRIGGERS}
   private publishTranslatedSubtreeVersions(source: string, target: string): void {
     const range = descendantRange(source);
     this.sql.exec(
-      `INSERT INTO vfs_path_versions (path, version)
-       SELECT ? || substr(path, ?), 1 FROM vfs_entries
+      `INSERT INTO vfs_path_versions (path, version, change_seq)
+       SELECT ? || substr(path, ?), 1, ? FROM vfs_entries
        WHERE path = ? OR (path >= ? AND path < ?)
-       ON CONFLICT(path) DO UPDATE SET version = vfs_path_versions.version + 1`,
+       ON CONFLICT(path) DO UPDATE SET
+         version = vfs_path_versions.version + 1,
+         change_seq = excluded.change_seq`,
       target,
       source.length + 1,
+      this.nextChangeSeq(),
       source,
       range.lower,
       range.upper,
@@ -2004,6 +2089,46 @@ ${ENTRY_TRIGGERS}
       }
     }
     return entry.kind === "symlink" ? 1 : this.subtreeSummary(access.path).entries;
+  }
+
+  changesSince(since: number, options: ChangesSinceOptions = {}): ChangePage {
+    if (!this.recordChanges) {
+      throw new VfsError("ENOTSUP", "the change cursor is not enabled for this filesystem");
+    }
+    if (!Number.isSafeInteger(since) || since < 0) {
+      throw new VfsError("EINVAL", "since must be a non-negative safe integer");
+    }
+    const limit = options.limit ?? DEFAULT_CHANGE_PAGE;
+    validatePositiveInteger(limit, "limit");
+    const bounded = Math.min(limit, MAX_CHANGE_PAGE);
+    // One indexed range scan over the sequence, joined to the entries it
+    // describes so a caller learns in the same statement whether the path is
+    // still there. Nothing here materializes an entry: `present` is the join
+    // succeeding, not a row read for its columns.
+    const rows = this.sql
+      .exec<SqlRow>(
+        `SELECT v.path AS path, (e.path IS NOT NULL) AS present, v.change_seq AS seq
+       FROM vfs_path_versions v
+       LEFT JOIN vfs_entries e INDEXED BY vfs_entries_path ON e.path = v.path
+       WHERE v.change_seq > ?
+       ORDER BY v.change_seq, v.path
+       LIMIT ?`,
+        since,
+        bounded + 1,
+      )
+      .toArray();
+    const more = rows.length > bounded;
+    const page = more ? rows.slice(0, bounded) : rows;
+    const changes = page.map((row) => ({
+      path: stringColumn(row, "path"),
+      present: integerColumn(row, "present") === 1,
+    }));
+    const last = page.at(-1);
+    return {
+      changes,
+      cursor: last === undefined ? since : integerColumn(last, "seq"),
+      more,
+    };
   }
 
   readFile(path: string, posix?: PosixAccessContext): InlineReadResult {
@@ -3835,6 +3960,13 @@ class PosixFileSystemView implements VirtualFileSystem {
 
   copy(from: string, to: string, options?: CopyOptions): Promise<CopyResult> {
     return this.inner.copy(from, to, options, this.access);
+  }
+
+  changesSince(): ChangePage {
+    // The feed names paths without regard to what this user can see, so it
+    // stays with the trusted capability rather than being filtered here into
+    // something that looks like a per-user view and is not one.
+    throw new VfsError("EPERM", "user views cannot read the workspace change feed");
   }
 
   beginOpaqueUpload(): Promise<OpaqueUploadReservation> {
