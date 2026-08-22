@@ -303,6 +303,7 @@ export class WorkspaceFiles extends ShellDurableObject<Env> {
 | --- | --- | --- |
 | `vfs.quota` | a storage limit refused work | `limit`, `used`, `max`, optional `requested`/`path` |
 | `vfs.usage` | a mutation committed | `inlineBytes`, `entries` |
+| `vfs.mutation` | a namespace change committed | `op`, `path`, optional `mutationToken`/`subtree` |
 | `vfs.opaque-upload` | a session reached `begin`, `commit`, `abort`, `expire`, or `reject` | `uploadId`, `objectKey`, `path`, optional `reason` |
 | `vfs.garbage` | a GC batch settled | `deleted`, `remaining`, `failed` |
 | `shell.limit` | an execution limit refused work | `limit`, `used`, `max` |
@@ -316,12 +317,46 @@ timeout. Limits enforced by the parser and the output pipes do not emit a
 per-limit event; they surface through `shell.execution.failureCode` instead.
 
 Three properties are contractual. The sink is never invoked when omitted, and
-the filesystem additionally skips the usage query that would feed `vfs.usage`,
-so an unobserved workspace pays nothing. A throwing sink cannot change
+the filesystem additionally skips the usage query that would feed `vfs.usage`
+and builds no `vfs.mutation` object at all, so an unobserved workspace pays
+nothing. A throwing sink cannot change
 behavior: its failure is discarded rather than rolling back a transaction,
 altering an exit status, or masking the error the caller is about to receive.
-And `vfs.usage` is reported only after its transaction commits, so a rolled-back
-mutation never reports usage it did not apply.
+And `vfs.usage` and `vfs.mutation` are reported only after their transaction
+commits, so a rolled-back mutation never reports usage or a change it did not
+apply.
+
+### Watching the namespace
+
+`vfs.mutation` is for a host that maintains a view of the workspace — a file
+tree, an open document, a search index — and needs to know when what it is
+showing stopped being true.
+
+It names the change (`create`, `write`, `remove`, `move`, `metadata`) and the
+path, and carries the `mutationToken` now in force. That token is also how a
+writer recognizes its own publication: `writeFile` returns the same value, so
+a host that remembers what it wrote filters its own echo without the event
+needing any notion of who wrote. There is deliberately no revision, size, or
+writer identity — none of them changed what a consumer did with the event, and
+the first two are not known where the token is published, so carrying them
+would cost a query this event does not otherwise need.
+
+Two shapes matter for a consumer. A single-path change carries `path` and a
+token. A set-based change — recursive `remove`, `move`, recursive `copy` —
+carries `subtree` with the `root` it covered and, for a move, the `to` it
+moved to, and **no token**. Those operations never materialize their entries,
+which is what makes them cost a constant number of statements; reporting one
+event per entry would give that back. Because a move is a prefix rename, a
+consumer holding `/src/file` under a move of `/src` to `/lib` recomputes
+`/lib/file` from `root` and `to` alone.
+
+One call can report several changes. Creating parents publishes each directory
+it had to make, because each is a change a view has to reflect. Treat the
+notification as one change per event, not one event per call.
+
+The events are volatile. A consumer that disconnects and returns cannot ask
+what it missed; a mutation token answers whether one path changed, never what
+changed. Plan for a full re-read on reconnect.
 
 `shell.command` is one event per command; sample or filter it under load.
 Cloudflare bills SQLite rows read/written and stored data, so pair these events

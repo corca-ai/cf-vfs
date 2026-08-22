@@ -728,6 +728,45 @@ describe("byte-oriented Durable Object filesystem", () => {
     });
   });
 
+  it("reports mutations only after the real transaction commits", async () => {
+    const stub = workspace("mutation-notification");
+    const observed = await runInDurableObject(stub, async (_instance, state) => {
+      const events: string[] = [];
+      const fileSystem = new DurableObjectFileSystem(state.storage, {
+        workspaceId: "mutation-notification",
+        maxEntries: 3,
+        onEvent: (event) => {
+          if (event.type !== "vfs.mutation") return;
+          events.push(
+            `${event.op} ${event.path}${event.subtree?.to === undefined ? "" : ` -> ${event.subtree.to}`}`,
+          );
+        },
+      });
+      await fileSystem.writeFile("/first", "x");
+      const committed = [...events];
+
+      // The entry quota refuses this inside the transaction, after the parent
+      // directory row has already been written and rolled back with it.
+      events.length = 0;
+      let refused = "";
+      try {
+        await fileSystem.writeFile("/parent/child", "x", { createParents: true });
+      } catch (error) {
+        refused = error instanceof Error ? ((error as { code?: string }).code ?? "") : "";
+      }
+      const afterRollback = [...events];
+
+      events.length = 0;
+      await fileSystem.move("/first", "/second");
+      return { committed, refused, afterRollback, moved: [...events] };
+    });
+
+    expect(observed.committed).toEqual(["create /first"]);
+    expect(observed.refused).toBe("ENOSPC");
+    expect(observed.afterRollback).toEqual([]);
+    expect(observed.moved).toEqual(["move /first -> /second"]);
+  });
+
   describe("sharing the alarm with a composing host", () => {
     /** Reads the maintenance time the filesystem would want to be woken at. */
     async function uploadExpiry(
