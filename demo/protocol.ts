@@ -26,6 +26,21 @@ export type ClientMessage =
       readonly columns: number;
       readonly rows: number;
     }
+  | { readonly type: "doc-open"; readonly path: string }
+  | {
+      readonly type: "doc-edit";
+      readonly path: string;
+      /**
+       * The version this text was typed against.
+       *
+       * The same shape the filesystem uses one level down: a writer that was
+       * working from something already replaced is told so rather than allowed
+       * to overwrite, and asks for the current state instead.
+       */
+      readonly base: number;
+      readonly text: string;
+    }
+  | { readonly type: "doc-close"; readonly path: string }
   | { readonly type: "ping" };
 
 /**
@@ -88,6 +103,19 @@ export type ServerMessage =
       readonly truncated: boolean;
       readonly values: readonly { readonly value: string; readonly kind: string }[];
     }
+  | {
+      /** The whole document, on open and whenever a client has fallen behind. */
+      readonly type: "doc";
+      readonly path: string;
+      readonly version: number;
+      readonly text: string;
+    }
+  | {
+      /** The namespace took the document away, from a `mv` or an `rm`. */
+      readonly type: "doc-gone";
+      readonly path: string;
+      readonly to?: string;
+    }
   | { readonly type: "pong" };
 
 export function parseClientMessage(message: string | ArrayBuffer): ClientMessage {
@@ -132,6 +160,31 @@ export function parseClientMessage(message: string | ArrayBuffer): ClientMessage
       throw new VfsError("EINVAL", "completion cursor must be an offset into the line");
     }
     return { type: "complete", line, cursor: cursor as number, token: token as number };
+  }
+  if (
+    (input["type"] === "doc-open" || input["type"] === "doc-close") &&
+    typeof input["path"] === "string"
+  ) {
+    return { type: input["type"], path: input["path"] };
+  }
+  if (
+    input["type"] === "doc-edit" &&
+    typeof input["path"] === "string" &&
+    typeof input["text"] === "string"
+  ) {
+    const base = input["base"];
+    // A version is a counter the server issued, so anything that is not a
+    // whole number is a malformed request rather than one to coerce: a `NaN`
+    // base would compare unequal forever and resynchronize on every keystroke.
+    if (!Number.isInteger(base) || (base as number) < 0) {
+      throw new VfsError("EINVAL", "document base must be a version this session was given");
+    }
+    return {
+      type: "doc-edit",
+      path: input["path"],
+      base: base as number,
+      text: input["text"],
+    };
   }
   if (input["type"] === "resize") {
     const columns = input["columns"];

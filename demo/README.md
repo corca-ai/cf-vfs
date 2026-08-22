@@ -14,6 +14,21 @@ The demo directory is outside `src`, outside `tsconfig.build.json`, and outside
 the package `files` allowlist. Deploying or changing the demo therefore does
 not add code to the published library.
 
+`demo/document.ts` adds the editing pane: one `DocumentRegistry` per room, a
+`CollaborativeFileSystem` the shells run against, and a debounced write-back.
+A `sed -i` typed in the terminal lands in an open editor as an edit rather
+than overwriting what someone is typing, and a `mv` or `rm` moves or closes
+the pane instead of leaving it pointed at a path that no longer names
+anything.
+
+The document is a string, not a CRDT. Every change to a room — a keystroke on
+a socket, a shell command — runs on one single-threaded Durable Object, so
+there is no concurrent application for a CRDT to reconcile. A client that
+applied its own edits before the server confirmed them is the one that would
+need Yjs, and `CollaborativeDocument` is an interface so that host can supply
+it. A version stamp catches a client whose text crossed with someone else'''s,
+which is the same shape the filesystem'''s mutation token has one layer down.
+
 Each open WebSocket owns an in-memory `InteractiveShell`; its cwd, variables,
 functions, and options live for that connection. The browser sends a bounded
 keepalive while the tab is open. Files live in the Durable Object's SQLite

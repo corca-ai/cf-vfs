@@ -353,3 +353,113 @@ h1 {
 .features .github-link {
   margin-top: 40px;
 }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.editor-card {
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid rgba(177, 225, 196, 0.18);
+  border-radius: 14px;
+  background: rgba(8, 20, 16, 0.93);
+  box-shadow:
+    0 20px 60px var(--shadow),
+    inset 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.editor-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.editor-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.editor-open {
+  display: flex;
+  gap: 8px;
+}
+
+.editor-open input {
+  min-width: 190px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+
+.editor-open input:focus-visible,
+.editor-text:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 1px;
+}
+
+.editor-open button {
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.editor-open button:hover {
+  border-color: rgba(177, 225, 196, 0.34);
+}
+
+.editor-status {
+  margin: 12px 0;
+  color: var(--dim);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.editor-status.is-live {
+  color: var(--mint);
+}
+
+.editor-status.is-error {
+  color: #ff9a8c;
+}
+
+#editor-text {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 180px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+#editor-text:disabled {
+  color: var(--dim);
+}

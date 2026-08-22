@@ -90,6 +90,52 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     this.#registry = registry;
   }
 
+  /**
+   * Writes an open document back to the namespace, guarded by the token it was
+   * read at.
+   *
+   * A method rather than a function taking a filesystem, because there are two
+   * filesystems here and only one of them is right: publishing through the
+   * collaborative view would be turned back into an edit of the very document
+   * being published, and reading through it would compare a document against
+   * itself. Owning both sides is what makes passing the wrong one impossible
+   * rather than silently ineffective.
+   *
+   * `skipIfUnchanged` keeps a timer-driven flush from churning: an unchanged
+   * publication still bumps the revision and invalidates every other holder's
+   * guard on that path. `EREVISION` means the namespace moved underneath —
+   * reconcile and try again rather than overwrite.
+   */
+  async publish(path: string): Promise<boolean> {
+    const open = this.#registry.get(path);
+    if (open === undefined || !open.dirty) return false;
+    const result = await this.#inner.writeFile(path, open.document.text(), {
+      ifMutationToken: open.token,
+      skipIfUnchanged: true,
+    });
+    this.#registry.markPublished(path, result.mutationToken);
+    return true;
+  }
+
+  /**
+   * Brings an open document up to date with what the namespace holds.
+   *
+   * For a change the document did not make — another caller, a restored file.
+   * Compare a notification's token against the one the registry reports first:
+   * they match when the change was this view's own publication, and
+   * reconciling against that is work with no result.
+   */
+  async reconcile(path: string): Promise<boolean> {
+    const open = this.#registry.get(path);
+    if (open === undefined) return false;
+    const read = this.#inner.readFile(path);
+    const bytes = await readAllBytes(read.stream, MAX_DOCUMENT_BYTES);
+    const edits = textEdits(open.document.text(), decodeText(bytes, path));
+    if (edits.length > 0) open.document.applyExternal(edits);
+    this.#registry.markPublished(path, read.stat.mutationToken);
+    return edits.length > 0;
+  }
+
   forCredentials(credentials: PosixCredentials, options?: PosixViewOptions): VirtualFileSystem {
     const candidate = this.#inner as Partial<PosixVirtualFileSystem>;
     if (typeof candidate.forCredentials !== "function") {
@@ -153,10 +199,17 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     if (open === undefined) return this.#inner.writeFile(path, body, options);
     const next = await bodyText(body, resolved);
     const edits = textEdits(open.document.text(), next);
-    if (edits.length > 0) {
-      open.document.applyExternal(edits);
-      this.#registry.markDirty(resolved);
+    if (edits.length === 0) {
+      // The text is already what the document holds, so there is nothing to
+      // merge and the write is either a publication of this very document or a
+      // redundant write. Both belong in storage: swallowing them would make
+      // `publishDocument` a silent no-op whenever it is handed this view
+      // rather than the one underneath, which is a mistake nothing would
+      // report.
+      return this.#inner.writeFile(path, next, options);
     }
+    open.document.applyExternal(edits);
+    this.#registry.markDirty(resolved);
     // Nothing reached storage, so the revision and token are the ones already
     // there. A caller that guards on this token still guards correctly: the
     // publication that eventually happens uses it too.
