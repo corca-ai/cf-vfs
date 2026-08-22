@@ -404,6 +404,53 @@ rewinding when nothing changed. `changesSince` is not available on a
 credential-bound view: the feed reports paths without regard to what a user can
 see, so it stays with the trusted capability.
 
+### Editing one file from several places
+
+`@corca-ai/cf-vfs/collab` is the layer between a workspace and an editing
+session. It is not core, it is not imported by anything else, and it is
+asserted absent from every bundle preset — a consumer that does not edit
+collaboratively carries none of it.
+
+It supplies three things and deliberately not a fourth:
+
+- `DocumentRegistry` — which paths are open, the token each was read at, and
+  whether it holds text the namespace has not been given. It also follows the
+  namespace: `observe(event)` takes a `vfs.mutation` and rebinds open paths
+  through a move or closes what a removal took.
+- `CollaborativeFileSystem` — a `VirtualFileSystem` that routes reads and
+  writes of open documents through them. Pass it to `Shell` in place of the
+  raw filesystem.
+- `textEdits(before, after)` — the change one text represents against another,
+  derived from the diff already in `src/core`.
+
+The fourth is a merging document itself. `CollaborativeDocument` is an
+interface the host implements, because the choice has real consequences for a
+Worker — Yjs is JavaScript while Loro and Automerge are Wasm — and it belongs
+to the application.
+
+Two behaviors are the point of the whole layer:
+
+**A write to an open document becomes an edit.** Without it, `sed -i` on a file
+someone is typing into is a guarded whole-file publication: it wins and
+discards their work, or it loses with `EREVISION`. Routed through the document
+it merges, and everyone else sees an ordinary remote change.
+
+**A read of an open document sees what has not been published.** Flushing
+before an execution does not cover this on its own, because a write *during*
+the execution leaves the document ahead of storage — `sed -i` followed by `cat`
+in one script is enough to show it.
+
+Publication stays the host's to schedule. `publishDocument()` writes the
+document guarded by the token it was read at and with `skipIfUnchanged`, so a
+timer-driven flush neither overwrites a change it did not see nor churns the
+revision when nothing moved. `EREVISION` is the signal to call
+`reconcileDocument()` and try again. Nothing here starts a timer or holds a
+socket; both are the application's.
+
+`textEdits` is line-granular, because it reuses the repository's diff rather
+than adding a second one. An edit inside a line replaces the line, which costs
+a little concurrency on the same line and none on different lines.
+
 ### Durability of an acknowledged change
 
 A write is durable when its call resolves — the transaction has committed and
