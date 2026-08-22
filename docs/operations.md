@@ -431,9 +431,26 @@ path during the lease hides the name immediately but delays object deletion.
 The default lease is five minutes and the maximum is one hour.
 
 `ShellDurableObject.alarm()` drains bounded GC batches. Failures retain the
-key, error text, attempt count, and exponential next-attempt time. The alarm is
-reset to the earliest open expiry, verification lease, retention deadline, or
+key, error text, attempt count, and exponential next-attempt time. Maintenance
+is due at the earliest open expiry, verification lease, retention deadline, or
 retry. Operations are idempotent and survive object eviction.
+
+A Durable Object has one alarm, and composing this filesystem inside a host
+class that owns `alarm()` shares it. There is no way to ask whether the alarm
+currently set belongs to the filesystem, so scheduling is earliest-wins in both
+directions: an alarm already set is never moved later, and no alarm is ever
+deleted. A host timer is therefore never stopped or delayed by maintenance. The
+cost is one spurious wake-up when maintenance work disappears while its alarm is
+still pending — the alarm fires, finds nothing due, and re-arms to whatever is
+next.
+
+The consequence for a composing host is that **its `alarm()` must run
+maintenance**, as `VfsDurableObject.alarm()` does and the README's example
+shows. When a host's alarm is the earlier one, deferring to it means the
+filesystem's own time is not armed until something re-arms it, and every exit
+from `drainGarbage()` is what does. A host that owns `alarm()` and never calls
+`drainGarbage()` leaves expiry, lease, and retry work waiting for the next
+mutation that schedules.
 
 Alert on old `open`/`verifying` sessions, growing GC depth, repeated delete
 attempts, R2 `HEAD` mismatch/missing objects, and database headroom. The

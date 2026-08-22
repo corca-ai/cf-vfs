@@ -326,9 +326,13 @@ retention time; callers must start the R2 read within the lease.
 
 GC materializes at most 100 due keys, issues one idempotent multi-delete, and
 removes queue/session rows in a short transaction. Failure records exponential
-backoff and schedules the next alarm before rethrowing. One alarm is always
-set to the earliest open-session expiry, verification lease, or GC retry. The
-work survives Durable Object eviction.
+backoff and schedules the next alarm before rethrowing. The object's alarm is
+armed for the earliest open-session expiry, verification lease, or GC retry,
+but only when nothing earlier is already set: the alarm slot is shared with the
+host, so scheduling never moves an existing alarm later and never deletes one.
+See [operations](operations.md#reads-leases-and-garbage-collection) for what
+that requires of a host that owns `alarm()`. The work survives Durable Object
+eviction.
 
 ## Shell and RPC boundaries
 
