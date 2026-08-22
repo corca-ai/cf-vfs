@@ -510,8 +510,30 @@ import { redrawSequence, submitSequence } from "./line-block.js";
       setConnection("online", message.exitCode === 0 ? "connected" : `exit ${message.exitCode}`);
       return;
     }
+    if (message.type === "doc") {
+      applyDocument(message);
+      return;
+    }
+    if (message.type === "doc-gone") {
+      if (message.path !== openPath) return;
+      if (typeof message.to === "string") {
+        // The terminal moved it. Follow, rather than leaving a pane pointed at
+        // a path that no longer names anything.
+        openPath = message.to;
+        editorPath.value = message.to;
+        setEditorStatus(`Moved to ${message.to} from the terminal.`, "live");
+        return;
+      }
+      openPath = null;
+      editorText.value = "";
+      editorText.disabled = true;
+      editorCloseButton.hidden = true;
+      setEditorStatus(`${message.path} was removed from the terminal.`, "error");
+      return;
+    }
     if (message.type === "error") {
       writeNotice(String(message.message), "203");
+      if (openPath !== null) setEditorStatus(String(message.message), "error");
       return;
     }
     if (message.type === "closed") {
@@ -546,6 +568,10 @@ import { redrawSequence, submitSequence } from "./line-block.js";
       setConnection("online", "connected");
       keepaliveTimer = window.setInterval(() => send({ type: "ping" }), KEEPALIVE_MS);
       sendDimensions();
+      // The document is in the object and outlived the socket, so a reconnect
+      // asks for it again rather than leaving a pane showing a version this
+      // session can no longer edit.
+      if (openPath !== null) send({ type: "doc-open", path: openPath });
       terminal.focus();
     });
     socket.addEventListener("message", handleServerMessage);
@@ -644,6 +670,93 @@ import { redrawSequence, submitSequence } from "./line-block.js";
     examplesElement.append(button);
   }
 
+  // --- the editor pane ----------------------------------------------------
+  //
+  // Deliberately a textarea and the whole file rather than an editor and a
+  // stream of operations. What this is here to show is one level down: that a
+  // shell command and a person can change the same file at once and both
+  // survive. A version stamp is what keeps that honest — the same shape the
+  // filesystem's mutation token has, one layer below.
+
+  const editorForm = document.getElementById("editor-form");
+  const editorPath = document.getElementById("editor-path");
+  const editorText = document.getElementById("editor-text");
+  const editorStatus = document.getElementById("editor-status");
+  const editorCloseButton = document.getElementById("editor-close");
+  /** The path this pane has open, or null. */
+  let openPath = null;
+  /** The version the text in the box was typed against. */
+  let openVersion = 0;
+  let sendEditTimer = 0;
+
+  function setEditorStatus(text, kind = "") {
+    editorStatus.textContent = text;
+    editorStatus.className = `editor-status${kind === "" ? "" : ` is-${kind}`}`;
+  }
+
+  function openDocument(path) {
+    if (openPath !== null && openPath !== path) send({ type: "doc-close", path: openPath });
+    openPath = path;
+    send({ type: "doc-open", path });
+    setEditorStatus(`Opening ${path}…`);
+  }
+
+  function closeDocument() {
+    if (openPath === null) return;
+    send({ type: "doc-close", path: openPath });
+    openPath = null;
+    editorText.value = "";
+    editorText.disabled = true;
+    editorCloseButton.hidden = true;
+    setEditorStatus("Nothing open.");
+  }
+
+  function flushEdit() {
+    if (openPath === null) return;
+    send({ type: "doc-edit", path: openPath, base: openVersion, text: editorText.value });
+  }
+
+  editorForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const path = editorPath.value.trim();
+    if (path !== "") openDocument(path);
+  });
+
+  editorCloseButton.addEventListener("click", closeDocument);
+
+  editorText.addEventListener("input", () => {
+    // Debounced rather than per-keystroke: every send is a round trip, and the
+    // window it leaves is the only thing a shell write can land inside.
+    window.clearTimeout(sendEditTimer);
+    sendEditTimer = window.setTimeout(flushEdit, 180);
+  });
+
+  /**
+   * Replaces the text without moving the caret out from under the typist.
+   *
+   * The offset is kept rather than the line and column, because a change that
+   * arrived from the shell may have been anywhere above.
+   */
+  function applyDocument(message) {
+    if (message.path !== openPath) return;
+    const wasFocused = document.activeElement === editorText;
+    const caret = editorText.selectionStart;
+    const before = editorText.value;
+    openVersion = message.version;
+    if (before !== message.text) {
+      editorText.value = message.text;
+      if (wasFocused) {
+        const kept = Math.min(caret, message.text.length);
+        editorText.setSelectionRange(kept, kept);
+      }
+    }
+    editorText.disabled = false;
+    editorCloseButton.hidden = false;
+    setEditorStatus(
+      `${message.path} · version ${message.version} — shared with everyone in this room.`,
+      "live",
+    );
+  }
 
   connect();
 })();

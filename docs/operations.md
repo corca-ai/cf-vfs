@@ -440,12 +440,19 @@ before an execution does not cover this on its own, because a write *during*
 the execution leaves the document ahead of storage — `sed -i` followed by `cat`
 in one script is enough to show it.
 
-Publication stays the host's to schedule. `publishDocument()` writes the
-document guarded by the token it was read at and with `skipIfUnchanged`, so a
+Publication stays the host's to schedule. `publish(path)` writes the document
+guarded by the token it was read at and with `skipIfUnchanged`, so a
 timer-driven flush neither overwrites a change it did not see nor churns the
 revision when nothing moved. `EREVISION` is the signal to call
-`reconcileDocument()` and try again. Nothing here starts a timer or holds a
-socket; both are the application's.
+`reconcile(path)` and try again. Nothing here starts a timer or holds a
+socket; both are the application'''s.
+
+Both are methods on `CollaborativeFileSystem` rather than functions taking a
+filesystem, because there are two filesystems in play and only one of them is
+right: publishing through the collaborative view would be turned back into an
+edit of the document being published, and reading through it would compare a
+document against itself. Owning both sides makes passing the wrong one
+impossible rather than silently ineffective.
 
 `textEdits` is line-granular, because it reuses the repository's diff rather
 than adding a second one. An edit inside a line replaces the line, which costs

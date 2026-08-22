@@ -1,3 +1,4 @@
+import { CollaborativeFileSystem } from "../src/collab/index.js";
 import { VfsError } from "../src/core/errors.js";
 import { curlCommand } from "../src/shell/commands/curl.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
@@ -10,6 +11,7 @@ import {
 import type { ShellExecution } from "../src/shell/types.js";
 import { VfsDurableObject } from "../src/vfs/durable-object.js";
 import type { VfsStat } from "../src/vfs/types.js";
+import { DemoDocuments, type DocumentNotice } from "./document.js";
 import {
   DEMO_CREDENTIALS,
   DEMO_IDENTITY_RESOLVER,
@@ -23,6 +25,8 @@ import { MAX_MESSAGE_BYTES, parseClientMessage, type ServerMessage } from "./pro
 interface TerminalSession {
   readonly shell: InteractiveShell;
   readonly input: InteractiveInputBuffer;
+  /** Documents this socket has open, so a change reaches only who is looking. */
+  readonly watching: Set<string>;
   pendingSourceBytes: number;
   execution: ShellExecution | undefined;
 }
@@ -190,10 +194,24 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
   private readonly sessions = new Map<WebSocket, TerminalSession>();
   /** The room this object is, so a session can say which one it joined. */
   private readonly workspaceName: string;
+  private readonly documents: DemoDocuments;
+  /**
+   * What the shells run against.
+   *
+   * A write to a file someone has open becomes an edit to their document
+   * rather than a publication that would discard it, and a read of one sees
+   * text that has not been written back yet.
+   */
+  private readonly editable: CollaborativeFileSystem;
 
   constructor(ctx: DurableObjectState, env: VfsBenchmarkEnv) {
+    // Built before `super()` because the filesystem takes it as an event sink,
+    // which is how a document follows a `mv` or an `rm` typed in the terminal.
+    // Legal only because nothing here touches `this`.
+    const documents = new DemoDocuments();
     super(ctx, env, {
       workspaceId: ctx.id.toString(),
+      onEvent: (event) => documents.observe(event),
       // A room shared by a whole country, so it is deliberately small: a
       // visitor who fills it can only have written fifty kilobytes, and
       // whoever arrives next can free it by deleting something. The welcome
@@ -206,6 +224,9 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
     });
     // `getByName` keeps the name on the identifier, which is the room's label.
     this.workspaceName = ctx.id.name ?? "country-XX";
+    this.documents = documents;
+    this.editable = new CollaborativeFileSystem(this.fileSystem, documents.registry);
+    documents.attach(this.editable, (notice) => this.announce(notice));
     ctx.blockConcurrencyWhile(async () => {
       // The Linux profile's directories, created once per workspace. `/bin` and
       // `/usr/bin` are deliberately not among them: they resolve applets
@@ -248,7 +269,7 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
 
     const session: TerminalSession = {
       shell: new InteractiveShell({
-        fileSystem: this.fileSystem,
+        fileSystem: this.editable,
         commands: [...defaultShellCommands, curlCommand],
         // PATH lookup and the profile's environment are one decision, not two:
         // without `commandResolution` a `PATH` is an ordinary variable and
@@ -273,6 +294,7 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
           maxNestingDepth: SHELL_LIMITS.maxNestingDepth,
         },
       }),
+      watching: new Set<string>(),
       pendingSourceBytes: 0,
       execution: undefined,
     };
@@ -303,7 +325,7 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       type: "hello",
       cwd: session.shell.cwd,
       protocol: 1,
-      features: ["completion", "resize-hint", "sigint", "continuation"],
+      features: ["completion", "resize-hint", "sigint", "continuation", "documents"],
       limits: {
         maxMessageBytes: MAX_MESSAGE_BYTES,
         maxSourceBytes: MAX_PENDING_SOURCE_BYTES,
@@ -320,6 +342,46 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
     const session = this.sessions.get(socket);
     session?.execution?.cancel();
     this.sessions.delete(socket);
+    // A document nobody is looking at any more is dropped, but only after the
+    // socket is out of the map so it does not count as its own watcher.
+    for (const path of session?.watching ?? []) {
+      if (!this.watchedElsewhere(socket, path)) this.documents.close(path);
+    }
+  }
+
+  private watchedElsewhere(except: WebSocket, path: string): boolean {
+    for (const [socket, session] of this.sessions) {
+      if (socket !== except && session.watching.has(path)) return true;
+    }
+    return false;
+  }
+
+  /** Sends the current document to everyone watching it but the one that changed it. */
+  private broadcastDocument(path: string, except?: WebSocket): void {
+    const document = this.documents.get(path);
+    if (document === undefined) return;
+    for (const [socket, session] of this.sessions) {
+      if (socket === except || !session.watching.has(path)) continue;
+      send(socket, { type: "doc", path, version: document.version(), text: document.text() });
+    }
+  }
+
+  /** Relays what the namespace did to an open document. */
+  private announce(notice: DocumentNotice): void {
+    if (notice.kind === "changed") {
+      this.broadcastDocument(notice.path);
+      return;
+    }
+    for (const [socket, session] of this.sessions) {
+      if (!session.watching.has(notice.path)) continue;
+      session.watching.delete(notice.path);
+      if (notice.to !== undefined) session.watching.add(notice.to);
+      send(socket, {
+        type: "doc-gone",
+        path: notice.path,
+        ...(notice.to === undefined ? {} : { to: notice.to }),
+      });
+    }
   }
 
   private async handleMessage(socket: WebSocket, rawMessage: string | ArrayBuffer): Promise<void> {
@@ -339,6 +401,43 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
         session.pendingSourceBytes = 0;
         prompt(socket, session);
       }
+      return;
+    }
+    if (message.type === "doc-open") {
+      const document = await this.documents.open(message.path);
+      send(socket, {
+        type: "doc",
+        path: message.path,
+        version: document.version(),
+        text: document.text(),
+      });
+      return;
+    }
+    if (message.type === "doc-close") {
+      // Closed only when this was the last socket looking at it: the room is
+      // shared, and one visitor closing a tab must not take the document out
+      // from under another who is still editing it.
+      if (!this.watchedElsewhere(socket, message.path)) this.documents.close(message.path);
+      session.watching.delete(message.path);
+      return;
+    }
+    if (message.type === "doc-edit") {
+      session.watching.add(message.path);
+      const applied = this.documents.applyClientText(message.path, message.base, message.text);
+      const document = this.documents.get(message.path);
+      if (document === undefined) return;
+      if (applied === "stale") {
+        // Say what is true now rather than taking text typed against something
+        // that has since been replaced.
+        send(socket, {
+          type: "doc",
+          path: message.path,
+          version: document.version(),
+          text: document.text(),
+        });
+        return;
+      }
+      this.broadcastDocument(message.path, socket);
       return;
     }
     if (message.type === "resize") {
@@ -408,6 +507,10 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
         pumpOutput(socket, execution.stdout, "stdout"),
         pumpOutput(socket, execution.stderr, "stderr"),
       ]);
+      // A write-through leaves a document ahead of storage and nothing else
+      // would publish it, so this is where the terminal's effect on an open
+      // file reaches both the editors watching it and the namespace.
+      this.documents.noticeShellWrites();
       send(socket, {
         type: "complete",
         cwd: session.shell.cwd,

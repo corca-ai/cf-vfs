@@ -62,6 +62,38 @@
         </div>
       </section>
 
+      <section class="editor-card" aria-labelledby="editor-title">
+        <div class="editor-head">
+          <h2 id="editor-title">Edit a file while the shell does</h2>
+          <form id="editor-form" class="editor-open">
+            <label class="visually-hidden" for="editor-path">File to open</label>
+            <input
+              id="editor-path"
+              name="path"
+              type="text"
+              value="README.txt"
+              spellcheck="false"
+              autocomplete="off"
+              aria-describedby="editor-status"
+            >
+            <button type="submit">Open</button>
+            <button type="button" id="editor-close" hidden>Close</button>
+          </form>
+        </div>
+        <p id="editor-status" class="editor-status" role="status">
+          Open a file, then change it from the terminal — <code>sed -i</code> lands
+          here as an edit instead of overwriting what you typed.
+        </p>
+        <label class="visually-hidden" for="editor-text">File contents</label>
+        <textarea
+          id="editor-text"
+          spellcheck="false"
+          autocomplete="off"
+          disabled
+          placeholder="Nothing open."
+        ></textarea>
+      </section>
+
       <p class="notice">
         Everyone visiting from the same country shares one workspace here, so
         what you write is what the next person finds — and can change. It holds

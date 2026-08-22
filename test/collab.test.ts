@@ -4,8 +4,6 @@ import {
   type CollaborativeDocument,
   CollaborativeFileSystem,
   DocumentRegistry,
-  publishDocument,
-  reconcileDocument,
   type TextEdit,
   textEdits,
 } from "../src/collab/index.js";
@@ -114,24 +112,25 @@ describe("document registry", () => {
     const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/doc.txt", "body\n");
     const registry = new DocumentRegistry();
+    const view = new CollaborativeFileSystem(fileSystem, registry);
     const document = new TextDocument("body\n");
     registry.open("/doc.txt", document, fileSystem.stat("/doc.txt").mutationToken);
 
-    expect(await publishDocument(fileSystem, registry, "/doc.txt")).toBe(false);
+    expect(await view.publish("/doc.txt")).toBe(false);
 
     document.type(5, "more\n");
     registry.markDirty("/doc.txt");
     const revisionBefore = fileSystem.stat("/doc.txt").revision;
-    expect(await publishDocument(fileSystem, registry, "/doc.txt")).toBe(true);
+    expect(await view.publish("/doc.txt")).toBe(true);
     expect(await read(fileSystem, "/doc.txt")).toBe("body\nmore\n");
     expect(fileSystem.stat("/doc.txt").revision).toBe(revisionBefore + 1);
 
     // A flush with nothing new publishes nothing, and one whose text happens
     // to match what is stored does not churn the revision either.
-    expect(await publishDocument(fileSystem, registry, "/doc.txt")).toBe(false);
+    expect(await view.publish("/doc.txt")).toBe(false);
     registry.markDirty("/doc.txt");
     const settled = fileSystem.stat("/doc.txt").revision;
-    await publishDocument(fileSystem, registry, "/doc.txt");
+    await view.publish("/doc.txt");
     expect(fileSystem.stat("/doc.txt").revision).toBe(settled);
   });
 
@@ -139,6 +138,7 @@ describe("document registry", () => {
     const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/doc.txt", "body\n");
     const registry = new DocumentRegistry();
+    const view = new CollaborativeFileSystem(fileSystem, registry);
     const document = new TextDocument("body\n");
     registry.open("/doc.txt", document, fileSystem.stat("/doc.txt").mutationToken);
 
@@ -146,14 +146,14 @@ describe("document registry", () => {
     document.type(0, "mine ");
     registry.markDirty("/doc.txt");
 
-    await expect(publishDocument(fileSystem, registry, "/doc.txt")).rejects.toMatchObject({
+    await expect(view.publish("/doc.txt")).rejects.toMatchObject({
       code: "EREVISION",
     });
 
     // Reconciling is what a caller does with that, and the local edit survives.
-    expect(await reconcileDocument(fileSystem, registry, "/doc.txt")).toBe(true);
+    expect(await view.reconcile("/doc.txt")).toBe(true);
     registry.markDirty("/doc.txt");
-    expect(await publishDocument(fileSystem, registry, "/doc.txt")).toBe(true);
+    expect(await view.publish("/doc.txt")).toBe(true);
     expect(await read(fileSystem, "/doc.txt")).toBe("someone else\n");
     expect(document.external).toHaveLength(1);
   });
