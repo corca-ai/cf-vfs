@@ -133,6 +133,22 @@ for entries and an entry-ID join for inline BLOB chunks, move uses one range
 `UPDATE`, and remove uses set-based token publication, GC queuing, and range
 deletes. JavaScript receives only aggregate counts and result metadata.
 
+Because every ordinary mutation publishes its token in one place, that is also
+where each one reports itself as `vfs.mutation`. The operation is a required
+parameter there rather than something inferred, so whether every mutation is
+reported is a question the type checker answers. Changes accumulate through the
+transaction and are delivered after it commits — never from inside, where a
+throwing observer would roll back the mutation it was told about, and never
+from a nested transaction, which returns before anything is committed. A
+rollback discards them with the work they described.
+
+Set-based mutations report the range they covered rather than the paths in it,
+which is the same reason they are set-based at all: materializing entries to
+announce them would return the per-entry cost the SQL avoids. A move is a
+prefix rename, so a range plus its destination is not a lossy summary — it is
+enough to recompute any path underneath. See
+[operations](operations.md#watching-the-namespace) for the consumer contract.
+
 ## Symbolic links and pathname resolution
 
 `vfs_entries` holds a link as `kind = 'symlink'` with the target stored in

@@ -221,6 +221,56 @@ describe("common-path SQL cost", () => {
     });
   });
 
+  it("adds no SQL for mutation notification, observed or not", async () => {
+    async function statements(observe: boolean): Promise<number> {
+      const meter: SqlMeter = {
+        statements: 0,
+        rows: 0,
+        reset() {
+          meter.statements = 0;
+          meter.rows = 0;
+        },
+      };
+      const seen: unknown[] = [];
+      const fileSystem = createTestFileSystem({
+        onStatement: () => {
+          meter.statements += 1;
+        },
+        // The usage event costs a query by design, so it is filtered out here
+        // rather than left to make the two arms incomparable.
+        ...(observe ? { onEvent: (event) => seen.push(event) } : {}),
+      });
+      await fileSystem.mkdir("/tree/inner", true);
+      for (let index = 0; index < 8; index += 1) {
+        await fileSystem.writeFile(`/tree/inner/f${index}`, "x");
+      }
+      meter.reset();
+      seen.length = 0;
+      await fileSystem.writeFile("/tree/inner/f0", "y");
+      fileSystem.setMetadata("/tree/inner/f1", { mode: 0o600 });
+      await fileSystem.copy("/tree", "/copy", { recursive: true });
+      await fileSystem.move("/copy", "/moved");
+      await fileSystem.remove("/moved", { recursive: true });
+      if (observe) {
+        expect(
+          seen.filter((event) => (event as { type: string }).type === "vfs.mutation"),
+        ).toHaveLength(5);
+      }
+      return meter.statements;
+    }
+
+    // Everything the notification carries is already in hand where the token
+    // is published, so it runs no query of its own. What the difference below
+    // measures is the guarded `usage()` read that feeds `vfs.usage`, which is
+    // cached inside a transaction and therefore costs one statement across all
+    // five operations. Five notifications for one statement is the assertion:
+    // a notification that had to look anything up could not produce that.
+    const unobserved = await statements(false);
+    const observed = await statements(true);
+    expect(unobserved).toBe(47);
+    expect(observed - unobserved).toBe(1);
+  });
+
   it("charges skipIfUnchanged only where it can decide something", async () => {
     async function statements(body: string, options: WriteFileOptions): Promise<number> {
       const { fileSystem, meter } = meteredFileSystem();

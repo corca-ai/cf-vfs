@@ -23,7 +23,13 @@ import {
   SYMLINK_MODE,
   validatePositiveInteger,
 } from "./config.js";
-import { emitVfsEvent, type VfsEventSink, type VfsQuotaLimit } from "./events.js";
+import {
+  emitVfsEvent,
+  type VfsEventSink,
+  type VfsMutationOp,
+  type VfsMutationSubtree,
+  type VfsQuotaLimit,
+} from "./events.js";
 import { rechunk, streamFromChunks } from "./streams.js";
 import type {
   AppendFileOptions,
@@ -294,6 +300,14 @@ interface EntryRow {
   mutationToken: string;
 }
 
+/** A committed namespace change, waiting for its transaction to commit. */
+interface PendingMutation {
+  readonly op: VfsMutationOp;
+  readonly path: string;
+  readonly mutationToken?: string;
+  readonly subtree?: VfsMutationSubtree;
+}
+
 interface CreationParents {
   readonly existing: EntryRow;
   readonly missing: readonly string[];
@@ -515,6 +529,13 @@ export class SqlFileSystem implements PosixVirtualFileSystem {
   private transactionUsage: { inlineBytes: number; entries: number } | undefined;
   /** Set inside a transaction, reported once the commit is durable. */
   private pendingUsage: { inlineBytes: number; entries: number } | undefined;
+  /**
+   * Namespace changes this transaction has made, held until it commits.
+   *
+   * Only ever appended to when a sink is attached, so an unobserved workspace
+   * allocates nothing rather than building events it will discard.
+   */
+  private pendingMutations: PendingMutation[] = [];
   /**
    * How many links exist, so a namespace without any pays nothing for them.
    *
@@ -831,14 +852,28 @@ export class SqlFileSystem implements PosixVirtualFileSystem {
       });
       // Report only after the commit succeeded, and never from inside the
       // transaction, where a throwing observer would roll the mutation back.
-      const usage = this.pendingUsage;
-      if (usage !== undefined) {
-        this.pendingUsage = undefined;
-        emitVfsEvent(this.onEvent, { type: "vfs.usage", ...usage });
+      // A nested call returns before anything is committed, so the drain waits
+      // for the outermost one: `transactionSync` runs the callback directly
+      // when a transaction is already open, and reporting there would announce
+      // work an outer rollback is still free to discard.
+      if (this.transactionDepth === 0) {
+        const usage = this.pendingUsage;
+        if (usage !== undefined) {
+          this.pendingUsage = undefined;
+          emitVfsEvent(this.onEvent, { type: "vfs.usage", ...usage });
+        }
+        if (this.pendingMutations.length > 0) {
+          const mutations = this.pendingMutations;
+          this.pendingMutations = [];
+          for (const mutation of mutations) {
+            emitVfsEvent(this.onEvent, { type: "vfs.mutation", ...mutation });
+          }
+        }
       }
       return result;
     } catch (error) {
       this.pendingUsage = undefined;
+      this.pendingMutations = [];
       const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       if (/SQLITE_FULL|database or disk is full/iu.test(message)) {
         throw new VfsError("ENOSPC", "SQLite database capacity is exhausted");
@@ -1281,8 +1316,29 @@ ${ENTRY_TRIGGERS}
     );
   }
 
-  private bumpToken(path: string): string {
-    return formatMutationToken(this.mutationEpoch, this.publishPathVersion(path));
+  /**
+   * Publishes a new token for one path and records what changed it.
+   *
+   * The operation is a parameter rather than something inferred here because
+   * this is the single place an ordinary mutation publishes a token, and
+   * making it required is what turns "did every mutation report itself" into a
+   * question the type checker answers instead of a review does.
+   */
+  private bumpToken(path: string, op: VfsMutationOp): string {
+    const token = formatMutationToken(this.mutationEpoch, this.publishPathVersion(path));
+    this.recordMutation({ op, path, mutationToken: token });
+    return token;
+  }
+
+  /**
+   * Holds one change until its transaction commits.
+   *
+   * Guarded on the sink rather than inside `emitVfsEvent`, so an unobserved
+   * workspace does not build an object it would only discard.
+   */
+  private recordMutation(mutation: PendingMutation): void {
+    if (this.onEvent === undefined) return;
+    this.pendingMutations.push(mutation);
   }
 
   private validateGuard(
@@ -1455,7 +1511,7 @@ ${ENTRY_TRIGGERS}
     const effectiveMode =
       parent === undefined ? mode : this.creationMode(mode, access, parent, true, intermediate);
     const owner = parent === undefined ? { uid: 0, gid: 0 } : this.creationOwner(parent, access);
-    const token = this.bumpToken(path);
+    const token = this.bumpToken(path, "create");
     const inserted = this.sql
       .exec<SqlRow>(
         `INSERT INTO vfs_entries (
@@ -2055,7 +2111,7 @@ ${ENTRY_TRIGGERS}
     }
     this.sql.exec("DELETE FROM vfs_entries WHERE id = ?", entry.id);
     if (entry.kind === "symlink") this.symlinkCountStale = true;
-    if (bumpPath) this.bumpToken(path);
+    if (bumpPath) this.bumpToken(path, "remove");
     this.updateUsage(entry.contentClass === "inline" ? -entry.sizeBytes : 0, -1);
     if (
       entry.contentClass === "opaque" &&
@@ -2203,7 +2259,7 @@ ${ENTRY_TRIGGERS}
               ? (options.mode ?? current.mode)
               : current.mode;
         this.assertCapacity(inlineDelta, current === null ? 1 : 0, normalized);
-        const token = this.bumpToken(normalized);
+        const token = this.bumpToken(normalized, current === null ? "create" : "write");
         if (current?.contentClass === "inline") {
           this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", current.id);
         }
@@ -2336,7 +2392,7 @@ ${ENTRY_TRIGGERS}
         }
         this.writeChunks(current.id, firstChunkIndex, chunks);
         const now = this.now();
-        const token = this.bumpToken(normalized);
+        const token = this.bumpToken(normalized, "write");
         this.sql.exec(
           `UPDATE vfs_entries SET size_bytes = ?, modified_at_ms = ?, revision = revision + 1
          WHERE id = ?`,
@@ -2375,7 +2431,7 @@ ${ENTRY_TRIGGERS}
         this.assertPermission(entry, posix, WRITE_PERMISSION, normalized);
       }
       this.validateGuard(normalized, entry, options);
-      const token = this.bumpToken(normalized);
+      const token = this.bumpToken(normalized, "metadata");
       const modifiedAtMs = options.modifiedAtMs ?? this.now();
       this.sql.exec(
         `UPDATE vfs_entries SET mode = ?, modified_at_ms = ?, revision = revision + 1
@@ -2416,7 +2472,7 @@ ${ENTRY_TRIGGERS}
         }
       }
       this.validateGuard(normalized, entry, options);
-      const token = this.bumpToken(normalized);
+      const token = this.bumpToken(normalized, "metadata");
       const modifiedAtMs = this.now();
       const mode =
         posix !== undefined &&
@@ -2486,7 +2542,7 @@ ${ENTRY_TRIGGERS}
           ? (options.mode ?? FILE_MODE)
           : this.creationMode(options.mode ?? FILE_MODE, posix, parent, false);
       this.assertCapacity(0, 1, normalized);
-      const token = this.bumpToken(normalized);
+      const token = this.bumpToken(normalized, "create");
       this.sql.exec(
         `INSERT INTO vfs_entries (
            path, parent_path, name, kind, content_class, opaque_object_id,
@@ -2612,7 +2668,7 @@ ${ENTRY_TRIGGERS}
         )
         .one();
       this.updateUsage(0, 1);
-      const token = this.bumpToken(normalized);
+      const token = this.bumpToken(normalized, existing === null ? "create" : "write");
       this.symlinkCount += 1;
       return rowToStat({
         id: integerColumn(inserted, "id"),
@@ -2749,6 +2805,14 @@ ${ENTRY_TRIGGERS}
          )`,
       );
       this.updateUsage(-summary.inlineBytes, -summary.entries);
+      // Recorded here rather than in `publishSubtreeVersions`, which cannot
+      // know whether it is publishing one path or a range, and which `move`
+      // calls twice for what is a single change.
+      this.recordMutation(
+        summary.entries > 1
+          ? { op: "remove", path: normalized, subtree: { root: normalized } }
+          : { op: "remove", path: normalized },
+      );
       return {
         removed: summary.entries,
         opaqueObjectsQueuedForDeletion: queued,
@@ -2850,6 +2914,14 @@ ${ENTRY_TRIGGERS}
         this.sql.exec<SqlRow>("SELECT changes() AS value").one(),
         "value",
       );
+      // One change, though two ranges were republished. A move is a prefix
+      // rename, so `root` and `to` are enough for a consumer to recompute
+      // every path it holds without being told them.
+      this.recordMutation({
+        op: "move",
+        path: source,
+        subtree: { root: source, to: target },
+      });
       return {
         from: source,
         to: target,
@@ -3064,6 +3136,13 @@ ${ENTRY_TRIGGERS}
       this.updateUsage(
         summary.inlineBytes - replacedInlineBytes,
         summary.entries - (destination === null ? 0 : 1),
+      );
+      // A copy publishes entries at the destination and leaves the source
+      // alone, so what a consumer has to reflect is a create at `to`.
+      this.recordMutation(
+        summary.entries > 1
+          ? { op: "create", path: target, subtree: { root: target } }
+          : { op: "create", path: target },
       );
       return {
         from: source,
@@ -3402,7 +3481,7 @@ ${ENTRY_TRIGGERS}
       if (existing?.contentClass === "inline") {
         this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", existing.id);
       }
-      const token = this.bumpToken(session.path);
+      const token = this.bumpToken(session.path, existing === null ? "create" : "write");
       const parentPath = dirname(session.path);
       const name = basename(session.path);
       const mode = session.mode ?? existing?.mode ?? FILE_MODE;
