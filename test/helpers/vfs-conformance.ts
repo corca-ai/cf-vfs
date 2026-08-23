@@ -490,6 +490,59 @@ export function runVfsConformance(
     expect(await readText(fileSystem, "/snapshot")).toBe("body");
   });
 
+  // A recorded digest is a cache, so what matters is that it can never make
+  // skipIfUnchanged answer wrongly -- including where a write path changes the
+  // body without clearing it, which the revision stamp is what prevents.
+  it("conforms: decides a body that changed after an append", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/doc", "aa", { skipIfUnchanged: true });
+    await fileSystem.writeFile("/doc", "aa", { skipIfUnchanged: true });
+
+    // The append writes chunks and bumps the revision without touching any
+    // record of the old body, so a cache trusted blindly would still describe
+    // "aa" while the file holds "aabb".
+    await fileSystem.appendFile("/doc", "bb");
+    const appended = await fileSystem.stat("/doc");
+
+    const same = await fileSystem.writeFile("/doc", "aabb", { skipIfUnchanged: true });
+    expect(same.revision).toBe(appended.revision);
+    const differing = await fileSystem.writeFile("/doc", "aaXX", { skipIfUnchanged: true });
+    expect(differing.revision).toBeGreaterThan(appended.revision);
+    expect(await readText(fileSystem, "/doc")).toBe("aaXX");
+  });
+
+  it("conforms: decides a body restored to what it was before", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/doc", "aaaa", { skipIfUnchanged: true });
+    const first = await fileSystem.stat("/doc");
+    await fileSystem.writeFile("/doc", "bbbb", { skipIfUnchanged: true });
+    const changed = await fileSystem.stat("/doc");
+    expect(changed.revision).toBeGreaterThan(first.revision);
+
+    // Same length both ways, so only the bodies decide it.
+    const restored = await fileSystem.writeFile("/doc", "aaaa", { skipIfUnchanged: true });
+    expect(restored.revision).toBeGreaterThan(changed.revision);
+    const again = await fileSystem.writeFile("/doc", "aaaa", { skipIfUnchanged: true });
+    expect(again.revision).toBe(restored.revision);
+    expect(await readText(fileSystem, "/doc")).toBe("aaaa");
+  });
+
+  it("conforms: decides a body a copy replaced", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/other", "zzzz");
+    await fileSystem.writeFile("/doc", "aaaa", { skipIfUnchanged: true });
+    await fileSystem.writeFile("/doc", "aaaa", { skipIfUnchanged: true });
+
+    await fileSystem.copy("/other", "/doc", { replace: true });
+    const replaced = await fileSystem.stat("/doc");
+
+    // Same length again, and the entry kept its identity, so nothing but the
+    // stored body distinguishes this from the state the cache described.
+    const stale = await fileSystem.writeFile("/doc", "aaaa", { skipIfUnchanged: true });
+    expect(stale.revision).toBeGreaterThan(replaced.revision);
+    expect(await readText(fileSystem, "/doc")).toBe("aaaa");
+  });
+
   it("conforms: publishes a differing body under skipIfUnchanged", async () => {
     const fileSystem = await factory();
     await fileSystem.writeFile("/snapshot", "body");

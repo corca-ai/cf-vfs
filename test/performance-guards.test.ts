@@ -312,9 +312,14 @@ describe("common-path SQL cost", () => {
   });
 
   it("charges skipIfUnchanged only where it can decide something", async () => {
-    async function statements(body: string, options: WriteFileOptions): Promise<number> {
+    async function statements(
+      body: string,
+      options: WriteFileOptions,
+      warm = false,
+    ): Promise<number> {
       const { fileSystem, meter } = meteredFileSystem();
       await fileSystem.writeFile("/snapshot", "body");
+      if (warm) await fileSystem.writeFile("/snapshot", "body", { skipIfUnchanged: true });
       meter.reset();
       await fileSystem.writeFile("/snapshot", body, options);
       return meter.statements;
@@ -323,20 +328,54 @@ describe("common-path SQL cost", () => {
     const off = await statements("body", {});
     const measured = {
       off,
-      // The size column already in hand decides a different length, so the
-      // bodies are never read and the option costs nothing here.
+      // The size column already in hand decides a different length, so neither
+      // the digest nor the bodies are ever read and the option costs nothing.
       sizeDiffers: await statements("longer body", { skipIfUnchanged: true }),
-      // One read of the entry's own chunks, and then the ordinary write.
+      // No digest recorded yet, so one lookup that finds none, then the read of
+      // the entry's own chunks, and then the ordinary write.
       sameSizeDiffers: await statements("BODY", { skipIfUnchanged: true }),
-      // The same read, and then nothing at all.
+      // The same lookup and read, then the digest is recorded so no later call
+      // has to read the body again, and then nothing at all.
       unchanged: await statements("body", { skipIfUnchanged: true }),
+      // With one recorded, the lookup replaces the read rather than preceding
+      // it, and there is nothing to record.
+      unchangedWarm: await statements("body", { skipIfUnchanged: true }, true),
     };
 
     // Exact on every arm: an upper bound alone would be satisfied by a meter
     // that stopped observing, and the `off` arm is what proves an optional
     // feature added no statements to the path that does not use it.
-    expect(measured).toEqual({ off: 10, sizeDiffers: 10, sameSizeDiffers: 11, unchanged: 5 });
-    expect(measured.unchanged).toBeLessThan(measured.off);
+    expect(measured).toEqual({
+      off: 10,
+      sizeDiffers: 10,
+      sameSizeDiffers: 12,
+      unchanged: 7,
+      unchangedWarm: 5,
+    });
+    expect(measured.unchangedWarm).toBeLessThan(measured.off);
+  });
+
+  it("decides skipIfUnchanged in a constant number of rows however large the body", async () => {
+    async function rowsForUnchanged(sizeBytes: number): Promise<number> {
+      const { fileSystem, meter } = meteredFileSystem();
+      const body = "x".repeat(sizeBytes);
+      // The first call records the digest; the steady state is what is pinned.
+      await fileSystem.writeFile("/snapshot", body, { skipIfUnchanged: true });
+      await fileSystem.writeFile("/snapshot", body, { skipIfUnchanged: true });
+      meter.reset();
+      await fileSystem.writeFile("/snapshot", body, { skipIfUnchanged: true });
+      return meter.rows;
+    }
+
+    // A recorded digest decides it without reading the body, so the cost stops
+    // following the number of stored chunks. Without one this reads every
+    // chunk: a 4 MiB body is 16 of them.
+    const measured = {
+      oneChunk: await rowsForUnchanged(4 * 1024),
+      fourChunks: await rowsForUnchanged(1024 * 1024),
+      sixteenChunks: await rowsForUnchanged(4 * 1024 * 1024),
+    };
+    expect(measured).toEqual({ oneChunk: 3, fourChunks: 3, sixteenChunks: 3 });
   });
 
   it("lists a directory with one traversal rather than one query per entry", async () => {
