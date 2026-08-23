@@ -22,11 +22,22 @@ const DEFAULT_MAX_INLINE_LOGICAL_BYTES = 512 * 1024 * 1024;
 const DEFAULT_MAX_ENTRIES = 100_000;
 const DEFAULT_MAX_IN_FLIGHT_BYTES = 32 * 1024 * 1024;
 
+/**
+ * A workspace quota, either fixed for the object's life or read fresh on every
+ * check. A function keeps the host the single source of truth: nothing is
+ * stored here, so a limit that moves leaves no second copy to reconcile at the
+ * next wake. It runs inside the check on every mutation, so it must be cheap
+ * and synchronous, and an unusable return fails that mutation rather than
+ * leaving the workspace unbounded. Only the quotas that are pure comparisons
+ * against live usage take this shape; see docs/operations.md.
+ */
+export type FileSystemLimit = number | (() => number);
+
 export interface CommonFileSystemOptions {
   chunkBytes?: number;
   maxInlineFileBytes?: number;
-  maxInlineLogicalBytes?: number;
-  maxEntries?: number;
+  maxInlineLogicalBytes?: FileSystemLimit;
+  maxEntries?: FileSystemLimit;
   maxInFlightBufferedBytes?: number;
   uploadSettlementGraceMs?: number;
   receiptRetentionMs?: number;
@@ -56,8 +67,10 @@ export interface CommonFileSystemOptions {
 export interface ResolvedFileSystemLimits {
   readonly chunkBytes: number;
   readonly maxInlineFileBytes: number;
-  readonly maxInlineLogicalBytes: number;
-  readonly maxEntries: number;
+  /** Read on every capacity check; see {@link FileSystemLimit}. */
+  readonly maxInlineLogicalBytes: () => number;
+  /** Read on every capacity check; see {@link FileSystemLimit}. */
+  readonly maxEntries: () => number;
   readonly maxInFlightBufferedBytes: number;
   readonly uploadSettlementGraceMs: number;
   readonly receiptRetentionMs: number;
@@ -69,21 +82,49 @@ export function validatePositiveInteger(value: number, name: string): void {
   }
 }
 
+/**
+ * Normalises a quota to one shape the check can call. A fixed number is
+ * validated once here, so the common case pays nothing per mutation; only a
+ * function is re-validated, because only it can change.
+ */
+function resolveLimit(
+  value: FileSystemLimit | undefined,
+  fallback: number,
+  name: string,
+): () => number {
+  if (typeof value === "function") {
+    return () => {
+      const resolved = value();
+      validatePositiveInteger(resolved, name);
+      return resolved;
+    };
+  }
+  const fixed = value ?? fallback;
+  validatePositiveInteger(fixed, name);
+  return () => fixed;
+}
+
 export function resolveFileSystemLimits(
   options: CommonFileSystemOptions,
 ): ResolvedFileSystemLimits {
-  const limits: ResolvedFileSystemLimits = {
+  const fixed = {
     chunkBytes: options.chunkBytes ?? DEFAULT_CHUNK_BYTES,
     maxInlineFileBytes: options.maxInlineFileBytes ?? MAX_INLINE_FILE_BYTES,
-    maxInlineLogicalBytes: options.maxInlineLogicalBytes ?? DEFAULT_MAX_INLINE_LOGICAL_BYTES,
-    maxEntries: options.maxEntries ?? DEFAULT_MAX_ENTRIES,
     maxInFlightBufferedBytes: options.maxInFlightBufferedBytes ?? DEFAULT_MAX_IN_FLIGHT_BYTES,
     uploadSettlementGraceMs: options.uploadSettlementGraceMs ?? DEFAULT_UPLOAD_SETTLEMENT_GRACE_MS,
     receiptRetentionMs: options.receiptRetentionMs ?? DEFAULT_RECEIPT_RETENTION_MS,
   };
-  for (const [name, value] of Object.entries(limits)) validatePositiveInteger(value, name);
-  if (limits.maxInlineFileBytes > MAX_INLINE_FILE_BYTES) {
+  for (const [name, value] of Object.entries(fixed)) validatePositiveInteger(value, name);
+  if (fixed.maxInlineFileBytes > MAX_INLINE_FILE_BYTES) {
     throw new VfsError("EINVAL", `maxInlineFileBytes cannot exceed ${MAX_INLINE_FILE_BYTES}`);
   }
-  return limits;
+  return {
+    ...fixed,
+    maxInlineLogicalBytes: resolveLimit(
+      options.maxInlineLogicalBytes,
+      DEFAULT_MAX_INLINE_LOGICAL_BYTES,
+      "maxInlineLogicalBytes",
+    ),
+    maxEntries: resolveLimit(options.maxEntries, DEFAULT_MAX_ENTRIES, "maxEntries"),
+  };
 }

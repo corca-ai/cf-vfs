@@ -538,6 +538,34 @@ the quota, changes nothing, and leaves what is already there readable — so a
 caller that hits a ceiling can delete something and continue rather than
 needing a new workspace. The public demo runs at the numbers above.
 
+Only growth is refused. A mutation that holds usage steady or gives space back
+is allowed even when the workspace is already past a quota, because writing
+less is how it gets back under one — a workspace that could not truncate a file
+would have nothing left but delete and rename.
+
+`maxInlineLogicalBytes` and `maxEntries` also accept a function, read on every
+check:
+
+```ts
+new VfsDurableObject(ctx, env, {
+  maxEntries: () => plan.entryLimit,
+});
+```
+
+A Durable Object is constructed on every wake, so a host that keeps its limits
+elsewhere can already supply them from its constructor; what it cannot do is
+move one while the object is hot, and a busy workspace stays resident. A
+function keeps the host the single source of truth — nothing about the limit is
+stored here, so there is no second copy to reconcile at the next wake — and it
+runs inside the check on every mutation, so it must be cheap and synchronous.
+Returning anything but a positive safe integer fails that mutation with
+`EINVAL` rather than leaving the workspace unbounded.
+
+The other options are fixed for the object's life. `chunkBytes` and
+`maxInlineFileBytes` describe how stored bodies are laid out rather than how
+much may be stored, and changing either against data already written is what
+`EIO: inline file chunks do not match its size` reports.
+
 Monitor logical inline bytes, entries, `storage.sql.databaseSize`, quota
 failures, stream-limit failures, deadline/idle cancellations, and per-command
 status. The `onEvent` hook above reports all of these except `databaseSize`,

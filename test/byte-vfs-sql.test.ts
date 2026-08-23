@@ -107,6 +107,136 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
       expect(fileSystem.stat("/a").sizeBytes).toBe(4);
     });
 
+    describe("limits read on every check", () => {
+      it("refuses and admits by whatever the limit says now", async () => {
+        let maxEntries = 2;
+        const fileSystem = createTestFileSystem({ maxEntries: () => maxEntries });
+
+        // The root directory counts, so this fills the workspace.
+        await fileSystem.writeFile("/a", "x");
+        await expect(fileSystem.writeFile("/b", "x")).rejects.toMatchObject({
+          code: "ENOSPC",
+        });
+
+        // No new construction, no eviction: the host answered differently and
+        // the next check saw it.
+        maxEntries = 3;
+        expect(await fileSystem.writeFile("/b", "x")).toMatchObject({ created: true });
+
+        maxEntries = 2;
+        await expect(fileSystem.writeFile("/c", "x")).rejects.toMatchObject({
+          code: "ENOSPC",
+        });
+      });
+
+      it("reports the value in force when it refuses", async () => {
+        const events: VfsEvent[] = [];
+        let maxInlineLogicalBytes = 8;
+        const fileSystem = createTestFileSystem({
+          maxInlineLogicalBytes: () => maxInlineLogicalBytes,
+          onEvent: (event) => events.push(event),
+        });
+
+        await expect(fileSystem.writeFile("/a", "123456789")).rejects.toMatchObject({
+          code: "ENOSPC",
+        });
+        expect(events).toContainEqual({
+          type: "vfs.quota",
+          limit: "maxInlineLogicalBytes",
+          requested: 9,
+          used: 0,
+          max: 8,
+          path: "/a",
+        });
+
+        maxInlineLogicalBytes = 4;
+        await expect(fileSystem.writeFile("/a", "123456789")).rejects.toMatchObject({
+          code: "ENOSPC",
+        });
+        expect(events.at(-1)).toMatchObject({ max: 4 });
+      });
+
+      // A quota that silently stops applying is worse than one that refuses,
+      // so a limit that comes back unusable fails the mutation instead.
+      it("fails the mutation when the limit comes back unusable", async () => {
+        for (const bad of [0, -1, Number.NaN, 1.5, Number.POSITIVE_INFINITY]) {
+          const fileSystem = createTestFileSystem({ maxEntries: () => bad });
+          await expect(fileSystem.writeFile("/a", "x")).rejects.toMatchObject({
+            code: "EINVAL",
+            message: "maxEntries must be a positive safe integer",
+          });
+        }
+      });
+
+      it("still validates a fixed limit once, at construction", () => {
+        expect(() => createTestFileSystem({ maxEntries: 0 })).toThrow(
+          "maxEntries must be a positive safe integer",
+        );
+        expect(() => createTestFileSystem({ maxInlineLogicalBytes: -1 })).toThrow(
+          "maxInlineLogicalBytes must be a positive safe integer",
+        );
+        // A function is not called until a check needs it, so an unusable one
+        // does not stop the workspace from opening.
+        expect(() => createTestFileSystem({ maxEntries: () => 0 })).not.toThrow();
+      });
+
+      // Reachable the moment a limit can move, and reachable already for a host
+      // that lowers one in its own source and deploys.
+      describe("with usage already past the limit", () => {
+        async function overLimit(): Promise<ReturnType<typeof createTestFileSystem>> {
+          let maxEntries = 100;
+          const fileSystem = createTestFileSystem({ maxEntries: () => maxEntries });
+          for (let index = 0; index < 5; index += 1) {
+            await fileSystem.writeFile(`/f${index}`, "xxx");
+          }
+          maxEntries = 2;
+          return fileSystem;
+        }
+
+        it("lets the workspace write less", async () => {
+          const fileSystem = await overLimit();
+          // Both hold the entry count steady, and one gives bytes back. The end
+          // state is no further past the limit than the start, so refusing them
+          // would only keep the workspace there.
+          expect(await fileSystem.writeFile("/f0", "yyy")).toMatchObject({ created: false });
+          expect(await fileSystem.writeFile("/f0", "")).toMatchObject({ created: false });
+          expect(await fileSystem.remove("/f1")).toMatchObject({ removed: 1 });
+          expect(await fileSystem.move("/f2", "/moved")).toMatchObject({ moved: 1 });
+        });
+
+        it("still refuses growth", async () => {
+          const fileSystem = await overLimit();
+          await expect(fileSystem.writeFile("/new", "x")).rejects.toMatchObject({
+            code: "ENOSPC",
+          });
+          expect(() => fileSystem.mkdir("/dir")).toThrow("filesystem entry quota exceeded");
+          await expect(fileSystem.copy("/f0", "/copied")).rejects.toMatchObject({
+            code: "ENOSPC",
+          });
+        });
+
+        it("refuses bytes it would add even while the entry count holds", async () => {
+          let maxInlineLogicalBytes = 100;
+          const fileSystem = createTestFileSystem({
+            maxInlineLogicalBytes: () => maxInlineLogicalBytes,
+          });
+          await fileSystem.writeFile("/f", "x".repeat(50));
+          maxInlineLogicalBytes = 10;
+
+          await expect(fileSystem.writeFile("/f", "x".repeat(60))).rejects.toMatchObject({
+            code: "ENOSPC",
+          });
+          await expect(fileSystem.appendFile("/f", "x")).rejects.toMatchObject({
+            code: "ENOSPC",
+          });
+          expect(await fileSystem.writeFile("/f", "x".repeat(50))).toMatchObject({
+            created: false,
+          });
+          expect(await fileSystem.writeFile("/f", "x")).toMatchObject({ created: false });
+        });
+      });
+    });
+
     describe("usage accounting", () => {
       type Usage = { inlineBytes: number; entries: number };
 

@@ -524,8 +524,8 @@ export class SqlFileSystem implements PosixVirtualFileSystem {
   private readonly sql: VfsSqlStorage;
   private readonly chunkBytes: number;
   private readonly maxInlineFileBytes: number;
-  private readonly maxInlineLogicalBytes: number;
-  private readonly maxEntries: number;
+  private readonly maxInlineLogicalBytes: () => number;
+  private readonly maxEntries: () => number;
   private readonly inFlightBytes: InFlightByteBudget;
   private readonly maxDatabaseBytes: number;
   private readonly minDatabaseHeadroomBytes: number;
@@ -1561,24 +1561,35 @@ ${ENTRY_TRIGGERS}
     throw new VfsError("ENOSPC", message, path);
   }
 
+  /**
+   * Refuses work that would carry the workspace past a quota.
+   *
+   * Only growth is refused. Comparing the end state alone would also refuse a
+   * mutation that holds steady or gives space back, which is wrong once usage
+   * exceeds a limit: writing less is the way out of that state. The two agree
+   * everywhere below a ceiling and at it, so this changes only what happens
+   * above one -- which a limit that can move is what makes reachable.
+   */
   private assertCapacity(inlineDelta: number, entryDelta: number, path?: string): void {
     const usage = this.usage();
-    if (usage.inlineBytes + inlineDelta > this.maxInlineLogicalBytes) {
+    const maxInlineLogicalBytes = this.maxInlineLogicalBytes();
+    if (inlineDelta > 0 && usage.inlineBytes + inlineDelta > maxInlineLogicalBytes) {
       this.quotaExceeded(
         "maxInlineLogicalBytes",
         inlineDelta,
         usage.inlineBytes,
-        this.maxInlineLogicalBytes,
+        maxInlineLogicalBytes,
         "workspace inline-byte quota exceeded",
         path,
       );
     }
-    if (usage.entries + entryDelta > this.maxEntries) {
+    const maxEntries = this.maxEntries();
+    if (entryDelta > 0 && usage.entries + entryDelta > maxEntries) {
       this.quotaExceeded(
         "maxEntries",
         entryDelta,
         usage.entries,
-        this.maxEntries,
+        maxEntries,
         "filesystem entry quota exceeded",
         path,
       );
