@@ -391,7 +391,16 @@ describe("symlink schema", () => {
       database
         .prepare("SELECT GROUP_CONCAT(version, ',') AS versions FROM vfs_schema_migrations")
         .get()?.["versions"],
-    ).toBe("1,2,3,4,5");
+    ).toBe("1,2,3,4,5,6");
+    // The version-6 columns exist on a migrated database and carry nothing:
+    // the digest cache is filled by use rather than backfilled by a migration.
+    expect(
+      database
+        .prepare(
+          "SELECT body_digest AS digest, body_digest_revision AS stamp FROM vfs_entries WHERE path = '/kept.txt'",
+        )
+        .get(),
+    ).toEqual({ digest: null, stamp: null });
     expect(() =>
       database.prepare("UPDATE vfs_entries SET uid = -1 WHERE path = '/kept.txt'").run(),
     ).toThrowError();

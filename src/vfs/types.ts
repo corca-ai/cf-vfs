@@ -220,6 +220,12 @@ export interface WriteFileOptions {
    * `modifiedAtMs` is not advanced, no usage event is emitted, and the entry
    * keeps the identity it had.
    *
+   * Deciding it reads the stored body once and then records a digest of it, so
+   * the entry answers later calls without being read again and the cost stops
+   * following the body's size. The digest is internal -- it is never reported,
+   * never accepted, and stamped with the revision it was taken at, so any
+   * change to the content retires it.
+   *
    * Everything else a write validates still applies. The disposition, the
    * revision or token guard, the directory check, and write permission are all
    * enforced first, so a stale guard fails exactly as it would have and this

@@ -1111,7 +1111,10 @@ Everything a write validates still applies, in the same order: the disposition,
 the mutation-token guard, the directory check, and write permission are all
 decided before an unchanged body can return, so a stale guard fails exactly as
 it would have. A skipped write does not advance `modifiedAtMs` and emits no
-usage event, because nothing was committed. Only an inline body is compared —
+usage event, because nothing was committed. Deciding it reads the stored body
+once and records an internal digest of it, so later calls decide in a constant
+number of rows however large the file is; the digest is stamped with the
+revision it was taken at, so any change to the content retires it. Only an inline body is compared —
 an opaque entry is always replaced, since deciding otherwise would mean reading
 an R2 body inside the namespace transaction — and a `mode` differing from the
 current one writes, because the mode is part of what the call asked for.

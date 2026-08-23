@@ -269,6 +269,32 @@ const DROP_ENTRY_TRIGGERS = `
         DROP TRIGGER IF EXISTS vfs_opaque_object_delete_guard;
         DROP TRIGGER IF EXISTS vfs_inline_chunk_insert_guard;`;
 
+/**
+ * Lowercase hex SHA-256 over a buffered body.
+ *
+ * A single slab is hashed in place; only a multi-slab body is joined, so the
+ * common case of a document below `chunkBytes` copies nothing.
+ */
+async function digestHex(chunks: readonly Uint8Array[], sizeBytes: number): Promise<string> {
+  let source: Uint8Array;
+  if (chunks.length === 1 && chunks[0] !== undefined) {
+    source = chunks[0];
+  } else {
+    source = new Uint8Array(sizeBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      source.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+  }
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", source as unknown as ArrayBuffer),
+  );
+  let hex = "";
+  for (const byte of digest) hex += byte.toString(16).padStart(2, "0");
+  return hex;
+}
+
 const ENTRY_COLUMNS = `
   e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,
   e.opaque_object_id, e.link_target, e.size_bytes, e.mode, e.uid, e.gid, e.created_at_ms,
@@ -1135,6 +1161,33 @@ ${ENTRY_TRIGGERS}
         );
         migrated = true;
       }
+      if (currentVersion < 6) {
+        // Unconditional, including for a database created moments ago by the
+        // version-1 branch above, for the reason the version-4 branch gives:
+        // adding it to the shared definition instead would leave a fresh
+        // database describing the table one way and a migrated one another.
+        //
+        // A cache for `skipIfUnchanged`, never a promise to a caller. The
+        // digest is stamped with the revision it was taken at and trusted only
+        // while that still matches, so a write path that forgets to clear it
+        // loses the optimisation and cannot produce a wrong answer -- every
+        // content change bumps the revision, which is what makes that
+        // structural rather than remembered.
+        //
+        // No backfill. An existing entry has no digest, and the first
+        // `skipIfUnchanged` write that publishes over it records one; hashing
+        // every stored body here would charge a migration for a cache that
+        // fills itself.
+        this.execBatch(`
+        ALTER TABLE vfs_entries ADD COLUMN body_digest TEXT;
+        ALTER TABLE vfs_entries ADD COLUMN body_digest_revision INTEGER;
+      `);
+        this.sql.exec(
+          "INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (6, ?)",
+          now,
+        );
+        migrated = true;
+      }
       return stringColumn(
         this.sql.exec<SqlRow>("SELECT mutation_epoch FROM vfs_state WHERE singleton = 1").one(),
         "mutation_epoch",
@@ -1847,6 +1900,79 @@ ${ENTRY_TRIGGERS}
   }
 
   /**
+   * The digest of a body about to be written, or undefined when none is wanted.
+   *
+   * Taken whenever the caller asked to skip an unchanged body, over slabs the
+   * call is already holding and before the transaction opens, because
+   * `crypto.subtle` is asynchronous and no cursor may cross an await.
+   *
+   * Deliberately not narrowed to the case that can skip. A digest is only ever
+   * recorded by a call that computes one, so hashing only when the sizes
+   * already match would leave a workspace that never publishes a differing
+   * body -- the steady state of a debounced flush -- without one forever.
+   */
+  private async incomingDigest(
+    options: WriteFileOptions,
+    buffered: { chunks: readonly Uint8Array[]; sizeBytes: number },
+  ): Promise<string | undefined> {
+    if (options.skipIfUnchanged !== true) return undefined;
+    return digestHex(buffered.chunks, buffered.sizeBytes);
+  }
+
+  /**
+   * The digest recorded for an entry, or null when there is none to trust.
+   *
+   * The stamp is compared in SQL rather than read back and checked here, so a
+   * stale one returns no row and the caller falls through to reading the body.
+   */
+  private storedDigest(entryId: number): string | null {
+    const row = firstRow(
+      this.sql.exec<SqlRow>(
+        `SELECT body_digest FROM vfs_entries
+       WHERE id = ? AND body_digest IS NOT NULL AND body_digest_revision = revision`,
+        entryId,
+      ),
+    );
+    return row === undefined ? null : stringColumn(row, "body_digest");
+  }
+
+  /**
+   * Whether the stored body is what is about to be written.
+   *
+   * A recorded digest answers it without reading the body at all. Without one
+   * -- a first write, an entry from before the column existed, a stamp left by
+   * an earlier revision -- the bodies are compared as before, and a match
+   * records the digest so no later call has to read them again.
+   *
+   * That record is the only write this path performs. It leaves the revision,
+   * the token, `modifiedAtMs`, the size, the identity and the usage totals
+   * exactly as they were, so nothing a caller can observe about the entry
+   * changes; without it a workspace whose body never differs would pay the
+   * comparison forever.
+   */
+  private bodyIsUnchanged(
+    entryId: number,
+    revision: number,
+    chunks: readonly Uint8Array[],
+    digest: string | undefined,
+  ): boolean {
+    if (digest !== undefined) {
+      const stored = this.storedDigest(entryId);
+      if (stored !== null) return stored === digest;
+    }
+    if (!this.inlineBodyMatches(entryId, chunks)) return false;
+    if (digest !== undefined) {
+      this.sql.exec(
+        "UPDATE vfs_entries SET body_digest = ?, body_digest_revision = ? WHERE id = ?",
+        digest,
+        revision,
+        entryId,
+      );
+    }
+    return true;
+  }
+
+  /**
    * Whether the stored inline body is byte-identical to the slabs about to
    * replace it.
    *
@@ -2400,6 +2526,7 @@ ${ENTRY_TRIGGERS}
     this.validateGuard(normalized, before, options, path);
     const capturedToken = this.tokenOf(normalized, before);
     const buffered = await this.collectInline(body);
+    const digest = await this.incomingDigest(options, buffered);
 
     let queued = false;
     const result = this.useBuffered(buffered, (chunks, sizeBytes) =>
@@ -2434,7 +2561,7 @@ ${ENTRY_TRIGGERS}
           current.contentClass === "inline" &&
           current.sizeBytes === sizeBytes &&
           (options.mode === undefined || options.mode === current.mode) &&
-          this.inlineBodyMatches(current.id, chunks)
+          this.bodyIsUnchanged(current.id, current.revision, chunks, digest)
         ) {
           return {
             path: normalized,
@@ -2476,13 +2603,16 @@ ${ENTRY_TRIGGERS}
           .exec<SqlRow>(
             `INSERT INTO vfs_entries (
            id, path, parent_path, name, kind, content_class, opaque_object_id,
-           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
-         ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, ?, ?, ?, ?, ?, ?, 1)
+           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
+           body_digest, body_digest_revision
+         ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, ?, ?, ?, ?, ?, ?, 1, ?, 1)
          ON CONFLICT(path) DO UPDATE SET
            kind = 'file', content_class = 'inline', opaque_object_id = NULL,
            size_bytes = excluded.size_bytes, mode = excluded.mode,
            modified_at_ms = excluded.modified_at_ms,
-           revision = vfs_entries.revision + 1
+           revision = vfs_entries.revision + 1,
+           body_digest = excluded.body_digest,
+           body_digest_revision = vfs_entries.revision + 1
          RETURNING id, revision`,
             current?.id ?? this.allocateIno(),
             normalized,
@@ -2494,6 +2624,10 @@ ${ENTRY_TRIGGERS}
             owner.gid,
             current?.createdAtMs ?? now,
             now,
+            // Null whenever one was not taken, which also clears whatever an
+            // earlier revision left behind rather than relying on the stamp
+            // alone to retire it.
+            digest ?? null,
           )
           .one();
         const entryId = integerColumn(written, "id");
