@@ -267,6 +267,106 @@ export function runVfsConformance(
     for (const ino of copied) expect(before).not.toContain(ino);
   });
 
+  describe("revision monotonicity", () => {
+    // A path's revision never goes backwards. Every site where an entry lands
+    // on an occupied path takes one past whatever was there, so a caller that
+    // displays or logs a version never sees it jump back.
+    it("conforms: advances the revision when a copy replaces a file", async () => {
+      const fileSystem = await factory();
+      await fileSystem.writeFile("/other", "source");
+      for (const body of ["v1", "v2", "v3", "v4", "v5", "v6"]) {
+        await fileSystem.writeFile("/doc", body);
+      }
+      const before = await fileSystem.stat("/doc");
+
+      await fileSystem.copy("/other", "/doc", { replace: true });
+
+      const after = await fileSystem.stat("/doc");
+      // `cp x y` and `cat x > y` agree on this field, which is what a caller
+      // keying durable state to an identity cannot be expected to hold apart.
+      expect(after.ino).toBe(before.ino);
+      expect(after.revision).toBe(before.revision + 1);
+    });
+
+    it("conforms: advances the revision when a move replaces a file", async () => {
+      const fileSystem = await factory();
+      for (const body of ["v1", "v2", "v3", "v4", "v5", "v6"]) {
+        await fileSystem.writeFile("/b", body);
+      }
+      const before = await fileSystem.stat("/b");
+      await fileSystem.writeFile("/a", "a1");
+      await fileSystem.writeFile("/a", "a2");
+
+      await fileSystem.move("/a", "/b", { replace: true });
+
+      // The arriving entry brought a revision of its own, and the destination
+      // had a higher one. The path takes one past the greater.
+      const after = await fileSystem.stat("/b");
+      expect(after.ino).not.toBe(before.ino);
+      expect(after.revision).toBe(before.revision + 1);
+    });
+
+    it("conforms: advances the revision when a link replaces a file", async () => {
+      const fileSystem = await factory();
+      for (const body of ["v1", "v2", "v3", "v4"]) await fileSystem.writeFile("/link", body);
+      const before = await fileSystem.lstat("/link");
+      await fileSystem.writeFile("/target", "t");
+
+      const created = await fileSystem.symlink("/link", "/target", { replace: true });
+
+      expect(created.revision).toBe(before.revision + 1);
+      expect((await fileSystem.lstat("/link")).revision).toBe(before.revision + 1);
+    });
+
+    it("conforms: starts at one wherever nothing was there", async () => {
+      const fileSystem = await factory();
+      await fileSystem.writeFile("/src", "x");
+      await fileSystem.mkdir("/tree");
+      await fileSystem.writeFile("/tree/f", "y");
+
+      await fileSystem.copy("/src", "/fresh");
+      await fileSystem.copy("/tree", "/copy", { recursive: true });
+      await fileSystem.symlink("/fresh-link", "/src");
+
+      // Only what lands on an occupied path is affected. A descendant of a
+      // recursive copy always lands somewhere absent, because a non-empty
+      // directory cannot be replaced at all.
+      expect((await fileSystem.stat("/fresh")).revision).toBe(1);
+      expect((await fileSystem.stat("/copy/f")).revision).toBe(1);
+      expect((await fileSystem.lstat("/fresh-link")).revision).toBe(1);
+    });
+
+    it("conforms: keeps (ino, revision) moving forward across a replacement", async () => {
+      const fileSystem = await factory();
+      await fileSystem.writeFile("/other", "source");
+      const seen: string[] = [];
+      const record = async () => {
+        const stat = await fileSystem.stat("/doc");
+        seen.push(`${stat.ino}:${stat.revision}`);
+      };
+
+      await fileSystem.writeFile("/doc", "v1");
+      await record();
+      for (const body of ["v2", "v3"]) {
+        await fileSystem.writeFile("/doc", body);
+        await record();
+      }
+      await fileSystem.copy("/other", "/doc", { replace: true });
+      await record();
+      await fileSystem.writeFile("/doc", "v5");
+      await record();
+
+      // One identity throughout, and a revision a cache can key on: the pair
+      // is unique over the identity's lifetime rather than repeating.
+      expect(new Set(seen).size).toBe(seen.length);
+      expect(seen).toEqual(
+        seen
+          .map((entry) => entry)
+          .sort((left, right) => Number(left.split(":")[1]) - Number(right.split(":")[1])),
+      );
+    });
+  });
+
   // The four ways a path can carry a stale guard. `revision` matches again in
   // every one of them, which is why it is an observable rather than a
   // precondition; the token composes each crossed path's version and retains
