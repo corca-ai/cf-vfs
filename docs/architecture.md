@@ -391,6 +391,17 @@ Version 3 adds `uid` and `gid`. Existing version-2 entries migrate as root-owned
 `0:0`; a host can then assign workspace ownership through the trusted raw
 `setOwnership()` capability. A version-1 database rebuilt by version 2 receives
 the current table shape directly.
+Version 5 makes the entry identity durable. `vfs_entries.id` was already stable
+across a move — the range `UPDATE` rewrites paths and never touches it — but a
+bare rowid is `max(rowid) + 1`, so removing the newest entry freed its number
+for the next one. Identities are now allocated from `vfs_usage.next_ino`, a
+high-water mark that rides the usage `UPDATE` every creation already performs,
+so never reusing one costs no statement, no row, and no table of its own. The
+counter is read once per instance and advanced in memory; a rolled-back
+transaction leaves a gap, which is harmless because nothing derives meaning
+from identities being consecutive. A recursive copy allocates its whole run up
+front and numbers the rows with `ROW_NUMBER()`, so it stays one statement.
+
 Version 4 adds `change_seq` to `vfs_path_versions` and a partial index over it.
 The column is added by `ALTER TABLE` for every database including one created
 moments earlier, rather than being declared in the version-1 definition, so a

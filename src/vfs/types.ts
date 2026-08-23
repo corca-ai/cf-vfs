@@ -39,6 +39,25 @@ export interface StatBase {
   path: string;
   parentPath: string;
   name: string;
+  /**
+   * The entry's identity, in the position `st_ino` holds.
+   *
+   * Stable for as long as the entry is: a move renames the path and a write
+   * replaces the content, and neither changes this. Removing the entry ends
+   * it, and the number is **never handed out again** — POSIX permits an
+   * implementation to recycle inode numbers and this one does not, because a
+   * recycled identity silently reattaches whatever a caller keyed to the old
+   * file while an absent one is known to be unusable.
+   *
+   * Unique within one workspace, and meaningless across two. It is the
+   * `st_ino` half of POSIX identity; there is no `st_dev`, because a Durable
+   * Object is the device.
+   *
+   * It does not make hard links expressible. A hard link is two names for one
+   * entry, which this namespace forbids in its shape rather than for want of
+   * an identity: a path is unique and an entry stores the one it lives at.
+   */
+  ino: number;
   sizeBytes: number;
   mode: number;
   uid: number;

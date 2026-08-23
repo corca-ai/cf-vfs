@@ -512,8 +512,10 @@ function statText(stat: VfsStat, identities: ResolvedIdentityNames | undefined):
  *
  * `-c` selects a machine-stable format so a script can read one field without
  * parsing a human report. The conversions name what this namespace actually
- * has. Inode and link-count conversions are refused rather than filled with a
- * placeholder.
+ * has. `%i` answers now that an entry carries an identity; the link-count
+ * conversion is still refused rather than filled with a placeholder, because
+ * a hard link remains inexpressible here and a constant `1` would read as a
+ * fact rather than as the absence of one.
  */
 export const statCommand = /* @__PURE__ */ defineApplet(STAT, async (context, argv, fds) => {
   const parsed = parseAppletOptions(STAT, argv);
@@ -600,6 +602,10 @@ function statFormat(
     const conversion = format[++index];
     if (conversion === "n") output += operand;
     else if (conversion === "s") output += String(stat.sizeBytes);
+    // `%i` is the entry's identity, in the position `st_ino` holds. It is
+    // stable across a move and never handed out again after a removal, which
+    // is a strengthening of what POSIX guarantees rather than a divergence.
+    else if (conversion === "i") output += String(stat.ino);
     // `%f` is the raw mode in hex, which is what GNU prints; `%a` is the
     // permission bits in octal.
     else if (conversion === "f") output += stat.mode.toString(16);

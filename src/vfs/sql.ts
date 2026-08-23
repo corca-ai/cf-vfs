@@ -164,6 +164,13 @@ interface StatBaseForPermissions {
  */
 const ENTRIES_SCHEMA = `
         CREATE TABLE vfs_entries (
+          -- Assigned from vfs_usage.next_ino rather than left to SQLite,
+          -- because this number is published as ino and a caller may key
+          -- durable state to it. A bare rowid is max(rowid) + 1, so deleting
+          -- the newest entry frees its number for the next one, and a recycled
+          -- identity is worse than none: an absent one is known to be
+          -- unusable while a recycled one looks correct. POSIX permits reuse;
+          -- nothing requires it, so never reusing is a strengthening.
           id INTEGER PRIMARY KEY,
           path TEXT NOT NULL,
           parent_path TEXT NOT NULL,
@@ -444,6 +451,9 @@ function rowToStat(row: EntryRow): VfsStat {
     path: row.path,
     parentPath: row.parentPath,
     name: row.name,
+    // Already on the row every entry query reads, so reporting it costs no
+    // column, no index, and no statement.
+    ino: row.id,
     sizeBytes: row.sizeBytes,
     mode: row.mode,
     uid: row.uid,
@@ -581,6 +591,8 @@ export class SqlFileSystem implements PosixVirtualFileSystem {
    * because a caller only ever compares against a sequence it was given.
    */
   private lastChangeSeq: number | undefined;
+  /** The next entry identity, read once per instance from `vfs_usage`. */
+  private nextIno: number;
 
   constructor(storage: SqlFileSystemStorage, options: SqlFileSystemOptions = {}) {
     const limits = resolveFileSystemLimits(options);
@@ -610,6 +622,12 @@ export class SqlFileSystem implements PosixVirtualFileSystem {
       validatePositiveInteger(value, name);
     this.mutationEpoch = this.migrate();
     this.symlinkCount = this.countSymlinks();
+    // Read once per instance, beside the link count and for the same reason:
+    // paying it here keeps it off every operation that allocates an identity.
+    this.nextIno = integerColumn(
+      this.sql.exec<SqlRow>("SELECT next_ino FROM vfs_usage WHERE singleton = 1").one(),
+      "next_ino",
+    );
   }
 
   forCredentials(credentials: PosixCredentials, options: PosixViewOptions = {}): VirtualFileSystem {
@@ -1087,6 +1105,32 @@ ${ENTRY_TRIGGERS}
         );
         migrated = true;
       }
+      if (currentVersion < 5) {
+        // AUTOINCREMENT cannot be added in place, so this is the version-2
+        // rebuild again, from the same shared definition. Existing ids are
+        // copied rather than reassigned — they are what `ino` reports, and a
+        // migration that renumbered them would be exactly the reuse this
+        // change exists to prevent. Copying explicit rowids also seeds
+        // `sqlite_sequence` to the highest one, so the first entry created
+        // afterwards continues the sequence instead of colliding.
+        this.execBatch(`
+        ALTER TABLE vfs_usage
+          ADD COLUMN next_ino INTEGER NOT NULL DEFAULT 1;
+      `);
+        // Seeded above the highest identity already in use, so an existing
+        // workspace continues its sequence rather than handing out numbers
+        // its entries already hold.
+        this.sql.exec(
+          `UPDATE vfs_usage
+             SET next_ino = (SELECT COALESCE(MAX(id), 0) + 1 FROM vfs_entries)
+           WHERE singleton = 1`,
+        );
+        this.sql.exec(
+          "INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (5, ?)",
+          now,
+        );
+        migrated = true;
+      }
       return stringColumn(
         this.sql.exec<SqlRow>("SELECT mutation_epoch FROM vfs_state WHERE singleton = 1").one(),
         "mutation_epoch",
@@ -1453,13 +1497,35 @@ ${ENTRY_TRIGGERS}
     return usage;
   }
 
+  /**
+   * The next entry identity to hand out, and the one after it.
+   *
+   * Held in memory and made durable by riding the usage UPDATE that every
+   * entry creation already performs, which is what makes never reusing an
+   * identity cost nothing: no counter row of its own, no `sqlite_sequence`,
+   * no extra statement. Seeded once per instance, and monotone across
+   * eviction because the durable value is written with the entry that used it.
+   *
+   * A rolled-back transaction leaves its numbers unused. A gap is harmless —
+   * nothing derives meaning from an identity being consecutive.
+   */
+  private allocateIno(count = 1): number {
+    const first = this.nextIno;
+    this.nextIno += count;
+    return first;
+  }
+
   private updateUsage(inlineDelta: number, entryDelta: number): void {
+    // `next_ino` rides this statement rather than one of its own: the row is
+    // already being written, so persisting the high-water mark is free.
     this.sql.exec(
       `UPDATE vfs_usage SET
-         inline_bytes = inline_bytes + ?, entries = entries + ?
+         inline_bytes = inline_bytes + ?, entries = entries + ?,
+         next_ino = MAX(next_ino, ?)
        WHERE singleton = 1`,
       inlineDelta,
       entryDelta,
+      this.nextIno,
     );
     const cached = this.transactionUsage;
     if (cached !== undefined) {
@@ -1600,10 +1666,11 @@ ${ENTRY_TRIGGERS}
     const inserted = this.sql
       .exec<SqlRow>(
         `INSERT INTO vfs_entries (
-         path, parent_path, name, kind, content_class, opaque_object_id,
+         id, path, parent_path, name, kind, content_class, opaque_object_id,
          size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
-       ) VALUES (?, ?, ?, 'directory', NULL, NULL, 0, ?, ?, ?, ?, ?, 1)
+       ) VALUES (?, ?, ?, ?, 'directory', NULL, NULL, 0, ?, ?, ?, ?, ?, 1)
        RETURNING id`,
+        this.allocateIno(),
         path,
         dirname(path),
         basename(path),
@@ -2400,7 +2467,7 @@ ${ENTRY_TRIGGERS}
            modified_at_ms = excluded.modified_at_ms,
            revision = vfs_entries.revision + 1
          RETURNING id, revision`,
-            current?.id ?? null,
+            current?.id ?? this.allocateIno(),
             normalized,
             dirname(normalized),
             basename(normalized),
@@ -2668,25 +2735,32 @@ ${ENTRY_TRIGGERS}
           : this.creationMode(options.mode ?? FILE_MODE, posix, parent, false);
       this.assertCapacity(0, 1, normalized);
       const token = this.bumpToken(normalized, "create");
-      this.sql.exec(
-        `INSERT INTO vfs_entries (
-           path, parent_path, name, kind, content_class, opaque_object_id,
+      // `RETURNING id` rather than a second read: the identity the caller is
+      // handed has to be the one the row was actually given.
+      const inserted = this.sql
+        .exec<SqlRow>(
+          `INSERT INTO vfs_entries (
+           id, path, parent_path, name, kind, content_class, opaque_object_id,
            size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
-         ) VALUES (?, ?, ?, 'file', 'inline', NULL, 0, ?, ?, ?, ?, ?, 1)`,
-        normalized,
-        dirname(normalized),
-        basename(normalized),
-        mode,
-        owner.uid,
-        owner.gid,
-        now,
-        options.modifiedAtMs ?? now,
-      );
+         ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, 0, ?, ?, ?, ?, ?, 1)
+         RETURNING id`,
+          this.allocateIno(),
+          normalized,
+          dirname(normalized),
+          basename(normalized),
+          mode,
+          owner.uid,
+          owner.gid,
+          now,
+          options.modifiedAtMs ?? now,
+        )
+        .one();
       this.updateUsage(0, 1);
       return {
         path: normalized,
         parentPath: dirname(normalized),
         name: basename(normalized),
+        ino: integerColumn(inserted, "id"),
         kind: "file",
         contentClass: "inline",
         sizeBytes: 0,
@@ -2776,10 +2850,11 @@ ${ENTRY_TRIGGERS}
       const inserted = this.sql
         .exec<SqlRow>(
           `INSERT INTO vfs_entries (
-             path, parent_path, name, kind, content_class, opaque_object_id,
+             id, path, parent_path, name, kind, content_class, opaque_object_id,
              link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
-          ) VALUES (?, ?, ?, 'symlink', NULL, NULL, ?, ?, ?, ?, ?, ?, ?, 1)
+          ) VALUES (?, ?, ?, ?, 'symlink', NULL, NULL, ?, ?, ?, ?, ?, ?, ?, 1)
            RETURNING id`,
+          this.allocateIno(),
           normalized,
           parentPath,
           name,
@@ -3135,10 +3210,11 @@ ${ENTRY_TRIGGERS}
       if (posix === undefined) {
         this.sql.exec(
           `INSERT INTO vfs_entries (
-           path, parent_path, name, kind, content_class, opaque_object_id,
+           id, path, parent_path, name, kind, content_class, opaque_object_id,
            link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
          )
          SELECT
+           ? + ROW_NUMBER() OVER (ORDER BY e.path),
            ? || substr(e.path, ?),
            CASE WHEN e.path = ? THEN ?
              ELSE ? || substr(e.parent_path, ?) END,
@@ -3147,6 +3223,10 @@ ${ENTRY_TRIGGERS}
            e.link_target, e.size_bytes, e.mode, e.uid, e.gid, ?, ?, 1
          FROM vfs_entries e
          WHERE e.path = ? OR (e.path >= ? AND e.path < ?)`,
+          // ROW_NUMBER() starts at one, so the base is the allocation minus
+          // one. Allocating the whole run up front is what keeps a recursive
+          // copy one statement rather than one per entry.
+          this.allocateIno(summary.entries) - 1,
           target,
           source.length + 1,
           source,
@@ -3203,10 +3283,11 @@ ${ENTRY_TRIGGERS}
              JOIN copied parent ON e.parent_path = parent.path
            )
            INSERT INTO vfs_entries (
-             path, parent_path, name, kind, content_class, opaque_object_id,
+             id, path, parent_path, name, kind, content_class, opaque_object_id,
              link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
            )
            SELECT
+             ? + ROW_NUMBER() OVER (ORDER BY copied.path),
              ? || substr(copied.path, ?),
              CASE WHEN copied.path = ? THEN ?
                ELSE ? || substr(copied.parent_path, ?) END,
@@ -3228,6 +3309,7 @@ ${ENTRY_TRIGGERS}
           posix.credentials.uid,
           SETGID_BIT,
           posix.credentials.gid,
+          this.allocateIno(summary.entries) - 1,
           target,
           source.length + 1,
           source,
@@ -3624,8 +3706,8 @@ ${ENTRY_TRIGGERS}
            size_bytes = excluded.size_bytes, mode = excluded.mode,
            modified_at_ms = excluded.modified_at_ms,
            revision = vfs_entries.revision + 1
-         RETURNING revision`,
-          existing?.id ?? null,
+         RETURNING id, revision`,
+          existing?.id ?? this.allocateIno(),
           session.path,
           parentPath,
           name,
@@ -3649,6 +3731,7 @@ ${ENTRY_TRIGGERS}
       const stat: OpaqueFileStat = {
         path: session.path,
         parentPath,
+        ino: integerColumn(written, "id"),
         name,
         kind: "file",
         contentClass: "opaque",

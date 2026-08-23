@@ -425,6 +425,21 @@ describe("listing and metadata", () => {
       stdout: "0:0\n",
     },
     {
+      // The identity is what a caller keys durable state to, so the shell can
+      // read it and a rename does not change what it reads.
+      name: "reports an identity that survives a rename",
+      files: { "/f": "body\n" },
+      script:
+        "before=$(stat -c '%i' /f); mv /f /g; [ \"$before\" = \"$(stat -c '%i' /g)\" ] && echo same",
+      stdout: "same\n",
+    },
+    {
+      name: "gives a copy an identity of its own",
+      files: { "/f": "body\n" },
+      script: "cp /f /g; [ \"$(stat -c '%i' /f)\" != \"$(stat -c '%i' /g)\" ] && echo distinct",
+      stdout: "distinct\n",
+    },
+    {
       name: "preserves mode bits with cp -p",
       files: { "/src": "body\n" },
       script: "chmod 751 /src; cp -p /src /dst; stat -c '%a' /dst",
