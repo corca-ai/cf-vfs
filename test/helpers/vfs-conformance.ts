@@ -159,6 +159,59 @@ export function runVfsConformance(
     ).toBe("new");
   });
 
+  it("conforms: keeps an entry's identity through a move and a rewrite", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/src/file.txt", "one", { createParents: true });
+    const created = (await fileSystem.stat("/src/file.txt")).ino;
+    expect(created).toBeGreaterThan(0);
+
+    await fileSystem.writeFile("/src/file.txt", "two");
+    expect((await fileSystem.stat("/src/file.txt")).ino).toBe(created);
+
+    fileSystem.setMetadata("/src/file.txt", { mode: 0o600 });
+    expect((await fileSystem.stat("/src/file.txt")).ino).toBe(created);
+
+    // A move renames the path and leaves the entry alone, so what a caller
+    // keyed to the identity still names the same file.
+    await fileSystem.move("/src", "/lib");
+    expect((await fileSystem.stat("/lib/file.txt")).ino).toBe(created);
+  });
+
+  it("conforms: never hands an identity out again", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/a", "x");
+    await fileSystem.writeFile("/b", "x");
+    const removed = (await fileSystem.stat("/b")).ino;
+
+    // Removing the newest entry is the case a bare rowid would recycle.
+    await fileSystem.remove("/b");
+    await fileSystem.writeFile("/c", "x");
+    const replacement = (await fileSystem.stat("/c")).ino;
+    expect(replacement).not.toBe(removed);
+    expect(replacement).toBeGreaterThan(removed);
+
+    // And recreating the same path is a new entry, not the old one returning.
+    await fileSystem.writeFile("/b", "x");
+    expect((await fileSystem.stat("/b")).ino).not.toBe(removed);
+  });
+
+  it("conforms: gives every copied entry an identity of its own", async () => {
+    const fileSystem = await factory();
+    await fileSystem.mkdir("/tree/inner", true);
+    for (let index = 0; index < 4; index += 1) {
+      await fileSystem.writeFile(`/tree/inner/f${index}`, "x");
+    }
+    const before = (await fileSystem.find({ path: "/tree" })).map((entry) => entry.ino);
+
+    await fileSystem.copy("/tree", "/copy", { recursive: true });
+    const copied = (await fileSystem.find({ path: "/copy" })).map((entry) => entry.ino);
+
+    expect(copied).toHaveLength(before.length);
+    expect(new Set(copied).size).toBe(copied.length);
+    // A copy is a different file, so it shares no identity with its source.
+    for (const ino of copied) expect(before).not.toContain(ino);
+  });
+
   it("conforms: publishes nothing when skipIfUnchanged matches the stored body", async () => {
     const fileSystem = await factory();
     await fileSystem.writeFile("/snapshot", "body");

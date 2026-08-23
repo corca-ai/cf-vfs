@@ -438,8 +438,11 @@ Plain `ls` remains one name per line. Its human-oriented long form is
 `MODE OWNER GROUP SIZE NAME`; `ls -l` resolves owner and group names when the
 host capability is present, while `ls -n` implies the long form and always
 uses numbers. `stat -c %u/%g` is likewise always numeric, and `%U/%G` selects
-resolved names with numeric fallback. The VFS has no inode link count or
-change-time guarantee, so the long form does not invent those Linux columns.
+resolved names with numeric fallback. `stat -c %i` reports the entry identity,
+which is stable across a move and never reused after a removal. The VFS has no
+link count or change-time guarantee, so the long form does not invent those
+Linux columns — a constant `1` for links would read as a fact rather than as
+the absence of one.
 
 `help` lists the registered commands with their summaries, `help NAME...`
 describes named ones and exits 1 for an unknown one, and `help -s` prints only
@@ -622,7 +625,7 @@ decides which directory is provisioned; pass the same path as the execution
 | discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
 | help | `help -s`, from the dedicated `/shell/commands/help` subpath |
 | shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
-| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p -P`, `ls -l -n -d -a -A -1 -R`, `find -name -type -maxdepth -print -print0 -exec`, `stat -L -c` (`%u/%g/%U/%G` ownership), `chmod`, `chown`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
+| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p -P`, `ls -l -n -d -a -A -1 -R`, `find -name -type -maxdepth -print -print0 -exec`, `stat -L -c` (`%i` identity, `%u/%g/%U/%G` ownership), `chmod`, `chown`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | links | `ln -s -f`, `readlink -f`, from the dedicated `/shell/commands/link` subpath |
 | streaming text/bytes | `cat`, `grep -i -v -n -F -E -c -l -q -r -R -h`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed -n -e -i`, `seq -s -w` |
 | deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, from the dedicated `/shell/commands/system` subpath |
@@ -838,8 +841,10 @@ still governed, including a path that tries to leave through `/dev/..`.
 `ln -s` creates a link and stores the target exactly as written. The target is
 not resolved, not checked, and not required to exist: a dangling link is a valid
 link, and refusing to create one would make the order a tree is restored in
-significant. `ln` without `-s` is a usage error — a hard link needs an inode
-identity this namespace does not have.
+significant. `ln` without `-s` is a usage error — a hard link is two names for
+one entry, and a path is unique here. Entries do carry an identity, and it does
+not change that: the obstacle is the shape of the namespace, not the absence of
+an inode number.
 
 Which commands follow a link and which act on it is the POSIX split, and it is
 the part worth reading twice. `cat`, `test -f`, `chmod`, and a redirection
@@ -1072,7 +1077,8 @@ they are not present on `ShellCommandContext.fileSystem`.
 
 `VirtualFileSystem` operates on bytes and canonical paths:
 
-- `stat`, `list`/`listPage`, `find`/`findPage`, and `countSubtree`;
+- `stat`, `list`/`listPage`, `find`/`findPage`, and `countSubtree`, each
+  reporting `ino` alongside the rest of an entry's metadata;
 - `changesSince`, when the filesystem was built with `recordChanges`;
 - `readFile`, `writeFile`, `appendFile`, `touch`, `setMetadata`, and
   `setOwnership`;

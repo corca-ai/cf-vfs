@@ -247,8 +247,15 @@ const V2_SCHEMA = `
   CREATE INDEX vfs_entries_symlink
     ON vfs_entries(path) WHERE kind = 'symlink';
 
+  CREATE TABLE vfs_usage (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    inline_bytes INTEGER NOT NULL CHECK (inline_bytes >= 0),
+    entries INTEGER NOT NULL CHECK (entries >= 1)
+  );
+
   INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (1, 0), (2, 0);
   INSERT INTO vfs_state (singleton, mutation_epoch) VALUES (1, 'epoch-v2');
+  INSERT INTO vfs_usage (singleton, inline_bytes, entries) VALUES (1, 5, 2);
   INSERT INTO vfs_path_versions (path, version) VALUES ('/', 1), ('/kept.txt', 7);
   INSERT INTO vfs_entries (
     path, parent_path, name, kind, content_class, opaque_object_id, link_target,
@@ -384,7 +391,7 @@ describe("symlink schema", () => {
       database
         .prepare("SELECT GROUP_CONCAT(version, ',') AS versions FROM vfs_schema_migrations")
         .get()?.["versions"],
-    ).toBe("1,2,3,4");
+    ).toBe("1,2,3,4,5");
     expect(() =>
       database.prepare("UPDATE vfs_entries SET uid = -1 WHERE path = '/kept.txt'").run(),
     ).toThrowError();
