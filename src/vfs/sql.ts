@@ -1106,13 +1106,17 @@ ${ENTRY_TRIGGERS}
         migrated = true;
       }
       if (currentVersion < 5) {
-        // AUTOINCREMENT cannot be added in place, so this is the version-2
-        // rebuild again, from the same shared definition. Existing ids are
-        // copied rather than reassigned — they are what `ino` reports, and a
-        // migration that renumbered them would be exactly the reuse this
-        // change exists to prevent. Copying explicit rowids also seeds
-        // `sqlite_sequence` to the highest one, so the first entry created
-        // afterwards continues the sequence instead of colliding.
+        // One column, and no table rebuild: entry identities keep the numbers
+        // they already have, because renumbering them would be exactly the
+        // reuse this exists to prevent.
+        //
+        // `next_ino` is where never reusing one comes from. AUTOINCREMENT was
+        // measured for the same job and rejected — it reads and writes
+        // `sqlite_sequence` on every creation, which costs +512 rows written
+        // and +512 rows read across 512 creates and one more row read on every
+        // overwrite. This column rides the usage UPDATE that every creation
+        // already performs, so the guarantee costs nothing. Anything that
+        // removes it as unused brings the recycling back.
         this.execBatch(`
         ALTER TABLE vfs_usage
           ADD COLUMN next_ino INTEGER NOT NULL DEFAULT 1;
