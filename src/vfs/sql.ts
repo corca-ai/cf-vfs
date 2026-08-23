@@ -2863,13 +2863,19 @@ ${ENTRY_TRIGGERS}
       }
       if (existing !== null) this.removeExact(normalized, now, false);
       const owner = posix === undefined ? { uid: 0, gid: 0 } : this.creationOwner(parent, posix);
+      // A path's revision never goes backwards. What lands on an occupied path
+      // takes one past whatever was there, so a holder of the old number
+      // cannot see it come round again. Only the root of what arrives can land
+      // on an occupied path -- a non-empty directory cannot be replaced, so
+      // every descendant lands somewhere that was absent.
+      const revision = (existing?.revision ?? 0) + 1;
       this.assertCapacity(0, 1, normalized);
       const inserted = this.sql
         .exec<SqlRow>(
           `INSERT INTO vfs_entries (
              id, path, parent_path, name, kind, content_class, opaque_object_id,
              link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
-          ) VALUES (?, ?, ?, ?, 'symlink', NULL, NULL, ?, ?, ?, ?, ?, ?, ?, 1)
+          ) VALUES (?, ?, ?, ?, 'symlink', NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)
            RETURNING id`,
           this.allocateIno(),
           normalized,
@@ -2882,6 +2888,7 @@ ${ENTRY_TRIGGERS}
           owner.gid,
           now,
           now,
+          revision,
         )
         .one();
       this.updateUsage(0, 1);
@@ -2902,7 +2909,7 @@ ${ENTRY_TRIGGERS}
         gid: owner.gid,
         createdAtMs: now,
         modifiedAtMs: now,
-        revision: 1,
+        revision,
         mutationToken: token,
       });
     });
@@ -3098,6 +3105,11 @@ ${ENTRY_TRIGGERS}
           target,
         );
       }
+      // A path's revision never goes backwards. What lands on an occupied path
+      // takes one past whatever was there, so a holder of the old number
+      // cannot see it come round again. Only the root of what arrives can land
+      // on an occupied path -- a non-empty directory cannot be replaced, so
+      // every descendant lands somewhere that was absent.
       const sourceRange = descendantRange(source);
       const now = this.now();
       if (destination !== null) queued += this.removeExact(target, now, false);
@@ -3110,7 +3122,7 @@ ${ENTRY_TRIGGERS}
              ELSE ? || substr(parent_path, ?) END,
            name = CASE WHEN path = ? THEN ? ELSE name END,
            modified_at_ms = CASE WHEN path = ? THEN ? ELSE modified_at_ms END,
-           revision = revision + 1
+           revision = CASE WHEN path = ? THEN MAX(revision, ?) + 1 ELSE revision + 1 END
          WHERE path = ? OR (path >= ? AND path < ?)`,
         target,
         source.length + 1,
@@ -3122,6 +3134,8 @@ ${ENTRY_TRIGGERS}
         basename(target),
         source,
         now,
+        source,
+        destination?.revision ?? 0,
         source,
         sourceRange.lower,
         sourceRange.upper,
@@ -3240,6 +3254,12 @@ ${ENTRY_TRIGGERS}
       // `ROW_NUMBER()` starts at one, so the base is one below the first
       // identity the run should use.
       const inoBase = (preserved ?? this.allocateIno(summary.entries)) - 1;
+      // A path's revision never goes backwards. Only the copy's root can land
+      // on an occupied path -- a non-empty directory cannot be replaced, so
+      // every descendant lands somewhere that was absent and starts at one.
+      // A fresh entry would be one, and the destination is at least one, so
+      // the general rule collapses to one past what was there.
+      const rootRevision = (destination?.revision ?? 0) + 1;
       if (posix === undefined) {
         this.sql.exec(
           `INSERT INTO vfs_entries (
@@ -3253,7 +3273,8 @@ ${ENTRY_TRIGGERS}
              ELSE ? || substr(e.parent_path, ?) END,
            CASE WHEN e.path = ? THEN ? ELSE e.name END,
            e.kind, e.content_class, e.opaque_object_id,
-           e.link_target, e.size_bytes, e.mode, e.uid, e.gid, ?, ?, 1
+           e.link_target, e.size_bytes, e.mode, e.uid, e.gid, ?, ?,
+           CASE WHEN e.path = ? THEN ? ELSE 1 END
          FROM vfs_entries e
          WHERE e.path = ? OR (e.path >= ? AND e.path < ?)`,
           inoBase,
@@ -3267,6 +3288,8 @@ ${ENTRY_TRIGGERS}
           basename(target),
           now,
           now,
+          source,
+          rootRevision,
           source,
           sourceRange.lower,
           sourceRange.upper,
@@ -3324,7 +3347,8 @@ ${ENTRY_TRIGGERS}
              CASE WHEN copied.path = ? THEN ? ELSE copied.name END,
              copied.kind, copied.content_class, copied.opaque_object_id,
              copied.link_target, copied.size_bytes,
-             copied.copied_mode, copied.copied_uid, copied.copied_gid, ?, ?, 1
+             copied.copied_mode, copied.copied_uid, copied.copied_gid, ?, ?,
+             CASE WHEN copied.path = ? THEN ? ELSE 1 END
            FROM copied`,
           ~posix.umask,
           targetParent?.mode ?? 0,
@@ -3350,6 +3374,8 @@ ${ENTRY_TRIGGERS}
           basename(target),
           now,
           now,
+          source,
+          rootRevision,
         );
       }
       this.sql.exec(

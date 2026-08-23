@@ -1084,7 +1084,7 @@ they are not present on `ShellCommandContext.fileSystem`.
 - `readFile`, `writeFile`, `appendFile`, `touch`, `setMetadata`, and
   `setOwnership`;
 - `mkdir`, `remove`, `move`, and `copy`;
-- `getMutationToken` and optional revision/token guards;
+- `getMutationToken` and the optional `ifMutationToken` guard;
 - `beginOpaqueUpload`, `commitOpaqueUpload`, `abortOpaqueUpload`;
 - `resolveOpaqueRead` and `drainGarbage`.
 
@@ -1108,7 +1108,7 @@ is not the write but the revision bump, which invalidates every other holder's
 optimistic guard on that path.
 
 Everything a write validates still applies, in the same order: the disposition,
-a revision or token guard, the directory check, and write permission are all
+the mutation-token guard, the directory check, and write permission are all
 decided before an unchanged body can return, so a stale guard fails exactly as
 it would have. A skipped write does not advance `modifiedAtMs` and emits no
 usage event, because nothing was committed. Only an inline body is compared —
