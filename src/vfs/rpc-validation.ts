@@ -33,7 +33,6 @@ interface UnknownRecord extends Readonly<Record<string, unknown>> {
   readonly dereference?: unknown;
   readonly follow?: unknown;
   readonly disposition?: unknown;
-  readonly ifRevision?: unknown;
   readonly ifMutationToken?: unknown;
   readonly mode?: unknown;
   readonly skipIfUnchanged?: unknown;
@@ -127,16 +126,9 @@ export function rpcPosixCredentials(value: unknown, name: string): PosixCredenti
   };
 }
 
-function guardOptions(input: UnknownRecord): {
-  ifRevision?: number;
-  ifMutationToken?: string;
-} {
-  const ifRevision = optionalInteger(input.ifRevision, "options.ifRevision", 1);
+function guardOptions(input: UnknownRecord): { ifMutationToken?: string } {
   const ifMutationToken = optionalString(input.ifMutationToken, "options.ifMutationToken");
-  return {
-    ...(ifRevision === undefined ? {} : { ifRevision }),
-    ...(ifMutationToken === undefined ? {} : { ifMutationToken }),
-  };
+  return ifMutationToken === undefined ? {} : { ifMutationToken };
 }
 
 export function rpcByteBody(value: unknown): ByteBody {
@@ -209,7 +201,7 @@ export function rpcWriteOptions(value: unknown): WriteFileOptions | undefined {
   const input = record(value, "options");
   keys(
     input,
-    ["createParents", "disposition", "ifRevision", "ifMutationToken", "mode", "skipIfUnchanged"],
+    ["createParents", "disposition", "ifMutationToken", "mode", "skipIfUnchanged"],
     "options",
   );
   const disposition = optionalString(input.disposition, "options.disposition");
@@ -233,13 +225,13 @@ export function rpcWriteOptions(value: unknown): WriteFileOptions | undefined {
 export function rpcAppendOptions(value: unknown): AppendFileOptions | undefined {
   if (value === undefined) return undefined;
   const input = record(value, "options");
-  keys(input, ["ifRevision", "ifMutationToken"], "options");
+  keys(input, ["ifMutationToken"], "options");
   return guardOptions(input);
 }
 
 export function rpcMetadataOptions(value: unknown): MetadataUpdateOptions {
   const input = record(value, "options");
-  keys(input, ["ifRevision", "ifMutationToken", "mode", "modifiedAtMs"], "options");
+  keys(input, ["ifMutationToken", "mode", "modifiedAtMs"], "options");
   const mode = optionalInteger(input.mode, "options.mode");
   const modifiedAtMs = optionalInteger(input.modifiedAtMs, "options.modifiedAtMs");
   return {
@@ -251,7 +243,7 @@ export function rpcMetadataOptions(value: unknown): MetadataUpdateOptions {
 
 export function rpcOwnershipOptions(value: unknown): OwnershipUpdateOptions {
   const input = record(value, "options");
-  keys(input, ["ifRevision", "ifMutationToken", "uid", "gid"], "options");
+  keys(input, ["ifMutationToken", "uid", "gid"], "options");
   const uid = optionalPosixId(input["uid"], "options.uid");
   const gid = optionalPosixId(input["gid"], "options.gid");
   if (uid === undefined && gid === undefined) {
@@ -289,16 +281,11 @@ export function rpcFollowOptions(value: unknown): { follow?: boolean } | undefin
 export function rpcTouchOptions(value: unknown): TouchOptions | undefined {
   if (value === undefined) return undefined;
   const input = record(value, "options");
-  keys(
-    input,
-    ["ifRevision", "ifMutationToken", "mode", "modifiedAtMs", "create", "createParents"],
-    "options",
-  );
+  keys(input, ["ifMutationToken", "mode", "modifiedAtMs", "create", "createParents"], "options");
   const create = optionalBoolean(input.create, "options.create");
   const createParents = optionalBoolean(input.createParents, "options.createParents");
   return {
     ...rpcMetadataOptions({
-      ifRevision: input.ifRevision,
       ifMutationToken: input.ifMutationToken,
       mode: input.mode,
       modifiedAtMs: input.modifiedAtMs,

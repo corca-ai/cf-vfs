@@ -1471,12 +1471,9 @@ ${ENTRY_TRIGGERS}
   private validateGuard(
     path: string,
     entry: EntryRow | null,
-    guard: { ifRevision?: number; ifMutationToken?: string },
+    guard: { ifMutationToken?: string },
     written?: string,
   ): void {
-    if (guard.ifRevision !== undefined && entry?.revision !== guard.ifRevision) {
-      throw new VfsError("EREVISION", "file revision does not match", path);
-    }
     if (guard.ifMutationToken === undefined) return;
     // Checked against the path the caller named, not the one it resolved to,
     // so the token covers every link crossed on the way. `getMutationToken`

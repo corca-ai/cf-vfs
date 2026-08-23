@@ -185,7 +185,25 @@ export interface InlineReadResult {
 export interface WriteFileOptions {
   createParents?: boolean;
   disposition?: WriteDisposition;
-  ifRevision?: number;
+  /**
+   * Refuses the call unless nothing has changed the path since the token was
+   * taken. The value comes from any `stat`, write result, or
+   * `getMutationToken`, so a caller never needs an extra read to hold one.
+   *
+   * This is the only guard the library offers, because it is the only one that
+   * can be sound. It composes the workspace epoch with the version of every
+   * path crossed on the way, and `vfs_path_versions` retains a version as a
+   * tombstone while its path is absent -- so a path that was removed and
+   * recreated, or repointed at a different file through a link, fails it. A
+   * number carried on the entry row can express none of that: the row is
+   * destroyed by a removal, and nothing on it records that the path became a
+   * link. `revision` remains on every result as an observable, for display,
+   * logging, and cheap change detection; it is not a precondition.
+   *
+   * It is not path-qualified. Two paths at the same version compose the same
+   * token, so it answers "has anything at this version changed" rather than
+   * "has this path changed" -- take the token from the path being guarded.
+   */
   ifMutationToken?: string;
   mode?: number;
   /**
@@ -216,7 +234,7 @@ export interface WriteFileOptions {
 }
 
 export interface AppendFileOptions {
-  ifRevision?: number;
+  /** See {@link WriteFileOptions.ifMutationToken}. */
   ifMutationToken?: string;
 }
 
@@ -229,14 +247,14 @@ export interface WriteResult {
 }
 
 export interface MetadataUpdateOptions {
-  ifRevision?: number;
+  /** See {@link WriteFileOptions.ifMutationToken}. */
   ifMutationToken?: string;
   mode?: number;
   modifiedAtMs?: number;
 }
 
 export interface OwnershipUpdateOptions {
-  ifRevision?: number;
+  /** See {@link WriteFileOptions.ifMutationToken}. */
   ifMutationToken?: string;
   uid?: number;
   gid?: number;
