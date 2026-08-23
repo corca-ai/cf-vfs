@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { readAllBytes } from "../../src/vfs/streams.js";
 import type { VirtualFileSystem } from "../../src/vfs/types.js";
 
@@ -66,6 +66,21 @@ export function streamThatFailsAfter(value: string): ReadableStream<Uint8Array> 
       controller.error(new Error("source failed"));
     },
   });
+}
+
+/**
+ * The error a call refused with, or null if it did not refuse.
+ *
+ * The rejection handler is attached where the promise is created rather than
+ * through `expect().rejects`, which the Durable Object backend needs: the RPC
+ * stub reports an unconsumed rejection as an unhandled error even when the
+ * assertion itself passes.
+ */
+async function refusal(run: () => Promise<unknown>): Promise<unknown> {
+  return run().then(
+    () => null,
+    (error: unknown) => error,
+  );
 }
 
 export function runVfsConformance(
@@ -250,6 +265,95 @@ export function runVfsConformance(
     expect(new Set(copied).size).toBe(copied.length);
     // A copy is a different file, so it shares no identity with its source.
     for (const ino of copied) expect(before).not.toContain(ino);
+  });
+
+  // The four ways a path can carry a stale guard. `revision` matches again in
+  // every one of them, which is why it is an observable rather than a
+  // precondition; the token composes each crossed path's version and retains
+  // it as a tombstone, so it refuses all four.
+  describe("mutation-token guards", () => {
+    it("conforms: refuses a guard held across a replacing copy", async () => {
+      const fileSystem = await factory();
+      await fileSystem.writeFile("/other", "source");
+      await fileSystem.writeFile("/doc", "v1");
+      const held = await fileSystem.stat("/doc");
+      for (const body of ["v2", "v3", "v4", "v5", "v6"]) {
+        await fileSystem.writeFile("/doc", body);
+      }
+      await fileSystem.copy("/other", "/doc", { replace: true });
+
+      // The destination keeps its identity and its revision returns to 1, so
+      // the number a caller was holding matches what is on the row again.
+      expect((await fileSystem.stat("/doc")).ino).toBe(held.ino);
+      expect(
+        await refusal(() =>
+          fileSystem.writeFile("/doc", "stale", { ifMutationToken: held.mutationToken }),
+        ),
+      ).toMatchObject({
+        code: "EREVISION",
+      });
+      expect(await readText(fileSystem, "/doc")).toBe("source");
+    });
+
+    it("conforms: refuses a guard held across a replacing move", async () => {
+      const fileSystem = await factory();
+      for (const body of ["b1", "b2", "b3"]) await fileSystem.writeFile("/b", body);
+      const held = await fileSystem.stat("/b");
+      for (const body of ["b4", "b5", "b6"]) await fileSystem.writeFile("/b", body);
+      await fileSystem.writeFile("/a", "a1");
+      await fileSystem.writeFile("/a", "a2");
+      await fileSystem.move("/a", "/b", { replace: true });
+
+      expect(
+        await refusal(() =>
+          fileSystem.writeFile("/b", "stale", { ifMutationToken: held.mutationToken }),
+        ),
+      ).toMatchObject({
+        code: "EREVISION",
+      });
+      expect(await readText(fileSystem, "/b")).toBe("a2");
+    });
+
+    it("conforms: refuses a guard held across a removal and recreation", async () => {
+      const fileSystem = await factory();
+      await fileSystem.writeFile("/doc", "original");
+      const held = await fileSystem.stat("/doc");
+      await fileSystem.remove("/doc");
+      await fileSystem.writeFile("/doc", "someone else");
+
+      // Absent-path ABA: a fresh entry starts over, so nothing on the row
+      // distinguishes it from the one the guard was taken against.
+      expect(
+        await refusal(() =>
+          fileSystem.writeFile("/doc", "stale", { ifMutationToken: held.mutationToken }),
+        ),
+      ).toMatchObject({
+        code: "EREVISION",
+      });
+      expect(await readText(fileSystem, "/doc")).toBe("someone else");
+    });
+
+    it("conforms: refuses a guard held across a path repointed at another file", async () => {
+      const fileSystem = await factory();
+      await fileSystem.writeFile("/target", "target untouched");
+      await fileSystem.writeFile("/p", "p1");
+      await fileSystem.writeFile("/p", "p2");
+      const held = await fileSystem.stat("/p");
+      for (const body of ["p3", "p4", "p5", "p6"]) await fileSystem.writeFile("/p", body);
+      await fileSystem.symlink("/p", "/target", { replace: true });
+
+      // A write resolves before it is guarded, so an unsound guard would be
+      // checked against /target and would land on a file the caller never
+      // named. The token covers every link crossed, so it refuses instead.
+      expect(
+        await refusal(() =>
+          fileSystem.writeFile("/p", "stale", { ifMutationToken: held.mutationToken }),
+        ),
+      ).toMatchObject({
+        code: "EREVISION",
+      });
+      expect(await readText(fileSystem, "/target")).toBe("target untouched");
+    });
   });
 
   it("conforms: copies a small file over a larger one", async () => {
