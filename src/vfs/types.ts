@@ -49,9 +49,17 @@ export interface StatBase {
    * recycled identity silently reattaches whatever a caller keyed to the old
    * file while an absent one is known to be unusable.
    *
-   * Unique within one workspace, and meaningless across two. It is the
-   * `st_ino` half of POSIX identity; there is no `st_dev`, because a Durable
-   * Object is the device.
+   * Unique among the entries of one workspace, and meaningless across two. It
+   * is the `st_ino` half of POSIX identity; there is no `st_dev`, because a
+   * Durable Object is the device.
+   *
+   * **Zero means there is no entry.** A shell device such as `/dev/null` and a
+   * reserved applet directory such as `/bin` are answered above the namespace
+   * and have no row, so they all report zero and share it with each other. No
+   * real entry ever does — identities are issued from one — but a caller
+   * keying durable state to `ino` has to exclude them, or two device paths
+   * become one key. Use `hasEntryIdentity()` rather than comparing against
+   * zero by hand.
    *
    * It does not make hard links expressible. A hard link is two names for one
    * entry, which this namespace forbids in its shape rather than for want of
@@ -93,6 +101,26 @@ export interface SymlinkStat extends StatBase {
 }
 
 export type VfsStat = DirectoryStat | InlineFileStat | OpaqueFileStat | SymlinkStat;
+
+/**
+ * The identity reported for a path that has no entry behind it.
+ *
+ * Shared by every shell device and reserved applet directory, and never held
+ * by a real entry. It is a legal `st_ino` value rather than a null so a caller
+ * that never touches `/dev` is not made to handle one.
+ */
+export const NO_ENTRY_IDENTITY = 0;
+
+/**
+ * Whether a stat describes an entry, and so whether its `ino` identifies one.
+ *
+ * The check the sentinel exists for, written once. A host mapping `ino` to a
+ * per-file room, a grant, or an index row should ask this first: without it,
+ * `/dev/null` and `/bin` arrive as the same key.
+ */
+export function hasEntryIdentity(stat: VfsStat): boolean {
+  return stat.ino !== NO_ENTRY_IDENTITY;
+}
 
 export interface PageOptions {
   cursor?: string;

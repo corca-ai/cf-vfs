@@ -4,8 +4,37 @@ import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { ReservedPathFileSystem } from "../src/shell/devices.js";
 import { ScopedFileSystem } from "../src/shell/policy.js";
 import { Shell } from "../src/shell/shell.js";
+import { hasEntryIdentity, NO_ENTRY_IDENTITY } from "../src/vfs/types.js";
 import { bashCases, createBashHarness } from "./helpers/bash.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
+
+describe("reserved paths carry no entry identity", () => {
+  it("reports the sentinel for every path answered above the namespace", () => {
+    const inner = createTestFileSystem();
+    const budget = new ExecutionBudget(DEFAULT_SHELL_LIMITS, () => 0);
+    const fileSystem = new ReservedPathFileSystem(new ScopedFileSystem(inner, {}, budget), {
+      applets: { directories: ["/bin", "/usr/bin"], names: ["cat"] },
+    });
+
+    for (const path of ["/dev/null", "/dev/stdin", "/dev/stdout", "/dev", "/bin", "/usr/bin"]) {
+      const stat = fileSystem.stat(path);
+      expect(hasEntryIdentity(stat), path).toBe(false);
+      expect(stat.ino, path).toBe(NO_ENTRY_IDENTITY);
+    }
+
+    // Which is the hazard the sentinel exists to make visible: two device
+    // paths are one key to anything that skips the check.
+    expect(fileSystem.stat("/dev/null").ino).toBe(fileSystem.stat("/dev/stdout").ino);
+  });
+
+  it("reports a real identity for an ordinary entry", async () => {
+    const fileSystem = createTestFileSystem();
+    await fileSystem.writeFile("/file", "body");
+    const stat = fileSystem.stat("/file");
+    expect(hasEntryIdentity(stat)).toBe(true);
+    expect(stat.ino).toBeGreaterThan(NO_ENTRY_IDENTITY);
+  });
+});
 
 describe("virtual devices", () => {
   bashCases([

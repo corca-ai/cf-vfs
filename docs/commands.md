@@ -439,7 +439,8 @@ Plain `ls` remains one name per line. Its human-oriented long form is
 host capability is present, while `ls -n` implies the long form and always
 uses numbers. `stat -c %u/%g` is likewise always numeric, and `%U/%G` selects
 resolved names with numeric fallback. `stat -c %i` reports the entry identity,
-which is stable across a move and never reused after a removal. The VFS has no
+which is stable across a move and never reused after a removal. A device or an
+applet path reports zero, because it has no entry behind it. The VFS has no
 link count or change-time guarantee, so the long form does not invent those
 Linux columns — a constant `1` for links would read as a fact rather than as
 the absence of one.

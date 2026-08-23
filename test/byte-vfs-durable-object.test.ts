@@ -767,6 +767,80 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(observed.moved).toEqual(["move /first -> /second"]);
   });
 
+  it("never reissues an entry identity after the object is evicted", async () => {
+    const stub = workspace("ino-eviction");
+    const retired = await runInDurableObject(stub, async (_instance, state) => {
+      const fileSystem = new DurableObjectFileSystem(state.storage, { workspaceId: "ino" });
+      await fileSystem.writeFile("/a", "x");
+      await fileSystem.writeFile("/b", "x");
+      const highest = fileSystem.stat("/b").ino;
+      // Removing the newest entry is precisely what a bare rowid recycles.
+      await fileSystem.remove("/b");
+      return highest;
+    });
+    expect(retired).toBeGreaterThan(0);
+
+    await evictDurableObject(stub);
+
+    // A revived object holds no counter, so the guarantee rests entirely on
+    // `next_ino` having been made durable by the creation that used it. An
+    // allocation that skipped `updateUsage` would pass every single-instance
+    // test and fail here, handing the retired identity out again.
+    const reissued = await runInDurableObject(stub, async (_instance, state) => {
+      const fileSystem = new DurableObjectFileSystem(state.storage, { workspaceId: "ino" });
+      await fileSystem.writeFile("/c", "x");
+      return fileSystem.stat("/c").ino;
+    });
+    expect(reissued).toBeGreaterThan(retired);
+  });
+
+  it("keeps next_ino ahead of every identity each creation shape issues", async () => {
+    const stub = workspace("ino-high-water");
+    const observed = await runInDurableObject(stub, async (_instance, state) => {
+      const store = new MemoryOpaqueStore();
+      const fileSystem = new DurableObjectFileSystem(state.storage, {
+        workspaceId: "ino-high-water",
+        opaqueStore: store,
+      });
+      const highWater = (): number =>
+        state.storage.sql
+          .exec<{ next_ino: number }>("SELECT next_ino FROM vfs_usage WHERE singleton = 1")
+          .one().next_ino;
+      const highestId = (): number =>
+        state.storage.sql
+          .exec<{ highest: number }>("SELECT COALESCE(MAX(id), 0) AS highest FROM vfs_entries")
+          .one().highest;
+
+      // Every shape that allocates an identity has to make the high-water mark
+      // durable in the same transaction. Checking after each one is what
+      // catches a new creation path that allocates and forgets.
+      const shapes: Array<[string, () => unknown | Promise<unknown>]> = [
+        ["mkdir", () => fileSystem.mkdir("/dir/inner", true)],
+        ["writeFile", () => fileSystem.writeFile("/dir/inner/file", "x")],
+        ["touch", () => fileSystem.touch("/dir/touched", { create: true })],
+        ["symlink", () => fileSystem.symlink("/dir/link", "inner/file")],
+        ["copy", () => fileSystem.copy("/dir", "/copied", { recursive: true })],
+        [
+          "opaque commit",
+          async () => {
+            const upload = await fileSystem.beginOpaqueUpload("/blob");
+            await store.putIfAbsent(upload.objectKey, "body");
+            await fileSystem.commitOpaqueUpload(upload.uploadId);
+          },
+        ],
+      ];
+      const behind: string[] = [];
+      for (const [name, run] of shapes) {
+        await run();
+        if (highWater() <= highestId()) behind.push(name);
+      }
+      return { behind, highWater: highWater(), highestId: highestId() };
+    });
+
+    expect(observed.behind).toEqual([]);
+    expect(observed.highWater).toBeGreaterThan(observed.highestId);
+  });
+
   it("resumes the change sequence after the object is evicted", async () => {
     const stub = workspace("change-cursor-eviction");
     const before = await runInDurableObject(stub, async (_instance, state) => {

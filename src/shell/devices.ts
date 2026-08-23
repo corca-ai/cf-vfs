@@ -23,6 +23,7 @@ import type {
   WriteFileOptions,
   WriteResult,
 } from "../vfs/types.js";
+import { NO_ENTRY_IDENTITY } from "../vfs/types.js";
 import type { ShellFileDescriptors, ShellFileSystem, ShellSink } from "./types.js";
 
 /**
@@ -85,23 +86,12 @@ export function shellDevice(path: string): ShellDevice | undefined {
   return Object.hasOwn(DEVICES, path) ? DEVICES[path as keyof typeof DEVICES] : undefined;
 }
 
-/**
- * The identity a path with no entry behind it reports.
- *
- * A device and an applet path are answered by this layer rather than by the
- * namespace, so there is no row and no identity to report. Zero says that
- * outright and can never collide with a real one, because SQLite assigns
- * entry ids from one. A caller keying state to `ino` should treat it as
- * "not an entry" rather than as a file it can come back to.
- */
-const RESERVED_INO = 0;
-
 function deviceStat(path: string, device: ShellDevice): VfsStat {
   return {
     path,
     parentPath: path.slice(0, path.lastIndexOf("/")) || "/",
     name: path.slice(path.lastIndexOf("/") + 1),
-    ino: RESERVED_INO,
+    ino: NO_ENTRY_IDENTITY,
     kind: "file",
     contentClass: "inline",
     sizeBytes: 0,
@@ -138,7 +128,7 @@ function directoryStat(path: string): VfsStat {
     path,
     parentPath: path.slice(0, path.lastIndexOf("/")) || "/",
     name: path.slice(path.lastIndexOf("/") + 1),
-    ino: RESERVED_INO,
+    ino: NO_ENTRY_IDENTITY,
     kind: "directory",
     contentClass: null,
     sizeBytes: 0,
