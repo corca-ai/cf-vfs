@@ -195,6 +195,46 @@ export function runVfsConformance(
     expect((await fileSystem.stat("/b")).ino).not.toBe(removed);
   });
 
+  it("conforms: makes the three ways of replacing content agree on identity", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/source", "source");
+    await fileSystem.writeFile("/target", "one");
+    const target = (await fileSystem.stat("/target")).ino;
+
+    // Rewriting through the namespace keeps the entry.
+    await fileSystem.writeFile("/target", "two");
+    expect((await fileSystem.stat("/target")).ino).toBe(target);
+
+    // So does copying one file over it. `cp` opens the destination and writes
+    // through it; unlinking first is what `--remove-destination` is for, and
+    // `cp x y` and `cat x > y` should not differ here.
+    await fileSystem.copy("/source", "/target", { replace: true });
+    expect((await fileSystem.stat("/target")).ino).toBe(target);
+    expect(await readText(fileSystem, "/target")).toBe("source");
+
+    // A move is the one that ends it, because the destination is gone and the
+    // source is what is now there.
+    await fileSystem.writeFile("/moved", "moved");
+    const moved = (await fileSystem.stat("/moved")).ino;
+    await fileSystem.move("/moved", "/target", { replace: true });
+    expect((await fileSystem.stat("/target")).ino).toBe(moved);
+  });
+
+  it("conforms: preserves nothing when the destination is not a file", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/from/inner/file", "x", { createParents: true });
+    await fileSystem.mkdir("/onto");
+    const replaced = (await fileSystem.stat("/onto")).ino;
+
+    // Only a file whose content was rewritten keeps its identity. A directory
+    // being replaced is not that, so the copy issues new ones — and a
+    // non-empty directory cannot be replaced at all, which is why this is the
+    // reachable shape of the case.
+    await fileSystem.copy("/from", "/onto", { recursive: true, replace: true });
+    expect((await fileSystem.stat("/onto")).ino).not.toBe(replaced);
+    expect(await readText(fileSystem, "/onto/inner/file")).toBe("x");
+  });
+
   it("conforms: gives every copied entry an identity of its own", async () => {
     const fileSystem = await factory();
     await fileSystem.mkdir("/tree/inner", true);

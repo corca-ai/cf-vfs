@@ -3211,6 +3211,22 @@ ${ENTRY_TRIGGERS}
       );
       if (destination !== null) queued += this.removeExact(target, now, false);
       this.publishTranslatedSubtreeVersions(source, target);
+      // Copying one file over another keeps the destination's identity, the
+      // way `cp` keeps its inode: it opens the destination and writes through
+      // it, and unlinking first is what `--remove-destination` is for. That
+      // also makes `cp x y` and `cat x > y` agree, which a caller keying
+      // durable state to an identity cannot be expected to hold apart.
+      //
+      // Anything else is a replacement and issues new identities: a recursive
+      // copy is `cp -r`, which unlinks what it cannot open through, and a
+      // directory or a link is not a file whose content was rewritten.
+      const preserved =
+        destination !== null && destination.kind === "file" && sourceEntry.kind === "file"
+          ? destination.id
+          : undefined;
+      // `ROW_NUMBER()` starts at one, so the base is one below the first
+      // identity the run should use.
+      const inoBase = (preserved ?? this.allocateIno(summary.entries)) - 1;
       if (posix === undefined) {
         this.sql.exec(
           `INSERT INTO vfs_entries (
@@ -3227,10 +3243,7 @@ ${ENTRY_TRIGGERS}
            e.link_target, e.size_bytes, e.mode, e.uid, e.gid, ?, ?, 1
          FROM vfs_entries e
          WHERE e.path = ? OR (e.path >= ? AND e.path < ?)`,
-          // ROW_NUMBER() starts at one, so the base is the allocation minus
-          // one. Allocating the whole run up front is what keeps a recursive
-          // copy one statement rather than one per entry.
-          this.allocateIno(summary.entries) - 1,
+          inoBase,
           target,
           source.length + 1,
           source,
@@ -3313,7 +3326,7 @@ ${ENTRY_TRIGGERS}
           posix.credentials.uid,
           SETGID_BIT,
           posix.credentials.gid,
-          this.allocateIno(summary.entries) - 1,
+          inoBase,
           target,
           source.length + 1,
           source,
