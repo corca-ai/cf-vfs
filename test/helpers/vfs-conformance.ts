@@ -252,6 +252,20 @@ export function runVfsConformance(
     for (const ino of copied) expect(before).not.toContain(ino);
   });
 
+  it("conforms: copies a small file over a larger one", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/small", "abc");
+    await fileSystem.writeFile("/large", "x".repeat(100));
+
+    // The destination's bytes are accounted for once, by the removal. Counting
+    // them a second time drove the stored total below zero, and the CHECK
+    // constraint on it turned an ordinary copy into a failure.
+    await fileSystem.copy("/small", "/large", { replace: true });
+
+    expect(await readText(fileSystem, "/large")).toBe("abc");
+    expect((await fileSystem.stat("/large")).sizeBytes).toBe(3);
+  });
+
   it("conforms: publishes nothing when skipIfUnchanged matches the stored body", async () => {
     const fileSystem = await factory();
     await fileSystem.writeFile("/snapshot", "body");

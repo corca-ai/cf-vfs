@@ -2299,6 +2299,11 @@ ${ENTRY_TRIGGERS}
     return true;
   }
 
+  /**
+   * Deletes one entry and accounts for it. The usage write is this method's
+   * own, so a caller that replaces an entry adds only what it inserted --
+   * subtracting the removal again double-counts it.
+   */
   private removeExact(path: string, now: number, bumpPath = true): number {
     const entry = this.oneEntry(path);
     if (entry === null) return 0;
@@ -3357,10 +3362,12 @@ ${ENTRY_TRIGGERS}
       // The copy is set-based and carries `kind` across, so it may have
       // produced links; the count is recomputed rather than guessed.
       this.symlinkCountStale = true;
-      this.updateUsage(
-        summary.inlineBytes - replacedInlineBytes,
-        summary.entries - (destination === null ? 0 : 1),
-      );
+      // Only what the copy added. The two expressions differ on purpose:
+      // `assertCapacity` runs before the destination is removed, so it has to
+      // predict the end state and subtract what the removal will give back;
+      // this runs after, and `removeExact` has already applied that half.
+      // Reusing the net delta here would subtract the destination twice.
+      this.updateUsage(summary.inlineBytes, summary.entries);
       // A copy publishes entries at the destination and leaves the source
       // alone, so what a consumer has to reflect is a create at `to`.
       this.recordMutation(

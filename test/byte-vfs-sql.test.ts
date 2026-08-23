@@ -107,6 +107,101 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
       expect(fileSystem.stat("/a").sizeBytes).toBe(4);
     });
 
+    describe("usage accounting", () => {
+      type Usage = { inlineBytes: number; entries: number };
+
+      function metered(options: Parameters<typeof createTestFileSystem>[0] = {}): {
+        fileSystem: ReturnType<typeof createTestFileSystem>;
+        usage: () => Usage | undefined;
+      } {
+        let last: Usage | undefined;
+        const fileSystem = createTestFileSystem({
+          ...options,
+          onEvent: (event) => {
+            if (event.type === "vfs.usage") {
+              last = { inlineBytes: event.inlineBytes, entries: event.entries };
+            }
+          },
+        });
+        return { fileSystem, usage: () => last };
+      }
+
+      // The oracle for every case below: the same end state, built without a
+      // replacement. What a replacing copy reports has to match it, because
+      // the two filesystems hold the same entries and the same bytes.
+      it("reports the same totals for a replacing copy as for the tree built directly", async () => {
+        const replaced = metered();
+        await replaced.fileSystem.writeFile("/ballast", "z".repeat(1000));
+        await replaced.fileSystem.writeFile("/a", "abc");
+        await replaced.fileSystem.writeFile("/b", "x".repeat(100));
+        await replaced.fileSystem.copy("/a", "/b", { replace: true });
+
+        const direct = metered();
+        await direct.fileSystem.writeFile("/ballast", "z".repeat(1000));
+        await direct.fileSystem.writeFile("/a", "abc");
+        await direct.fileSystem.writeFile("/b", "abc");
+
+        expect(replaced.usage()).toEqual({ inlineBytes: 1006, entries: 4 });
+        expect(replaced.usage()).toEqual(direct.usage());
+      });
+
+      it("reports the same totals for a replacing recursive copy", async () => {
+        const replaced = metered();
+        await replaced.fileSystem.mkdir("/src");
+        await replaced.fileSystem.writeFile("/src/f", "hello");
+        await replaced.fileSystem.mkdir("/dst");
+        await replaced.fileSystem.copy("/src", "/dst", { replace: true, recursive: true });
+
+        const direct = metered();
+        await direct.fileSystem.mkdir("/src");
+        await direct.fileSystem.writeFile("/src/f", "hello");
+        await direct.fileSystem.mkdir("/dst");
+        await direct.fileSystem.writeFile("/dst/f", "hello");
+
+        expect(replaced.usage()).toEqual({ inlineBytes: 10, entries: 5 });
+        expect(replaced.usage()).toEqual(direct.usage());
+      });
+
+      it("reports the same totals when the copy grows the destination", async () => {
+        const { fileSystem, usage } = metered();
+        await fileSystem.writeFile("/a", "x".repeat(100));
+        await fileSystem.writeFile("/b", "abc");
+        await fileSystem.copy("/a", "/b", { replace: true });
+        expect(usage()).toEqual({ inlineBytes: 200, entries: 3 });
+      });
+
+      // A wrong counter is not just a wrong number: it is quota headroom that
+      // an ordinary sequence of operations can manufacture. Each replacing
+      // copy used to give one entry back, so repeating it walked the stored
+      // total down and let the tree grow past the limit that refuses work.
+      it("does not let repeated replacing copies buy quota headroom", async () => {
+        const { fileSystem } = metered({ maxEntries: 12 });
+        await fileSystem.mkdir("/d");
+        for (let index = 0; index < 8; index += 1) {
+          await fileSystem.writeFile(`/d/f${index}`, "a");
+        }
+        for (let index = 0; index < 8; index += 1) {
+          await fileSystem.copy("/d/f0", "/d/f1", { replace: true });
+        }
+
+        let created = 0;
+        for (let index = 0; index < 20; index += 1) {
+          const failed = await fileSystem.writeFile(`/d/extra${index}`, "a").then(
+            () => null,
+            (error: unknown) => error,
+          );
+          if (failed !== null) {
+            expect(failed).toMatchObject({ code: "ENOSPC" });
+            break;
+          }
+          created += 1;
+        }
+
+        expect(await fileSystem.find({ path: "/" })).toHaveLength(12 - 1);
+        expect(created).toBe(2);
+      });
+    });
+
     describe("mutation notification", () => {
       function observed(options: Parameters<typeof createTestFileSystem>[0] = {}) {
         const mutations: Extract<VfsEvent, { type: "vfs.mutation" }>[] = [];
