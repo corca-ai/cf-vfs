@@ -42,9 +42,13 @@ export interface StatBase {
   /**
    * The entry's identity, in the position `st_ino` holds.
    *
-   * Stable for as long as the entry is: a move renames the path and a write
-   * replaces the content, and neither changes this. Removing the entry ends
-   * it, and the number is **never handed out again** — POSIX permits an
+   * Stable for as long as the entry is. Every way of replacing the content at
+   * a path keeps it — a write, an append, and a copy of one file over another
+   * — and so does a move, which renames the path and carries the entry with
+   * it. What ends an identity is the entry going away: a removal, a move that
+   * replaces the destination, or a copy over anything that is not a file
+   * whose content was rewritten. Once ended, the number is **never handed out
+   * again** — POSIX permits an
    * implementation to recycle inode numbers and this one does not, because a
    * recycled identity silently reattaches whatever a caller keyed to the old
    * file while an absent one is known to be unusable.
