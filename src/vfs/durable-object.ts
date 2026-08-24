@@ -9,6 +9,7 @@ import {
   rpcCopyOptions,
   rpcFindOptions,
   rpcFollowOptions,
+  rpcIdentity,
   rpcMetadataOptions,
   rpcMoveOptions,
   rpcNonnegativeInteger,
@@ -67,6 +68,10 @@ export abstract class VfsDurableObject<Environment> extends DurableObject<Enviro
 
   stat(path: string): VfsStat {
     return this.fileSystem.stat(rpcString(path, "path"));
+  }
+
+  statById(ino: number): VfsStat {
+    return this.fileSystem.statById(rpcIdentity(ino));
   }
 
   lstat(path: string): VfsStat {

@@ -395,6 +395,29 @@ export interface VirtualFileSystem {
   /** Resolves symbolic links in every component, as `stat(2)` does. */
   stat(path: string): VfsStat;
   /**
+   * Reports the entry holding an identity, so a caller that keyed durable
+   * state to one can find where it is now.
+   *
+   * `ino` is otherwise write-only: it comes out of every `stat`, `list` and
+   * `find`, and nothing takes one back. A host that keyed a room, a grant or an
+   * index row to an entry can follow it through a move, a rename and a content
+   * replace, but has no way to turn what it is holding back into a path, or to
+   * learn that the entry is gone.
+   *
+   * Reports the entry itself, never what it points at: an identity names a row,
+   * so a link resolves to the link the way `lstat` does. `ENOENT` for an
+   * identity no entry holds, which is permanent — identities are never reissued
+   * — and `EINVAL` for one that was never issuable.
+   *
+   * Absent from the credential-bound view, which refuses it with `EPERM`.
+   * Identities are dense consecutive integers, so a caller that may read by one
+   * can enumerate the workspace by counting; `list` and `find` are safe under
+   * credentials partly because reaching a path means knowing its name, and
+   * reaching an identity means adding one. POSIX declines to open by inode for
+   * the same reason rather than permission-checking it.
+   */
+  statById(ino: number): VfsStat;
+  /**
    * Resolves symbolic links in every component except the last, as `lstat(2)`
    * does, so a link is reported as itself rather than as what it points at.
    */

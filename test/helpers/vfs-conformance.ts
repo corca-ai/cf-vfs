@@ -267,6 +267,64 @@ export function runVfsConformance(
     for (const ino of copied) expect(before).not.toContain(ino);
   });
 
+  describe("reading by entry identity", () => {
+    it("conforms: finds an entry that moved out from under a held identity", async () => {
+      const fileSystem = await factory();
+      await fileSystem.mkdir("/from/inner", true);
+      await fileSystem.writeFile("/from/inner/doc", "body");
+      const held = (await fileSystem.stat("/from/inner/doc")).ino;
+
+      await fileSystem.move("/from", "/to");
+
+      // What a host holding an identity could not do before: turn it back into
+      // a path without an index of its own to keep in step.
+      const found = await fileSystem.statById(held);
+      expect(found.path).toBe("/to/inner/doc");
+      expect(found.ino).toBe(held);
+      expect(await readText(fileSystem, found.path)).toBe("body");
+    });
+
+    it("conforms: reports the entry itself rather than what it points at", async () => {
+      const fileSystem = await factory();
+      await fileSystem.writeFile("/target", "body");
+      await fileSystem.symlink("/link", "/target");
+      const link = await fileSystem.lstat("/link");
+
+      // An identity names a row, so there is nothing to resolve through.
+      const found = await fileSystem.statById(link.ino);
+      expect(found).toMatchObject({ path: "/link", kind: "symlink", linkTarget: "/target" });
+      expect(found.ino).not.toBe((await fileSystem.stat("/target")).ino);
+    });
+
+    it("conforms: refuses an identity no entry holds", async () => {
+      const fileSystem = await factory();
+      await fileSystem.writeFile("/doc", "body");
+      const removed = (await fileSystem.stat("/doc")).ino;
+      await fileSystem.remove("/doc");
+
+      // Permanent rather than momentary: an identity is never reissued, so a
+      // host can retire what it keyed to this one instead of retrying.
+      expect(await refusal(async () => fileSystem.statById(removed))).toMatchObject({
+        code: "ENOENT",
+      });
+      await fileSystem.writeFile("/doc", "again");
+      expect(await refusal(async () => fileSystem.statById(removed))).toMatchObject({
+        code: "ENOENT",
+      });
+    });
+
+    it("conforms: refuses an identity that was never issuable", async () => {
+      const fileSystem = await factory();
+      // Zero is the documented sentinel for a path answered above the
+      // namespace, so it must not read as "an entry that is gone".
+      for (const candidate of [0, -1, 1.5]) {
+        expect(await refusal(async () => fileSystem.statById(candidate))).toMatchObject({
+          code: "EINVAL",
+        });
+      }
+    });
+  });
+
   describe("revision monotonicity", () => {
     // A path's revision never goes backwards. Every site where an entry lands
     // on an occupied path takes one past whatever was there, so a caller that

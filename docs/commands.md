@@ -1081,6 +1081,7 @@ they are not present on `ShellCommandContext.fileSystem`.
 - `stat`, `list`/`listPage`, `find`/`findPage`, and `countSubtree`, each
   reporting `ino` alongside the rest of an entry's metadata;
 - `changesSince`, when the filesystem was built with `recordChanges`;
+- `statById`, which reads an entry back by its identity;
 - `readFile`, `writeFile`, `appendFile`, `touch`, `setMetadata`, and
   `setOwnership`;
 - `mkdir`, `remove`, `move`, and `copy`;
@@ -1092,8 +1093,10 @@ they are not present on `ShellCommandContext.fileSystem`.
 `forCredentials({ uid, gid, supplementaryGids }, { umask })` returns an
 immutable access-controlled `VirtualFileSystem` view. The raw object remains
 the trusted administration capability. The bound view disables opaque upload
-and GC administration; opaque reads still require ordinary read permission and
-the separate shell content capability.
+and GC administration, and refuses `statById`, because identities are
+consecutive and reading by one would let any credential enumerate the workspace
+by counting; opaque reads still require ordinary read permission and the
+separate shell content capability.
 
 Inline `readFile()` returns a stable bounded stream snapshot. Consume or cancel
 it to release the instance-wide materialization budget. Writes accept strings,

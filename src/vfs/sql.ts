@@ -2044,6 +2044,35 @@ ${ENTRY_TRIGGERS}
     return this.statEntry(path, false, access);
   }
 
+  /**
+   * Reports the entry holding an identity. See {@link VirtualFileSystem.statById}.
+   *
+   * One statement and one row: `id` is `INTEGER PRIMARY KEY`, which SQLite
+   * makes an alias for the rowid, so this seeks the table's own key and needs
+   * no index of its own.
+   *
+   * Takes no access context. The credential-bound view refuses the call rather
+   * than filtering it, because an identity carries no path to check ancestors
+   * of and because answering by one at all is what a dense counter makes
+   * enumerable.
+   */
+  statById(ino: number): VfsStat {
+    if (!Number.isSafeInteger(ino) || ino < 1) {
+      throw new VfsError("EINVAL", "entry identity must be a positive safe integer");
+    }
+    const row = firstRow(
+      this.sql.exec<SqlRow>(
+        `SELECT ${ENTRY_COLUMNS}
+       FROM vfs_entries e
+       CROSS JOIN vfs_path_versions p
+       WHERE e.id = ? AND p.path = e.path`,
+        ino,
+      ),
+    );
+    if (row === undefined) throw new VfsError("ENOENT", "no entry holds that identity");
+    return rowToStat(parseEntry(row, this.mutationEpoch));
+  }
+
   readlink(path: string, access?: PosixAccessContext): string {
     const resolved = this.accessEntry(path, false);
     this.assertTraverse(resolved.path, resolved.followed, access);
@@ -4235,6 +4264,16 @@ class PosixFileSystemView implements VirtualFileSystem {
 
   copy(from: string, to: string, options?: CopyOptions): Promise<CopyResult> {
     return this.inner.copy(from, to, options, this.access);
+  }
+
+  statById(): VfsStat {
+    // Identities are dense consecutive integers, so a view that answers by one
+    // lets any credential enumerate the workspace by counting up from 1 --
+    // existence and cardinality for entries it cannot reach, and their paths.
+    // Filtering cannot fix it: reporting an unreadable entry as absent is a lie
+    // a caller acts on, and refusing only those still leaks by bisection.
+    // POSIX declines to open by inode rather than permission-checking it.
+    throw new VfsError("EPERM", "user views cannot read by entry identity");
   }
 
   changesSince(): ChangePage {
