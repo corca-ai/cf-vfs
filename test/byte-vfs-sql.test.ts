@@ -544,6 +544,51 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
       });
     });
 
+    describe("reading by entry identity", () => {
+      it("refuses a credential-bound view, whatever the identity holds", async () => {
+        const fileSystem = createTestFileSystem();
+        fileSystem.mkdir("/private", true);
+        await fileSystem.writeFile("/private/secret", "body");
+        await fileSystem.writeFile("/readable", "body");
+        fileSystem.setMetadata("/private", { mode: 0o040700 });
+
+        const view = fileSystem.forCredentials({ uid: 1000, gid: 1000 });
+        const unreachable = fileSystem.stat("/private/secret").ino;
+        const reachable = fileSystem.stat("/readable").ino;
+
+        // Refused for an entry the caller could reach by path too. Answering
+        // only for those would still hand out existence for the others by
+        // which identities refuse, and identities are consecutive.
+        for (const ino of [unreachable, reachable, 999_999]) {
+          expect(() => view.statById(ino)).toThrow(
+            expect.objectContaining({ code: "EPERM" }) as Error,
+          );
+        }
+        // The trusted capability still answers, which is what makes the refusal
+        // a boundary rather than the feature being absent.
+        expect(fileSystem.statById(unreachable).path).toBe("/private/secret");
+      });
+
+      it("shows why the view cannot answer: identities are consecutive", async () => {
+        const fileSystem = createTestFileSystem();
+        fileSystem.mkdir("/a", true);
+        for (let index = 0; index < 5; index += 1) {
+          await fileSystem.writeFile(`/a/f${index}`, "x");
+        }
+        const census: string[] = [];
+        for (let ino = 1; ino <= 8; ino += 1) {
+          try {
+            census.push(fileSystem.statById(ino).path);
+          } catch {
+            census.push("<none>");
+          }
+        }
+        // Counting up from one enumerates the workspace, which is what a
+        // credential-bound caller must not be able to do.
+        expect(census).toEqual(["/", "/a", "/a/f0", "/a/f1", "/a/f2", "/a/f3", "/a/f4", "<none>"]);
+      });
+    });
+
     describe("mutation notification (continued)", () => {
       it("keeps a throwing observer from changing the mutation", async () => {
         const fileSystem = createTestFileSystem({

@@ -81,6 +81,20 @@ function optionalInteger(value: unknown, name: string, minimum = 0): number | un
   return value as number;
 }
 
+/**
+ * An entry identity arriving over RPC.
+ *
+ * Zero is the documented sentinel for a path with no entry, so it is refused
+ * here rather than reaching the namespace and coming back as `ENOENT`, which
+ * would read as "that entry is gone" for something that never was one.
+ */
+export function rpcIdentity(value: unknown): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 1) {
+    throw new VfsError("EINVAL", "ino must be a positive safe integer");
+  }
+  return value as number;
+}
+
 export function rpcOptionalPositiveInteger(value: unknown, name: string): number | undefined {
   return optionalInteger(value, name, 1);
 }

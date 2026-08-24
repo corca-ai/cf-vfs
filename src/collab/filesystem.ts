@@ -178,6 +178,17 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
       : { ...stat, sizeBytes: new TextEncoder().encode(pending.text).byteLength };
   }
 
+  statById(ino: number): VfsStat {
+    // Same correction as `stat`, and for the same reason: an identity is how a
+    // caller finds a document it is holding, so the size it reports has to be
+    // the size the read would serve rather than the one last published.
+    const stat = this.#inner.statById(ino);
+    const pending = this.#pending(stat.path);
+    return pending === undefined
+      ? stat
+      : { ...stat, sizeBytes: new TextEncoder().encode(pending.text).byteLength };
+  }
+
   readFile(path: string): InlineReadResult {
     const resolved = this.#resolved(path);
     const pending = this.#pending(resolved);

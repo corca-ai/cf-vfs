@@ -402,7 +402,9 @@ Pages are bounded (1,000 by default, 10,000 maximum). Continue while `more` is
 set, resuming from the returned `cursor`; the cursor stands still rather than
 rewinding when nothing changed. `changesSince` is not available on a
 credential-bound view: the feed reports paths without regard to what a user can
-see, so it stays with the trusted capability.
+see, so it stays with the trusted capability. `statById` stays there for a
+related reason — identities are consecutive, so answering by one lets a caller
+enumerate the workspace by counting.
 
 ### Editing one file from several places
 

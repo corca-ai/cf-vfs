@@ -355,6 +355,27 @@ describe("common-path SQL cost", () => {
     expect(measured.unchangedWarm).toBeLessThan(measured.off);
   });
 
+  it("reads by entry identity in one statement, whatever the path costs", async () => {
+    const { fileSystem, meter } = meteredFileSystem();
+    fileSystem.mkdir("/a/b/c/d/e/f/g/h", true);
+    await fileSystem.writeFile("/a/b/c/d/e/f/g/h/deep", "body");
+    const ino = fileSystem.stat("/a/b/c/d/e/f/g/h/deep").ino;
+
+    meter.reset();
+    fileSystem.statById(ino);
+    const byIdentity = { statements: meter.statements, rows: meter.rows };
+    meter.reset();
+    fileSystem.stat("/a/b/c/d/e/f/g/h/deep");
+    const byPath = { statements: meter.statements, rows: meter.rows };
+
+    // `id` is INTEGER PRIMARY KEY, which SQLite makes an alias for the rowid,
+    // so this seeks the table's own key and needs no index of its own. Pinned
+    // against the path read so a later change that turns it into a scan, or
+    // that adds an index to carry it, is a failure rather than a slowdown.
+    expect(byIdentity).toEqual({ statements: 1, rows: 1 });
+    expect(byIdentity.statements).toBeLessThanOrEqual(byPath.statements);
+  });
+
   it("decides skipIfUnchanged in a constant number of rows however large the body", async () => {
     async function rowsForUnchanged(sizeBytes: number): Promise<number> {
       const { fileSystem, meter } = meteredFileSystem();

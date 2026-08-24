@@ -402,6 +402,23 @@ transaction leaves a gap, which is harmless because nothing derives meaning
 from identities being consecutive. A recursive copy allocates its whole run up
 front and numbers the rows with `ROW_NUMBER()`, so it stays one statement.
 
+`statById()` reads an entry back by that identity, so a host keying durable
+state to one can find where the entry is now, or learn that it is gone. `id` is
+`INTEGER PRIMARY KEY`, which SQLite makes an alias for the rowid, so the read
+seeks the table's own key in one statement and one row and needs no index. It
+reports the entry rather than what it points at, the way `lstat` does, because
+an identity names a row and there is nothing to resolve through.
+
+It is absent from the credential-bound view, which refuses it with `EPERM`.
+Identities being consecutive is harmless to correctness — nothing derives
+meaning from it — but it is not harmless to a boundary: a caller that may read
+by one can enumerate the workspace by counting up from 1, which is existence,
+cardinality, and paths for entries it cannot reach. Filtering cannot recover
+it. Reporting an unreachable entry as absent is a lie a caller acts on, and
+refusing only those still leaks the same census by bisection. POSIX declines to
+open by inode for this reason rather than permission-checking it, and the
+bound view stays a pathname-only view for the same one.
+
 Version 4 adds `change_seq` to `vfs_path_versions` and a partial index over it.
 The column is added by `ALTER TABLE` for every database including one created
 moments earlier, rather than being declared in the version-1 definition, so a
