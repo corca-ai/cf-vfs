@@ -488,8 +488,16 @@ export class ReservedPathFileSystem implements ShellFileSystem {
     const cursor = options.cursor ?? "";
     const pending = this.#reservedRootsFor(options).filter((entry) => entry.path > cursor);
     if (pending.length === 0) return page;
+    // `findPage` advances by rows scanned, including rows its filters removed.
+    // A synthetic entry beyond that scan frontier must wait: returning it now
+    // while keeping the earlier inner cursor would return it again next page,
+    // and advancing to it would skip unscanned stored matches in between.
+    const frontier = page.nextCursor;
+    const available =
+      frontier === null ? pending : pending.filter((entry) => entry.path <= frontier);
+    if (available.length === 0) return page;
     const limit = options.limit ?? page.entries.length + pending.length;
-    const merged = [...page.entries, ...pending].sort((left, right) =>
+    const merged = [...page.entries, ...available].sort((left, right) =>
       left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
     );
     const kept = merged.slice(0, limit);

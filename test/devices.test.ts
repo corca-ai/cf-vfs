@@ -323,6 +323,30 @@ describe("virtual devices", () => {
     expect(view.find({ path: "/", maxDepth: 1, limit: 1 })).toHaveLength(1);
   });
 
+  it("does not repeat a reserved root while filtered pages advance", async () => {
+    const fileSystem = createTestFileSystem();
+    for (const name of ["alpha", "beta", "zeta"]) await fileSystem.mkdir(`/${name}`);
+    const view = new ReservedPathFileSystem(
+      new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
+    );
+    const seen: string[] = [];
+    let cursor: string | undefined;
+
+    for (let guard = 0; guard < 20; guard += 1) {
+      const page = view.findPage({
+        path: "/",
+        name: "dev",
+        limit: 1,
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      seen.push(...page.entries.map((entry) => entry.path));
+      cursor = page.nextCursor ?? undefined;
+      if (cursor === undefined) break;
+    }
+
+    expect(seen).toEqual(["/dev"]);
+  });
+
   it("honors page limits and cursors inside a reserved directory", () => {
     const fileSystem = createTestFileSystem();
     const view = new ReservedPathFileSystem(

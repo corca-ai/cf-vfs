@@ -18,6 +18,9 @@ included.
 
 ### Fixed
 
+- Filtered root `findPage` traversal now waits until the stored-row scan reaches
+  a reserved path before merging it, preventing synthetic entries such as
+  `/dev` from repeating across pages.
 - Root `find` results now reapply their result ceiling after reserved paths are
   merged with stored entries, so synthetic roots cannot overflow `limit`.
 - Direct `find` calls on reserved directories now honor their result limit and
