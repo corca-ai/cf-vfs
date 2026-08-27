@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- Document registry move handling now closes open destination entries replaced
+  by the move before relocating any open source documents.
 - Metadata mutations on open documents now advance their registry token while
   preserving pending text and report the pending size in their returned stat.
 - Collaborative `lstat` now reports pending document size for a regular file,

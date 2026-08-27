@@ -89,9 +89,12 @@ export class DocumentRegistry {
   }
 
   #relocate(root: string, to: string): void {
-    for (const [path, entry] of [...this.#open]) {
-      if (path !== root && !isDescendant(root, path)) continue;
-      this.#open.delete(path);
+    const moved = [...this.#open].filter(([path]) => path === root || isDescendant(root, path));
+    for (const path of [...this.#open.keys()]) {
+      if (path === to || isDescendant(to, path)) this.#open.delete(path);
+    }
+    for (const [path] of moved) this.#open.delete(path);
+    for (const [path, entry] of moved) {
       this.#open.set(`${to}${path.slice(root.length)}`, entry);
     }
   }

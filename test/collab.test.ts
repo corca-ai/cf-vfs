@@ -95,6 +95,20 @@ describe("document registry", () => {
     expect(registry.get("/lib/a.ts")?.document.text()).toBe("x");
   });
 
+  it("closes an open destination replaced by a move", () => {
+    const registry = new DocumentRegistry();
+    registry.open("/destination.txt", new TextDocument("old"), "token");
+
+    registry.observe({
+      type: "vfs.mutation",
+      op: "move",
+      path: "/source.txt",
+      subtree: { root: "/source.txt", to: "/destination.txt" },
+    });
+
+    expect(registry.paths()).toEqual([]);
+  });
+
   it("closes what a removal took, and leaves the rest", () => {
     const registry = new DocumentRegistry();
     registry.open("/src/a.ts", new TextDocument("x"), "token");
