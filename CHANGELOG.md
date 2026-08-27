@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- `du` now measures a named symbolic link itself instead of following a
+  directory link and charging the target subtree.
 - `ln -s TARGET` now strips trailing slashes when inferring the link name while
   preserving the target text stored in the link.
 - `ln -s TARGET` no longer treats its inferred link name as a second directory

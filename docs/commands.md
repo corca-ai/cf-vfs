@@ -853,7 +853,7 @@ follow it, so writing through a link writes the target and leaves the link
 alone. `rm`, `mv`, `mkdir`, and `ln -sf` act on the link itself, so removing a
 link to a directory leaves the directory, and a dangling or cyclic link can
 still be removed and renamed — it is the link being named, not what it fails
-to reach. `stat`, `ls -l`, `ls -d`, `file`,
+to reach. `stat`, `ls -l`, `ls -d`, `file`, `du`,
 `find`, and `test -L` report the link, with `stat -L` following instead. `ls`
 without `-l` or `-d` lists through a link to a directory, as `ls` does. `cp`
 follows a named link but `cp -r` and `cp -P` copy the link itself, because a

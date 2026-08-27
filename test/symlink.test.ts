@@ -498,6 +498,20 @@ describe("symlink resolution", () => {
     });
   });
 
+  it("does not follow a directory symlink when measuring disk usage", async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/directory/file", "x".repeat(1024), {
+      createParents: true,
+    });
+    harness.fileSystem.symlink("/link", "/directory");
+
+    expect(await harness.run("du /link")).toMatchObject({
+      exitCode: 0,
+      stdout: "0\t/link\n",
+      stderr: "",
+    });
+  });
+
   it("resolves absolute, relative, nested, and directory links", async () => {
     const fs = createTestFileSystem();
     await fs.writeFile("/t/real.txt", "body\n", { createParents: true });
