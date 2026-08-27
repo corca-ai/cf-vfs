@@ -664,8 +664,11 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     });
     await fileSystem.writeFile("/file", "1234");
     const first = fileSystem.readFile("/file");
+    // The second snapshot fits the budget on its own and is refused only
+    // because the first is holding it, which is what `EAGAIN` says and
+    // `ENOSPC` would not: cancelling the first is all it takes.
     expect(() => fileSystem.readFile("/file")).toThrowError(
-      expect.objectContaining({ code: "ENOSPC" }),
+      expect.objectContaining({ code: "EAGAIN" }),
     );
     await first.stream.cancel();
     expect(await bytes(fileSystem.readFile("/file").stream)).toEqual([49, 50, 51, 52]);
@@ -693,10 +696,14 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     await Promise.resolve();
     await Promise.resolve();
     await expect(fileSystem.writeFile("/second", new Uint8Array([4, 5, 6]))).rejects.toMatchObject({
-      code: "ENOSPC",
+      code: "EAGAIN",
     });
     closeFirst?.();
     await first;
+    // Retryable, and retried: the capacity the refusal wanted was only ever
+    // held by a write that has since finished.
+    await fileSystem.writeFile("/second", new Uint8Array([4, 5, 6]));
+    expect(await bytes(fileSystem.readFile("/second").stream)).toEqual([4, 5, 6]);
   });
 
   it("discards a failed input stream without publishing partial bytes", async () => {
@@ -834,6 +841,42 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
       ).rejects.toMatchObject({ code: "ENOSPC" });
       expect(mutations).toEqual([]);
       expect(fileSystem.list("/").map((entry) => entry.path)).toEqual(["/one", "/two"]);
+    });
+
+    it("separates a set too large to ever hold from one that arrived at a busy moment", async () => {
+      const fileSystem = createTestFileSystem({
+        maxInlineFileBytes: 4,
+        maxInFlightBufferedBytes: 8,
+      });
+      await fileSystem.writeFile("/held", "1234");
+
+      // Twelve bytes against a budget of eight. No amount of waiting makes
+      // this set fit, so the caller has to split it rather than retry it.
+      await expect(
+        fileSystem.writeFiles([
+          { path: "/a", body: "1111" },
+          { path: "/b", body: "2222" },
+          { path: "/c", body: "3333" },
+        ]),
+      ).rejects.toMatchObject({ code: "ENOSPC" });
+
+      // The same eight bytes, which fit exactly -- but a read snapshot is
+      // holding four of them. Identical demand, opposite advice.
+      const snapshot = fileSystem.readFile("/held");
+      await expect(
+        fileSystem.writeFiles([
+          { path: "/a", body: "1111" },
+          { path: "/b", body: "2222" },
+        ]),
+      ).rejects.toMatchObject({ code: "EAGAIN" });
+      expect(fileSystem.list("/").map((entry) => entry.path)).toEqual(["/held"]);
+
+      await snapshot.stream.cancel();
+      const written = await fileSystem.writeFiles([
+        { path: "/a", body: "1111" },
+        { path: "/b", body: "2222" },
+      ]);
+      expect(written.map((result) => result.path)).toEqual(["/a", "/b"]);
     });
 
     it("charges a set to the in-flight budget that already bounds one body", async () => {

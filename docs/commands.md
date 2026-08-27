@@ -1112,7 +1112,9 @@ array.
 
 Each entry carries its own `path`, `body`, optional `mode`, and optional
 `ifMutationToken`; `createParents`, `disposition`, and `skipIfUnchanged` apply
-to the call. The per-entry guard is what makes it composable rather than
+to the call. A set too large for the in-flight budget fails with `ENOSPC` and
+has to be split; one that merely collided with concurrent work fails with
+`EAGAIN` and can be retried. The per-entry guard is what makes it composable rather than
 convenient: a caller replacing a known set of files gets all-or-nothing against
 concurrent mutation. Every path reports its own revision and token, a matched
 `skipIfUnchanged` entry reports the ones already in force, and naming one path

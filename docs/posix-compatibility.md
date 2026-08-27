@@ -19,7 +19,7 @@ host filesystem access.
 | Other links and special files | Hard links, devices, sockets, FIFOs, sparse files, xattrs, and `mmap` are unsupported. A hard link is two names for one entry, which this namespace forbids in its shape rather than for want of an identity: a path is unique and an entry stores the one it lives at. `ln` without `-s` is therefore a usage error rather than a copy, and it stays one now that entries carry an identity. |
 | Execution | An inline file with an executable mode bit runs as a shell script in an isolated child scope. There are no processes, `fork`, `execve`, signals, job control, or native binaries, and no interpreter other than this shell profile. |
 | Locks and open handles | There is no persistent descriptor lifecycle or advisory/mandatory locking. Returned inline streams are bounded snapshots; guards provide optimistic concurrency. |
-| Errors | Familiar codes include `ENOENT`, `ENOEXEC`, `EEXIST`, `ENOTDIR`, `EISDIR`, `ENOTEMPTY`, `ELOOP`, `EFBIG`, `ENOSPC`, `EPIPE`, and `ENOTSUP`. `EREVISION` denotes a stale guard. This is not the complete POSIX errno set. |
+| Errors | Familiar codes include `ENOENT`, `ENOEXEC`, `EEXIST`, `ENOTDIR`, `EISDIR`, `ENOTEMPTY`, `ELOOP`, `EFBIG`, `ENOSPC`, `EPIPE`, and `ENOTSUP`. `EREVISION` denotes a stale guard, and `EAGAIN` a refusal worth retrying rather than a permanent one. This is not the complete POSIX errno set. |
 
 `/dev/null` and the descriptor paths `/dev/stdin`, `/dev/stdout`, `/dev/stderr`
 and their `/dev/fd/N` spellings exist during a shell execution and nowhere

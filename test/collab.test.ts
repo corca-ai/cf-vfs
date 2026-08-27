@@ -238,7 +238,7 @@ describe("collaborative filesystem", () => {
     expect(await read(inner, "/other.txt")).toBe("PLAIN\n");
   });
 
-  it("refuses a batch that spans an open document, and passes the rest through", async () => {
+  it("refuses a batch that spans an open document, published or not", async () => {
     const { inner, registry, document, fileSystem } = open("body\n");
     await inner.writeFile("/doc.txt", "body\n");
     registry.open("/doc.txt", document, inner.stat("/doc.txt").mutationToken);
@@ -255,13 +255,44 @@ describe("collaborative filesystem", () => {
     expect(inner.list("/").map((entry) => entry.path)).toEqual(["/doc.txt"]);
     expect(document.text()).toBe("body\n");
 
-    // Nothing open, so nothing to be inconsistent with.
+    // Publishing does not lift the refusal, and must not: it records the token
+    // and clears the dirty flag but leaves the document open, and a read of an
+    // open document is still served from the document.
+    document.type(5, "edited\n");
+    registry.markDirty("/doc.txt");
+    expect(await fileSystem.publish("/doc.txt")).toBe(true);
+    await expect(
+      fileSystem.writeFiles([{ path: "/doc.txt", body: "replacement\n" }]),
+    ).rejects.toMatchObject({ code: "ENOTSUP", path: "/doc.txt" });
+
+    // Closing does, which is one of the two routes the refusal points at.
+    registry.close("/doc.txt");
     await fileSystem.writeFiles([
-      { path: "/one.txt", body: "one\n" },
-      { path: "/two.txt", body: "two\n" },
+      { path: "/doc.txt", body: "batched\n" },
+      { path: "/plain.txt", body: "plain\n" },
     ]);
-    expect(await read(inner, "/one.txt")).toBe("one\n");
-    expect(await read(inner, "/two.txt")).toBe("two\n");
+    expect(await read(inner, "/doc.txt")).toBe("batched\n");
+    expect(await read(inner, "/plain.txt")).toBe("plain\n");
+  });
+
+  it("reconciles an open document with a batch written underneath this view", async () => {
+    const { inner, registry, document, fileSystem } = open("body\n");
+    await inner.writeFile("/doc.txt", "body\n");
+    registry.open("/doc.txt", document, inner.stat("/doc.txt").mutationToken);
+
+    // The other route: the batch goes to the filesystem underneath, which owes
+    // the document nothing, and each open document is brought up to date after
+    // it -- what `reconcile` exists for.
+    await inner.writeFiles([
+      { path: "/doc.txt", body: "reconciled\n" },
+      { path: "/other.txt", body: "other\n" },
+    ]);
+    expect(await fileSystem.reconcile("/doc.txt")).toBe(true);
+
+    expect(document.text()).toBe("reconciled\n");
+    expect(document.external).toHaveLength(1);
+    expect(registry.get("/doc.txt")?.token).toBe(inner.stat("/doc.txt").mutationToken);
+    expect(await read(inner, "/other.txt")).toBe("other\n");
   });
 
   it("stays bound when a credential view is taken from it", async () => {

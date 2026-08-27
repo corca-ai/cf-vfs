@@ -1919,13 +1919,14 @@ ${ENTRY_TRIGGERS}
     if (child !== undefined) throw new VfsError("ENOTEMPTY", "directory is not empty", target);
   }
 
-  private async collectInline(body: ByteBody) {
+  private async collectInline(body: ByteBody, heldByCaller = 0) {
     try {
       return await collectInlineBytes(
         body,
         this.maxInlineFileBytes,
         this.chunkBytes,
         this.inFlightBytes,
+        heldByCaller,
       );
     } catch (error) {
       // Collection aborts at the ceiling, so the body's real size is unknown.
@@ -2844,11 +2845,16 @@ ${ENTRY_TRIGGERS}
     // by a second one -- and the leases taken before the refusal are released
     // here rather than waiting for a transaction that will never open.
     const collected: CollectedWrite[] = [];
+    let held = 0;
     try {
       for (const [index, entry] of entries.entries()) {
         const plan = plans[index];
         if (plan === undefined) break;
-        const lease = await this.collectInline(entry.body);
+        // What the batch is already holding, so the budget can tell a set too
+        // large for it -- retrying which is work with no outcome -- from one
+        // that merely collided with a concurrent read or batch.
+        const lease = await this.collectInline(entry.body, held);
+        held += lease.sizeBytes;
         collected.push({ plan, lease, digest: await this.incomingDigest(options, lease) });
       }
     } catch (error) {

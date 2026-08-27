@@ -247,10 +247,22 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
    * commit the storage half and lose the document half, which is precisely
    * what the batch exists to rule out.
    *
-   * Refusing is what keeps the guarantee true rather than nearly true. A host
-   * that wants both publishes the open documents first -- `publish` returns
-   * only once storage has them -- and then the paths are ordinary files and
-   * the batch is an ordinary batch.
+   * Publishing first is *not* the way around it. `publish` records the token
+   * and clears the dirty flag; it does not close the document, so the path is
+   * still open and still refused -- and it should be, because a read of an
+   * open document is served from the document. A batch that wrote underneath
+   * one would be followed by a `cat` returning the document's older text with
+   * nothing reporting the disagreement.
+   *
+   * Two routes work. Either `close` the document, run the batch, and reopen at
+   * the token the batch published; or run the batch against the filesystem
+   * underneath this one and `reconcile` each open document afterwards, which
+   * is what `reconcile` is for -- a change the document did not make.
+   *
+   * The check runs before any body is collected, so a document opened during
+   * collection is not seen and the batch commits underneath it. The registry
+   * is the host's to drive, so that ordering is the host's too: open and close
+   * documents around a batch, not during one.
    */
   async writeFiles(
     entries: readonly WriteFilesEntry[],
