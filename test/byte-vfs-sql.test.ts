@@ -1031,6 +1031,23 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     expect(await fileSystem.drainGarbage()).toMatchObject({ deleted: 1 });
   });
 
+  it("retries an opaque commit after a local precondition is repaired", async () => {
+    const store = new MemoryOpaqueStore();
+    const fileSystem = createTestFileSystem({ opaqueStore: store });
+    const upload = await fileSystem.beginOpaqueUpload("/parent/asset");
+    await store.putIfAbsent(upload.objectKey, "body");
+
+    await expect(fileSystem.commitOpaqueUpload(upload.uploadId)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    fileSystem.mkdir("/parent");
+
+    await expect(fileSystem.commitOpaqueUpload(upload.uploadId)).resolves.toMatchObject({
+      path: "/parent/asset",
+      contentClass: "opaque",
+    });
+  });
+
   it("makes successful opaque commit retries idempotent", async () => {
     const store = new MemoryOpaqueStore();
     const fileSystem = createTestFileSystem({ opaqueStore: store });

@@ -18,6 +18,9 @@ included.
 
 ### Fixed
 
+- Opaque commits that fail a local filesystem precondition now release their
+  verification lease, allowing an immediate retry after the parent or quota is
+  repaired instead of returning `EAGAIN` until lease expiry.
 - Change-feed pagination now keeps every path from a set-based mutation on the
   same page, preventing a numeric cursor from skipping the remainder of a
   recursive copy, move, or removal when it crosses the requested limit.

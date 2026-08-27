@@ -4129,65 +4129,70 @@ ${ENTRY_TRIGGERS}
       );
     }
 
-    const committed = this.transaction(() => {
-      const session = this.upload(uploadId);
-      if (
-        session === null ||
-        session.state !== "verifying" ||
-        session.verificationToken !== started.verificationToken
-      )
-        throw new VfsError("EREVISION", "upload verification lease was lost", started.session.path);
-      if (this.tokenFor(session.path) !== session.expectedMutationToken) {
-        this.sql.exec(
-          `UPDATE vfs_upload_sessions SET
-             state = 'garbage', verification_token = NULL,
-             verification_lease_until_ms = NULL
-           WHERE id = ?`,
-          uploadId,
+    const finalize = () =>
+      this.transaction(() => {
+        const session = this.upload(uploadId);
+        if (
+          session === null ||
+          session.state !== "verifying" ||
+          session.verificationToken !== started.verificationToken
+        )
+          throw new VfsError(
+            "EREVISION",
+            "upload verification lease was lost",
+            started.session.path,
+          );
+        if (this.tokenFor(session.path) !== session.expectedMutationToken) {
+          this.sql.exec(
+            `UPDATE vfs_upload_sessions SET
+               state = 'garbage', verification_token = NULL,
+               verification_lease_until_ms = NULL
+             WHERE id = ?`,
+            uploadId,
+          );
+          this.queueUploadGarbage(session, this.now());
+          return { stale: true, path: session.path, objectKey: session.objectKey } as const;
+        }
+        const existing = this.oneEntry(session.path);
+        if (existing?.kind === "directory")
+          throw new VfsError("EISDIR", "is a directory", session.path);
+        const now = this.now();
+        this.prepareParents(session.path, session.createParents, now, []);
+        this.assertCapacity(
+          existing?.contentClass === "inline" ? -existing.sizeBytes : 0,
+          existing === null ? 1 : 0,
+          session.path,
         );
-        this.queueUploadGarbage(session, this.now());
-        return { stale: true, path: session.path, objectKey: session.objectKey } as const;
-      }
-      const existing = this.oneEntry(session.path);
-      if (existing?.kind === "directory")
-        throw new VfsError("EISDIR", "is a directory", session.path);
-      const now = this.now();
-      this.prepareParents(session.path, session.createParents, now, []);
-      this.assertCapacity(
-        existing?.contentClass === "inline" ? -existing.sizeBytes : 0,
-        existing === null ? 1 : 0,
-        session.path,
-      );
-      const insertedObject = this.sql
-        .exec<SqlRow>(
-          `INSERT INTO vfs_opaque_objects (
+        const insertedObject = this.sql
+          .exec<SqlRow>(
+            `INSERT INTO vfs_opaque_objects (
            r2_key, size_bytes, etag, r2_version, verified_sha256,
            content_type, retain_until_ms, created_at_ms
          ) VALUES (?, ?, ?, ?, ?, ?, 0, ?)
          RETURNING id`,
-          metadata.key,
-          metadata.sizeBytes,
-          metadata.etag,
-          metadata.version,
-          metadata.verifiedSha256 ?? null,
-          session.contentType ?? metadata.contentType ?? null,
-          now,
-        )
-        .one();
-      const objectId = integerColumn(insertedObject, "id");
-      if (existing?.contentClass === "inline") {
-        this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", existing.id);
-      }
-      const token = this.bumpToken(session.path, existing === null ? "create" : "write");
-      const parentPath = dirname(session.path);
-      const name = basename(session.path);
-      const mode = session.mode ?? existing?.mode ?? FILE_MODE;
-      const uid = existing?.uid ?? 0;
-      const gid = existing?.gid ?? 0;
-      const createdAtMs = existing?.createdAtMs ?? now;
-      const written = this.sql
-        .exec<SqlRow>(
-          `INSERT INTO vfs_entries (
+            metadata.key,
+            metadata.sizeBytes,
+            metadata.etag,
+            metadata.version,
+            metadata.verifiedSha256 ?? null,
+            session.contentType ?? metadata.contentType ?? null,
+            now,
+          )
+          .one();
+        const objectId = integerColumn(insertedObject, "id");
+        if (existing?.contentClass === "inline") {
+          this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", existing.id);
+        }
+        const token = this.bumpToken(session.path, existing === null ? "create" : "write");
+        const parentPath = dirname(session.path);
+        const name = basename(session.path);
+        const mode = session.mode ?? existing?.mode ?? FILE_MODE;
+        const uid = existing?.uid ?? 0;
+        const gid = existing?.gid ?? 0;
+        const createdAtMs = existing?.createdAtMs ?? now;
+        const written = this.sql
+          .exec<SqlRow>(
+            `INSERT INTO vfs_entries (
            id, path, parent_path, name, kind, content_class, opaque_object_id,
            size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
          ) VALUES (?, ?, ?, ?, 'file', 'opaque', ?, ?, ?, ?, ?, ?, ?, 1)
@@ -4197,58 +4202,75 @@ ${ENTRY_TRIGGERS}
            modified_at_ms = excluded.modified_at_ms,
            revision = vfs_entries.revision + 1
          RETURNING id, revision`,
-          existing?.id ?? this.allocateIno(),
-          session.path,
+            existing?.id ?? this.allocateIno(),
+            session.path,
+            parentPath,
+            name,
+            objectId,
+            metadata.sizeBytes,
+            mode,
+            uid,
+            gid,
+            createdAtMs,
+            now,
+          )
+          .one();
+        this.updateUsage(
+          existing?.contentClass === "inline" ? -existing.sizeBytes : 0,
+          existing === null ? 1 : 0,
+        );
+        if (existing?.contentClass === "opaque" && existing.opaqueObjectId !== null) {
+          this.queueObjectIfUnreferenced(existing.opaqueObjectId, now);
+        }
+        const contentType = session.contentType ?? metadata.contentType;
+        const stat: OpaqueFileStat = {
+          path: session.path,
           parentPath,
+          ino: integerColumn(written, "id"),
           name,
-          objectId,
-          metadata.sizeBytes,
+          kind: "file",
+          contentClass: "opaque",
+          sizeBytes: metadata.sizeBytes,
           mode,
           uid,
           gid,
           createdAtMs,
-          now,
-        )
-        .one();
-      this.updateUsage(
-        existing?.contentClass === "inline" ? -existing.sizeBytes : 0,
-        existing === null ? 1 : 0,
-      );
-      if (existing?.contentClass === "opaque" && existing.opaqueObjectId !== null) {
-        this.queueObjectIfUnreferenced(existing.opaqueObjectId, now);
-      }
-      const contentType = session.contentType ?? metadata.contentType;
-      const stat: OpaqueFileStat = {
-        path: session.path,
-        parentPath,
-        ino: integerColumn(written, "id"),
-        name,
-        kind: "file",
-        contentClass: "opaque",
-        sizeBytes: metadata.sizeBytes,
-        mode,
-        uid,
-        gid,
-        createdAtMs,
-        modifiedAtMs: now,
-        revision: integerColumn(written, "revision"),
-        mutationToken: token,
-        ...(contentType === undefined ? {} : { contentType }),
-        ...(metadata.verifiedSha256 === undefined
-          ? {}
-          : { verifiedSha256: metadata.verifiedSha256 }),
-      };
-      this.sql.exec(
-        `UPDATE vfs_upload_sessions SET
-           state = 'committed', verification_token = NULL,
-           verification_lease_until_ms = NULL, receipt_json = ?, expires_at_ms = ?
-         WHERE id = ?`,
-        JSON.stringify(stat),
-        now + this.receiptRetentionMs,
-        uploadId,
-      );
-      return { stale: false, stat } as const;
-    });
+          modifiedAtMs: now,
+          revision: integerColumn(written, "revision"),
+          mutationToken: token,
+          ...(contentType === undefined ? {} : { contentType }),
+          ...(metadata.verifiedSha256 === undefined
+            ? {}
+            : { verifiedSha256: metadata.verifiedSha256 }),
+        };
+        this.sql.exec(
+          `UPDATE vfs_upload_sessions SET
+             state = 'committed', verification_token = NULL,
+             verification_lease_until_ms = NULL, receipt_json = ?, expires_at_ms = ?
+           WHERE id = ?`,
+          JSON.stringify(stat),
+          now + this.receiptRetentionMs,
+          uploadId,
+        );
+        return { stale: false, stat } as const;
+      });
+    let committed: ReturnType<typeof finalize>;
+    try {
+      committed = finalize();
+    } catch (error) {
+      this.transaction(() => {
+        this.sql.exec(
+          `UPDATE vfs_upload_sessions SET
+             state = 'open', verification_token = NULL,
+             verification_lease_until_ms = NULL
+           WHERE id = ? AND state = 'verifying' AND verification_token = ?`,
+          uploadId,
+          started.verificationToken,
+        );
+      });
+      await this.scheduleGarbageAlarm();
+      throw error;
+    }
     if (committed.stale) {
       await this.scheduleGarbageAlarm();
       emitVfsEvent(this.onEvent, {
