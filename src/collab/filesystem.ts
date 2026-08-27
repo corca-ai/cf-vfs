@@ -38,6 +38,7 @@ import type {
 } from "../vfs/types.js";
 import { textEdits } from "./edits.js";
 import { type DocumentRegistry, decodeText } from "./registry.js";
+import type { CollaborativeDocument } from "./types.js";
 
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 
@@ -118,11 +119,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
       ifMutationToken: open.token,
       skipIfUnchanged: true,
     });
-    const current = this.#registry.get(path);
-    if (current?.document === open.document) {
-      this.#registry.markPublished(path, result.mutationToken);
-      if (current.document.text() !== publishedText) this.#registry.markDirty(path);
-    }
+    this.#recordStoredText(path, open.document, publishedText, result.mutationToken);
     return true;
   }
 
@@ -142,11 +139,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     const storedText = decodeText(bytes, path);
     const edits = textEdits(open.document.text(), storedText);
     if (edits.length > 0) open.document.applyExternal(edits);
-    const current = this.#registry.get(path);
-    if (current?.document === open.document) {
-      this.#registry.markPublished(path, read.stat.mutationToken);
-      if (current.document.text() !== storedText) this.#registry.markDirty(path);
-    }
+    this.#recordStoredText(path, open.document, storedText, read.stat.mutationToken);
     return edits.length > 0;
   }
 
@@ -173,6 +166,18 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
   #pending(path: string): { text: string } | undefined {
     const open = this.#registry.get(path);
     return open === undefined || !open.dirty ? undefined : { text: open.document.text() };
+  }
+
+  #recordStoredText(
+    path: string,
+    document: CollaborativeDocument,
+    storedText: string,
+    mutationToken: string,
+  ): void {
+    const current = this.#registry.get(path);
+    if (current?.document !== document) return;
+    this.#registry.markPublished(path, mutationToken);
+    if (current.document.text() !== storedText) this.#registry.markDirty(path);
   }
 
   #withPendingSize(stat: VfsStat): VfsStat {
@@ -270,7 +275,9 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
       // `publishDocument` a silent no-op whenever it is handed this view
       // rather than the one underneath, which is a mistake nothing would
       // report.
-      return this.#inner.writeFile(path, next, options);
+      const result = await this.#inner.writeFile(path, next, options);
+      this.#recordStoredText(resolved, open.document, next, result.mutationToken);
+      return result;
     }
     open.document.applyExternal(edits);
     this.#registry.markDirty(resolved);

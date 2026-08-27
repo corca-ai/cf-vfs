@@ -314,6 +314,19 @@ describe("collaborative filesystem", () => {
     expect(document.text()).toBe("body\n");
   });
 
+  it("keeps the publication token after an identical routed write", async () => {
+    const { inner, registry, document, fileSystem } = open("body\n");
+    await inner.writeFile("/doc.txt", "body\n");
+    registry.open("/doc.txt", document, inner.stat("/doc.txt").mutationToken);
+
+    await fileSystem.writeFile("/doc.txt", "body\n");
+    document.type(5, "edited\n");
+    registry.markDirty("/doc.txt");
+
+    expect(await fileSystem.publish("/doc.txt")).toBe(true);
+    expect(await read(inner, "/doc.txt")).toBe("body\nedited\n");
+  });
+
   it("leaves files nobody has open entirely alone", async () => {
     const { inner, fileSystem } = open("");
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });

@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- An identical write routed through an open document now advances the
+  registry's publication token, so the next real edit can still be published.
 - Writes routed through an open document now enforce mutation-token guards and
   create-only disposition before applying edits.
 - Credential-bound collaborative writes now enforce file write permissions
