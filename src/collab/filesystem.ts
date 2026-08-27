@@ -112,11 +112,16 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
   async publish(path: string): Promise<boolean> {
     const open = this.#registry.get(path);
     if (open === undefined || !open.dirty) return false;
-    const result = await this.#inner.writeFile(path, open.document.text(), {
+    const publishedText = open.document.text();
+    const result = await this.#inner.writeFile(path, publishedText, {
       ifMutationToken: open.token,
       skipIfUnchanged: true,
     });
-    this.#registry.markPublished(path, result.mutationToken);
+    const current = this.#registry.get(path);
+    if (current?.document === open.document) {
+      this.#registry.markPublished(path, result.mutationToken);
+      if (current.document.text() !== publishedText) this.#registry.markDirty(path);
+    }
     return true;
   }
 

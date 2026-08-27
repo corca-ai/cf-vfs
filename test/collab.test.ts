@@ -134,6 +134,27 @@ describe("document registry", () => {
     expect(fileSystem.stat("/doc.txt").revision).toBe(settled);
   });
 
+  it("keeps edits made while a publication is in flight dirty", async () => {
+    const fileSystem = createTestFileSystem();
+    await fileSystem.writeFile("/doc.txt", "body\n");
+    const registry = new DocumentRegistry();
+    const view = new CollaborativeFileSystem(fileSystem, registry);
+    const document = new TextDocument("body\n");
+    registry.open("/doc.txt", document, fileSystem.stat("/doc.txt").mutationToken);
+    document.type(5, "first\n");
+    registry.markDirty("/doc.txt");
+
+    const publishing = view.publish("/doc.txt");
+    document.type(document.text().length, "second\n");
+    registry.markDirty("/doc.txt");
+    await publishing;
+
+    expect(registry.get("/doc.txt")?.dirty).toBe(true);
+    expect(await read(fileSystem, "/doc.txt")).toBe("body\nfirst\n");
+    expect(await view.publish("/doc.txt")).toBe(true);
+    expect(await read(fileSystem, "/doc.txt")).toBe("body\nfirst\nsecond\n");
+  });
+
   it("refuses to publish over a change it did not see", async () => {
     const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/doc.txt", "body\n");

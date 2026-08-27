@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- Collaborative publication now keeps edits made while a write is in flight
+  pending for the next publication instead of incorrectly marking them clean.
 - Collaborative directory traversal now reports the byte size of pending
   document text, matching `stat` and the bytes a collaborative read serves.
 - `countSubtree` now includes nested synthetic entries such as `/dev/fd/0`
