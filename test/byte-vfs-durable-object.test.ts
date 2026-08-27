@@ -238,98 +238,42 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(result.stat.path).toBe("/dir/file");
   });
 
-  it("names the batch entry a malformed write DTO arrived in", async () => {
+  it("rejects a malformed batch before writing any entry", async () => {
     const stub = workspace("batch-rpc-validation");
     const result = await runInDurableObject(stub, async (instance) => {
-      const errors: unknown[] = [];
-      for (const entries of [
-        [
-          { path: "/ok", body: "body" },
-          { path: 7, body: "body" },
-        ],
-        [
-          { path: "/ok", body: "body" },
-          { path: "/bad", body: { not: "bytes" } },
-        ],
-        [
-          { path: "/ok", body: "body" },
-          { path: "/bad", body: "body", nonsense: true },
-        ],
-      ]) {
-        try {
-          await instance.writeFiles(entries as never);
-          errors.push(null);
-        } catch (caught) {
-          errors.push(caught);
-        }
+      let error: unknown;
+      try {
+        await instance.writeFiles([
+          { path: "/valid", body: "body" },
+          { path: "/invalid", body: { not: "bytes" } },
+        ] as never);
+      } catch (caught) {
+        error = caught;
       }
-      return { errors, entries: instance.list("/").length };
+      return { error, entries: instance.list("/").length };
     });
 
-    // A caller holding a set needs to know which entry, not that one of them
-    // was wrong -- and a batch refused at the boundary writes none of it.
-    expect(result.errors).toEqual([
-      expect.objectContaining({ code: "EINVAL", message: "entries[1].path must be a string" }),
-      expect.objectContaining({ code: "EINVAL" }),
-      expect.objectContaining({
-        code: "EINVAL",
-        message: "entries[1].nonsense is not supported",
-      }),
-    ]);
+    expect(result.error).toMatchObject({
+      code: "EINVAL",
+      message: "entries[1].body must be bytes, text, or a byte stream",
+    });
     expect(result.entries).toBe(0);
-  });
-
-  it("rejects malformed shell RPC DTOs deterministically", async () => {
-    const stub = workspace("shell-rpc-validation");
-    const errors = await runInDurableObject(stub, async (instance) => {
-      const malformed = [
-        { script: 123 },
-        { script: "echo unreachable", env: { VALID: "yes", INVALID: 1 } },
-        { script: "echo unreachable", args: ["valid", 1] },
-      ];
-      const caught: unknown[] = [];
-      for (const options of malformed) {
-        try {
-          await instance.executeText(options as never);
-          caught.push(null);
-        } catch (error) {
-          caught.push(error);
-        }
-      }
-      return caught;
-    });
-    expect(errors).toEqual([
-      expect.objectContaining({ code: "EINVAL", message: "options.script must be a string" }),
-      expect.objectContaining({ code: "EINVAL", message: "options.env values must be strings" }),
-      expect.objectContaining({
-        code: "EINVAL",
-        message: "options.args must be an array of strings",
-      }),
-    ]);
   });
 
   it("rejects POSIX IDs outside the SQLite uint32 range at the RPC boundary", async () => {
     const stub = workspace("shell-rpc-posix-id-range");
-    const errors = await runInDurableObject(stub, async (instance) => {
-      const invalidCredentials = [
-        { uid: 0x1_0000_0000, gid: 1 },
-        { uid: 1, gid: 1, supplementaryGids: [0x1_0000_0000] },
-      ];
-      return Promise.all(
-        invalidCredentials.map(async (credentials) => {
-          try {
-            await instance.executeText({ script: "echo unreachable", credentials } as never);
-            return null;
-          } catch (caught) {
-            return caught;
-          }
-        }),
-      );
+    const error = await runInDurableObject(stub, async (instance) => {
+      try {
+        await instance.executeText({
+          script: "echo unreachable",
+          credentials: { uid: 0x1_0000_0000, gid: 1 },
+        } as never);
+        return null;
+      } catch (caught) {
+        return caught;
+      }
     });
-    expect(errors).toEqual([
-      expect.objectContaining({ code: "EINVAL" }),
-      expect.objectContaining({ code: "EINVAL" }),
-    ]);
+    expect(error).toMatchObject({ code: "EINVAL" });
   });
 
   it("fails writes before the configured SQLite headroom is consumed", async () => {

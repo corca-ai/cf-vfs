@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- Malformed bodies in `writeFiles` now identify the failing entry index and
+  field instead of reporting only a context-free `body` error.
 - RPC option records and retained opaque-upload receipts are now rebuilt from
   parsed fields instead of asserted wholesale. A damaged receipt missing its
   entry identity can no longer escape as a complete `OpaqueFileStat`, and

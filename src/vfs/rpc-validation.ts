@@ -192,7 +192,7 @@ function guardOptions(input: UnknownRecord): { ifMutationToken?: string } {
   return ifMutationToken === undefined ? {} : { ifMutationToken };
 }
 
-export function rpcByteBody(value: unknown): ByteBody {
+export function rpcByteBody(value: unknown, name = "body"): ByteBody {
   if (
     typeof value === "string" ||
     value instanceof ArrayBuffer ||
@@ -200,7 +200,7 @@ export function rpcByteBody(value: unknown): ByteBody {
     value instanceof ReadableStream
   )
     return value;
-  throw new VfsError("EINVAL", "body must be bytes, text, or a byte stream");
+  throw new VfsError("EINVAL", `${name} must be bytes, text, or a byte stream`);
 }
 
 export function rpcPageOptions(value: unknown): PageOptions | undefined {
@@ -296,7 +296,7 @@ export function rpcWriteFilesEntries(value: unknown): WriteFilesEntry[] {
     const mode = optionalInteger(input["mode"], `${name}.mode`);
     return {
       path: rpcString(input["path"], `${name}.path`),
-      body: rpcByteBody(input["body"]),
+      body: rpcByteBody(input["body"], `${name}.body`),
       ...(ifMutationToken === undefined ? {} : { ifMutationToken }),
       ...(mode === undefined ? {} : { mode }),
     };
