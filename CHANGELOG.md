@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- `listPage` now honors limits and cursors when listing a reserved directory
+  such as `/dev`, instead of returning all synthetic entries in one page.
 - `basename` and `dirname` now process path text lexically, preserving `..`
   components and accepting an empty operand instead of canonicalizing through
   the virtual root.
