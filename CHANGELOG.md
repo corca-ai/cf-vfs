@@ -18,6 +18,9 @@ included.
 
 ### Fixed
 
+- `ln -s TARGET` no longer treats its inferred link name as a second directory
+  operand, preventing an existing `./basename(TARGET)` directory from receiving
+  an unintended nested link.
 - Opaque commits that fail a local filesystem precondition now release their
   verification lease, allowing an immediate retry after the parent or quota is
   repaired instead of returning `EAGAIN` until lease expiry.

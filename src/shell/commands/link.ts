@@ -66,8 +66,11 @@ export const lnCommand = /* @__PURE__ */ defineApplet(LN, async (context, argv) 
   const linkName = name ?? target.split("/").pop() ?? "";
   if (linkName === "") throw appletUsageError(LN, "requires a link name");
   // An existing directory as the destination means "inside it", the way `mv`
-  // and `cp` read the same operand.
-  const path = destinationPath(context, target, linkName);
+  // and `cp` read the same operand. An inferred name is already the final path:
+  // treating it as an explicit destination a second time would turn `ln -s
+  // /missing/foo` into `foo/foo` whenever `./foo` is a directory.
+  const path =
+    name === undefined ? commandPath(context, linkName) : destinationPath(context, target, name);
   context.budget.mutation();
   context.fileSystem.symlink(path, target, { replace: has("force") });
   return 0;

@@ -476,6 +476,16 @@ describe("symlink schema", () => {
 });
 
 describe("symlink resolution", () => {
+  it("does not reinterpret an inferred link name as a destination directory", async () => {
+    const harness = createBashHarness();
+    harness.fileSystem.mkdir("/foo");
+
+    const result = await harness.run("ln -s /missing/foo");
+
+    expect(result.exitCode).toBe(1);
+    expect(harness.fileSystem.list("/foo")).toEqual([]);
+  });
+
   it("resolves absolute, relative, nested, and directory links", async () => {
     const fs = createTestFileSystem();
     await fs.writeFile("/t/real.txt", "body\n", { createParents: true });
