@@ -336,6 +336,31 @@ describe("virtual devices", () => {
     expect(seen).toEqual(expected);
   });
 
+  it("honors find-page limits and cursors inside a reserved directory", () => {
+    const fileSystem = createTestFileSystem();
+    const view = new ReservedPathFileSystem(
+      new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
+    );
+    const options = { path: "/dev", type: "file" as const };
+    const expected = view.find(options).map((entry) => entry.path);
+    const seen: string[] = [];
+    let cursor: string | undefined;
+
+    for (let guard = 0; guard < 20; guard += 1) {
+      const page = view.findPage({
+        ...options,
+        limit: 1,
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      expect(page.entries.length).toBeLessThanOrEqual(1);
+      seen.push(...page.entries.map((entry) => entry.path));
+      cursor = page.nextCursor ?? undefined;
+      if (cursor === undefined) break;
+    }
+
+    expect(seen).toEqual(expected);
+  });
+
   it("lists the applet directories that resolve commands", async () => {
     const harness = createBashHarness();
     // `which cat` answering `/bin/cat` and `ls /bin` showing it are the same

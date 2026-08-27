@@ -469,7 +469,21 @@ export class ReservedPathFileSystem implements ShellFileSystem {
 
   findPage(options: FindOptions): EntryPage {
     if (this.#at(options.path) !== undefined) {
-      return { entries: this.#findHere(options), nextCursor: null, scanned: 0 };
+      if (
+        options.limit !== undefined &&
+        (!Number.isSafeInteger(options.limit) || options.limit <= 0)
+      ) {
+        throw new VfsError("EINVAL", "limit must be a positive safe integer");
+      }
+      const cursor = options.cursor ?? "";
+      const remaining = this.#findHere(options).filter((entry) => entry.path > cursor);
+      const limit = options.limit ?? remaining.length;
+      const entries = remaining.slice(0, limit);
+      return {
+        entries,
+        nextCursor: remaining.length > limit ? (entries.at(-1)?.path ?? null) : null,
+        scanned: entries.length,
+      };
     }
     const page = this.#inner.findPage(options);
     const cursor = options.cursor ?? "";

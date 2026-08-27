@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- `findPage` now honors limits and cursors when traversing a reserved directory
+  directly, rather than materializing every synthetic child at once.
 - `listPage` now honors limits and cursors when listing a reserved directory
   such as `/dev`, instead of returning all synthetic entries in one page.
 - `basename` and `dirname` now process path text lexically, preserving `..`
