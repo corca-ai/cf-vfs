@@ -1,6 +1,6 @@
 {
   "name": "@corca-ai/cf-vfs",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A tree-shakable virtual filesystem for Cloudflare Durable Objects and R2",
   "license": "MIT",
   "author": "corca-ai",
@@ -165,6 +165,8 @@
     "build": "npm run clean && tsc -p tsconfig.build.json",
     "prepare": "npm run build && npm run hooks:install",
     "hooks:install": "node scripts/install-hooks.mjs",
+    "release:prepare": "node scripts/prepare-release.mjs",
+    "release:notes": "node scripts/release-notes.mjs",
     "prepublishOnly": "npm run check",
     "typegen:test": "wrangler types worker-configuration.d.ts --config wrangler.test.jsonc --env-interface VfsTestEnv --include-runtime false",
     "typegen:benchmark": "wrangler types bench/worker-configuration.d.ts --config wrangler.benchmark.jsonc --env-interface VfsBenchmarkEnv --include-runtime false",

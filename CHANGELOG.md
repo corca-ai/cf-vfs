@@ -10,10 +10,13 @@ An entry says what changed and why in a sentence or two; the linked pull
 request carries the reasoning, the measurements, and the alternatives that were
 rejected.
 
+Entries under **Unreleased** are on `main` and have not been released, so a
+consumer installing from a git reference already has them — breaking changes
+included.
+
 ## [Unreleased]
 
-Everything below is on `main` and has not been released. A consumer installing
-from a git reference already has it, including the breaking changes.
+## [0.2.0] — 2026-08-27
 
 ### Removed
 
@@ -143,5 +146,6 @@ to the release, so the package can be installed by a consumer that pins
 [`a335bd1`]: https://github.com/corca-ai/cf-vfs/commit/a335bd1
 [`1a4447d`]: https://github.com/corca-ai/cf-vfs/commit/1a4447d
 [`32a2c15`]: https://github.com/corca-ai/cf-vfs/commit/32a2c15
-[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/corca-ai/cf-vfs/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/corca-ai/cf-vfs/releases/tag/v0.1.0

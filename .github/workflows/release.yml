@@ -1,0 +1,62 @@
+name: Release
+
+# Pushing the tag is what publishes. Everything before it -- the version bump,
+# the changelog section, the comparison links -- lands on `main` through an
+# ordinary pull request prepared by `npm run release:prepare`, so a release is
+# reviewed as a diff before it is a decision.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      # Before anything is published, not after. A tag that disagrees with
+      # package.json, or a version with no changelog section, would otherwise
+      # become a release that ships the wrong thing or describes nothing.
+      - name: Tag, package.json, and changelog agree
+        run: node scripts/release-notes.mjs --tag "${GITHUB_REF_NAME}" > /dev/null
+
+      # The tag is a commit that already passed CI on `main`, but a tarball is
+      # published from here and a broken one is worse than a slow release.
+      - run: npm run check
+      - run: npm run bench:check
+
+      # Written to a file rather than piped: `npm pack --json` lists every file
+      # in the tarball -- 179 of them today, 18 KB of JSON -- and a reader that
+      # takes only the first chunk of a pipe would start truncating as the
+      # package grows, at the one moment there is no second chance.
+      - name: Pack
+        id: pack
+        run: |
+          npm pack --json > pack.json
+          integrity=$(node -e \
+            'process.stdout.write(JSON.parse(require("node:fs").readFileSync("pack.json", "utf8"))[0].integrity)')
+          echo "integrity=$integrity" >> "$GITHUB_OUTPUT"
+
+      - name: Release notes
+        run: |
+          node scripts/release-notes.mjs \
+            --tag "${GITHUB_REF_NAME}" \
+            --integrity "${{ steps.pack.outputs.integrity }}" > release-notes.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file release-notes.md \
+            ./*.tgz
