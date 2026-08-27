@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- Copying a missing path onto itself now reports the missing source instead of
+  a same-path conflict that presupposes an entry exists.
 - A same-path `move` now verifies that its source exists instead of reporting a
   successful no-op for a path absent from the filesystem.
 - Moving a missing source to a path lexically below it now reports the missing

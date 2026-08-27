@@ -3622,12 +3622,12 @@ ${ENTRY_TRIGGERS}
     const source = sourceAccess.path;
     const targetAccess = this.resolveAccess(to, true, false);
     const target = targetAccess.path;
-    if (source === target) {
-      throw new VfsError("EINVAL", "source and destination are the same path", target);
-    }
     let queued = 0;
     const result = this.transaction(() => {
       const sourceEntry = sourceAccess.row ?? this.requireEntry(source, false);
+      if (source === target) {
+        throw new VfsError("EINVAL", "source and destination are the same path", target);
+      }
       this.assertTraverse(source, sourceAccess.followed, posix);
       if (sourceEntry.kind === "file") {
         this.assertPermission(sourceEntry, posix, READ_PERMISSION, source);
