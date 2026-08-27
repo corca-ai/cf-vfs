@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- Collaborative reconciliation now keeps locally merged text pending when a
+  document's result differs from the storage snapshot it just incorporated.
 - Collaborative publication now keeps edits made while a write is in flight
   pending for the next publication instead of incorrectly marking them clean.
 - Collaborative directory traversal now reports the byte size of pending

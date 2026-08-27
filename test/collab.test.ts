@@ -178,6 +178,29 @@ describe("document registry", () => {
     expect(await read(fileSystem, "/doc.txt")).toBe("someone else\n");
     expect(document.external).toHaveLength(1);
   });
+
+  it("keeps a locally merged reconciliation pending", async () => {
+    const fileSystem = createTestFileSystem();
+    await fileSystem.writeFile("/doc.txt", "base\n");
+    const registry = new DocumentRegistry();
+    const view = new CollaborativeFileSystem(fileSystem, registry);
+    let text = "base\nlocal\n";
+    const document: CollaborativeDocument = {
+      text: () => text,
+      applyExternal: (edits) => {
+        text = `${applyTextEdits(text, edits)}local\n`;
+      },
+    };
+    registry.open("/doc.txt", document, fileSystem.stat("/doc.txt").mutationToken);
+    registry.markDirty("/doc.txt");
+    await fileSystem.writeFile("/doc.txt", "remote\n");
+
+    expect(await view.reconcile("/doc.txt")).toBe(true);
+    expect(document.text()).toBe("remote\nlocal\n");
+    expect(registry.get("/doc.txt")?.dirty).toBe(true);
+    expect(await view.publish("/doc.txt")).toBe(true);
+    expect(await read(fileSystem, "/doc.txt")).toBe("remote\nlocal\n");
+  });
 });
 
 describe("collaborative filesystem", () => {

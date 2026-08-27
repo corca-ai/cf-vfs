@@ -138,9 +138,14 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     if (open === undefined) return false;
     const read = this.#inner.readFile(path);
     const bytes = await readAllBytes(read.stream, MAX_DOCUMENT_BYTES);
-    const edits = textEdits(open.document.text(), decodeText(bytes, path));
+    const storedText = decodeText(bytes, path);
+    const edits = textEdits(open.document.text(), storedText);
     if (edits.length > 0) open.document.applyExternal(edits);
-    this.#registry.markPublished(path, read.stat.mutationToken);
+    const current = this.#registry.get(path);
+    if (current?.document === open.document) {
+      this.#registry.markPublished(path, read.stat.mutationToken);
+      if (current.document.text() !== storedText) this.#registry.markDirty(path);
+    }
     return edits.length > 0;
   }
 
