@@ -53,13 +53,17 @@ const WRITE_OPTION_KEYS = [...WRITE_FILES_OPTION_KEYS, "ifMutationToken", "mode"
 const METADATA_OPTION_KEYS = ["ifMutationToken", "mode", "modifiedAtMs"] as const;
 const TOUCH_OPTION_KEYS = [...METADATA_OPTION_KEYS, "create", "createParents"] as const;
 
+function isRpcRecord(value: unknown): value is RpcRecord {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 function rpcRecord(value: unknown, name: string): RpcRecord {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRpcRecord(value)) {
     throw new VfsError("EINVAL", `${name} must be an object`);
   }
-  // JavaScript has no indexable-object narrowing. Callers still receive
-  // unknown at every property and must parse each one before using it.
-  return value as RpcRecord;
+  return value;
 }
 
 export function rpcStruct(value: unknown, name: string, allowedKeys: readonly string[]): RpcRecord {
@@ -99,12 +103,11 @@ export function rpcOptionalStringRecord(
   name: string,
 ): Readonly<Record<string, string>> | undefined {
   if (value === undefined) return undefined;
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRpcRecord(value)) {
     throw new VfsError("EINVAL", `${name} must be a string record`);
   }
-  const input = rpcRecord(value, name);
   const parsed: [string, string][] = [];
-  for (const [key, item] of Object.entries(input)) {
+  for (const [key, item] of Object.entries(value)) {
     if (typeof item !== "string") {
       throw new VfsError("EINVAL", `${name} values must be strings`);
     }

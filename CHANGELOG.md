@@ -18,6 +18,9 @@ included.
 
 ### Fixed
 
+- RPC record validation now rejects structured-clone built-ins such as `Map`
+  and `Date` instead of silently treating them as empty option or environment
+  records.
 - Shell RPC execution now rejects permission masks above `0777` at the input
   boundary instead of ignoring them without credentials or failing later with
   a credential-bound filesystem.

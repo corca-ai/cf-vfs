@@ -46,6 +46,11 @@ describe("shell RPC option parsing", () => {
       "options.env values must be strings",
     ],
     [
+      "environment record",
+      { script: "true", env: new Map([["HOME", "/work"]]) },
+      "options.env must be a string record",
+    ],
+    [
       "arguments",
       { script: "true", args: ["valid", 1] },
       "options.args must be an array of strings",
@@ -101,6 +106,12 @@ describe("shell RPC option parsing", () => {
 });
 
 describe("VFS RPC option parsing", () => {
+  it("rejects built-in objects where an option record is required", () => {
+    expect(() => rpcWriteOptions(new Date())).toThrowError(
+      expect.objectContaining({ code: "EINVAL", message: "options must be an object" }),
+    );
+  });
+
   it("accepts the documented integer boundaries and refuses values outside them", () => {
     expect(rpcIdentity(1)).toBe(1);
     expect(rpcOptionalPositiveInteger(Number.MAX_SAFE_INTEGER, "limit")).toBe(
