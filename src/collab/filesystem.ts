@@ -87,6 +87,7 @@ function streamOf(text: string): ReadableStream<Uint8Array> {
 export class CollaborativeFileSystem implements PosixVirtualFileSystem {
   readonly #inner: VirtualFileSystem;
   readonly #registry: DocumentRegistry;
+  #credentials: PosixCredentials | undefined;
 
   constructor(inner: VirtualFileSystem, registry: DocumentRegistry) {
     this.#inner = inner;
@@ -154,10 +155,18 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     if (typeof candidate.forCredentials !== "function") {
       throw new TypeError("the underlying filesystem does not support POSIX credentials");
     }
-    return new CollaborativeFileSystem(
+    const view = new CollaborativeFileSystem(
       candidate.forCredentials(credentials, options),
       this.#registry,
     );
+    view.#credentials = {
+      uid: credentials.uid,
+      gid: credentials.gid,
+      ...(credentials.supplementaryGids === undefined
+        ? {}
+        : { supplementaryGids: [...credentials.supplementaryGids] }),
+    };
+    return view;
   }
 
   /** The document holding unpublished text at `path`, if there is one. */
@@ -171,6 +180,19 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     return pending === undefined
       ? stat
       : { ...stat, sizeBytes: new TextEncoder().encode(pending.text).byteLength };
+  }
+
+  #assertDocumentWrite(path: string): void {
+    const credentials = this.#credentials;
+    if (credentials === undefined || credentials.uid === 0) return;
+    const stat = this.#inner.stat(path);
+    const permissions =
+      stat.uid === credentials.uid
+        ? (stat.mode >> 6) & 0o7
+        : stat.gid === credentials.gid || credentials.supplementaryGids?.includes(stat.gid) === true
+          ? (stat.mode >> 3) & 0o7
+          : stat.mode & 0o7;
+    if ((permissions & 0o2) === 0) throw new VfsError("EACCES", "permission denied", stat.path);
   }
 
   /**
@@ -220,7 +242,9 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     const resolved = this.#resolved(path);
     const open = this.#registry.get(resolved);
     if (open === undefined) return this.#inner.writeFile(path, body, options);
+    this.#assertDocumentWrite(path);
     const next = await bodyText(body, resolved);
+    this.#assertDocumentWrite(path);
     const edits = textEdits(open.document.text(), next);
     if (edits.length === 0) {
       // The text is already what the document holds, so there is nothing to
@@ -298,7 +322,9 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     const resolved = this.#resolved(path);
     const open = this.#registry.get(resolved);
     if (open === undefined) return this.#inner.appendFile(path, body, options);
+    this.#assertDocumentWrite(path);
     const addition = await bodyText(body, resolved);
+    this.#assertDocumentWrite(path);
     const text = open.document.text();
     if (addition.length > 0) {
       open.document.applyExternal([{ offset: text.length, remove: 0, insert: addition }]);

@@ -384,5 +384,13 @@ describe("collaborative filesystem", () => {
     expect(() => stranger.readFile("/doc.txt")).toThrow(
       expect.objectContaining({ code: "EACCES" }) as Error,
     );
+
+    await expect(stranger.writeFile("/doc.txt", "intrusion\n")).rejects.toMatchObject({
+      code: "EACCES",
+    });
+    await expect(stranger.appendFile("/doc.txt", "intrusion\n")).rejects.toMatchObject({
+      code: "EACCES",
+    });
+    expect(document.text()).toBe("body\nedited\n");
   });
 });

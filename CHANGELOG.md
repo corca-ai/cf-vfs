@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- Credential-bound collaborative writes now enforce file write permissions
+  before changing an open document.
 - Collaborative reconciliation now keeps locally merged text pending when a
   document's result differs from the storage snapshot it just incorporated.
 - Collaborative publication now keeps edits made while a write is in flight
