@@ -9,7 +9,7 @@ import {
   normalizePath,
   pathRequiresDirectory,
 } from "../core/path.js";
-import { collectInlineBytes, InFlightByteBudget } from "./buffering.js";
+import { type BufferedChunksLease, collectInlineBytes, InFlightByteBudget } from "./buffering.js";
 import {
   type CommonFileSystemOptions,
   DEFAULT_READ_LEASE_MS,
@@ -67,6 +67,8 @@ import type {
   VfsStat,
   VirtualFileSystem,
   WriteFileOptions,
+  WriteFilesEntry,
+  WriteFilesOptions,
   WriteResult,
 } from "./types.js";
 import { MAX_SYMLINK_HOPS, MAX_SYMLINK_TARGET_BYTES } from "./types.js";
@@ -355,6 +357,39 @@ interface PendingMutation {
 interface CreationParents {
   readonly existing: EntryRow;
   readonly missing: readonly string[];
+}
+
+/**
+ * What a write decided before it started collecting bytes.
+ *
+ * Every decision here is made from SQLite in one synchronous pass, so a call
+ * that is going to be refused is refused before it buffers anything -- and a
+ * batch before it buffers the first of its bodies. `capturedToken` is taken
+ * here and compared again inside the transaction, which is what makes "nothing
+ * moved while the body streamed" a check rather than an assumption.
+ */
+interface InlineWritePlan {
+  /** The path as the caller wrote it, which is what a guard is checked against. */
+  readonly written: string;
+  readonly path: string;
+  readonly followed: readonly string[];
+  readonly createParents: boolean;
+  readonly skipIfUnchanged: boolean;
+  readonly mode: number | undefined;
+  readonly guard: { readonly ifMutationToken?: string };
+  readonly capturedToken: string;
+}
+
+interface InlineWriteOutcome {
+  readonly result: WriteResult;
+  readonly queuedGarbage: boolean;
+}
+
+/** One planned write and the bytes it is holding, ready to commit. */
+interface CollectedWrite {
+  readonly plan: InlineWritePlan;
+  readonly lease: BufferedChunksLease;
+  readonly digest: string | undefined;
 }
 
 interface OpaqueObjectRow {
@@ -1621,7 +1656,25 @@ ${ENTRY_TRIGGERS}
    * above one -- which a limit that can move is what makes reachable.
    */
   private assertCapacity(inlineDelta: number, entryDelta: number, path?: string): void {
-    const usage = this.usage();
+    this.assertCapacityFrom(this.usage(), inlineDelta, entryDelta, path);
+  }
+
+  /**
+   * The same refusal, weighed against a stated starting point.
+   *
+   * A batch accumulates its entries' deltas and weighs them once against the
+   * usage it began from, which `usage()` cannot report by then because every
+   * entry has already moved it. Passing the base in is what lets one set be
+   * judged as one thing, and that is the whole difference between refusing a
+   * set that ends over a ceiling and refusing an entry that is momentarily
+   * over one inside a set that ends under it.
+   */
+  private assertCapacityFrom(
+    usage: { inlineBytes: number; entries: number },
+    inlineDelta: number,
+    entryDelta: number,
+    path?: string,
+  ): void {
     const maxInlineLogicalBytes = this.maxInlineLogicalBytes();
     if (inlineDelta > 0 && usage.inlineBytes + inlineDelta > maxInlineLogicalBytes) {
       this.quotaExceeded(
@@ -1866,13 +1919,14 @@ ${ENTRY_TRIGGERS}
     if (child !== undefined) throw new VfsError("ENOTEMPTY", "directory is not empty", target);
   }
 
-  private async collectInline(body: ByteBody) {
+  private async collectInline(body: ByteBody, heldByCaller = 0) {
     try {
       return await collectInlineBytes(
         body,
         this.maxInlineFileBytes,
         this.chunkBytes,
         this.inFlightBytes,
+        heldByCaller,
       );
     } catch (error) {
       // Collection aborts at the ceiling, so the body's real size is unknown.
@@ -1900,6 +1954,22 @@ ${ENTRY_TRIGGERS}
   }
 
   /**
+   * The same release guarantee for a set of bodies held at once.
+   *
+   * A batch cannot release as it goes: nothing is published until the last
+   * entry has been committed, so every body has to stay materialized until the
+   * transaction closes, and every lease has to be given back whether it
+   * committed or threw.
+   */
+  private useBufferedSet<T>(collected: readonly CollectedWrite[], operation: () => T): T {
+    try {
+      return operation();
+    } finally {
+      for (const item of collected) item.lease.release();
+    }
+  }
+
+  /**
    * The digest of a body about to be written, or undefined when none is wanted.
    *
    * Taken whenever the caller asked to skip an unchanged body, over slabs the
@@ -1912,7 +1982,7 @@ ${ENTRY_TRIGGERS}
    * body -- the steady state of a debounced flush -- without one forever.
    */
   private async incomingDigest(
-    options: WriteFileOptions,
+    options: { skipIfUnchanged?: boolean },
     buffered: { chunks: readonly Uint8Array[]; sizeBytes: number },
   ): Promise<string | undefined> {
     if (options.skipIfUnchanged !== true) return undefined;
@@ -2528,22 +2598,27 @@ ${ENTRY_TRIGGERS}
     if (current === null || due < current) await this.storage.setAlarm(due);
   }
 
-  async writeFile(
+  /**
+   * Everything a write can decide before it holds any bytes.
+   *
+   * Split out so that a batch is refused for a bad disposition, a stale guard,
+   * or a permission on its twelfth entry without having buffered its first,
+   * and so that both forms decide those questions in one place rather than
+   * two. `entry` carries what describes the file and `options` what describes
+   * the call; a single write passes its options as both, which is exactly the
+   * split a batch makes explicit.
+   */
+  private planInlineWrite(
     path: string,
-    body: ByteBody,
-    options: WriteFileOptions = {},
-    posix?: PosixAccessContext,
-  ): Promise<WriteResult> {
+    entry: { ifMutationToken?: string; mode?: number },
+    options: WriteFilesOptions,
+    posix: PosixAccessContext | undefined,
+  ): InlineWritePlan {
     const access = this.resolveAccess(path, true);
     const normalized = access.path;
     const before = access.row ?? this.oneEntry(normalized);
-    this.assertWriteAccess(
-      normalized,
-      before,
-      options.createParents ?? false,
-      access.followed,
-      posix,
-    );
+    const createParents = options.createParents ?? false;
+    this.assertWriteAccess(normalized, before, createParents, access.followed, posix);
     const disposition = options.disposition ?? "upsert";
     if (disposition === "create" && before !== null) {
       throw new VfsError("EEXIST", "file or directory already exists", normalized);
@@ -2552,85 +2627,116 @@ ${ENTRY_TRIGGERS}
       throw new VfsError("ENOENT", "no such file", normalized);
     }
     if (before?.kind === "directory") throw new VfsError("EISDIR", "is a directory", normalized);
-    this.validateGuard(normalized, before, options, path);
-    const capturedToken = this.tokenOf(normalized, before);
-    const buffered = await this.collectInline(body);
-    const digest = await this.incomingDigest(options, buffered);
+    this.validateGuard(normalized, before, entry, path);
+    return {
+      written: path,
+      path: normalized,
+      followed: access.followed,
+      createParents,
+      skipIfUnchanged: options.skipIfUnchanged === true,
+      mode: entry.mode,
+      guard: entry,
+      capturedToken: this.tokenOf(normalized, before),
+    };
+  }
 
-    let queued = false;
-    const result = this.useBuffered(buffered, (chunks, sizeBytes) =>
-      this.transaction(() => {
-        const current = this.oneEntry(normalized);
-        if (this.tokenOf(normalized, current) !== capturedToken) {
-          throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
-        }
-        this.validateGuard(normalized, current, options, path);
-        if (current?.kind === "directory")
-          throw new VfsError("EISDIR", "is a directory", normalized);
-        const now = this.now();
-        const parent =
-          current === null
-            ? this.prepareParents(
-                normalized,
-                options.createParents ?? false,
-                now,
-                access.followed,
-                posix,
-              )
-            : undefined;
-        if (current !== null) {
-          this.assertWriteAccess(normalized, current, false, access.followed, posix);
-        }
-        // Last, so that everything a write refuses is still refused: the
-        // disposition, the guard, the directory check, and write permission
-        // have all been decided by the time an unchanged body can return.
-        if (
-          options.skipIfUnchanged === true &&
-          current !== null &&
-          current.contentClass === "inline" &&
-          current.sizeBytes === sizeBytes &&
-          (options.mode === undefined || options.mode === current.mode) &&
-          this.bodyIsUnchanged(current.id, current.revision, chunks, digest)
-        ) {
-          return {
-            path: normalized,
-            revision: current.revision,
-            mutationToken: capturedToken,
-            sizeBytes,
-            created: false,
-          };
-        }
-        const entryOrParent = parent ?? current ?? this.requireDirectory(dirname(normalized));
-        const previousInlineBytes = current?.contentClass === "inline" ? current.sizeBytes : 0;
-        const inlineDelta = sizeBytes - previousInlineBytes;
-        // An entry that is already there is proof of its own parent. Nothing
-        // removes or replaces a directory while a child remains, and every
-        // route that could reach the parent must delete the child first, which
-        // bumps its version and so fails the token compared just above.
-        // `touch` reaches the same conclusion by returning early; a write has
-        // to say it, because it goes on to write.
-        const owner =
-          current === null
-            ? posix === undefined
-              ? { uid: 0, gid: 0 }
-              : this.creationOwner(entryOrParent, posix)
-            : { uid: current.uid, gid: current.gid };
-        const mode =
-          current === null
-            ? posix === undefined
-              ? (options.mode ?? FILE_MODE)
-              : this.creationMode(options.mode ?? FILE_MODE, posix, entryOrParent, false)
-            : posix === undefined
-              ? (options.mode ?? current.mode)
-              : current.mode;
-        this.assertCapacity(inlineDelta, current === null ? 1 : 0, normalized);
-        const token = this.bumpToken(normalized, current === null ? "create" : "write");
-        if (current?.contentClass === "inline") {
-          this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", current.id);
-        }
-        const written = this.sql
-          .exec<SqlRow>(
-            `INSERT INTO vfs_entries (
+  /**
+   * Publishes one collected body, inside a transaction the caller already owns.
+   *
+   * Split out of `writeFile` so that `writeFiles` commits this same step once
+   * per entry rather than a second implementation of it. That is what makes
+   * "a batch costs a single write nothing" structural rather than a promise:
+   * the single-path form runs this code, so its statement, row-read, and
+   * row-written counts cannot move because a batch exists.
+   *
+   * `pending` is a batch's running capacity delta. A single write leaves it
+   * undefined and validates its own growth here, before the insert it guards.
+   * A batch accumulates instead and weighs the whole set once, which is a
+   * different answer rather than a cheaper one -- see `assertCapacityFrom`.
+   * Ordering inside the transaction is free either way: whichever entry is
+   * refused, every one of them rolls back.
+   */
+  private commitInlineWrite(
+    plan: InlineWritePlan,
+    chunks: readonly Uint8Array[],
+    sizeBytes: number,
+    digest: string | undefined,
+    now: number,
+    posix: PosixAccessContext | undefined,
+    pending?: { inlineBytes: number; entries: number },
+  ): InlineWriteOutcome {
+    const normalized = plan.path;
+    const current = this.oneEntry(normalized);
+    if (this.tokenOf(normalized, current) !== plan.capturedToken) {
+      throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
+    }
+    this.validateGuard(normalized, current, plan.guard, plan.written);
+    if (current?.kind === "directory") throw new VfsError("EISDIR", "is a directory", normalized);
+    const parent =
+      current === null
+        ? this.prepareParents(normalized, plan.createParents, now, plan.followed, posix)
+        : undefined;
+    if (current !== null) {
+      this.assertWriteAccess(normalized, current, false, plan.followed, posix);
+    }
+    // Last, so that everything a write refuses is still refused: the
+    // disposition, the guard, the directory check, and write permission
+    // have all been decided by the time an unchanged body can return.
+    if (
+      plan.skipIfUnchanged &&
+      current !== null &&
+      current.contentClass === "inline" &&
+      current.sizeBytes === sizeBytes &&
+      (plan.mode === undefined || plan.mode === current.mode) &&
+      this.bodyIsUnchanged(current.id, current.revision, chunks, digest)
+    ) {
+      return {
+        result: {
+          path: normalized,
+          revision: current.revision,
+          mutationToken: plan.capturedToken,
+          sizeBytes,
+          created: false,
+        },
+        queuedGarbage: false,
+      };
+    }
+    const entryOrParent = parent ?? current ?? this.requireDirectory(dirname(normalized));
+    const previousInlineBytes = current?.contentClass === "inline" ? current.sizeBytes : 0;
+    const inlineDelta = sizeBytes - previousInlineBytes;
+    // An entry that is already there is proof of its own parent. Nothing
+    // removes or replaces a directory while a child remains, and every
+    // route that could reach the parent must delete the child first, which
+    // bumps its version and so fails the token compared just above.
+    // `touch` reaches the same conclusion by returning early; a write has
+    // to say it, because it goes on to write.
+    const owner =
+      current === null
+        ? posix === undefined
+          ? { uid: 0, gid: 0 }
+          : this.creationOwner(entryOrParent, posix)
+        : { uid: current.uid, gid: current.gid };
+    const mode =
+      current === null
+        ? posix === undefined
+          ? (plan.mode ?? FILE_MODE)
+          : this.creationMode(plan.mode ?? FILE_MODE, posix, entryOrParent, false)
+        : posix === undefined
+          ? (plan.mode ?? current.mode)
+          : current.mode;
+    const entryDelta = current === null ? 1 : 0;
+    if (pending === undefined) this.assertCapacity(inlineDelta, entryDelta, normalized);
+    else {
+      pending.inlineBytes += inlineDelta;
+      pending.entries += entryDelta;
+    }
+    const token = this.bumpToken(normalized, current === null ? "create" : "write");
+    if (current?.contentClass === "inline") {
+      this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", current.id);
+    }
+    const written = this.sql
+      .exec<SqlRow>(
+        `INSERT INTO vfs_entries (
            id, path, parent_path, name, kind, content_class, opaque_object_id,
            size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
            body_digest, body_digest_revision
@@ -2643,42 +2749,149 @@ ${ENTRY_TRIGGERS}
            body_digest = excluded.body_digest,
            body_digest_revision = vfs_entries.revision + 1
          RETURNING id, revision`,
-            current?.id ?? this.allocateIno(),
-            normalized,
-            dirname(normalized),
-            basename(normalized),
-            sizeBytes,
-            mode,
-            owner.uid,
-            owner.gid,
-            current?.createdAtMs ?? now,
-            now,
-            // Null whenever one was not taken, which also clears whatever an
-            // earlier revision left behind rather than relying on the stamp
-            // alone to retire it.
-            digest ?? null,
-          )
-          .one();
-        const entryId = integerColumn(written, "id");
-        this.writeChunks(entryId, 0, chunks);
-        this.updateUsage(inlineDelta, current === null ? 1 : 0);
-        if (
-          current?.contentClass === "opaque" &&
-          current.opaqueObjectId !== null &&
-          this.queueObjectIfUnreferenced(current.opaqueObjectId, now)
-        )
-          queued = true;
-        return {
-          path: normalized,
-          revision: integerColumn(written, "revision"),
-          mutationToken: token,
-          sizeBytes,
-          created: current === null,
-        };
+        current?.id ?? this.allocateIno(),
+        normalized,
+        dirname(normalized),
+        basename(normalized),
+        sizeBytes,
+        mode,
+        owner.uid,
+        owner.gid,
+        current?.createdAtMs ?? now,
+        now,
+        // Null whenever one was not taken, which also clears whatever an
+        // earlier revision left behind rather than relying on the stamp
+        // alone to retire it.
+        digest ?? null,
+      )
+      .one();
+    const entryId = integerColumn(written, "id");
+    this.writeChunks(entryId, 0, chunks);
+    this.updateUsage(inlineDelta, entryDelta);
+    const queuedGarbage =
+      current?.contentClass === "opaque" &&
+      current.opaqueObjectId !== null &&
+      this.queueObjectIfUnreferenced(current.opaqueObjectId, now);
+    return {
+      result: {
+        path: normalized,
+        revision: integerColumn(written, "revision"),
+        mutationToken: token,
+        sizeBytes,
+        created: current === null,
+      },
+      queuedGarbage,
+    };
+  }
+
+  async writeFile(
+    path: string,
+    body: ByteBody,
+    options: WriteFileOptions = {},
+    posix?: PosixAccessContext,
+  ): Promise<WriteResult> {
+    const plan = this.planInlineWrite(path, options, options, posix);
+    const buffered = await this.collectInline(body);
+    const digest = await this.incomingDigest(options, buffered);
+    let queued = false;
+    const result = this.useBuffered(buffered, (chunks, sizeBytes) =>
+      this.transaction(() => {
+        const outcome = this.commitInlineWrite(plan, chunks, sizeBytes, digest, this.now(), posix);
+        queued = outcome.queuedGarbage;
+        return outcome.result;
       }),
     );
     if (queued) await this.scheduleGarbageAlarm();
     return result;
+  }
+
+  /**
+   * Writes several bodies to several paths as one change.
+   *
+   * The three phases are the whole design, and the order is what makes it
+   * possible at all. Every entry is planned against SQLite synchronously, so
+   * a batch that cannot succeed is refused before it holds a byte. Then every
+   * body is collected, which is the only part that awaits. Then one
+   * transaction publishes the set, holding no cursor across anything.
+   *
+   * An open transaction handed back to the host would be the other way to
+   * offer this, and it is the reason this shape exists instead: it would hold
+   * the storage lock across arbitrary caller code. What survives that
+   * constraint is collect, then commit.
+   */
+  async writeFiles(
+    entries: readonly WriteFilesEntry[],
+    options: WriteFilesOptions = {},
+    posix?: PosixAccessContext,
+  ): Promise<WriteResult[]> {
+    if (entries.length === 0) return [];
+    const plans: InlineWritePlan[] = [];
+    const claimed = new Set<string>();
+    for (const entry of entries) {
+      const plan = this.planInlineWrite(entry.path, entry, options, posix);
+      // Compared after resolution, so two spellings of one file are caught as
+      // well as two copies of one spelling -- `a` beside `./a`, and a link
+      // beside what it points at. Neither last-write-wins nor a merge is
+      // something a caller can have meant.
+      if (claimed.has(plan.path)) {
+        throw new VfsError("EINVAL", "the batch names this path more than once", plan.path);
+      }
+      claimed.add(plan.path);
+      plans.push(plan);
+    }
+    // Every body is held at once, charged to the instance-wide in-flight
+    // budget one at a time. A set too large for that budget is refused by the
+    // limit that already bounds how much a caller can materialize rather than
+    // by a second one -- and the leases taken before the refusal are released
+    // here rather than waiting for a transaction that will never open.
+    const collected: CollectedWrite[] = [];
+    let held = 0;
+    try {
+      for (const [index, entry] of entries.entries()) {
+        const plan = plans[index];
+        if (plan === undefined) break;
+        // What the batch is already holding, so the budget can tell a set too
+        // large for it -- retrying which is work with no outcome -- from one
+        // that merely collided with a concurrent read or batch.
+        const lease = await this.collectInline(entry.body, held);
+        held += lease.sizeBytes;
+        collected.push({ plan, lease, digest: await this.incomingDigest(options, lease) });
+      }
+    } catch (error) {
+      for (const item of collected) item.lease.release();
+      throw error;
+    }
+    let queued = false;
+    const results = this.useBufferedSet(collected, () =>
+      this.transaction(() => {
+        const before = this.usage();
+        // Headroom is a property of the database rather than of the set, so it
+        // is weighed before the batch writes anything as well as after. The
+        // quotas can only be weighed after, because what the set costs is not
+        // known until every entry has decided whether it is writing at all.
+        this.assertCapacityFrom(before, 0, 0);
+        const now = this.now();
+        const pending = { inlineBytes: 0, entries: 0 };
+        const written: WriteResult[] = [];
+        for (const item of collected) {
+          const outcome = this.commitInlineWrite(
+            item.plan,
+            item.lease.chunks,
+            item.lease.sizeBytes,
+            item.digest,
+            now,
+            posix,
+            pending,
+          );
+          if (outcome.queuedGarbage) queued = true;
+          written.push(outcome.result);
+        }
+        this.assertCapacityFrom(before, pending.inlineBytes, pending.entries);
+        return written;
+      }),
+    );
+    if (queued) await this.scheduleGarbageAlarm();
+    return results;
   }
 
   async appendFile(
@@ -4232,6 +4445,16 @@ class PosixFileSystemView implements VirtualFileSystem {
 
   writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult> {
     return this.inner.writeFile(path, body, options, this.access);
+  }
+
+  writeFiles(
+    entries: readonly WriteFilesEntry[],
+    options?: WriteFilesOptions,
+  ): Promise<WriteResult[]> {
+    // An ordinary write, so it is offered here like one. Every per-entry
+    // permission check the single-path form performs runs unchanged, because
+    // both forms run the same planning and the same commit.
+    return this.inner.writeFiles(entries, options, this.access);
   }
 
   appendFile(path: string, body: ByteBody, options?: AppendFileOptions): Promise<WriteResult> {

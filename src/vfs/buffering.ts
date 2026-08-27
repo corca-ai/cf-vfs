@@ -20,7 +20,24 @@ export class InFlightByteBudget {
     validatePositiveInteger(maximumBytes, "maxInFlightBufferedBytes");
   }
 
-  acquire(bytes: number): void {
+  /**
+   * Reserves `bytes`, or refuses in a way the caller can act on.
+   *
+   * `heldByCaller` is what this same call already holds, and it is the whole
+   * difference between the two refusals. A call whose own demand fits the
+   * budget and is refused anyway lost a race with concurrent work -- a read
+   * snapshot, another batch -- and would succeed once that work finishes, so
+   * it gets `EAGAIN`. A call demanding more than the budget can ever hold gets
+   * `ENOSPC`, because retrying it is work with no outcome: it has to ask for
+   * less. Reporting both as `ENOSPC` leaves a caller unable to tell "try again"
+   * from "split the batch", which matters most exactly where a call holds
+   * several bodies at once.
+   *
+   * Nothing waits here. A queue would deadlock rather than delay: the capacity
+   * a waiter needs is held by work that may itself be waiting on this object's
+   * single thread.
+   */
+  acquire(bytes: number, heldByCaller = 0): void {
     if (this.usedBytes + bytes > this.maximumBytes) {
       emitVfsEvent(this.onEvent, {
         type: "vfs.quota",
@@ -29,7 +46,9 @@ export class InFlightByteBudget {
         used: this.usedBytes,
         max: this.maximumBytes,
       });
-      throw new VfsError("ENOSPC", "runtime in-flight byte budget exceeded");
+      throw heldByCaller + bytes > this.maximumBytes
+        ? new VfsError("ENOSPC", "request exceeds the whole runtime in-flight byte budget")
+        : new VfsError("EAGAIN", "runtime in-flight byte budget is temporarily exhausted");
     }
     this.usedBytes += bytes;
   }
@@ -39,16 +58,25 @@ export class InFlightByteBudget {
   }
 }
 
+/**
+ * Collects a body into slabs, charged to the shared in-flight budget.
+ *
+ * `heldByCaller` is what the calling operation is holding for *other* bodies —
+ * a batch collecting its second file has its first still materialized. Added
+ * to what this body has taken so far, it is what lets the budget tell a batch
+ * that is too large for it from one that merely arrived at a busy moment.
+ */
 export async function collectInlineBytes(
   body: ByteBody,
   maximumBytes: number,
   chunkBytes: number,
   budget: InFlightByteBudget,
+  heldByCaller = 0,
 ): Promise<BufferedChunksLease> {
   let accounted = 0;
   try {
     const collected = await collectRechunkedBytes(body, maximumBytes, chunkBytes, (delta) => {
-      budget.acquire(delta);
+      budget.acquire(delta, heldByCaller + accounted);
       accounted += delta;
     });
     let released = false;

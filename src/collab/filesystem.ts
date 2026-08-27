@@ -1,3 +1,4 @@
+import { VfsError } from "../core/errors.js";
 import { readAllBytes } from "../vfs/streams.js";
 import type {
   AppendFileOptions,
@@ -31,6 +32,8 @@ import type {
   VfsStat,
   VirtualFileSystem,
   WriteFileOptions,
+  WriteFilesEntry,
+  WriteFilesOptions,
   WriteResult,
 } from "../vfs/types.js";
 import { textEdits } from "./edits.js";
@@ -232,6 +235,50 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
       sizeBytes: new TextEncoder().encode(next).byteLength,
       created: false,
     };
+  }
+
+  /**
+   * Refuses a batch that touches an open document, and delegates every other.
+   *
+   * `writeFiles` promises that a failed set leaves every path as it was, and
+   * that promise rests on one SQLite transaction. An open document does not
+   * live in that transaction: a write to it lands in the registry, is
+   * published later, and can fail on its own. A set spanning both stores could
+   * commit the storage half and lose the document half, which is precisely
+   * what the batch exists to rule out.
+   *
+   * Publishing first is *not* the way around it. `publish` records the token
+   * and clears the dirty flag; it does not close the document, so the path is
+   * still open and still refused -- and it should be, because a read of an
+   * open document is served from the document. A batch that wrote underneath
+   * one would be followed by a `cat` returning the document's older text with
+   * nothing reporting the disagreement.
+   *
+   * Two routes work. Either `close` the document, run the batch, and reopen at
+   * the token the batch published; or run the batch against the filesystem
+   * underneath this one and `reconcile` each open document afterwards, which
+   * is what `reconcile` is for -- a change the document did not make.
+   *
+   * The check runs before any body is collected, so a document opened during
+   * collection is not seen and the batch commits underneath it. The registry
+   * is the host's to drive, so that ordering is the host's too: open and close
+   * documents around a batch, not during one.
+   */
+  async writeFiles(
+    entries: readonly WriteFilesEntry[],
+    options?: WriteFilesOptions,
+  ): Promise<WriteResult[]> {
+    for (const entry of entries) {
+      const resolved = this.#resolved(entry.path);
+      if (this.#registry.get(resolved) !== undefined) {
+        throw new VfsError(
+          "ENOTSUP",
+          "a batch write cannot include an open document; publish it first",
+          resolved,
+        );
+      }
+    }
+    return this.#inner.writeFiles(entries, options);
   }
 
   async appendFile(

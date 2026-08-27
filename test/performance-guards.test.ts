@@ -186,6 +186,40 @@ describe("common-path SQL cost", () => {
     expect(appends.thirtyFour).toBe(appends.one + 1);
   });
 
+  it("costs a single write nothing to have a batch form", async () => {
+    async function counted(
+      run: (fileSystem: NodeSqlFileSystem) => Promise<unknown>,
+    ): Promise<{ statements: number; rows: number }> {
+      const { fileSystem, meter } = meteredFileSystem();
+      meter.reset();
+      await run(fileSystem);
+      return { statements: meter.statements, rows: meter.rows };
+    }
+
+    const paths = ["/a", "/b", "/c"];
+    const single = await counted((fileSystem) => fileSystem.writeFile("/a", "body"));
+    const batchOfOne = await counted((fileSystem) =>
+      fileSystem.writeFiles([{ path: "/a", body: "body" }]),
+    );
+    const batchOfThree = await counted((fileSystem) =>
+      fileSystem.writeFiles(paths.map((path) => ({ path, body: "body" }))),
+    );
+    const threeWrites = await counted(async (fileSystem) => {
+      for (const path of paths) await fileSystem.writeFile(path, "body");
+    });
+
+    // The single-path form runs the same planning and the same commit that one
+    // entry of a batch runs, so a batch existing cannot move what it costs.
+    // That is what makes "costs nothing when unused" structural rather than a
+    // promise to re-measure.
+    expect(single).toEqual({ statements: 12, rows: 4 });
+    expect(batchOfOne).toEqual(single);
+    // And a set shares one transaction and one usage read across its entries
+    // rather than paying for them once per file.
+    expect(batchOfThree).toEqual({ statements: 30, rows: 10 });
+    expect(threeWrites).toEqual({ statements: 36, rows: 12 });
+  });
+
   it("skips subtree summaries without slowing a rejected directory removal", async () => {
     async function statements(
       setup: (fileSystem: NodeSqlFileSystem) => unknown | Promise<unknown>,

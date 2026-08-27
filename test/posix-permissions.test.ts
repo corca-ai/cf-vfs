@@ -126,6 +126,36 @@ describe("POSIX VFS views", () => {
     await expect(text(user, "/group-readable")).rejects.toMatchObject({ code: "EACCES" });
   });
 
+  it("applies ownership, umask, and a permission refusal to every entry of a batch", async () => {
+    const fileSystem = createTestFileSystem();
+    prepareHome(fileSystem);
+    fileSystem.mkdir("/sealed");
+    fileSystem.setMetadata("/sealed", { mode: 0o040700 });
+    const user = view(fileSystem, USER, 0o027);
+
+    await user.writeFiles([
+      { path: "/home/one", body: "one", mode: 0o100666 },
+      { path: "/home/two", body: "two", mode: 0o100666 },
+    ]);
+    for (const path of ["/home/one", "/home/two"]) {
+      expect(fileSystem.stat(path)).toMatchObject({
+        uid: USER.uid,
+        gid: USER.gid,
+        mode: 0o100640,
+      });
+    }
+
+    // The set is refused where a single write to the same path would be, and
+    // the entry beside it is not published on the way to finding that out.
+    await expect(
+      user.writeFiles([
+        { path: "/home/three", body: "three" },
+        { path: "/sealed/four", body: "four" },
+      ]),
+    ).rejects.toMatchObject({ code: "EACCES" });
+    expect(fileSystem.list("/home").map((entry) => entry.path)).toEqual(["/home/one", "/home/two"]);
+  });
+
   it("keeps recursively created parents usable under a restrictive umask", async () => {
     const fileSystem = createTestFileSystem();
     prepareHome(fileSystem);

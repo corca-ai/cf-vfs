@@ -456,6 +456,26 @@ edit of the document being published, and reading through it would compare a
 document against itself. Owning both sides makes passing the wrong one
 impossible rather than silently ineffective.
 
+`writeFiles` is refused on this view for any set touching an open document,
+with `ENOTSUP` naming the path. A batch's guarantee is that a failure leaves
+every path as it was, and it rests on one SQLite transaction; the document is
+not in that transaction, so a set spanning both stores could commit the storage
+half and lose the other.
+
+Publishing first does not lift it. `publish` records the token and clears the
+dirty flag but leaves the document open, and a read of an open document is
+still served from the document — a batch written underneath one would be
+followed by a `cat` returning the older text with nothing reporting the
+disagreement. Two routes work instead: `close` the document, batch, and reopen
+at the token the batch published; or run the batch against the filesystem
+underneath this view and `reconcile` each open document afterwards, which is
+the case `reconcile` exists for.
+
+The check happens before any body is collected, so a document opened while a
+batch is collecting is not seen and the batch commits underneath it. The
+registry is the host's to drive, so that ordering is the host's too — open and
+close documents around a batch rather than during one.
+
 `textEdits` is line-granular, because it reuses the repository's diff rather
 than adding a second one. An edit inside a line replaces the line, which costs
 a little concurrency on the same line and none on different lines.
@@ -521,8 +541,39 @@ in-flight materialization quota is 32 MiB.
 A read snapshot holds in-flight capacity until its stream completes or is
 cancelled. Streaming writes collect into fixed slabs, recheck the path token,
 then publish in one short transaction. Failed collection or a stale guard does
-not mutate the file. `SQLITE_FULL` and proactive headroom exhaustion surface as
-`ENOSPC`; reads and cleanup remain available.
+not mutate the file.
+
+`writeFiles()` extends that to a set. What a consumer may assume when a batch
+fails is the whole point of it: **every path in the set is exactly as it was**,
+including the paths earlier in the array, and including a path an entry would
+have created. A failed batch publishes no revision, no token, and no
+`vfs.mutation` — a rollback discards those with the work they described. A
+committed batch publishes one revision, one token, and one `vfs.mutation` per
+path, and one `vfs.usage` for the set.
+
+What a consumer may *not* assume is that a batch is unbounded. Every body is
+held at once, charged to the same instance-wide `maxInFlightBufferedBytes` a
+read snapshot draws on, so a large batch and a concurrent large read compete
+for the same 32 MiB. The bodies collected before a refusal are released there
+rather than held until a transaction that never opens. Size a batch against
+that budget, not against the per-file ceiling.
+
+**That budget refuses with two different codes, and the difference is what to
+do next.** `ENOSPC` means the call's own demand exceeds the whole budget:
+retrying is work with no outcome, and the batch has to be split. `EAGAIN` means
+the call would have fitted and lost a race with concurrent work, so retrying
+once that work finishes is the correct response. Both also report
+`limit: "maxInFlightBufferedBytes"` on `vfs.quota`. Nothing waits internally,
+deliberately — a queue would deadlock rather than delay, because the capacity a
+waiter needs may be held by work waiting on the same thread.
+
+A batch that names one path twice is refused with `EINVAL` before anything is
+collected. Neither last-write-wins nor a merge is something a caller can have
+meant, and the comparison is made after resolution, so `a` beside `./a` and a
+link beside its target are both caught.
+
+`SQLITE_FULL` and proactive headroom exhaustion surface as `ENOSPC`; reads and
+cleanup remain available.
 
 The quotas are constructor options, and a workspace can be made as small as it
 needs to be:

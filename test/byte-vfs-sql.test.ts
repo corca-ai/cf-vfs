@@ -664,8 +664,11 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     });
     await fileSystem.writeFile("/file", "1234");
     const first = fileSystem.readFile("/file");
+    // The second snapshot fits the budget on its own and is refused only
+    // because the first is holding it, which is what `EAGAIN` says and
+    // `ENOSPC` would not: cancelling the first is all it takes.
     expect(() => fileSystem.readFile("/file")).toThrowError(
-      expect.objectContaining({ code: "ENOSPC" }),
+      expect.objectContaining({ code: "EAGAIN" }),
     );
     await first.stream.cancel();
     expect(await bytes(fileSystem.readFile("/file").stream)).toEqual([49, 50, 51, 52]);
@@ -693,10 +696,14 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     await Promise.resolve();
     await Promise.resolve();
     await expect(fileSystem.writeFile("/second", new Uint8Array([4, 5, 6]))).rejects.toMatchObject({
-      code: "ENOSPC",
+      code: "EAGAIN",
     });
     closeFirst?.();
     await first;
+    // Retryable, and retried: the capacity the refusal wanted was only ever
+    // held by a write that has since finished.
+    await fileSystem.writeFile("/second", new Uint8Array([4, 5, 6]));
+    expect(await bytes(fileSystem.readFile("/second").stream)).toEqual([4, 5, 6]);
   });
 
   it("discards a failed input stream without publishing partial bytes", async () => {
@@ -738,6 +745,171 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     expect(() => fileSystem.stat("/parent")).toThrowError(
       expect.objectContaining({ code: "ENOENT" }),
     );
+  });
+
+  describe("batched writes", () => {
+    it("weighs the workspace quota once over the set rather than once per entry", async () => {
+      // As a sequence, the growing entry is weighed against a workspace that
+      // has not yet been given back what the shrinking one is about to release.
+      const sequential = createTestFileSystem({ maxInlineLogicalBytes: 120 });
+      await sequential.writeFile("/big", "x".repeat(100));
+      await expect(sequential.writeFile("/added", "y".repeat(50))).rejects.toMatchObject({
+        code: "ENOSPC",
+      });
+
+      const batched = createTestFileSystem({ maxInlineLogicalBytes: 120 });
+      await batched.writeFile("/big", "x".repeat(100));
+      const written = await batched.writeFiles([
+        { path: "/added", body: "y".repeat(50) },
+        { path: "/big", body: "x" },
+      ]);
+
+      // The same two writes, as one set that ends at 51 bytes rather than as a
+      // sequence that passes through 150.
+      expect(written.map((result) => result.sizeBytes)).toEqual([50, 1]);
+      expect(batched.stat("/big").sizeBytes).toBe(1);
+      expect(batched.stat("/added").sizeBytes).toBe(50);
+    });
+
+    it("refuses a set that ends over the entry quota without creating any of it", async () => {
+      const events: VfsEvent[] = [];
+      const fileSystem = createTestFileSystem({
+        maxEntries: 3,
+        onEvent: (event) => events.push(event),
+      });
+
+      await expect(
+        fileSystem.writeFiles([
+          { path: "/a", body: "a" },
+          { path: "/b", body: "b" },
+          { path: "/c", body: "c" },
+        ]),
+      ).rejects.toMatchObject({ code: "ENOSPC" });
+
+      // The set is what was refused, so the refusal reports what the set asked
+      // for rather than whichever entry happened to cross the ceiling. Two of
+      // these would have fitted, which is exactly the partial state a batch
+      // exists to prevent.
+      expect(events).toContainEqual({
+        type: "vfs.quota",
+        limit: "maxEntries",
+        requested: 3,
+        used: 1,
+        max: 3,
+      });
+      expect(fileSystem.list("/")).toEqual([]);
+      expect(events.filter((event) => event.type === "vfs.usage")).toHaveLength(0);
+    });
+
+    it("delivers one mutation per path once a set commits, and none when it rolls back", async () => {
+      const mutations: Extract<VfsEvent, { type: "vfs.mutation" }>[] = [];
+      const fileSystem = createTestFileSystem({
+        maxInlineLogicalBytes: 8,
+        onEvent: (event) => {
+          if (event.type === "vfs.mutation") mutations.push(event);
+        },
+      });
+
+      const written = await fileSystem.writeFiles([
+        { path: "/one", body: "1" },
+        { path: "/two", body: "2" },
+      ]);
+      expect(mutations).toEqual([
+        {
+          type: "vfs.mutation",
+          op: "create",
+          path: "/one",
+          mutationToken: written[0]?.mutationToken,
+        },
+        {
+          type: "vfs.mutation",
+          op: "create",
+          path: "/two",
+          mutationToken: written[1]?.mutationToken,
+        },
+      ]);
+
+      // Over the quota only once the whole set is counted, so both entries
+      // reach SQLite before the refusal discards them. Nothing may be
+      // announced for work a rollback took back.
+      mutations.length = 0;
+      await expect(
+        fileSystem.writeFiles([
+          { path: "/three", body: "xxx" },
+          { path: "/four", body: "yyyy" },
+        ]),
+      ).rejects.toMatchObject({ code: "ENOSPC" });
+      expect(mutations).toEqual([]);
+      expect(fileSystem.list("/").map((entry) => entry.path)).toEqual(["/one", "/two"]);
+    });
+
+    it("separates a set too large to ever hold from one that arrived at a busy moment", async () => {
+      const fileSystem = createTestFileSystem({
+        maxInlineFileBytes: 4,
+        maxInFlightBufferedBytes: 8,
+      });
+      await fileSystem.writeFile("/held", "1234");
+
+      // Twelve bytes against a budget of eight. No amount of waiting makes
+      // this set fit, so the caller has to split it rather than retry it.
+      await expect(
+        fileSystem.writeFiles([
+          { path: "/a", body: "1111" },
+          { path: "/b", body: "2222" },
+          { path: "/c", body: "3333" },
+        ]),
+      ).rejects.toMatchObject({ code: "ENOSPC" });
+
+      // The same eight bytes, which fit exactly -- but a read snapshot is
+      // holding four of them. Identical demand, opposite advice.
+      const snapshot = fileSystem.readFile("/held");
+      await expect(
+        fileSystem.writeFiles([
+          { path: "/a", body: "1111" },
+          { path: "/b", body: "2222" },
+        ]),
+      ).rejects.toMatchObject({ code: "EAGAIN" });
+      expect(fileSystem.list("/").map((entry) => entry.path)).toEqual(["/held"]);
+
+      await snapshot.stream.cancel();
+      const written = await fileSystem.writeFiles([
+        { path: "/a", body: "1111" },
+        { path: "/b", body: "2222" },
+      ]);
+      expect(written.map((result) => result.path)).toEqual(["/a", "/b"]);
+    });
+
+    it("charges a set to the in-flight budget that already bounds one body", async () => {
+      const events: VfsEvent[] = [];
+      const fileSystem = createTestFileSystem({
+        maxInlineFileBytes: 4,
+        maxInFlightBufferedBytes: 6,
+        onEvent: (event) => events.push(event),
+      });
+
+      // A set too large to materialize is refused by the limit that already
+      // bounds how much a caller can hold at once, not by a second one.
+      await expect(
+        fileSystem.writeFiles([
+          { path: "/a", body: "1234" },
+          { path: "/b", body: "5678" },
+        ]),
+      ).rejects.toMatchObject({ code: "ENOSPC" });
+      expect(events).toContainEqual({
+        type: "vfs.quota",
+        limit: "maxInFlightBufferedBytes",
+        requested: 4,
+        used: 4,
+        max: 6,
+      });
+      expect(fileSystem.list("/")).toEqual([]);
+
+      // The leases taken before the refusal are released there rather than
+      // waiting for a transaction that never opens, so the budget is whole
+      // again instead of permanently short by one failed batch.
+      await fileSystem.writeFiles([{ path: "/a", body: "1234" }]);
+      expect(await bytes(fileSystem.readFile("/a").stream)).toEqual([49, 50, 51, 52]);
+    });
   });
 
   it("reserves immutable opaque keys while a put is in flight", async () => {
