@@ -48,6 +48,7 @@ npm run test:package
 npm run test:changelog origin/main
 npm run test:commit-message -- --text "feat(vfs): ..."
 npm run hooks:install
+npm run release:prepare -- 0.2.0
 npm run test:tree-shaking
 npm run bench
 npm run bench:do
@@ -121,11 +122,29 @@ exists.
 The major version is zero, so a breaking change raises the minor version.
 Mark such an entry **Breaking** and say what a consumer has to do instead.
 
-Releasing means renaming `## [Unreleased]` to the version and date, adding the
-comparison link, bumping `package.json`, tagging, and attaching `npm pack` to
-the GitHub release. The tarball is the point: a consumer pinning
+Releasing is two steps, and the split is deliberate — one is reviewed, the
+other publishes.
+
+```sh
+npm run release:prepare -- 0.2.0   # edits CHANGELOG.md and package.json
+```
+
+That renames `## [Unreleased]` to the version and today's date, opens a fresh
+`Unreleased`, repoints the comparison link and adds the new one, and bumps
+`package.json`. It changes files and stops. Commit the diff and merge it
+through an ordinary pull request, so a release is reviewed before it is a
+decision.
+
+Pushing the tag is what publishes. `.github/workflows/release.yml` verifies
+that the tag, `package.json`, and the changelog agree *before* anything is
+published, runs the full check and the benchmarks against the tagged commit,
+packs, and creates the GitHub release with that version's changelog section as
+its notes and the tarball attached.
+
+The tarball is the point rather than a courtesy: a consumer pinning
 `ignore-scripts=true` never runs `prepare`, so it cannot build `dist/` from a
-git reference, and `v0.1.0` exists solely to serve one.
+git reference, and `v0.1.0` exists solely to serve one. Its packed integrity is
+published with it so the artifact can be checked against what npm resolves.
 
 ## Changing the VFS
 
