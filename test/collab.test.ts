@@ -217,6 +217,31 @@ describe("collaborative filesystem", () => {
     expect(inner.stat("/doc.txt").sizeBytes).toBe(6);
   });
 
+  it("reports pending document sizes through directory traversals", async () => {
+    const { inner, registry, document, fileSystem } = open("short\n");
+    await inner.writeFile("/doc.txt", "short\n");
+    registry.open("/doc.txt", document, inner.stat("/doc.txt").mutationToken);
+    document.type(6, "한글\n");
+    registry.markDirty("/doc.txt");
+
+    const expectedSize = new TextEncoder().encode("short\n한글\n").byteLength;
+    expect(fileSystem.list("/").find((entry) => entry.path === "/doc.txt")?.sizeBytes).toBe(
+      expectedSize,
+    );
+    expect(
+      fileSystem.listPage("/", { limit: 10 }).entries.find((entry) => entry.path === "/doc.txt")
+        ?.sizeBytes,
+    ).toBe(expectedSize);
+    expect(
+      fileSystem.find({ path: "/" }).find((entry) => entry.path === "/doc.txt")?.sizeBytes,
+    ).toBe(expectedSize);
+    expect(
+      fileSystem
+        .findPage({ path: "/", limit: 10 })
+        .entries.find((entry) => entry.path === "/doc.txt")?.sizeBytes,
+    ).toBe(expectedSize);
+  });
+
   it("appends to an open document rather than to storage", async () => {
     const { inner, registry, document, fileSystem } = open("head\n");
     await inner.writeFile("/doc.txt", "head\n");

@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- Collaborative directory traversal now reports the byte size of pending
+  document text, matching `stat` and the bytes a collaborative read serves.
 - `countSubtree` now includes nested synthetic entries such as `/dev/fd/0`
   instead of counting only a reserved directory and its immediate children.
 - Filtered root `findPage` traversal now waits until the stored-row scan reaches

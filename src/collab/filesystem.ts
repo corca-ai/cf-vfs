@@ -156,6 +156,13 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     return open === undefined || !open.dirty ? undefined : { text: open.document.text() };
   }
 
+  #withPendingSize(stat: VfsStat): VfsStat {
+    const pending = this.#pending(stat.path);
+    return pending === undefined
+      ? stat
+      : { ...stat, sizeBytes: new TextEncoder().encode(pending.text).byteLength };
+  }
+
   /**
    * Resolves before looking the document up, because a document is keyed by
    * the path it lives at and a caller may have named a link to it.
@@ -172,24 +179,16 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
   }
 
   stat(path: string): VfsStat {
-    const stat = this.#inner.stat(path);
-    const pending = this.#pending(stat.path);
     // Reported from the same text the read would serve, so a size and its
     // bytes cannot disagree.
-    return pending === undefined
-      ? stat
-      : { ...stat, sizeBytes: new TextEncoder().encode(pending.text).byteLength };
+    return this.#withPendingSize(this.#inner.stat(path));
   }
 
   statById(ino: number): VfsStat {
     // Same correction as `stat`, and for the same reason: an identity is how a
     // caller finds a document it is holding, so the size it reports has to be
     // the size the read would serve rather than the one last published.
-    const stat = this.#inner.statById(ino);
-    const pending = this.#pending(stat.path);
-    return pending === undefined
-      ? stat
-      : { ...stat, sizeBytes: new TextEncoder().encode(pending.text).byteLength };
+    return this.#withPendingSize(this.#inner.statById(ino));
   }
 
   readFile(path: string): InlineReadResult {
@@ -326,19 +325,21 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
   }
 
   list(path: string): VfsStat[] {
-    return this.#inner.list(path);
+    return this.#inner.list(path).map((entry) => this.#withPendingSize(entry));
   }
 
   listPage(path: string, options?: PageOptions): EntryPage {
-    return this.#inner.listPage(path, options);
+    const page = this.#inner.listPage(path, options);
+    return { ...page, entries: page.entries.map((entry) => this.#withPendingSize(entry)) };
   }
 
   find(options: FindOptions): VfsStat[] {
-    return this.#inner.find(options);
+    return this.#inner.find(options).map((entry) => this.#withPendingSize(entry));
   }
 
   findPage(options: FindOptions): EntryPage {
-    return this.#inner.findPage(options);
+    const page = this.#inner.findPage(options);
+    return { ...page, entries: page.entries.map((entry) => this.#withPendingSize(entry)) };
   }
 
   countSubtree(path: string): number {
