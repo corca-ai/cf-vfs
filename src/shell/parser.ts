@@ -87,7 +87,9 @@ export interface ShellWord {
   assignmentName?: string;
 }
 
-export type PathRedirectionOperator = "<" | ">" | ">>" | "2>" | "2>>";
+const PATH_REDIRECTION_OPERATORS = ["<", ">", ">>", "2>", "2>>"] as const;
+
+export type PathRedirectionOperator = (typeof PATH_REDIRECTION_OPERATORS)[number];
 
 export type Redirection =
   | { operator: PathRedirectionOperator; target: ShellWord }
@@ -268,7 +270,7 @@ type Token =
   | OperatorToken
   | { type: "arithmetic-command"; expression: ArithmeticNode; offset: number };
 
-const PATH_REDIRECTIONS = new Set<Operator>(["<", ">", ">>", "2>", "2>>"]);
+const PATH_REDIRECTIONS = new Set<Operator>(PATH_REDIRECTION_OPERATORS);
 const HEREDOC_REDIRECTIONS = new Set<Operator>(["<<", "<<-"]);
 const REDIRECTIONS = new Set<Operator>([
   ...PATH_REDIRECTIONS,
@@ -277,6 +279,10 @@ const REDIRECTIONS = new Set<Operator>([
   ">&2",
   "<<<",
 ]);
+
+function isPathRedirectionOperator(value: Operator): value is PathRedirectionOperator {
+  return PATH_REDIRECTIONS.has(value);
+}
 const UNSUPPORTED_RESERVED = new Set([
   "then",
   "elif",
@@ -1847,9 +1853,9 @@ class Parser {
       return { operator: token.value, document: token.document };
     }
     if (token.value === "<<<") return { operator: "<<<", target: target.word };
-    if (!PATH_REDIRECTIONS.has(token.value))
+    if (!isPathRedirectionOperator(token.value))
       throw this.tokenError("unsupported redirection", token);
-    return { operator: token.value as PathRedirectionOperator, target: target.word };
+    return { operator: token.value, target: target.word };
   }
 
   private takeWord(): ShellWord {

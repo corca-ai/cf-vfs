@@ -635,7 +635,11 @@ describe("Bash v2 arithmetic", () => {
       ["divides signed integers toward zero", "-5 / 2", "-2"],
       ["normalizes true comparisons to one", "3 < 4", "1"],
       ["normalizes false comparisons to zero", "3 >= 4", "0"],
-      ["applies compound assignment inside comma expressions", "N=1, N<<=3, N", "8"],
+      [
+        "maps every compound assignment to its binary operation",
+        "N=8, N+=2, N-=3, N*=4, N/=2, N%=5, N<<=2, N>>=1, N&=6, N^=3, N|=8, N",
+        "11",
+      ],
     ];
 
   bashCases(

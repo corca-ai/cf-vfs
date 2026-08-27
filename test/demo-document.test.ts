@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DemoDocuments } from "../demo/document.js";
 import { parseClientMessage } from "../demo/protocol.js";
 import { CollaborativeFileSystem } from "../src/collab/index.js";
@@ -24,6 +24,7 @@ const rooms: DemoDocuments[] = [];
 afterEach(() => {
   for (const documents of rooms) documents.dispose();
   rooms.length = 0;
+  vi.useRealTimers();
 });
 
 function room(): {
@@ -32,33 +33,56 @@ function room(): {
   editable: CollaborativeFileSystem;
   notices: { path: string; kind: string; to?: string }[];
   shell: Shell;
+  nextMutation: (path: string) => Promise<void>;
+  nextNotice: (path: string) => Promise<void>;
 } {
   const documents = new DemoDocuments();
   const notices: { path: string; kind: string; to?: string }[] = [];
+  const mutationWaiters = new Map<string, Array<() => void>>();
+  const noticeWaiters = new Map<string, Array<() => void>>();
   // The same wiring order the object uses: the sink is handed to the
   // filesystem, and the documents get the collaborative view back.
   const storage = createTestFileSystem({
-    onEvent: (event: VfsEvent) => documents.observe(event),
+    onEvent: (event: VfsEvent) => {
+      documents.observe(event);
+      if (event.type !== "vfs.mutation") return;
+      const waiters = mutationWaiters.get(event.path);
+      waiters?.shift()?.();
+      if (waiters?.length === 0) mutationWaiters.delete(event.path);
+    },
   });
   const editable = new CollaborativeFileSystem(storage, documents.registry);
-  documents.attach(editable, (notice) => notices.push({ ...notice }));
+  documents.attach(editable, (notice) => {
+    notices.push({ ...notice });
+    const waiters = noticeWaiters.get(notice.path);
+    waiters?.shift()?.();
+    if (waiters?.length === 0) noticeWaiters.delete(notice.path);
+  });
   const shell = new Shell({ fileSystem: editable, commands: defaultShellCommands });
+  const nextMutation = (path: string): Promise<void> =>
+    new Promise((resolve) => {
+      const waiters = mutationWaiters.get(path) ?? [];
+      waiters.push(resolve);
+      mutationWaiters.set(path, waiters);
+    });
+  const nextNotice = (path: string): Promise<void> =>
+    new Promise((resolve) => {
+      const waiters = noticeWaiters.get(path) ?? [];
+      waiters.push(resolve);
+      noticeWaiters.set(path, waiters);
+    });
   rooms.push(documents);
-  return { documents, storage, editable, notices, shell };
+  return { documents, storage, editable, notices, shell, nextMutation, nextNotice };
 }
 
 async function stored(fileSystem: VirtualFileSystem, path: string): Promise<string> {
   return new TextDecoder().decode(await readAllBytes(fileSystem.readFile(path).stream, 1 << 20));
 }
 
-/** Publication is debounced in the object; a test drives it directly. */
-async function settle(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 500));
-}
-
 describe("demo documents", () => {
   it("merges a terminal write into a document someone is editing", async () => {
-    const { documents, storage, notices, shell } = room();
+    vi.useFakeTimers();
+    const { documents, storage, notices, shell, nextMutation } = room();
     await storage.writeFile("/doc.txt", "alpha\nbeta\ngamma\n");
     const document = await documents.open("/doc.txt");
 
@@ -77,7 +101,9 @@ describe("demo documents", () => {
     // And whoever has it open is told, so the pane is not left stale.
     expect(notices).toContainEqual({ path: "/doc.txt", kind: "changed" });
 
-    await settle();
+    const published = nextMutation("/doc.txt");
+    await vi.runOnlyPendingTimersAsync();
+    await published;
     expect(await stored(storage, "/doc.txt")).toBe("# alpha\nBETA\ngamma\n");
   });
 
@@ -95,7 +121,8 @@ describe("demo documents", () => {
   });
 
   it("publishes once after a pause rather than on every keystroke", async () => {
-    const { documents, storage } = room();
+    vi.useFakeTimers();
+    const { documents, storage, nextMutation } = room();
     await storage.writeFile("/doc.txt", "");
     const document = await documents.open("/doc.txt");
     const revision = storage.stat("/doc.txt").revision;
@@ -106,7 +133,9 @@ describe("demo documents", () => {
     // Nothing written yet: three edits are still one pending publication.
     expect(storage.stat("/doc.txt").revision).toBe(revision);
 
-    await settle();
+    const published = nextMutation("/doc.txt");
+    await vi.runOnlyPendingTimersAsync();
+    await published;
     expect(await stored(storage, "/doc.txt")).toBe("abc\n");
     expect(storage.stat("/doc.txt").revision).toBe(revision + 1);
   });
@@ -136,7 +165,8 @@ describe("demo documents", () => {
   });
 
   it("republishes over a change made outside the document", async () => {
-    const { documents, storage } = room();
+    vi.useFakeTimers();
+    const { documents, storage, nextNotice } = room();
     await storage.writeFile("/doc.txt", "one\n");
     const document = await documents.open("/doc.txt");
     documents.applyClientText("/doc.txt", document.version(), "one\nedited\n");
@@ -145,7 +175,9 @@ describe("demo documents", () => {
     // Worker, say — replaces the file before the flush lands.
     await storage.writeFile("/doc.txt", "replaced\n");
 
-    await settle();
+    const reconciled = nextNotice("/doc.txt");
+    await vi.runOnlyPendingTimersAsync();
+    await reconciled;
     // The publication was refused, the outside change was taken in, and the
     // result holds both rather than either being silently lost.
     expect(document.text()).toContain("replaced");

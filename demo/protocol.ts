@@ -118,6 +118,16 @@ export type ServerMessage =
     }
   | { readonly type: "pong" };
 
+type MessageRecord = Readonly<Record<string, unknown>>;
+
+function isMessageRecord(value: unknown): value is MessageRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value);
+}
+
 export function parseClientMessage(message: string | ArrayBuffer): ClientMessage {
   if (typeof message !== "string") {
     throw new VfsError("EINVAL", "binary WebSocket messages are not supported");
@@ -132,11 +142,11 @@ export function parseClientMessage(message: string | ArrayBuffer): ClientMessage
   } catch {
     throw new VfsError("EINVAL", "WebSocket message must be valid JSON");
   }
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+  if (!isMessageRecord(value)) {
     throw new VfsError("EINVAL", "WebSocket message must be an object");
   }
 
-  const input = value as Readonly<Record<string, unknown>>;
+  const input = value;
   if (input["type"] === "ping") return { type: "ping" };
   if (input["type"] === "signal" && input["signal"] === "SIGINT") {
     return { type: "signal", signal: "SIGINT" };
@@ -151,15 +161,10 @@ export function parseClientMessage(message: string | ArrayBuffer): ClientMessage
     // A cursor is an offset into the line, so anything that is not a whole
     // number inside it is a malformed request rather than one to clamp: `NaN`
     // would otherwise travel back out as a `null` offset the client splices on.
-    if (
-      !Number.isInteger(cursor) ||
-      !Number.isInteger(token) ||
-      (cursor as number) < 0 ||
-      (cursor as number) > line.length
-    ) {
+    if (!isInteger(cursor) || !isInteger(token) || cursor < 0 || cursor > line.length) {
       throw new VfsError("EINVAL", "completion cursor must be an offset into the line");
     }
-    return { type: "complete", line, cursor: cursor as number, token: token as number };
+    return { type: "complete", line, cursor, token };
   }
   if (
     (input["type"] === "doc-open" || input["type"] === "doc-close") &&
@@ -176,23 +181,23 @@ export function parseClientMessage(message: string | ArrayBuffer): ClientMessage
     // A version is a counter the server issued, so anything that is not a
     // whole number is a malformed request rather than one to coerce: a `NaN`
     // base would compare unequal forever and resynchronize on every keystroke.
-    if (!Number.isInteger(base) || (base as number) < 0) {
+    if (!isInteger(base) || base < 0) {
       throw new VfsError("EINVAL", "document base must be a version this session was given");
     }
     return {
       type: "doc-edit",
       path: input["path"],
-      base: base as number,
+      base,
       text: input["text"],
     };
   }
   if (input["type"] === "resize") {
     const columns = input["columns"];
     const rows = input["rows"];
-    if (!Number.isInteger(columns) || !Number.isInteger(rows)) {
+    if (!isInteger(columns) || !isInteger(rows)) {
       throw new VfsError("EINVAL", "resize dimensions must be whole numbers");
     }
-    return { type: "resize", columns: columns as number, rows: rows as number };
+    return { type: "resize", columns, rows };
   }
   throw new VfsError("EINVAL", "unsupported WebSocket message");
 }

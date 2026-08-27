@@ -3,38 +3,46 @@ import { ShellNounsetError } from "./errors.js";
 
 type UnaryOperator = "+" | "-" | "!" | "~";
 type UpdateOperator = "++" | "--";
-type AssignmentOperator =
-  | "="
-  | "+="
-  | "-="
-  | "*="
-  | "/="
-  | "%="
-  | "<<="
-  | ">>="
-  | "&="
-  | "^="
-  | "|=";
-type BinaryOperator =
-  | "||"
-  | "&&"
-  | "|"
-  | "^"
-  | "&"
-  | "=="
-  | "!="
-  | "<"
-  | "<="
-  | ">"
-  | ">="
-  | "<<"
-  | ">>"
-  | "+"
-  | "-"
-  | "*"
-  | "/"
-  | "%"
-  | "**";
+
+const BINARY_PRECEDENCE = {
+  "||": 1,
+  "&&": 2,
+  "|": 3,
+  "^": 4,
+  "&": 5,
+  "==": 6,
+  "!=": 6,
+  "<": 7,
+  "<=": 7,
+  ">": 7,
+  ">=": 7,
+  "<<": 8,
+  ">>": 8,
+  "+": 9,
+  "-": 9,
+  "*": 10,
+  "/": 10,
+  "%": 10,
+  "**": 11,
+} as const;
+
+type BinaryOperator = keyof typeof BINARY_PRECEDENCE;
+
+const ASSIGNMENT_BINARY = {
+  "=": undefined,
+  "+=": "+",
+  "-=": "-",
+  "*=": "*",
+  "/=": "/",
+  "%=": "%",
+  "<<=": "<<",
+  ">>=": ">>",
+  "&=": "&",
+  "^=": "^",
+  "|=": "|",
+} as const satisfies Readonly<Record<string, BinaryOperator | undefined>>;
+
+type AssignmentOperator = keyof typeof ASSIGNMENT_BINARY;
 
 export type ArithmeticNode =
   | { type: "integer"; value: bigint }
@@ -55,12 +63,6 @@ export interface ParsedArithmetic {
   node: ArithmeticNode;
   nodeCount: number;
 }
-
-type Token =
-  | { type: "integer"; value: bigint; offset: number }
-  | { type: "identifier"; value: string; offset: number }
-  | { type: "operator"; value: string; offset: number }
-  | { type: "end"; offset: number };
 
 const OPERATORS = [
   "<<=",
@@ -104,19 +106,21 @@ const OPERATORS = [
   "|",
 ] as const;
 
-const ASSIGNMENTS = new Set<string>([
-  "=",
-  "+=",
-  "-=",
-  "*=",
-  "/=",
-  "%=",
-  "<<=",
-  ">>=",
-  "&=",
-  "^=",
-  "|=",
-]);
+type ArithmeticOperator = (typeof OPERATORS)[number];
+
+type Token =
+  | { type: "integer"; value: bigint; offset: number }
+  | { type: "identifier"; value: string; offset: number }
+  | { type: "operator"; value: ArithmeticOperator; offset: number }
+  | { type: "end"; offset: number };
+
+function isAssignmentOperator(value: ArithmeticOperator): value is AssignmentOperator {
+  return Object.hasOwn(ASSIGNMENT_BINARY, value);
+}
+
+function isBinaryOperator(value: ArithmeticOperator): value is BinaryOperator {
+  return Object.hasOwn(BINARY_PRECEDENCE, value);
+}
 
 export class ArithmeticSyntaxError extends VfsError {
   readonly detail: string;
@@ -266,7 +270,7 @@ class ArithmeticParser {
     return token;
   }
 
-  private takeOperator(value: string): boolean {
+  private takeOperator(value: ArithmeticOperator): boolean {
     const token = this.peek();
     if (token.type !== "operator" || token.value !== value) return false;
     this.index += 1;
@@ -284,13 +288,13 @@ class ArithmeticParser {
   private assignment(): ArithmeticNode {
     const left = this.conditional();
     const token = this.peek();
-    if (token.type !== "operator" || !ASSIGNMENTS.has(token.value)) return left;
+    if (token.type !== "operator" || !isAssignmentOperator(token.value)) return left;
     if (left.type !== "variable")
       throw this.syntax("assignment target must be a variable", token.offset);
     this.take();
     return this.add({
       type: "assignment",
-      operator: token.value as AssignmentOperator,
+      operator: token.value,
       name: left.name,
       value: this.nested(() => this.assignment()),
     });
@@ -315,14 +319,14 @@ class ArithmeticParser {
     let left = this.unary();
     while (true) {
       const token = this.peek();
-      if (token.type !== "operator") break;
-      const precedence = BINARY_PRECEDENCE[token.value as BinaryOperator];
-      if (precedence === undefined || precedence < minimum) break;
+      if (token.type !== "operator" || !isBinaryOperator(token.value)) break;
+      const precedence = BINARY_PRECEDENCE[token.value];
+      if (precedence < minimum) break;
       this.take();
       const right = this.nested(() =>
         this.binary(token.value === "**" ? precedence : precedence + 1),
       );
-      left = this.add({ type: "binary", operator: token.value as BinaryOperator, left, right });
+      left = this.add({ type: "binary", operator: token.value, left, right });
     }
     return left;
   }
@@ -418,28 +422,6 @@ function validateArithmeticDepth(root: ArithmeticNode, maximumDepth: number): vo
   }
 }
 
-const BINARY_PRECEDENCE: Readonly<Record<BinaryOperator, number>> = {
-  "||": 1,
-  "&&": 2,
-  "|": 3,
-  "^": 4,
-  "&": 5,
-  "==": 6,
-  "!=": 6,
-  "<": 7,
-  "<=": 7,
-  ">": 7,
-  ">=": 7,
-  "<<": 8,
-  ">>": 8,
-  "+": 9,
-  "-": 9,
-  "*": 10,
-  "/": 10,
-  "%": 10,
-  "**": 11,
-};
-
 function int64(value: bigint): bigint {
   return BigInt.asIntN(64, value);
 }
@@ -517,8 +499,7 @@ function binary(operator: BinaryOperator, left: bigint, right: bigint): bigint {
 }
 
 function assignmentBinary(operator: AssignmentOperator): BinaryOperator | undefined {
-  if (operator === "=") return undefined;
-  return operator.slice(0, -1) as BinaryOperator;
+  return ASSIGNMENT_BINARY[operator];
 }
 
 export function evaluateArithmetic(
