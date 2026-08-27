@@ -6,6 +6,7 @@ const root = new URL("..", import.meta.url);
 const documents = [
   "README.md",
   "AGENTS.md",
+  "CHANGELOG.md",
   "docs/index.md",
   "docs/getting-started.md",
   "docs/commands.md",
@@ -43,6 +44,31 @@ for (const stale of [
 ]) {
   assert(!combined.includes(stale), `documentation still references removed ${stale}`);
 }
+// The changelog is reference-linked. A reference with no definition renders as
+// literal brackets rather than failing, and a definition nothing uses is a
+// pull request number that moved -- neither is visible to a reader of the
+// source, so both are asserted here.
+const changelog = await readFile(resolve(root.pathname, "CHANGELOG.md"), "utf8");
+const definedReferences = new Set(
+  [...changelog.matchAll(/^\[([^\]]+)\]:\s*\S+$/gmu)].map((match) => match[1]),
+);
+const usedReferences = new Set(
+  [...changelog.matchAll(/\[([^\]]+)\](?![(:])/gu)].map((match) => match[1]),
+);
+for (const reference of usedReferences) {
+  assert(
+    definedReferences.has(reference),
+    `CHANGELOG.md uses the undefined link reference [${reference}]`,
+  );
+}
+for (const reference of definedReferences) {
+  assert(
+    usedReferences.has(reference),
+    `CHANGELOG.md defines the unused link reference [${reference}]`,
+  );
+}
+assert(changelog.includes("## [Unreleased]"), "CHANGELOG.md has no Unreleased section");
+
 assert(combined.includes("BASH_COMPATIBILITY_VERSION"));
 assert(combined.toLowerCase().includes("atomic redirection divergence"));
 assert(combined.includes("opaque-gc-batch") || combined.includes("64-object GC batch"));

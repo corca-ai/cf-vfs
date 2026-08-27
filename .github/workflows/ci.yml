@@ -28,3 +28,28 @@ jobs:
       # property, and it drifted unnoticed for fifty-six commits while this ran
       # only on a weekly schedule. It takes about five seconds.
       - run: npm run bench:check
+
+  # Two rules `npm run check` structurally cannot enforce, because both need
+  # the pull request rather than the working tree. Same lesson as the line
+  # above: the changelog rule drifted for twenty-two commits and one breaking
+  # change while it was nobody's job in particular.
+  conventions:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # Merges here are squashed, so this title -- not any commit on the branch
+      # -- is the subject that lands on `main` and that the changelog and the
+      # version bump are later derived from.
+      - name: Pull request title follows Conventional Commits
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: node test/check-commit-message.mjs --text "$PR_TITLE"
+      - name: Library change carries a changelog entry
+        env:
+          CHANGELOG_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CHANGELOG_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: node test/check-changelog.mjs
