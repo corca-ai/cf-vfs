@@ -2474,33 +2474,47 @@ ${ENTRY_TRIGGERS}
     const limit = options.limit ?? DEFAULT_CHANGE_PAGE;
     validatePositiveInteger(limit, "limit");
     const bounded = Math.min(limit, MAX_CHANGE_PAGE);
-    // One indexed range scan over the sequence, joined to the entries it
-    // describes so a caller learns in the same statement whether the path is
-    // still there. Nothing here materializes an entry: `present` is the join
-    // succeeding, not a row read for its columns.
+    // The cursor names a sequence, not a path within one. A set-based mutation
+    // gives every path the same sequence, so cutting that group at `bounded`
+    // would make the next `change_seq > cursor` page skip its remainder. The
+    // scalar cutoff finds the sequence at the requested boundary and the main
+    // scan includes that whole sequence. A single atomic change may therefore
+    // make a page larger than requested, but no path can be lost between pages.
     const rows = this.sql
       .exec<SqlRow>(
-        `SELECT v.path AS path, (e.path IS NOT NULL) AS present, v.change_seq AS seq
+        `WITH cutoff AS (
+           SELECT (
+             SELECT change_seq
+             FROM vfs_path_versions
+             WHERE change_seq > ?
+             ORDER BY change_seq, path
+             LIMIT 1 OFFSET ?
+           ) AS seq
+         )
+       SELECT v.path AS path, (e.path IS NOT NULL) AS present, v.change_seq AS seq,
+              EXISTS (
+                SELECT 1 FROM vfs_path_versions remaining
+                WHERE cutoff.seq IS NOT NULL AND remaining.change_seq > cutoff.seq
+              ) AS more
        FROM vfs_path_versions v
        LEFT JOIN vfs_entries e INDEXED BY vfs_entries_path ON e.path = v.path
-       WHERE v.change_seq > ?
-       ORDER BY v.change_seq, v.path
-       LIMIT ?`,
+       CROSS JOIN cutoff
+       WHERE v.change_seq > ? AND (cutoff.seq IS NULL OR v.change_seq <= cutoff.seq)
+       ORDER BY v.change_seq, v.path`,
         since,
-        bounded + 1,
+        bounded - 1,
+        since,
       )
       .toArray();
-    const more = rows.length > bounded;
-    const page = more ? rows.slice(0, bounded) : rows;
-    const changes = page.map((row) => ({
+    const changes = rows.map((row) => ({
       path: stringColumn(row, "path"),
       present: integerColumn(row, "present") === 1,
     }));
-    const last = page.at(-1);
+    const last = rows.at(-1);
     return {
       changes,
       cursor: last === undefined ? since : integerColumn(last, "seq"),
-      more,
+      more: last === undefined ? false : integerColumn(last, "more") === 1,
     };
   }
 

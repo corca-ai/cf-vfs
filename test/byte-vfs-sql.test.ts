@@ -511,6 +511,32 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
         ]);
       });
 
+      it("does not lose paths when a page limit cuts through a set-based change", async () => {
+        const fileSystem = createTestFileSystem({ recordChanges: true });
+        await fileSystem.writeFile("/tree/a", "a", { createParents: true });
+        await fileSystem.writeFile("/tree/b", "b");
+        const seen = fileSystem.changesSince(0).cursor;
+
+        await fileSystem.move("/tree", "/moved");
+        const collected: { path: string; present: boolean }[] = [];
+        let cursor = seen;
+        for (;;) {
+          const page = fileSystem.changesSince(cursor, { limit: 1 });
+          collected.push(...page.changes);
+          cursor = page.cursor;
+          if (!page.more) break;
+        }
+
+        expect(collected).toEqual([
+          { path: "/tree", present: false },
+          { path: "/tree/a", present: false },
+          { path: "/tree/b", present: false },
+          { path: "/moved", present: true },
+          { path: "/moved/a", present: true },
+          { path: "/moved/b", present: true },
+        ]);
+      });
+
       it("pages a large catch-up rather than materializing it", async () => {
         const fileSystem = createTestFileSystem({ recordChanges: true });
         for (let index = 0; index < 30; index += 1) {

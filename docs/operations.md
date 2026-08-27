@@ -398,8 +398,11 @@ every move reaches it as an event, and its own table can hold them. Without
 that, a reconnecting client closes the old path and opens the new one, which
 loses the association but not the content.
 
-Pages are bounded (1,000 by default, 10,000 maximum). Continue while `more` is
-set, resuming from the returned `cursor`; the cursor stands still rather than
+Pages target 1,000 changes by default and at most 10,000 when requested. A page
+includes the complete set-based change that crosses that target, because its
+numeric cursor cannot represent a position inside one sequence; it can
+therefore be larger than the requested limit. Continue while `more` is set,
+resuming from the returned `cursor`; the cursor stands still rather than
 rewinding when nothing changed. `changesSince` is not available on a
 credential-bound view: the feed reports paths without regard to what a user can
 see, so it stays with the trusted capability. `statById` stays there for a

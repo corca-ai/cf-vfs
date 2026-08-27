@@ -18,6 +18,9 @@ included.
 
 ### Fixed
 
+- Change-feed pagination now keeps every path from a set-based mutation on the
+  same page, preventing a numeric cursor from skipping the remainder of a
+  recursive copy, move, or removal when it crosses the requested limit.
 - Copying a missing path onto itself now reports the missing source instead of
   a same-path conflict that presupposes an entry exists.
 - A same-path `move` now verifies that its source exists instead of reporting a
