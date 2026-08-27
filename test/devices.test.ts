@@ -409,6 +409,15 @@ describe("virtual devices", () => {
     );
   });
 
+  it("counts nested entries in a reserved subtree", () => {
+    const fileSystem = createTestFileSystem();
+    const view = new ReservedPathFileSystem(
+      new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
+    );
+
+    expect(view.countSubtree("/dev")).toBe(view.find({ path: "/dev", includeRoot: true }).length);
+  });
+
   it("honors find limits and starting cursors inside a reserved directory", () => {
     const fileSystem = createTestFileSystem();
     const view = new ReservedPathFileSystem(

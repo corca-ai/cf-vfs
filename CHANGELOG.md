@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- `countSubtree` now includes nested synthetic entries such as `/dev/fd/0`
+  instead of counting only a reserved directory and its immediate children.
 - Filtered root `findPage` traversal now waits until the stored-row scan reaches
   a reserved path before merging it, preventing synthetic entries such as
   `/dev` from repeating across pages.

@@ -551,7 +551,7 @@ export class ReservedPathFileSystem implements ShellFileSystem {
   countSubtree(path: string): number {
     const at = this.#at(path);
     if (at === undefined) return this.#inner.countSubtree(path);
-    return at.device === undefined ? this.list(at.path).length + 1 : 1;
+    return this.#findHere({ path: at.path, includeRoot: true }).length;
   }
 
   touch(path: string, options?: TouchOptions): VfsStat {
