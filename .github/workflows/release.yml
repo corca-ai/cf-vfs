@@ -34,11 +34,16 @@ jobs:
       - run: npm run check
       - run: npm run bench:check
 
+      # Written to a file rather than piped: `npm pack --json` lists every file
+      # in the tarball -- 179 of them today, 18 KB of JSON -- and a reader that
+      # takes only the first chunk of a pipe would start truncating as the
+      # package grows, at the one moment there is no second chance.
       - name: Pack
         id: pack
         run: |
-          integrity=$(npm pack --json | node -e \
-            'process.stdin.once("data", (d) => process.stdout.write(JSON.parse(d)[0].integrity))')
+          npm pack --json > pack.json
+          integrity=$(node -e \
+            'process.stdout.write(JSON.parse(require("node:fs").readFileSync("pack.json", "utf8"))[0].integrity)')
           echo "integrity=$integrity" >> "$GITHUB_OUTPUT"
 
       - name: Release notes
