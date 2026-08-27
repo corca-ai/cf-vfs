@@ -238,6 +238,47 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(result.stat.path).toBe("/dir/file");
   });
 
+  it("names the batch entry a malformed write DTO arrived in", async () => {
+    const stub = workspace("batch-rpc-validation");
+    const result = await runInDurableObject(stub, async (instance) => {
+      const errors: unknown[] = [];
+      for (const entries of [
+        [
+          { path: "/ok", body: "body" },
+          { path: 7, body: "body" },
+        ],
+        [
+          { path: "/ok", body: "body" },
+          { path: "/bad", body: { not: "bytes" } },
+        ],
+        [
+          { path: "/ok", body: "body" },
+          { path: "/bad", body: "body", nonsense: true },
+        ],
+      ]) {
+        try {
+          await instance.writeFiles(entries as never);
+          errors.push(null);
+        } catch (caught) {
+          errors.push(caught);
+        }
+      }
+      return { errors, entries: instance.list("/").length };
+    });
+
+    // A caller holding a set needs to know which entry, not that one of them
+    // was wrong -- and a batch refused at the boundary writes none of it.
+    expect(result.errors).toEqual([
+      expect.objectContaining({ code: "EINVAL", message: "entries[1].path must be a string" }),
+      expect.objectContaining({ code: "EINVAL" }),
+      expect.objectContaining({
+        code: "EINVAL",
+        message: "entries[1].nonsense is not supported",
+      }),
+    ]);
+    expect(result.entries).toBe(0);
+  });
+
   it("rejects malformed shell RPC DTOs deterministically", async () => {
     const stub = workspace("shell-rpc-validation");
     const error = await runInDurableObject(stub, async (instance) => {

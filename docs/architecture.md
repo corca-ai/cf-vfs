@@ -89,6 +89,31 @@ Write behavior:
    Cloudflare's 100-parameter ceiling.
 4. Release the buffered-byte reservation before any external await.
 
+A batch write is that same sequence with one transaction around a set.
+`writeFiles()` plans every entry against SQLite synchronously — disposition,
+guard, directory check, permission — so a set that cannot succeed is refused
+before it buffers a byte. It then collects every body, each charged to the same
+in-flight budget that already bounds one. It then publishes the set in one
+`transactionSync()`, running the identical per-entry step the single-path form
+runs, which is what keeps a single write costing exactly what it did.
+
+Two things differ inside that transaction. The quotas are weighed once against
+the usage the batch started from rather than once per entry against what its
+predecessors left, which is a different answer and not only a cheaper one: a
+set that ends smaller while an entry inside it grows is allowed by the first
+and refused by the second. Database headroom is weighed before the set as well,
+because it is a property of the database rather than of the set. And every path
+publishes its own revision and token, so a committed batch delivers one
+`vfs.mutation` per path; the `subtree` form exists because recursive operations
+never materialize their entries, and a batch materializes all of them.
+
+An open transaction handed back to the host is the other way to offer this, and
+is why this shape exists instead: it would hold the storage lock across
+arbitrary caller code, and no cursor or transaction may cross an `await`.
+Collection finishing before the transaction opens is what survives that
+constraint. It is also the honest limit — a shell script cannot become one
+unit, because its pipes await between stages by construction.
+
 Append keeps existing full chunks in place. It reads only the final stored
 chunk, fills that tail, and inserts any new suffix chunks in the same
 transaction.

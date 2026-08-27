@@ -16,6 +16,8 @@ import type {
   SymlinkOptions,
   TouchOptions,
   WriteFileOptions,
+  WriteFilesEntry,
+  WriteFilesOptions,
 } from "./types.js";
 
 const MAX_POSIX_ID = 0xffff_ffff;
@@ -28,6 +30,7 @@ interface UnknownRecord extends Readonly<Record<string, unknown>> {
   readonly maxDepth?: unknown;
   readonly name?: unknown;
   readonly pathGlob?: unknown;
+  readonly body?: unknown;
   readonly type?: unknown;
   readonly createParents?: unknown;
   readonly dereference?: unknown;
@@ -232,6 +235,49 @@ export function rpcWriteOptions(value: unknown): WriteFileOptions | undefined {
       ? {}
       : { disposition: disposition as Exclude<WriteFileOptions["disposition"], undefined> }),
     ...(mode === undefined ? {} : { mode }),
+    ...(skipIfUnchanged === undefined ? {} : { skipIfUnchanged }),
+  };
+}
+
+/**
+ * A batch's entries arriving over RPC.
+ *
+ * Validated entry by entry and named by index, because a batch that is refused
+ * for its ninth entry has to say which one -- the caller is holding a set, and
+ * "one of these is wrong" is not something it can act on.
+ */
+export function rpcWriteFilesEntries(value: unknown): WriteFilesEntry[] {
+  if (!Array.isArray(value)) throw new VfsError("EINVAL", "entries must be an array");
+  return value.map((entry, index) => {
+    const name = `entries[${index}]`;
+    const input = record(entry, name);
+    keys(input, ["path", "body", "ifMutationToken", "mode"], name);
+    const ifMutationToken = optionalString(input.ifMutationToken, `${name}.ifMutationToken`);
+    const mode = optionalInteger(input.mode, `${name}.mode`);
+    return {
+      path: rpcString(input.path, `${name}.path`),
+      body: rpcByteBody(input.body),
+      ...(ifMutationToken === undefined ? {} : { ifMutationToken }),
+      ...(mode === undefined ? {} : { mode }),
+    };
+  });
+}
+
+export function rpcWriteFilesOptions(value: unknown): WriteFilesOptions | undefined {
+  if (value === undefined) return undefined;
+  const input = record(value, "options");
+  keys(input, ["createParents", "disposition", "skipIfUnchanged"], "options");
+  const disposition = optionalString(input.disposition, "options.disposition");
+  if (disposition !== undefined && !["create", "replace", "upsert"].includes(disposition)) {
+    throw new VfsError("EINVAL", "options.disposition is invalid");
+  }
+  const createParents = optionalBoolean(input.createParents, "options.createParents");
+  const skipIfUnchanged = optionalBoolean(input.skipIfUnchanged, "options.skipIfUnchanged");
+  return {
+    ...(createParents === undefined ? {} : { createParents }),
+    ...(disposition === undefined
+      ? {}
+      : { disposition: disposition as Exclude<WriteFilesOptions["disposition"], undefined> }),
     ...(skipIfUnchanged === undefined ? {} : { skipIfUnchanged }),
   };
 }

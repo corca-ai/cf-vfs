@@ -1,3 +1,4 @@
+import { VfsError } from "../core/errors.js";
 import { readAllBytes } from "../vfs/streams.js";
 import type {
   AppendFileOptions,
@@ -31,6 +32,8 @@ import type {
   VfsStat,
   VirtualFileSystem,
   WriteFileOptions,
+  WriteFilesEntry,
+  WriteFilesOptions,
   WriteResult,
 } from "../vfs/types.js";
 import { textEdits } from "./edits.js";
@@ -232,6 +235,38 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
       sizeBytes: new TextEncoder().encode(next).byteLength,
       created: false,
     };
+  }
+
+  /**
+   * Refuses a batch that touches an open document, and delegates every other.
+   *
+   * `writeFiles` promises that a failed set leaves every path as it was, and
+   * that promise rests on one SQLite transaction. An open document does not
+   * live in that transaction: a write to it lands in the registry, is
+   * published later, and can fail on its own. A set spanning both stores could
+   * commit the storage half and lose the document half, which is precisely
+   * what the batch exists to rule out.
+   *
+   * Refusing is what keeps the guarantee true rather than nearly true. A host
+   * that wants both publishes the open documents first -- `publish` returns
+   * only once storage has them -- and then the paths are ordinary files and
+   * the batch is an ordinary batch.
+   */
+  async writeFiles(
+    entries: readonly WriteFilesEntry[],
+    options?: WriteFilesOptions,
+  ): Promise<WriteResult[]> {
+    for (const entry of entries) {
+      const resolved = this.#resolved(entry.path);
+      if (this.#registry.get(resolved) !== undefined) {
+        throw new VfsError(
+          "ENOTSUP",
+          "a batch write cannot include an open document; publish it first",
+          resolved,
+        );
+      }
+    }
+    return this.#inner.writeFiles(entries, options);
   }
 
   async appendFile(

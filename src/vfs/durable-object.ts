@@ -21,6 +21,8 @@ import {
   rpcString,
   rpcSymlinkOptions,
   rpcTouchOptions,
+  rpcWriteFilesEntries,
+  rpcWriteFilesOptions,
   rpcWriteOptions,
 } from "./rpc-validation.js";
 import type {
@@ -51,6 +53,8 @@ import type {
   TouchOptions,
   VfsStat,
   WriteFileOptions,
+  WriteFilesEntry,
+  WriteFilesOptions,
   WriteResult,
 } from "./types.js";
 
@@ -135,6 +139,13 @@ export abstract class VfsDurableObject<Environment> extends DurableObject<Enviro
       rpcByteBody(body),
       rpcWriteOptions(options),
     );
+  }
+
+  writeFiles(
+    entries: readonly WriteFilesEntry[],
+    options?: WriteFilesOptions,
+  ): Promise<WriteResult[]> {
+    return this.fileSystem.writeFiles(rpcWriteFilesEntries(entries), rpcWriteFilesOptions(options));
   }
 
   appendFile(path: string, body: ByteBody, options?: AppendFileOptions): Promise<WriteResult> {

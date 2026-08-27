@@ -1082,8 +1082,8 @@ they are not present on `ShellCommandContext.fileSystem`.
   reporting `ino` alongside the rest of an entry's metadata;
 - `changesSince`, when the filesystem was built with `recordChanges`;
 - `statById`, which reads an entry back by its identity;
-- `readFile`, `writeFile`, `appendFile`, `touch`, `setMetadata`, and
-  `setOwnership`;
+- `readFile`, `writeFile`, `writeFiles`, `appendFile`, `touch`,
+  `setMetadata`, and `setOwnership`;
 - `mkdir`, `remove`, `move`, and `copy`;
 - `getMutationToken` and the optional `ifMutationToken` guard;
 - `beginOpaqueUpload`, `commitOpaqueUpload`, `abortOpaqueUpload`;
@@ -1101,6 +1101,32 @@ separate shell content capability.
 Inline `readFile()` returns a stable bounded stream snapshot. Consume or cancel
 it to release the instance-wide materialization budget. Writes accept strings,
 buffers, typed views, or byte streams and publish once after normal collection.
+
+`writeFiles(entries, options)` writes several bodies to several paths as one
+change. `copy`, `move`, and `remove` are already atomic however many entries
+they touch; a caller writing distinct bodies to distinct paths had no
+equivalent, and a deadline, a stale guard, or a quota refusal on the seventh of
+twelve `writeFile` calls leaves a tree that matches nobody's intent. A failed
+batch leaves every path exactly as it was, including the paths earlier in the
+array.
+
+Each entry carries its own `path`, `body`, optional `mode`, and optional
+`ifMutationToken`; `createParents`, `disposition`, and `skipIfUnchanged` apply
+to the call. The per-entry guard is what makes it composable rather than
+convenient: a caller replacing a known set of files gets all-or-nothing against
+concurrent mutation. Every path reports its own revision and token, a matched
+`skipIfUnchanged` entry reports the ones already in force, and naming one path
+twice is refused. The credential-bound view offers it, and every per-entry
+permission check the single-path form performs still runs.
+
+A batch costs a single write nothing, because both run the same planning and
+the same commit: measured on the guard, `writeFile` and a `writeFiles` of one
+entry are both 12 statements and 4 rows, while three files cost 30 statements
+and 10 rows as a batch against 36 and 12 as three calls. Collection has to
+finish before the transaction opens, so what can become one unit is what a
+caller can hand over as one intent — this does not make a shell script atomic,
+and a script wanting the same guarantee should stage into a directory and
+finish with one `mv`, which already is.
 
 `writeFile(path, body, { skipIfUnchanged: true })` publishes nothing when the
 body is already exactly what is stored, and reports the revision and token that

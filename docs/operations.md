@@ -521,7 +521,28 @@ in-flight materialization quota is 32 MiB.
 A read snapshot holds in-flight capacity until its stream completes or is
 cancelled. Streaming writes collect into fixed slabs, recheck the path token,
 then publish in one short transaction. Failed collection or a stale guard does
-not mutate the file. `SQLITE_FULL` and proactive headroom exhaustion surface as
+not mutate the file.
+
+`writeFiles()` extends that to a set. What a consumer may assume when a batch
+fails is the whole point of it: **every path in the set is exactly as it was**,
+including the paths earlier in the array, and including a path an entry would
+have created. A failed batch publishes no revision, no token, and no
+`vfs.mutation` — a rollback discards those with the work they described. A
+committed batch publishes one revision, one token, and one `vfs.mutation` per
+path, and one `vfs.usage` for the set.
+
+What a consumer may *not* assume is that a batch is unbounded. Every body is
+held at once, charged to the same instance-wide in-flight budget a read
+snapshot draws on, so a large batch and a concurrent large read compete for the
+same 32 MiB; a set too large for it is refused with `ENOSPC` naming
+`maxInFlightBufferedBytes`, and the bodies collected before the refusal are
+released there rather than held until a transaction that never opens. Size a
+batch against that budget, not against the per-file ceiling.
+
+A batch that names one path twice is refused with `EINVAL` before anything is
+collected. Neither last-write-wins nor a merge is something a caller can have
+meant, and the comparison is made after resolution, so `a` beside `./a` and a
+link beside its target are both caught. `SQLITE_FULL` and proactive headroom exhaustion surface as
 `ENOSPC`; reads and cleanup remain available.
 
 The quotas are constructor options, and a workspace can be made as small as it

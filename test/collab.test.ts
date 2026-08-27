@@ -238,6 +238,32 @@ describe("collaborative filesystem", () => {
     expect(await read(inner, "/other.txt")).toBe("PLAIN\n");
   });
 
+  it("refuses a batch that spans an open document, and passes the rest through", async () => {
+    const { inner, registry, document, fileSystem } = open("body\n");
+    await inner.writeFile("/doc.txt", "body\n");
+    registry.open("/doc.txt", document, inner.stat("/doc.txt").mutationToken);
+
+    // A batch promises that a failure leaves every path as it was, and that
+    // rests on one transaction. The document is not in it, so the set cannot
+    // be one change and is refused rather than half kept.
+    await expect(
+      fileSystem.writeFiles([
+        { path: "/plain.txt", body: "plain\n" },
+        { path: "/doc.txt", body: "replacement\n" },
+      ]),
+    ).rejects.toMatchObject({ code: "ENOTSUP", path: "/doc.txt" });
+    expect(inner.list("/").map((entry) => entry.path)).toEqual(["/doc.txt"]);
+    expect(document.text()).toBe("body\n");
+
+    // Nothing open, so nothing to be inconsistent with.
+    await fileSystem.writeFiles([
+      { path: "/one.txt", body: "one\n" },
+      { path: "/two.txt", body: "two\n" },
+    ]);
+    expect(await read(inner, "/one.txt")).toBe("one\n");
+    expect(await read(inner, "/two.txt")).toBe("two\n");
+  });
+
   it("stays bound when a credential view is taken from it", async () => {
     const { inner, registry, document, fileSystem } = open("body\n");
     await inner.writeFile("/doc.txt", "body\n");

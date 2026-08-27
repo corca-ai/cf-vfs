@@ -239,6 +239,32 @@ export interface WriteFileOptions {
   skipIfUnchanged?: boolean;
 }
 
+/**
+ * One file in a batch write.
+ *
+ * `mode` and the guard sit here rather than in {@link WriteFilesOptions}
+ * because they describe the file; the options describe the call. Guarding each
+ * entry is what makes a batch composable rather than merely convenient: a
+ * caller replacing a known set of files gets all-or-nothing against concurrent
+ * mutation, which a sequence of `writeFile` calls cannot express because it
+ * can already have changed something by the time one of them fails.
+ */
+export interface WriteFilesEntry {
+  path: string;
+  body: ByteBody;
+  /** See {@link WriteFileOptions.ifMutationToken}. */
+  ifMutationToken?: string;
+  mode?: number;
+}
+
+/** Applies to every entry of a {@link VirtualFileSystem.writeFiles} call. */
+export interface WriteFilesOptions {
+  createParents?: boolean;
+  disposition?: WriteDisposition;
+  /** See {@link WriteFileOptions.skipIfUnchanged}. */
+  skipIfUnchanged?: boolean;
+}
+
 export interface AppendFileOptions {
   /** See {@link WriteFileOptions.ifMutationToken}. */
   ifMutationToken?: string;
@@ -482,6 +508,46 @@ export interface VirtualFileSystem {
   changesSince(since: number, options?: ChangesSinceOptions): ChangePage;
   readFile(path: string): InlineReadResult;
   writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult>;
+  /**
+   * Writes several bodies to several paths as one change.
+   *
+   * `copy`, `move`, and `remove` are atomic however many entries they touch,
+   * because each is one set-based statement inside one transaction. Writing
+   * distinct bodies to distinct paths had no equivalent: N `writeFile` calls
+   * are N transactions, and a deadline, a stale guard, or a quota refusal on
+   * the seventh of twelve leaves a tree that matches nobody's intent -- not
+   * the caller's, and not the one that was there before. This is that missing
+   * unit. Every body is collected first, and then the set commits at once.
+   *
+   * Everything a single write validates is validated per entry: the
+   * disposition, the guard, the directory check, write permission, and
+   * `skipIfUnchanged`. Any one of them refusing rolls the whole set back, so a
+   * failed batch leaves every path exactly as it was, including the paths
+   * earlier in the array.
+   *
+   * The quotas are weighed once against the state the batch started from,
+   * rather than once per entry against what its predecessors left. Those are
+   * different answers rather than a cheaper one: a set that ends smaller while
+   * an entry inside it grows is allowed by the first and refused by the
+   * second, and only the first is what a quota that can be reached is for.
+   *
+   * Two entries naming the same path are refused. Neither last-write-wins nor
+   * a merge is something a caller can have meant, and guessing would publish
+   * one of two bodies with nothing to say which.
+   *
+   * Every path reports its own revision and token, and a committed batch
+   * delivers one `vfs.mutation` per path: a set has no single token to carry,
+   * because each path publishes its own.
+   *
+   * This does not make a shell script atomic, and it should not be read as
+   * doing so. Collection has to finish before the transaction opens, so what
+   * can become one unit is what a caller can hand over as one intent; a script
+   * that awaits between stages cannot.
+   */
+  writeFiles(
+    entries: readonly WriteFilesEntry[],
+    options?: WriteFilesOptions,
+  ): Promise<WriteResult[]>;
   appendFile(path: string, body: ByteBody, options?: AppendFileOptions): Promise<WriteResult>;
   touch(path: string, options?: TouchOptions): VfsStat;
   setMetadata(path: string, options: MetadataUpdateOptions): VfsStat;
