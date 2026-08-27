@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- Writes routed through an open document now enforce mutation-token guards and
+  create-only disposition before applying edits.
 - Credential-bound collaborative writes now enforce file write permissions
   before changing an open document.
 - Collaborative reconciliation now keeps locally merged text pending when a

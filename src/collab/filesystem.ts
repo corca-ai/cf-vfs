@@ -195,6 +195,21 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     if ((permissions & 0o2) === 0) throw new VfsError("EACCES", "permission denied", stat.path);
   }
 
+  #assertDocumentPreconditions(
+    path: string,
+    options: { ifMutationToken?: string; disposition?: "create" | "replace" | "upsert" } = {},
+  ): void {
+    if (options.disposition === "create") {
+      throw new VfsError("EEXIST", "file or directory already exists", this.#inner.stat(path).path);
+    }
+    if (
+      options.ifMutationToken !== undefined &&
+      this.#inner.getMutationToken(path) !== options.ifMutationToken
+    ) {
+      throw new VfsError("EREVISION", "path mutation token does not match", path);
+    }
+  }
+
   /**
    * Resolves before looking the document up, because a document is keyed by
    * the path it lives at and a caller may have named a link to it.
@@ -243,8 +258,10 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     const open = this.#registry.get(resolved);
     if (open === undefined) return this.#inner.writeFile(path, body, options);
     this.#assertDocumentWrite(path);
+    this.#assertDocumentPreconditions(path, options);
     const next = await bodyText(body, resolved);
     this.#assertDocumentWrite(path);
+    this.#assertDocumentPreconditions(path, options);
     const edits = textEdits(open.document.text(), next);
     if (edits.length === 0) {
       // The text is already what the document holds, so there is nothing to
@@ -323,8 +340,10 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     const open = this.#registry.get(resolved);
     if (open === undefined) return this.#inner.appendFile(path, body, options);
     this.#assertDocumentWrite(path);
+    this.#assertDocumentPreconditions(path, options);
     const addition = await bodyText(body, resolved);
     this.#assertDocumentWrite(path);
+    this.#assertDocumentPreconditions(path, options);
     const text = open.document.text();
     if (addition.length > 0) {
       open.document.applyExternal([{ offset: text.length, remove: 0, insert: addition }]);

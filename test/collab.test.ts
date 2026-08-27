@@ -297,6 +297,23 @@ describe("collaborative filesystem", () => {
     expect(await read(inner, "/doc.txt")).toBe("head\n");
   });
 
+  it("enforces write preconditions before editing an open document", async () => {
+    const { inner, registry, document, fileSystem } = open("body\n");
+    await inner.writeFile("/doc.txt", "body\n");
+    registry.open("/doc.txt", document, inner.stat("/doc.txt").mutationToken);
+
+    await expect(
+      fileSystem.writeFile("/doc.txt", "replacement\n", { ifMutationToken: "stale" }),
+    ).rejects.toMatchObject({ code: "EREVISION" });
+    await expect(
+      fileSystem.appendFile("/doc.txt", "addition\n", { ifMutationToken: "stale" }),
+    ).rejects.toMatchObject({ code: "EREVISION" });
+    await expect(
+      fileSystem.writeFile("/doc.txt", "replacement\n", { disposition: "create" }),
+    ).rejects.toMatchObject({ code: "EEXIST" });
+    expect(document.text()).toBe("body\n");
+  });
+
   it("leaves files nobody has open entirely alone", async () => {
     const { inner, fileSystem } = open("");
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });
