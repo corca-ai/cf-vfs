@@ -38,7 +38,7 @@ import type {
 } from "../vfs/types.js";
 import { textEdits } from "./edits.js";
 import { type DocumentRegistry, decodeText } from "./registry.js";
-import type { CollaborativeDocument } from "./types.js";
+import type { CollaborativeDocument, OpenDocument } from "./types.js";
 
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 
@@ -178,6 +178,15 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     if (current?.document !== document) return;
     this.#registry.markPublished(path, mutationToken);
     if (current.document.text() !== storedText) this.#registry.markDirty(path);
+  }
+
+  #metadataResult(path: string, open: OpenDocument | undefined, stat: VfsStat): VfsStat {
+    const current = this.#registry.get(path);
+    if (open !== undefined && current?.document === open.document) {
+      this.#registry.markPublished(path, stat.mutationToken);
+      if (open.dirty) this.#registry.markDirty(path);
+    }
+    return this.#withPendingSize(stat);
   }
 
   #withPendingSize(stat: VfsStat): VfsStat {
@@ -431,15 +440,21 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
   }
 
   touch(path: string, options?: TouchOptions): VfsStat {
-    return this.#inner.touch(path, options);
+    const resolved = this.#resolved(path);
+    const open = this.#registry.get(resolved);
+    return this.#metadataResult(resolved, open, this.#inner.touch(path, options));
   }
 
   setMetadata(path: string, options: MetadataUpdateOptions): VfsStat {
-    return this.#inner.setMetadata(path, options);
+    const resolved = this.#resolved(path);
+    const open = this.#registry.get(resolved);
+    return this.#metadataResult(resolved, open, this.#inner.setMetadata(path, options));
   }
 
   setOwnership(path: string, options: OwnershipUpdateOptions): VfsStat {
-    return this.#inner.setOwnership(path, options);
+    const resolved = this.#resolved(path);
+    const open = this.#registry.get(resolved);
+    return this.#metadataResult(resolved, open, this.#inner.setOwnership(path, options));
   }
 
   mkdir(path: string, recursive?: boolean, mode?: number): VfsStat {

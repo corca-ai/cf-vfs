@@ -389,6 +389,31 @@ describe("collaborative filesystem", () => {
     expect(result.sizeBytes).toBe(new TextEncoder().encode(document.text()).byteLength);
   });
 
+  it("keeps open documents current across metadata mutations", async () => {
+    const { inner, registry, fileSystem } = open("");
+    const paths = ["/touched.txt", "/moded.txt", "/owned.txt"] as const;
+    for (const path of paths) {
+      await inner.writeFile(path, "old\n");
+      const document = new TextDocument("old\npending\n");
+      registry.open(path, document, inner.stat(path).mutationToken);
+      registry.markDirty(path);
+    }
+
+    const changed = [
+      fileSystem.touch(paths[0], { modifiedAtMs: 1234 }),
+      fileSystem.setMetadata(paths[1], { mode: 0o600 }),
+      fileSystem.setOwnership(paths[2], { uid: 1000, gid: 1000 }),
+    ];
+    const pendingSize = new TextEncoder().encode("old\npending\n").byteLength;
+    for (const [index, path] of paths.entries()) {
+      expect(changed[index]?.sizeBytes).toBe(pendingSize);
+      expect(registry.get(path)?.token).toBe(changed[index]?.mutationToken);
+      expect(registry.get(path)?.dirty).toBe(true);
+      expect(await fileSystem.publish(path)).toBe(true);
+      expect(await read(inner, path)).toBe("old\npending\n");
+    }
+  });
+
   it("leaves files nobody has open entirely alone", async () => {
     const { inner, fileSystem } = open("");
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });

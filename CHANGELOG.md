@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- Metadata mutations on open documents now advance their registry token while
+  preserving pending text and report the pending size in their returned stat.
 - Collaborative `lstat` now reports pending document size for a regular file,
   matching `stat` and collaborative reads.
 - Collaborative write results now report the byte size produced by the merging
