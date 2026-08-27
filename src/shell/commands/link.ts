@@ -63,7 +63,12 @@ export const lnCommand = /* @__PURE__ */ defineApplet(LN, async (context, argv) 
   }
   // `ln -s target` with no name links into the working directory under the
   // target's own basename, as GNU does.
-  const linkName = name ?? target.split("/").pop() ?? "";
+  const targetWithoutTrailingSlashes = target.replace(/\/+$/u, "");
+  const linkName =
+    name ??
+    (targetWithoutTrailingSlashes === ""
+      ? "/"
+      : (targetWithoutTrailingSlashes.split("/").pop() ?? ""));
   if (linkName === "") throw appletUsageError(LN, "requires a link name");
   // An existing directory as the destination means "inside it", the way `mv`
   // and `cp` read the same operand. An inferred name is already the final path:

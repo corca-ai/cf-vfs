@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- `ln -s TARGET` now strips trailing slashes when inferring the link name while
+  preserving the target text stored in the link.
 - `ln -s TARGET` no longer treats its inferred link name as a second directory
   operand, preventing an existing `./basename(TARGET)` directory from receiving
   an unintended nested link.

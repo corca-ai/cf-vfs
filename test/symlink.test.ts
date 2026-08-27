@@ -486,6 +486,18 @@ describe("symlink resolution", () => {
     expect(harness.fileSystem.list("/foo")).toEqual([]);
   });
 
+  it("infers a link name from a target with trailing slashes", async () => {
+    const harness = createBashHarness();
+
+    const result = await harness.run("ln -s /missing/bar/");
+
+    expect(result).toMatchObject({ exitCode: 0, stderr: "" });
+    expect(harness.fileSystem.lstat("/bar")).toMatchObject({
+      kind: "symlink",
+      linkTarget: "/missing/bar/",
+    });
+  });
+
   it("resolves absolute, relative, nested, and directory links", async () => {
     const fs = createTestFileSystem();
     await fs.writeFile("/t/real.txt", "body\n", { createParents: true });
