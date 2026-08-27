@@ -18,6 +18,9 @@ included.
 
 ### Fixed
 
+- `basename` and `dirname` now process path text lexically, preserving `..`
+  components and accepting an empty operand instead of canonicalizing through
+  the virtual root.
 - `du` now measures a named symbolic link itself instead of following a
   directory link and charging the target subtree.
 - `ln -s TARGET` now strips trailing slashes when inferring the link name while

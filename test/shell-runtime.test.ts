@@ -1172,6 +1172,21 @@ describe("stream-first shell runtime", () => {
     expect(result.stderr).toContain("not sorted");
   });
 
+  it("keeps basename and dirname lexical around dot-dot components", async () => {
+    const { shell } = createBashHarness();
+
+    await expect(
+      shell.executeText({
+        script:
+          "basename 'a/..'; dirname 'a/..'; basename '../'; dirname '../'; basename ''; dirname ''",
+      }),
+    ).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: "..\na\n..\n.\n\n.\n",
+      stderr: "",
+    });
+  });
+
   it("smoke-tests the remaining default utility families through the shell", async () => {
     const { fileSystem, shell } = createBashHarness();
     const result = await shell.executeText({

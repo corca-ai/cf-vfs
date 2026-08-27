@@ -1,6 +1,6 @@
 import { VfsError } from "../../core/errors.js";
 import { matchesGlob } from "../../core/glob.js";
-import { basename, dirname, normalizePath } from "../../core/path.js";
+import { normalizePath } from "../../core/path.js";
 import type { EntryKind, VfsStat } from "../../vfs/types.js";
 import { openContent } from "../content.js";
 import {
@@ -744,18 +744,34 @@ export const treeCommand = /* @__PURE__ */ defineApplet(TREE, async (context, ar
   return 0;
 });
 
+function lexicalBasename(path: string): string {
+  const withoutTrailingSlashes = path.replace(/\/+$/u, "");
+  if (withoutTrailingSlashes === "") return path === "" ? "" : "/";
+  return withoutTrailingSlashes.slice(withoutTrailingSlashes.lastIndexOf("/") + 1);
+}
+
+function lexicalDirname(path: string): string {
+  if (path === "") return ".";
+  const withoutTrailingSlashes = path.replace(/\/+$/u, "");
+  if (withoutTrailingSlashes === "") return "/";
+  const separator = withoutTrailingSlashes.lastIndexOf("/");
+  if (separator < 0) return ".";
+  const parent = withoutTrailingSlashes.slice(0, separator).replace(/\/+$/u, "");
+  return parent === "" ? "/" : parent;
+}
+
 export const basenameCommand = /* @__PURE__ */ defineApplet(
   BASENAME,
   async (_context, argv, fds) => {
     if (argv.length !== 1) throw appletUsageError(BASENAME, "requires one path");
-    await writeText(fds[1], `${basename(argv[0] ?? "")}\n`);
+    await writeText(fds[1], `${lexicalBasename(argv[0] ?? "")}\n`);
     return 0;
   },
 );
 
 export const dirnameCommand = /* @__PURE__ */ defineApplet(DIRNAME, async (_context, argv, fds) => {
   if (argv.length !== 1) throw appletUsageError(DIRNAME, "requires one path");
-  await writeText(fds[1], `${dirname(argv[0] ?? "")}\n`);
+  await writeText(fds[1], `${lexicalDirname(argv[0] ?? "")}\n`);
   return 0;
 });
 
