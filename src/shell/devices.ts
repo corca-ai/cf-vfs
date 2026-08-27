@@ -457,7 +457,7 @@ export class ReservedPathFileSystem implements ShellFileSystem {
   }
 
   find(options: FindOptions): VfsStat[] {
-    if (this.#at(options.path) !== undefined) return this.#findHere(options);
+    if (this.#at(options.path) !== undefined) return this.findPage(options).entries;
     const entries = this.#inner.find(options);
     const roots = this.#reservedRootsFor(options);
     return roots.length === 0

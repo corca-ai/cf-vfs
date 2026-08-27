@@ -375,6 +375,24 @@ describe("virtual devices", () => {
     );
   });
 
+  it("honors find limits and starting cursors inside a reserved directory", () => {
+    const fileSystem = createTestFileSystem();
+    const view = new ReservedPathFileSystem(
+      new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
+    );
+
+    const first = view.find({ path: "/dev", type: "file", limit: 1 });
+    expect(first).toHaveLength(1);
+    const second = view.find({
+      path: "/dev",
+      type: "file",
+      cursor: first[0]?.path ?? "",
+      limit: 1,
+    });
+    expect(second).toHaveLength(1);
+    expect(second[0]?.path).not.toBe(first[0]?.path);
+  });
+
   it("lists the applet directories that resolve commands", async () => {
     const harness = createBashHarness();
     // `which cat` answering `/bin/cat` and `ls /bin` showing it are the same
