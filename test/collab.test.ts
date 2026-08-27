@@ -327,6 +327,20 @@ describe("collaborative filesystem", () => {
     expect(await read(inner, "/doc.txt")).toBe("body\nedited\n");
   });
 
+  it("applies a requested mode alongside an open-document edit", async () => {
+    const { inner, registry, document, fileSystem } = open("body\n");
+    await inner.writeFile("/doc.txt", "body\n", { mode: 0o644 });
+    registry.open("/doc.txt", document, inner.stat("/doc.txt").mutationToken);
+
+    await fileSystem.writeFile("/doc.txt", "replacement\n", { mode: 0o600 });
+
+    expect(inner.stat("/doc.txt").mode & 0o777).toBe(0o600);
+    expect(document.text()).toBe("replacement\n");
+    expect(registry.get("/doc.txt")?.dirty).toBe(true);
+    expect(await fileSystem.publish("/doc.txt")).toBe(true);
+    expect(await read(inner, "/doc.txt")).toBe("replacement\n");
+  });
+
   it("leaves files nobody has open entirely alone", async () => {
     const { inner, fileSystem } = open("");
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });

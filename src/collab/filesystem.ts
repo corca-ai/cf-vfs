@@ -279,12 +279,26 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
       this.#recordStoredText(resolved, open.document, next, result.mutationToken);
       return result;
     }
+    const stat =
+      options?.mode === undefined
+        ? this.#inner.stat(resolved)
+        : this.#inner.setMetadata(path, {
+            mode: options.mode,
+            ...(options.ifMutationToken === undefined
+              ? {}
+              : { ifMutationToken: options.ifMutationToken }),
+          });
+    if (options?.mode !== undefined) {
+      const current = this.#registry.get(resolved);
+      if (current?.document === open.document) {
+        this.#registry.markPublished(resolved, stat.mutationToken);
+      }
+    }
     open.document.applyExternal(edits);
     this.#registry.markDirty(resolved);
-    // Nothing reached storage, so the revision and token are the ones already
-    // there. A caller that guards on this token still guards correctly: the
-    // publication that eventually happens uses it too.
-    const stat = this.#inner.stat(resolved);
+    // Content has not reached storage. With no mode change the revision and
+    // token are the ones already there; with one they describe that metadata
+    // mutation, which is also the token the eventual publication will guard.
     return {
       path: resolved,
       revision: stat.revision,

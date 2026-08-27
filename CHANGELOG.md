@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- A write routed through an open document now applies its requested file mode
+  and carries the resulting namespace token into the later publication.
 - An identical write routed through an open document now advances the
   registry's publication token, so the next real edit can still be published.
 - Writes routed through an open document now enforce mutation-token guards and
