@@ -16,6 +16,14 @@ included.
 
 ## [Unreleased]
 
+### Fixed
+
+- RPC option records and retained opaque-upload receipts are now rebuilt from
+  parsed fields instead of asserted wholesale. A damaged receipt missing its
+  entry identity can no longer escape as a complete `OpaqueFileStat`, and
+  malformed shell environment or argument values remain unknown until each
+  value has been validated.
+
 ## [0.2.0] — 2026-08-27
 
 ### Removed

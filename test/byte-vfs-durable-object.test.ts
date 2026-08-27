@@ -281,15 +281,31 @@ describe("byte-oriented Durable Object filesystem", () => {
 
   it("rejects malformed shell RPC DTOs deterministically", async () => {
     const stub = workspace("shell-rpc-validation");
-    const error = await runInDurableObject(stub, async (instance) => {
-      try {
-        await instance.executeText({ script: 123 } as never);
-        return null;
-      } catch (caught) {
-        return caught;
+    const errors = await runInDurableObject(stub, async (instance) => {
+      const malformed = [
+        { script: 123 },
+        { script: "echo unreachable", env: { VALID: "yes", INVALID: 1 } },
+        { script: "echo unreachable", args: ["valid", 1] },
+      ];
+      const caught: unknown[] = [];
+      for (const options of malformed) {
+        try {
+          await instance.executeText(options as never);
+          caught.push(null);
+        } catch (error) {
+          caught.push(error);
+        }
       }
+      return caught;
     });
-    expect(error).toMatchObject({ code: "EINVAL" });
+    expect(errors).toEqual([
+      expect.objectContaining({ code: "EINVAL", message: "options.script must be a string" }),
+      expect.objectContaining({ code: "EINVAL", message: "options.env values must be strings" }),
+      expect.objectContaining({
+        code: "EINVAL",
+        message: "options.args must be an array of strings",
+      }),
+    ]);
   });
 
   it("rejects POSIX IDs outside the SQLite uint32 range at the RPC boundary", async () => {
@@ -549,6 +565,23 @@ describe("byte-oriented Durable Object filesystem", () => {
       }
     });
     expect(error).toMatchObject({ code: "EIO" });
+    const missingIdentityError = await runInDurableObject(stub, async (instance, state) => {
+      const receipt = Object.fromEntries(
+        Object.entries(instance.stat("/asset")).filter(([field]) => field !== "ino"),
+      );
+      state.storage.sql.exec(
+        "UPDATE vfs_upload_sessions SET receipt_json = ? WHERE id = ?",
+        JSON.stringify(receipt),
+        upload.uploadId,
+      );
+      try {
+        await instance.commitOpaqueUpload(upload.uploadId);
+        return null;
+      } catch (caught) {
+        return caught;
+      }
+    });
+    expect(missingIdentityError).toMatchObject({ code: "EIO" });
     await runInDurableObject(stub, async (instance, state) => {
       state.storage.sql.exec(
         "UPDATE vfs_upload_sessions SET expires_at_ms = 0, receipt_json = ? WHERE id = ?",

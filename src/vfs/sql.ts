@@ -454,6 +454,75 @@ function nullableIntegerColumn(row: SqlRow, column: string): number | null {
     : invalidColumn(column, "a safe integer or null");
 }
 
+function invalidReceipt(path: string): never {
+  throw new VfsError("EIO", "invalid committed upload receipt", path);
+}
+
+function receiptRecord(value: unknown, path: string): Readonly<Record<string, unknown>> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) invalidReceipt(path);
+  // JavaScript has no indexable-object narrowing. The shape remains unknown
+  // at every field until the accessors below parse it.
+  return value as Readonly<Record<string, unknown>>;
+}
+
+function receiptString(
+  receipt: Readonly<Record<string, unknown>>,
+  field: keyof OpaqueFileStat,
+  path: string,
+): string {
+  const value = receipt[field];
+  return typeof value === "string" ? value : invalidReceipt(path);
+}
+
+function optionalReceiptString(
+  receipt: Readonly<Record<string, unknown>>,
+  field: keyof OpaqueFileStat,
+  path: string,
+): string | undefined {
+  const value = receipt[field];
+  if (value === undefined || typeof value === "string") return value;
+  return invalidReceipt(path);
+}
+
+function receiptInteger(
+  receipt: Readonly<Record<string, unknown>>,
+  field: keyof OpaqueFileStat,
+  minimum: number,
+  path: string,
+): number {
+  const value = receipt[field];
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= minimum
+    ? value
+    : invalidReceipt(path);
+}
+
+function parseOpaqueReceipt(value: unknown, path: string): OpaqueFileStat {
+  const receipt = receiptRecord(value, path);
+  if (receipt["kind"] !== "file" || receipt["contentClass"] !== "opaque") {
+    return invalidReceipt(path);
+  }
+  const contentType = optionalReceiptString(receipt, "contentType", path);
+  const verifiedSha256 = optionalReceiptString(receipt, "verifiedSha256", path);
+  return {
+    kind: "file",
+    contentClass: "opaque",
+    path: receiptString(receipt, "path", path),
+    parentPath: receiptString(receipt, "parentPath", path),
+    name: receiptString(receipt, "name", path),
+    ino: receiptInteger(receipt, "ino", 1, path),
+    sizeBytes: receiptInteger(receipt, "sizeBytes", 0, path),
+    mode: receiptInteger(receipt, "mode", 0, path),
+    uid: receiptInteger(receipt, "uid", 0, path),
+    gid: receiptInteger(receipt, "gid", 0, path),
+    createdAtMs: receiptInteger(receipt, "createdAtMs", 0, path),
+    modifiedAtMs: receiptInteger(receipt, "modifiedAtMs", 0, path),
+    revision: receiptInteger(receipt, "revision", 1, path),
+    mutationToken: receiptString(receipt, "mutationToken", path),
+    ...(contentType === undefined ? {} : { contentType }),
+    ...(verifiedSha256 === undefined ? {} : { verifiedSha256 }),
+  };
+}
+
 function blobColumn(row: SqlRow, column: string): ArrayBuffer {
   const value = row[column];
   return value instanceof ArrayBuffer ? value : invalidColumn(column, "a blob");
@@ -3868,33 +3937,7 @@ ${ENTRY_TRIGGERS}
     } catch {
       throw new VfsError("EIO", "invalid committed upload receipt", path);
     }
-    if (parsed === null || typeof parsed !== "object") {
-      throw new VfsError("EIO", "invalid committed upload receipt", path);
-    }
-    const receipt = parsed as Readonly<Record<string, unknown>>;
-    const strings = ["path", "parentPath", "name", "mutationToken"] as const;
-    const integers = [
-      "sizeBytes",
-      "mode",
-      "uid",
-      "gid",
-      "createdAtMs",
-      "modifiedAtMs",
-      "revision",
-    ] as const;
-    if (
-      receipt["kind"] !== "file" ||
-      receipt["contentClass"] !== "opaque" ||
-      strings.some((field) => typeof receipt[field] !== "string") ||
-      integers.some(
-        (field) => !Number.isSafeInteger(receipt[field]) || (receipt[field] as number) < 0,
-      ) ||
-      (receipt["revision"] as number) < 1 ||
-      (receipt["contentType"] !== undefined && typeof receipt["contentType"] !== "string") ||
-      (receipt["verifiedSha256"] !== undefined && typeof receipt["verifiedSha256"] !== "string")
-    )
-      throw new VfsError("EIO", "invalid committed upload receipt", path);
-    return receipt as unknown as OpaqueFileStat;
+    return parseOpaqueReceipt(parsed, path);
   }
 
   private markUploadGarbage(

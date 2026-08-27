@@ -5,7 +5,10 @@ import type { VfsEvent } from "../vfs/events.js";
 import {
   rpcByteBody,
   rpcOptionalNonnegativeInteger,
+  rpcOptionalStringArray,
+  rpcOptionalStringRecord,
   rpcPosixCredentials,
+  rpcRecord,
   rpcString,
 } from "../vfs/rpc-validation.js";
 import type { PosixCredentials } from "../vfs/types.js";
@@ -69,10 +72,7 @@ function remoteTextOptions(
   value: unknown,
   additionalKeys: readonly string[] = [],
 ): RemoteExecuteTextOptions {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new VfsError("EINVAL", "options must be an object");
-  }
-  const input = value as Readonly<Record<string, unknown>>;
+  const input = rpcRecord(value, "options");
   const extra = Object.keys(input).find(
     (key) =>
       ![
@@ -87,20 +87,8 @@ function remoteTextOptions(
       ].includes(key),
   );
   if (extra !== undefined) throw new VfsError("EINVAL", `options.${extra} is not supported`);
-  const env = input["env"];
-  if (env !== undefined && (env === null || typeof env !== "object" || Array.isArray(env))) {
-    throw new VfsError("EINVAL", "options.env must be a string record");
-  }
-  if (env !== undefined && Object.values(env).some((item) => typeof item !== "string")) {
-    throw new VfsError("EINVAL", "options.env values must be strings");
-  }
-  const args = input["args"];
-  if (
-    args !== undefined &&
-    (!Array.isArray(args) || args.some((item) => typeof item !== "string"))
-  ) {
-    throw new VfsError("EINVAL", "options.args must be an array of strings");
-  }
+  const env = rpcOptionalStringRecord(input["env"], "options.env");
+  const args = rpcOptionalStringArray(input["args"], "options.args");
   const stdin = input["stdin"];
   const body = stdin === undefined ? undefined : rpcByteBody(stdin);
   if (
@@ -114,8 +102,8 @@ function remoteTextOptions(
   return {
     script: rpcString(input["script"], "options.script"),
     ...(input["cwd"] === undefined ? {} : { cwd: rpcString(input["cwd"], "options.cwd") }),
-    ...(env === undefined ? {} : { env: env as Readonly<Record<string, string>> }),
-    ...(args === undefined ? {} : { args: args as readonly string[] }),
+    ...(env === undefined ? {} : { env }),
+    ...(args === undefined ? {} : { args }),
     ...(body === undefined ? {} : { stdin: body }),
     ...(credentials === undefined ? {} : { credentials }),
     ...(umask === undefined ? {} : { umask }),
@@ -124,7 +112,7 @@ function remoteTextOptions(
 
 function remoteExecuteToOptions(value: unknown): ExecuteToOptions {
   const common = remoteTextOptions(value, ["stdout", "stderr"]);
-  const input = value as Readonly<Record<string, unknown>>;
+  const input = rpcRecord(value, "options");
   if (!(common.stdin instanceof ReadableStream)) {
     throw new VfsError("EINVAL", "options.stdin must be a byte stream");
   }
