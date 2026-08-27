@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- Streamed collaborative writes now recheck which document is open after body
+  collection, preventing an edit from landing in a document closed meanwhile.
 - A write routed through an open document now applies its requested file mode
   and carries the resulting namespace token into the later publication.
 - An identical write routed through an open document now advances the

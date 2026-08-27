@@ -260,11 +260,13 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
 
   async writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult> {
     const resolved = this.#resolved(path);
-    const open = this.#registry.get(resolved);
+    let open = this.#registry.get(resolved);
     if (open === undefined) return this.#inner.writeFile(path, body, options);
     this.#assertDocumentWrite(path);
     this.#assertDocumentPreconditions(path, options);
     const next = await bodyText(body, resolved);
+    open = this.#registry.get(resolved);
+    if (open === undefined) return this.#inner.writeFile(path, next, options);
     this.#assertDocumentWrite(path);
     this.#assertDocumentPreconditions(path, options);
     const edits = textEdits(open.document.text(), next);
@@ -358,11 +360,13 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     options?: AppendFileOptions,
   ): Promise<WriteResult> {
     const resolved = this.#resolved(path);
-    const open = this.#registry.get(resolved);
+    let open = this.#registry.get(resolved);
     if (open === undefined) return this.#inner.appendFile(path, body, options);
     this.#assertDocumentWrite(path);
     this.#assertDocumentPreconditions(path, options);
     const addition = await bodyText(body, resolved);
+    open = this.#registry.get(resolved);
+    if (open === undefined) return this.#inner.appendFile(path, addition, options);
     this.#assertDocumentWrite(path);
     this.#assertDocumentPreconditions(path, options);
     const text = open.document.text();

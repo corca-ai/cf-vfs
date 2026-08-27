@@ -341,6 +341,32 @@ describe("collaborative filesystem", () => {
     expect(await read(inner, "/doc.txt")).toBe("replacement\n");
   });
 
+  it("routes a collected stream to the document that remains open", async () => {
+    const { inner, registry, document: closedDocument, fileSystem } = open("old\n");
+    await inner.writeFile("/doc.txt", "old\n");
+    registry.open("/doc.txt", closedDocument, inner.stat("/doc.txt").mutationToken);
+    let deliver!: () => void;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        deliver = () => {
+          controller.enqueue(new TextEncoder().encode("replacement\n"));
+          controller.close();
+        };
+      },
+    });
+
+    const writing = fileSystem.writeFile("/doc.txt", body);
+    registry.close("/doc.txt");
+    const currentDocument = new TextDocument("old\n");
+    registry.open("/doc.txt", currentDocument, inner.stat("/doc.txt").mutationToken);
+    deliver();
+    await writing;
+
+    expect(closedDocument.text()).toBe("old\n");
+    expect(currentDocument.text()).toBe("replacement\n");
+    expect(registry.get("/doc.txt")?.dirty).toBe(true);
+  });
+
   it("leaves files nobody has open entirely alone", async () => {
     const { inner, fileSystem } = open("");
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });
