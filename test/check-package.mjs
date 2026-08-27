@@ -41,6 +41,7 @@ try {
     "dist/testing/index.js",
     "dist/testing/node.js",
     "docs/index.md",
+    "CHANGELOG.md",
   ])
     assert(
       files.some((file) => file.path === path),

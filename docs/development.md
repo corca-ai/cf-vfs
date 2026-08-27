@@ -12,7 +12,7 @@ src/storage/          Cloudflare R2 and SQL compatibility entry points
 src/testing/          Node in-memory SQLite and deterministic R2 adapters
 test/                 Node SQLite, workerd, package, docs, and bundle checks
 bench/                executable scenarios and checked-in local baseline
-scripts/              fixture regeneration
+scripts/              fixture regeneration and hook installation
 docs/                 documentation, starting at index.md
 ```
 
@@ -45,6 +45,9 @@ npm run knip
 npm test
 npm run test:docs
 npm run test:package
+npm run test:changelog origin/main
+npm run test:commit-message -- --text "feat(vfs): ..."
+npm run hooks:install
 npm run test:tree-shaking
 npm run bench
 npm run bench:do
@@ -78,6 +81,51 @@ point, so anything a consumer can import is reachable by definition and only
 genuinely dead code is reported. Adding a subpath means adding it to both
 files. Unused *type* exports are warnings rather than errors: a library
 legitimately publishes types this repository never imports.
+
+## Commit and pull request subjects
+
+Subjects are [Conventional Commits](https://www.conventionalcommits.org/):
+`<type>[(scope)][!]: <description>`, where the type is one of `feat`, `fix`,
+`perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `demo`, or
+`revert`, and `!` marks a breaking change. A scope is lowercase and names a
+part of the repository. The description does not end with a period, and the
+subject stays within 80 characters — measured after the `(#NNN)` GitHub
+appends, so the same limit applies to both forms.
+
+**Merges are squashed, so the subject that lands on `main` is the pull request
+title rather than any commit on the branch.** The rule is therefore enforced
+twice from one definition in `test/check-commit-message.mjs`: the `commit-msg`
+hook checks each commit as it is written, and CI checks the pull request title,
+which is the one that becomes history. `npm ci` installs the hook through
+`prepare`; `npm run hooks:install` does it directly.
+
+This is not bookkeeping. The changelog groups by type and a release derives its
+version bump from `feat` against `fix` and from `!`, so both are only as
+reliable as the subjects they parse.
+
+## Changelog and releases
+
+Every pull request that changes `src/` adds an entry to `CHANGELOG.md` under
+`## [Unreleased]`, saying what changed and why in a sentence or two and linking
+the pull request. CI enforces this — `npm run test:changelog origin/main` runs
+the same check locally. A `src/` change with nothing for a consumer to learn
+from, such as a comment or an internal rename, takes the `no-changelog` label
+instead of an entry nobody wanted.
+
+This is a job rather than part of `npm run check` because completeness needs
+the diff against the base branch, which a local check cannot see.
+`npm run check` still asserts that the changelog is *well formed*: every link
+reference resolves, no definition is unused, and the `Unreleased` section
+exists.
+
+The major version is zero, so a breaking change raises the minor version.
+Mark such an entry **Breaking** and say what a consumer has to do instead.
+
+Releasing means renaming `## [Unreleased]` to the version and date, adding the
+comparison link, bumping `package.json`, tagging, and attaching `npm pack` to
+the GitHub release. The tarball is the point: a consumer pinning
+`ignore-scripts=true` never runs `prepare`, so it cannot build `dist/` from a
+git reference, and `v0.1.0` exists solely to serve one.
 
 ## Changing the VFS
 

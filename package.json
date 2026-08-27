@@ -26,6 +26,7 @@
   "files": [
     "dist",
     "docs",
+    "CHANGELOG.md",
     "README.md",
     "LICENSE"
   ],
@@ -162,7 +163,8 @@
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "npm run clean && tsc -p tsconfig.build.json",
-    "prepare": "npm run build",
+    "prepare": "npm run build && npm run hooks:install",
+    "hooks:install": "node scripts/install-hooks.mjs",
     "prepublishOnly": "npm run check",
     "typegen:test": "wrangler types worker-configuration.d.ts --config wrangler.test.jsonc --env-interface VfsTestEnv --include-runtime false",
     "typegen:benchmark": "wrangler types bench/worker-configuration.d.ts --config wrangler.benchmark.jsonc --env-interface VfsBenchmarkEnv --include-runtime false",
@@ -175,6 +177,8 @@
     "test": "vitest run --config vitest.node.config.ts && vitest run",
     "test:docs": "node test/check-docs.mjs",
     "test:package": "node test/check-package.mjs",
+    "test:changelog": "node test/check-changelog.mjs",
+    "test:commit-message": "node test/check-commit-message.mjs",
     "test:tree-shaking": "npm run build && node test/check-tree-shaking.mjs",
     "bench": "npm run build && node bench/benchmarks.mjs",
     "bench:do": "vitest run --config vitest.performance.config.ts --disableConsoleIntercept",

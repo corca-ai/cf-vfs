@@ -1,0 +1,9 @@
+#!/bin/sh
+# Conventional Commits, checked where the feedback is immediate.
+#
+# The subject that reaches `main` is the pull request title, because merges
+# here are squashed -- CI checks that one. This keeps a branch consistent with
+# it, and catches the mistake while the message is still in the editor.
+#
+# Installed by `npm run hooks:install`, which `prepare` also runs.
+exec node "$(dirname "$0")/../test/check-commit-message.mjs" --file "$1"
