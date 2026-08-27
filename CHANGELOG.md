@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- Collaborative write results now report the byte size produced by the merging
+  document rather than assuming it exactly matches the requested replacement.
 - Streamed collaborative writes now recheck which document is open after body
   collection, preventing an edit from landing in a document closed meanwhile.
 - A write routed through an open document now applies its requested file mode

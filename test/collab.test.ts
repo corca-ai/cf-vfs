@@ -367,6 +367,27 @@ describe("collaborative filesystem", () => {
     expect(registry.get("/doc.txt")?.dirty).toBe(true);
   });
 
+  it("reports the size produced by a merging document", async () => {
+    const inner = createTestFileSystem();
+    await inner.writeFile("/doc.txt", "base\n");
+    const registry = new DocumentRegistry();
+    let text = "base\nlocal\n";
+    const document: CollaborativeDocument = {
+      text: () => text,
+      applyExternal: (edits) => {
+        text = `${applyTextEdits(text, edits)}local\n`;
+      },
+    };
+    registry.open("/doc.txt", document, inner.stat("/doc.txt").mutationToken);
+    registry.markDirty("/doc.txt");
+    const fileSystem = new CollaborativeFileSystem(inner, registry);
+
+    const result = await fileSystem.writeFile("/doc.txt", "remote\n");
+
+    expect(document.text()).toBe("remote\nlocal\n");
+    expect(result.sizeBytes).toBe(new TextEncoder().encode(document.text()).byteLength);
+  });
+
   it("leaves files nobody has open entirely alone", async () => {
     const { inner, fileSystem } = open("");
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });

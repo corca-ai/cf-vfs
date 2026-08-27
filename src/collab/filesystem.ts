@@ -305,7 +305,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
       path: resolved,
       revision: stat.revision,
       mutationToken: stat.mutationToken,
-      sizeBytes: new TextEncoder().encode(next).byteLength,
+      sizeBytes: new TextEncoder().encode(open.document.text()).byteLength,
       created: false,
     };
   }
@@ -379,7 +379,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
       path: resolved,
       revision: stat.revision,
       mutationToken: stat.mutationToken,
-      sizeBytes: new TextEncoder().encode(text + addition).byteLength,
+      sizeBytes: new TextEncoder().encode(open.document.text()).byteLength,
       created: false,
     };
   }
