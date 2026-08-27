@@ -460,11 +460,10 @@ export class ReservedPathFileSystem implements ShellFileSystem {
     if (this.#at(options.path) !== undefined) return this.findPage(options).entries;
     const entries = this.#inner.find(options);
     const roots = this.#reservedRootsFor(options);
-    return roots.length === 0
-      ? entries
-      : [...entries, ...roots].sort((left, right) =>
-          left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
-        );
+    if (roots.length === 0) return entries;
+    return [...entries, ...roots]
+      .sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0))
+      .slice(0, options.limit ?? 10_000);
   }
 
   findPage(options: FindOptions): EntryPage {

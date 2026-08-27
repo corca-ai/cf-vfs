@@ -313,6 +313,16 @@ describe("virtual devices", () => {
     expect(seen).toEqual(["/alpha", "/beta", "/dev", "/zeta"]);
   });
 
+  it("keeps reserved root entries within a find result limit", async () => {
+    const fileSystem = createTestFileSystem();
+    await fileSystem.mkdir("/zeta");
+    const view = new ReservedPathFileSystem(
+      new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
+    );
+
+    expect(view.find({ path: "/", maxDepth: 1, limit: 1 })).toHaveLength(1);
+  });
+
   it("honors page limits and cursors inside a reserved directory", () => {
     const fileSystem = createTestFileSystem();
     const view = new ReservedPathFileSystem(

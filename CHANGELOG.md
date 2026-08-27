@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- Root `find` results now reapply their result ceiling after reserved paths are
+  merged with stored entries, so synthetic roots cannot overflow `limit`.
 - Direct `find` calls on reserved directories now honor their result limit and
   starting cursor instead of returning every synthetic match.
 - Direct `find` traversal of reserved paths now applies `maxDepth` and
