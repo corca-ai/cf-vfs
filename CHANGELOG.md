@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- Moving a missing source to a path lexically below it now reports the missing
+  source instead of misclassifying it as a directory moved into itself.
 - RPC record validation now rejects structured-clone built-ins such as `Map`
   and `Date` instead of silently treating them as empty option or environment
   records.

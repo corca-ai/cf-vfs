@@ -192,6 +192,15 @@ export function runVfsConformance(
     expect((await fileSystem.stat("/lib/file.txt")).ino).toBe(created);
   });
 
+  it("conforms: reports a missing move source before checking its destination", async () => {
+    const fileSystem = await factory();
+
+    expect(await refusal(() => fileSystem.move("/missing", "/missing/child"))).toMatchObject({
+      code: "ENOENT",
+      path: "/missing",
+    });
+  });
+
   it("conforms: never hands an identity out again", async () => {
     const fileSystem = await factory();
     await fileSystem.writeFile("/a", "x");

@@ -3516,12 +3516,12 @@ ${ENTRY_TRIGGERS}
         return { from: source, to: target, moved: 1, replaced: false };
       });
     }
-    if (isDescendant(source, target)) {
-      throw new VfsError("EINVAL", "cannot move a directory into itself", target);
-    }
     let queued = 0;
     const result = this.transaction(() => {
       const sourceEntry = sourceAccess.row ?? this.requireEntry(source, false);
+      if (sourceEntry.kind === "directory" && isDescendant(source, target)) {
+        throw new VfsError("EINVAL", "cannot move a directory into itself", target);
+      }
       this.assertTraverse(source, sourceAccess.followed, posix);
       this.assertTraverse(target, targetAccess.followed, posix);
       const targetParent = this.requireDirectory(dirname(target));
