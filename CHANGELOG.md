@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- Collaborative `lstat` now reports pending document size for a regular file,
+  matching `stat` and collaborative reads.
 - Collaborative write results now report the byte size produced by the merging
   document rather than assuming it exactly matches the requested replacement.
 - Streamed collaborative writes now recheck which document is open after body

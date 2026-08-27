@@ -389,7 +389,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
   }
 
   lstat(path: string): VfsStat {
-    return this.#inner.lstat(path);
+    return this.#withPendingSize(this.#inner.lstat(path));
   }
 
   readlink(path: string): string {

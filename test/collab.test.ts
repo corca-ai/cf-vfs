@@ -256,6 +256,7 @@ describe("collaborative filesystem", () => {
     registry.markDirty("/doc.txt");
 
     expect(fileSystem.stat("/doc.txt").sizeBytes).toBe(22);
+    expect(fileSystem.lstat("/doc.txt").sizeBytes).toBe(22);
     expect(await read(fileSystem, "/doc.txt")).toBe("short\nmuch longer now\n");
     // The namespace still holds what was published.
     expect(inner.stat("/doc.txt").sizeBytes).toBe(6);
