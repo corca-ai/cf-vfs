@@ -9,7 +9,8 @@ These commands are deliberately excluded from ordinary unit tests and
 `npm run check`. The checked-in
 [Node SQLite baseline](../bench/node-sql-baseline-2026-07-25.md) and
 [Durable Object baseline](../bench/do-baseline-2026-07-24.md) and its
-[structural-cost follow-up](../bench/do-baseline-2026-07-26.md) record their
+[structural-cost follow-up](../bench/do-baseline-2026-07-26.md), plus the
+[write-path follow-up](../bench/do-baseline-2026-08-27.md), record their
 environments and interpretation.
 
 ## Structural guards versus wall-clock benchmarks
@@ -49,7 +50,10 @@ snapshot without holding a cursor or transaction across `await`. Writes collect
 directly into fixed slabs and insert up to 33 chunks per statement. Append reads
 and rewrites only the last partial chunk plus newly added chunks in the same
 batches; earlier chunks stay inside SQLite. The batch size uses 99 of
-Cloudflare's 100 bound parameters.
+Cloudflare's 100 bound parameters. A same-size or growing overwrite UPSERTs
+retained chunk slots in place; only a shrinking overwrite deletes the suffix
+that would otherwise remain. This avoids paying once to delete each chunk and
+again to insert its replacement.
 This is usually faster and simpler than a paged pull protocol at this size, but
 concurrent snapshots and writes are capped by the instance-wide in-flight
 budget.
@@ -65,10 +69,12 @@ also exact above `find()`'s 10,000-result ceiling.
 ### POSIX credential cost
 
 The trusted path has a hard zero-overhead SQL requirement. The workerd
-regression suite still records exactly 5,120 statements for 512 small writes,
-8 statements/14 rows read/5 rows written for an overwrite, and 9/8/10
-statements for subtree copy/move/remove. These are the same structural counts
-as before uid/gid and DAC were added.
+regression suite records exactly 3,584 statements, 3,584 rows read, and 3,072
+rows written for 512 root-level small writes; 7 statements/13 rows read/4 rows
+written for a point overwrite; and 9/8/9 statements for subtree
+copy/move/remove. A root-level creation relies on the schema's permanent root
+invariant instead of reading `/` again, and the pre-stream/commit checks read a
+live entry or absent-path tombstone in one statement.
 
 A credential-bound point or directory operation adds one indexed ancestor
 query per path it resolves. A guarded listing test records exactly two more
@@ -79,7 +85,7 @@ across all pages: a 1,006-entry, two-page traversal is pinned at seven
 statements rather than repeating the range preflight per page. A
 credential-bound recursive copy is pinned at 14 statements for both 41-entry
 and 81-entry source trees; its setgid calculation grows in rows, not statement
-round trips. Creating an entry below an existing parent costs 9/9/10/15
+round trips. Creating an entry below an existing parent costs 9/9/10/13
 statements for touch/mkdir/symlink/write, and a touch that creates three
 intermediate directories costs 21; each transaction walks its parent chain
 only once.

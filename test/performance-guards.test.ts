@@ -4,6 +4,7 @@ import { Shell } from "../src/shell/shell.js";
 import type { NodeSqlFileSystem, NodeSqlFileSystemOptions } from "../src/testing/node.js";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import { putOpaque } from "../src/vfs/opaque.js";
+import { readAllBytes } from "../src/vfs/streams.js";
 import type { OpaqueStore, WriteFileOptions } from "../src/vfs/types.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 
@@ -186,6 +187,38 @@ describe("common-path SQL cost", () => {
     expect(appends.thirtyFour).toBe(appends.one + 1);
   });
 
+  it("overwrites retained chunks in place and deletes only a shrinking suffix", async () => {
+    async function overwrite(sizeBytes: number): Promise<{
+      statements: number;
+      chunkDeletes: number;
+      body: number[];
+    }> {
+      let statements = 0;
+      let chunkDeletes = 0;
+      const fileSystem = createTestFileSystem({
+        chunkBytes: 4,
+        onStatement: (query) => {
+          statements += 1;
+          if (/DELETE FROM vfs_inline_chunks/u.test(query)) chunkDeletes += 1;
+        },
+      });
+      await fileSystem.writeFile("/body", new Uint8Array(12).fill(1));
+      statements = 0;
+      chunkDeletes = 0;
+      await fileSystem.writeFile("/body", new Uint8Array(sizeBytes).fill(2));
+      const measured = { statements, chunkDeletes };
+      const body = await readAllBytes(fileSystem.readFile("/body").stream, 16);
+      return { ...measured, body: [...body] };
+    }
+
+    const sameSize = await overwrite(12);
+    const growing = await overwrite(16);
+    const shrinking = await overwrite(4);
+    expect(sameSize).toEqual({ statements: 9, chunkDeletes: 0, body: Array(12).fill(2) });
+    expect(growing).toEqual({ statements: 9, chunkDeletes: 0, body: Array(16).fill(2) });
+    expect(shrinking).toEqual({ statements: 10, chunkDeletes: 1, body: Array(4).fill(2) });
+  });
+
   it("costs a single write nothing to have a batch form", async () => {
     async function counted(
       run: (fileSystem: NodeSqlFileSystem) => Promise<unknown>,
@@ -212,12 +245,12 @@ describe("common-path SQL cost", () => {
     // entry of a batch runs, so a batch existing cannot move what it costs.
     // That is what makes "costs nothing when unused" structural rather than a
     // promise to re-measure.
-    expect(single).toEqual({ statements: 12, rows: 4 });
+    expect(single).toEqual({ statements: 9, rows: 3 });
     expect(batchOfOne).toEqual(single);
     // And a set shares one transaction and one usage read across its entries
     // rather than paying for them once per file.
-    expect(batchOfThree).toEqual({ statements: 30, rows: 10 });
-    expect(threeWrites).toEqual({ statements: 36, rows: 12 });
+    expect(batchOfThree).toEqual({ statements: 21, rows: 7 });
+    expect(threeWrites).toEqual({ statements: 27, rows: 9 });
   });
 
   it("skips subtree summaries without slowing a rejected directory removal", async () => {
@@ -277,7 +310,7 @@ describe("common-path SQL cost", () => {
     // every one of these, and the equality below is what would catch that.
     const off = await statements(false);
     const on = await statements(true);
-    expect(off).toBe(47);
+    expect(off).toBe(46);
     expect(on).toBe(off);
   });
 
@@ -341,7 +374,7 @@ describe("common-path SQL cost", () => {
     // a notification that had to look anything up could not produce that.
     const unobserved = await statements(false);
     const observed = await statements(true);
-    expect(unobserved).toBe(47);
+    expect(unobserved).toBe(46);
     expect(observed - unobserved).toBe(1);
   });
 
@@ -380,9 +413,9 @@ describe("common-path SQL cost", () => {
     // that stopped observing, and the `off` arm is what proves an optional
     // feature added no statements to the path that does not use it.
     expect(measured).toEqual({
-      off: 10,
-      sizeDiffers: 10,
-      sameSizeDiffers: 12,
+      off: 9,
+      sizeDiffers: 9,
+      sameSizeDiffers: 11,
       unchanged: 7,
       unchangedWarm: 5,
     });
@@ -716,7 +749,7 @@ describe("common-path SQL cost", () => {
       touch: 9,
       mkdir: 9,
       symlink: 9,
-      write: 15,
+      write: 13,
       recursiveTouch: 21,
     });
   });

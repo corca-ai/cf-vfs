@@ -385,6 +385,11 @@ interface InlineWriteOutcome {
   readonly queuedGarbage: boolean;
 }
 
+interface PathState {
+  readonly entry: EntryRow | null;
+  readonly mutationToken: string;
+}
+
 /** One planned write and the bytes it is holding, ready to commit. */
 interface CollectedWrite {
   readonly plan: InlineWritePlan;
@@ -1322,6 +1327,40 @@ ${ENTRY_TRIGGERS}
   }
 
   /**
+   * Reads an entry and its tombstone token as one point lookup.
+   *
+   * Ordinary reads need only an entry and use `oneEntry`. A streamed write
+   * also has to reserve the version of an absent path before it awaits its
+   * body, then compare that version inside the commit transaction. Starting
+   * from the version table lets one statement answer both questions: a live
+   * path joins its entry, a removed path returns only its tombstone, and a path
+   * never used returns no row at all.
+   */
+  private pathState(path: string): PathState {
+    const row = firstRow(
+      this.sql.exec<SqlRow>(
+        `SELECT ${ENTRY_COLUMNS}
+       FROM vfs_path_versions p
+       LEFT JOIN vfs_entries e INDEXED BY vfs_entries_path ON e.path = p.path
+       WHERE p.path = ?`,
+        path,
+      ),
+    );
+    if (row === undefined) return { entry: null, mutationToken: NEVER_MUTATED_TOKEN };
+    if (nullableIntegerColumn(row, "id") === null) {
+      return {
+        entry: null,
+        mutationToken: formatMutationToken(
+          this.mutationEpoch,
+          integerColumn(row, "mutation_version"),
+        ),
+      };
+    }
+    const entry = parseEntry(row, this.mutationEpoch);
+    return { entry, mutationToken: entry.mutationToken };
+  }
+
+  /**
    * The absolute form of a link target, read from the link's own parent.
    *
    * POSIX resolves a relative target against the directory holding the link,
@@ -1946,6 +1985,10 @@ ${ENTRY_TRIGGERS}
     access: PosixAccessContext | undefined,
     parents: CreationParents,
   ): EntryRow {
+    // Every caller weighs the entry it is about to create after this returns.
+    // With no intermediate directory there is nothing to reserve here, so a
+    // second capacity/headroom check would only repeat that caller's work.
+    if (parents.missing.length === 0) return parents.existing;
     this.assertCapacity(0, parents.missing.length, path);
     let parent = parents.existing;
     for (const missingParent of parents.missing) {
@@ -2699,7 +2742,11 @@ ${ENTRY_TRIGGERS}
   ): InlineWritePlan {
     const access = this.resolveAccess(path, true);
     const normalized = access.path;
-    const before = access.row ?? this.oneEntry(normalized);
+    const state =
+      access.row === null
+        ? this.pathState(normalized)
+        : { entry: access.row, mutationToken: access.row.mutationToken };
+    const before = state.entry;
     const createParents = options.createParents ?? false;
     this.assertWriteAccess(normalized, before, createParents, access.followed, posix);
     const disposition = options.disposition ?? "upsert";
@@ -2719,7 +2766,7 @@ ${ENTRY_TRIGGERS}
       skipIfUnchanged: options.skipIfUnchanged === true,
       mode: entry.mode,
       guard: entry,
-      capturedToken: this.tokenOf(normalized, before),
+      capturedToken: state.mutationToken,
     };
   }
 
@@ -2749,14 +2796,18 @@ ${ENTRY_TRIGGERS}
     pending?: { inlineBytes: number; entries: number },
   ): InlineWriteOutcome {
     const normalized = plan.path;
-    const current = this.oneEntry(normalized);
-    if (this.tokenOf(normalized, current) !== plan.capturedToken) {
+    const state = this.pathState(normalized);
+    const current = state.entry;
+    if (state.mutationToken !== plan.capturedToken) {
       throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
     }
     this.validateGuard(normalized, current, plan.guard, plan.written);
     if (current?.kind === "directory") throw new VfsError("EISDIR", "is a directory", normalized);
+    // The schema creates `/` before any public operation and the API cannot
+    // remove or replace it. A trusted root-level create needs neither its
+    // ownership nor its mode, so reading that permanent row adds no proof.
     const parent =
-      current === null
+      current === null && (posix !== undefined || dirname(normalized) !== "/")
         ? this.prepareParents(normalized, plan.createParents, now, plan.followed, posix)
         : undefined;
     if (current !== null) {
@@ -2784,7 +2835,6 @@ ${ENTRY_TRIGGERS}
         queuedGarbage: false,
       };
     }
-    const entryOrParent = parent ?? current ?? this.requireDirectory(dirname(normalized));
     const previousInlineBytes = current?.contentClass === "inline" ? current.sizeBytes : 0;
     const inlineDelta = sizeBytes - previousInlineBytes;
     // An entry that is already there is proof of its own parent. Nothing
@@ -2797,13 +2847,18 @@ ${ENTRY_TRIGGERS}
       current === null
         ? posix === undefined
           ? { uid: 0, gid: 0 }
-          : this.creationOwner(entryOrParent, posix)
+          : this.creationOwner(parent ?? this.requireDirectory(dirname(normalized)), posix)
         : { uid: current.uid, gid: current.gid };
     const mode =
       current === null
         ? posix === undefined
           ? (plan.mode ?? FILE_MODE)
-          : this.creationMode(plan.mode ?? FILE_MODE, posix, entryOrParent, false)
+          : this.creationMode(
+              plan.mode ?? FILE_MODE,
+              posix,
+              parent ?? this.requireDirectory(dirname(normalized)),
+              false,
+            )
         : posix === undefined
           ? (plan.mode ?? current.mode)
           : current.mode;
@@ -2814,8 +2869,18 @@ ${ENTRY_TRIGGERS}
       pending.entries += entryDelta;
     }
     const token = this.bumpToken(normalized, current === null ? "create" : "write");
-    if (current?.contentClass === "inline") {
-      this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", current.id);
+    if (
+      current?.contentClass === "inline" &&
+      chunks.length < Math.ceil(current.sizeBytes / this.chunkBytes)
+    ) {
+      // The UPSERT below replaces every chunk that remains. Only a shrinking
+      // write can leave a stored suffix behind, so deleting the whole body on
+      // same-size and growing overwrites merely writes every chunk twice.
+      this.sql.exec(
+        "DELETE FROM vfs_inline_chunks WHERE entry_id = ? AND chunk_index >= ?",
+        current.id,
+        chunks.length,
+      );
     }
     const written = this.sql
       .exec<SqlRow>(

@@ -106,8 +106,8 @@ describe("Durable Object storage benchmark metrics", () => {
     expect(metrics.storageAmplification).toBeLessThan(2);
     expect(metrics.checksum).toBeGreaterThan(0);
     expect(metrics.writeCost).toEqual({
-      statements: 5_120,
-      rowsRead: 4_608,
+      statements: 3_584,
+      rowsRead: 3_584,
       rowsWritten: 3_072,
     });
     expect(metrics.readCost).toEqual({
@@ -160,8 +160,8 @@ describe("Durable Object storage benchmark metrics", () => {
     expect(metrics).toMatchObject({ chunks: 4, outputBytes: 1024 * 1024, firstByte: 7 });
     expect(metrics.rowsRead).toBeGreaterThan(0);
     expect(metrics.rowsWritten).toBeGreaterThan(0);
-    expect(metrics.rowsRead).toBeLessThanOrEqual(31);
-    expect(metrics.rowsWritten).toBeLessThanOrEqual(11);
+    expect(metrics.rowsRead).toBeLessThanOrEqual(27);
+    expect(metrics.rowsWritten).toBeLessThanOrEqual(7);
     expect(metrics.databaseBytesAfter).toBeGreaterThanOrEqual(metrics.databaseBytesBefore);
     expect(metrics.estimatedSqlRowUsd).toBeGreaterThan(0);
   });
@@ -182,7 +182,7 @@ describe("Durable Object storage benchmark metrics", () => {
       return statements;
     });
 
-    expect(metrics).toEqual({ "1": 10, "33": 10, "34": 11 });
+    expect(metrics).toEqual({ "1": 7, "33": 7, "34": 8 });
   });
 
   it("rewrites only the inline tail when appending", async () => {
@@ -484,9 +484,9 @@ describe("Durable Object storage benchmark metrics", () => {
     });
     expect(metrics.populatedStatCost).toEqual({ rowsRead: 2, statements: 1 });
     expect(metrics.overwriteCost).toMatchObject({
-      statements: 8,
-      rowsRead: 14,
-      rowsWritten: 5,
+      statements: 7,
+      rowsRead: 13,
+      rowsWritten: 4,
     });
     expect(metrics.statQueryPlan.every((detail) => detail.includes("SEARCH"))).toBe(true);
     measured(metrics.warmInitializeMs);
