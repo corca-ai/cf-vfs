@@ -361,6 +361,20 @@ describe("virtual devices", () => {
     expect(seen).toEqual(expected);
   });
 
+  it("applies depth and path filters inside a reserved directory", () => {
+    const fileSystem = createTestFileSystem();
+    const view = new ReservedPathFileSystem(
+      new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
+    );
+
+    expect(
+      view.find({ path: "/dev", includeRoot: true, maxDepth: 0 }).map((entry) => entry.path),
+    ).toEqual(["/dev"]);
+    expect(view.find({ path: "/dev", pathGlob: "/dev/stdout" }).map((entry) => entry.path)).toEqual(
+      ["/dev/stdout"],
+    );
+  });
+
   it("lists the applet directories that resolve commands", async () => {
     const harness = createBashHarness();
     // `which cat` answering `/bin/cat` and `ls /bin` showing it are the same

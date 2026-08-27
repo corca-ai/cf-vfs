@@ -1,6 +1,6 @@
 import { VfsError } from "../core/errors.js";
 import { matchesGlob } from "../core/glob.js";
-import { normalizePath, pathRequiresDirectory } from "../core/path.js";
+import { depthFrom, normalizePath, pathRequiresDirectory } from "../core/path.js";
 import type {
   AppendFileOptions,
   ByteBody,
@@ -534,8 +534,10 @@ export class ReservedPathFileSystem implements ShellFileSystem {
     const selected = options.includeRoot === true ? found : found.slice(1);
     return selected.filter(
       (entry) =>
+        (options.maxDepth === undefined || depthFrom(at.path, entry.path) <= options.maxDepth) &&
         (options.type === undefined || entry.kind === options.type) &&
-        (options.name === undefined || matchesGlob(entry.name, options.name)),
+        (options.name === undefined || matchesGlob(entry.name, options.name)) &&
+        (options.pathGlob === undefined || matchesGlob(entry.path, options.pathGlob)),
     );
   }
 

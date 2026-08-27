@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- Direct `find` traversal of reserved paths now applies `maxDepth` and
+  `pathGlob` instead of returning synthetic descendants that do not match.
 - `findPage` now honors limits and cursors when traversing a reserved directory
   directly, rather than materializing every synthetic child at once.
 - `listPage` now honors limits and cursors when listing a reserved directory
