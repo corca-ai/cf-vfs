@@ -61,7 +61,7 @@ describe("shell RPC option parsing", () => {
       "options.credentials requires uid and gid",
     ],
     ["umask", { script: "true", umask: -1 }, "options.umask must be a safe integer >= 0"],
-    ["unknown field", { script: "true", timeout: 10 }, "options.timeout is not supported"],
+    ["stream-only field", { script: "true", stdout: {} }, "options.stdout is not supported"],
   ])("rejects an invalid %s with a field-specific diagnostic", (_field, value, message) => {
     expect(() => parseRemoteTextOptions(value)).toThrowError(
       expect.objectContaining({ code: "EINVAL", message }),

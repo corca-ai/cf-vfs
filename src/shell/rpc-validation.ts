@@ -1,15 +1,28 @@
 import { VfsError } from "../core/errors.js";
+import type { RpcRecord } from "../vfs/rpc-validation.js";
 import {
   rpcByteBody,
   rpcOptionalNonnegativeInteger,
   rpcOptionalStringArray,
   rpcOptionalStringRecord,
   rpcPosixCredentials,
-  rpcRecord,
   rpcString,
+  rpcStruct,
 } from "../vfs/rpc-validation.js";
 import type { PosixCredentials } from "../vfs/types.js";
 import type { RemoteExecuteTextOptions } from "./types.js";
+
+const REMOTE_TEXT_OPTION_KEYS = [
+  "script",
+  "cwd",
+  "env",
+  "args",
+  "stdin",
+  "credentials",
+  "umask",
+] as const;
+
+const REMOTE_EXECUTE_TO_OPTION_KEYS = [...REMOTE_TEXT_OPTION_KEYS, "stdout", "stderr"] as const;
 
 export interface ExecuteToOptions {
   script: string;
@@ -23,25 +36,7 @@ export interface ExecuteToOptions {
   stderr: WritableStream<Uint8Array>;
 }
 
-export function parseRemoteTextOptions(
-  value: unknown,
-  additionalKeys: readonly string[] = [],
-): RemoteExecuteTextOptions {
-  const input = rpcRecord(value, "options");
-  const extra = Object.keys(input).find(
-    (key) =>
-      ![
-        "script",
-        "cwd",
-        "env",
-        "args",
-        "stdin",
-        "credentials",
-        "umask",
-        ...additionalKeys,
-      ].includes(key),
-  );
-  if (extra !== undefined) throw new VfsError("EINVAL", `options.${extra} is not supported`);
+function parseTextOptions(input: RpcRecord): RemoteExecuteTextOptions {
   const env = rpcOptionalStringRecord(input["env"], "options.env");
   const args = rpcOptionalStringArray(input["args"], "options.args");
   const stdin = input["stdin"];
@@ -65,9 +60,13 @@ export function parseRemoteTextOptions(
   };
 }
 
+export function parseRemoteTextOptions(value: unknown): RemoteExecuteTextOptions {
+  return parseTextOptions(rpcStruct(value, "options", REMOTE_TEXT_OPTION_KEYS));
+}
+
 export function parseRemoteExecuteToOptions(value: unknown): ExecuteToOptions {
-  const common = parseRemoteTextOptions(value, ["stdout", "stderr"]);
-  const input = rpcRecord(value, "options");
+  const input = rpcStruct(value, "options", REMOTE_EXECUTE_TO_OPTION_KEYS);
+  const common = parseTextOptions(input);
   if (!(common.stdin instanceof ReadableStream)) {
     throw new VfsError("EINVAL", "options.stdin must be a byte stream");
   }

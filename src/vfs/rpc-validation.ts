@@ -24,7 +24,7 @@ import type {
 
 const MAX_POSIX_ID = 0xffff_ffff;
 
-type UnknownRecord = Readonly<Record<string, unknown>>;
+export type RpcRecord = Readonly<Record<string, unknown>>;
 
 const ENTRY_KINDS = {
   directory: true,
@@ -38,18 +38,35 @@ const WRITE_DISPOSITIONS = {
   upsert: true,
 } as const satisfies Readonly<Record<WriteDisposition, true>>;
 
-export function rpcRecord(value: unknown, name: string): UnknownRecord {
+const PAGE_OPTION_KEYS = ["cursor", "limit"] as const;
+const FIND_OPTION_KEYS = [
+  "path",
+  "includeRoot",
+  "maxDepth",
+  "name",
+  "pathGlob",
+  "type",
+  ...PAGE_OPTION_KEYS,
+] as const;
+const WRITE_FILES_OPTION_KEYS = ["createParents", "disposition", "skipIfUnchanged"] as const;
+const WRITE_OPTION_KEYS = [...WRITE_FILES_OPTION_KEYS, "ifMutationToken", "mode"] as const;
+const METADATA_OPTION_KEYS = ["ifMutationToken", "mode", "modifiedAtMs"] as const;
+const TOUCH_OPTION_KEYS = [...METADATA_OPTION_KEYS, "create", "createParents"] as const;
+
+function rpcRecord(value: unknown, name: string): RpcRecord {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new VfsError("EINVAL", `${name} must be an object`);
   }
   // JavaScript has no indexable-object narrowing. Callers still receive
   // unknown at every property and must parse each one before using it.
-  return value as UnknownRecord;
+  return value as RpcRecord;
 }
 
-function keys(value: UnknownRecord, allowed: readonly string[], name: string): void {
-  const extra = Object.keys(value).find((key) => !allowed.includes(key));
+export function rpcStruct(value: unknown, name: string, allowedKeys: readonly string[]): RpcRecord {
+  const input = rpcRecord(value, name);
+  const extra = Object.keys(input).find((key) => !allowedKeys.includes(key));
   if (extra !== undefined) throw new VfsError("EINVAL", `${name}.${extra} is not supported`);
+  return input;
 }
 
 function isSafeInteger(value: unknown): value is number {
@@ -163,8 +180,7 @@ function optionalPosixId(value: unknown, name: string): number | undefined {
 
 export function rpcPosixCredentials(value: unknown, name: string): PosixCredentials | undefined {
   if (value === undefined) return undefined;
-  const input = rpcRecord(value, name);
-  keys(input, ["uid", "gid", "supplementaryGids"], name);
+  const input = rpcStruct(value, name, ["uid", "gid", "supplementaryGids"]);
   const uid = optionalPosixId(input["uid"], `${name}.uid`);
   const gid = optionalPosixId(input["gid"], `${name}.gid`);
   if (uid === undefined || gid === undefined) {
@@ -187,9 +203,33 @@ export function rpcPosixCredentials(value: unknown, name: string): PosixCredenti
   };
 }
 
-function guardOptions(input: UnknownRecord): { ifMutationToken?: string } {
+function guardOptions(input: RpcRecord): { ifMutationToken?: string } {
   const ifMutationToken = optionalString(input["ifMutationToken"], "options.ifMutationToken");
   return ifMutationToken === undefined ? {} : { ifMutationToken };
+}
+
+function pageOptions(input: RpcRecord): PageOptions {
+  const cursor = optionalString(input["cursor"], "options.cursor");
+  const limit = rpcOptionalPositiveInteger(input["limit"], "options.limit");
+  return { ...(cursor === undefined ? {} : { cursor }), ...(limit === undefined ? {} : { limit }) };
+}
+
+function metadataOptions(input: RpcRecord): MetadataUpdateOptions {
+  const mode = optionalInteger(input["mode"], "options.mode");
+  const modifiedAtMs = optionalInteger(input["modifiedAtMs"], "options.modifiedAtMs");
+  return {
+    ...guardOptions(input),
+    ...(mode === undefined ? {} : { mode }),
+    ...(modifiedAtMs === undefined ? {} : { modifiedAtMs }),
+  };
+}
+
+function writeDisposition(input: RpcRecord): WriteDisposition | undefined {
+  return optionalLiteral(
+    input["disposition"],
+    WRITE_DISPOSITIONS,
+    "options.disposition is invalid",
+  );
 }
 
 export function rpcByteBody(value: unknown, name = "body"): ByteBody {
@@ -205,11 +245,8 @@ export function rpcByteBody(value: unknown, name = "body"): ByteBody {
 
 export function rpcPageOptions(value: unknown): PageOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcRecord(value, "options");
-  keys(input, ["cursor", "limit"], "options");
-  const cursor = optionalString(input["cursor"], "options.cursor");
-  const limit = rpcOptionalPositiveInteger(input["limit"], "options.limit");
-  return { ...(cursor === undefined ? {} : { cursor }), ...(limit === undefined ? {} : { limit }) };
+  const input = rpcStruct(value, "options", PAGE_OPTION_KEYS);
+  return pageOptions(input);
 }
 
 export function rpcNonnegativeInteger(value: unknown, name: string): number {
@@ -221,19 +258,13 @@ export function rpcNonnegativeInteger(value: unknown, name: string): number {
 
 export function rpcChangesSinceOptions(value: unknown): ChangesSinceOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcRecord(value, "options");
-  keys(input, ["limit"], "options");
+  const input = rpcStruct(value, "options", ["limit"]);
   const limit = rpcOptionalPositiveInteger(input["limit"], "options.limit");
   return limit === undefined ? {} : { limit };
 }
 
 export function rpcFindOptions(value: unknown): FindOptions {
-  const input = rpcRecord(value, "options");
-  keys(
-    input,
-    ["path", "includeRoot", "maxDepth", "name", "pathGlob", "type", "cursor", "limit"],
-    "options",
-  );
+  const input = rpcStruct(value, "options", FIND_OPTION_KEYS);
   const includeRoot = optionalBoolean(input["includeRoot"], "options.includeRoot");
   const maxDepth = optionalInteger(input["maxDepth"], "options.maxDepth");
   const name = optionalString(input["name"], "options.name");
@@ -250,23 +281,14 @@ export function rpcFindOptions(value: unknown): FindOptions {
     ...(name === undefined ? {} : { name }),
     ...(pathGlob === undefined ? {} : { pathGlob }),
     ...(type === undefined ? {} : { type }),
-    ...rpcPageOptions({ cursor: input["cursor"], limit: input["limit"] }),
+    ...pageOptions(input),
   };
 }
 
 export function rpcWriteOptions(value: unknown): WriteFileOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcRecord(value, "options");
-  keys(
-    input,
-    ["createParents", "disposition", "ifMutationToken", "mode", "skipIfUnchanged"],
-    "options",
-  );
-  const disposition = optionalLiteral(
-    input["disposition"],
-    WRITE_DISPOSITIONS,
-    "options.disposition is invalid",
-  );
+  const input = rpcStruct(value, "options", WRITE_OPTION_KEYS);
+  const disposition = writeDisposition(input);
   const createParents = optionalBoolean(input["createParents"], "options.createParents");
   const mode = optionalInteger(input["mode"], "options.mode");
   const skipIfUnchanged = optionalBoolean(input["skipIfUnchanged"], "options.skipIfUnchanged");
@@ -290,8 +312,7 @@ export function rpcWriteFilesEntries(value: unknown): WriteFilesEntry[] {
   if (!Array.isArray(value)) throw new VfsError("EINVAL", "entries must be an array");
   return value.map((entry, index) => {
     const name = `entries[${index}]`;
-    const input = rpcRecord(entry, name);
-    keys(input, ["path", "body", "ifMutationToken", "mode"], name);
+    const input = rpcStruct(entry, name, ["path", "body", "ifMutationToken", "mode"]);
     const ifMutationToken = optionalString(input["ifMutationToken"], `${name}.ifMutationToken`);
     const mode = optionalInteger(input["mode"], `${name}.mode`);
     return {
@@ -305,13 +326,8 @@ export function rpcWriteFilesEntries(value: unknown): WriteFilesEntry[] {
 
 export function rpcWriteFilesOptions(value: unknown): WriteFilesOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcRecord(value, "options");
-  keys(input, ["createParents", "disposition", "skipIfUnchanged"], "options");
-  const disposition = optionalLiteral(
-    input["disposition"],
-    WRITE_DISPOSITIONS,
-    "options.disposition is invalid",
-  );
+  const input = rpcStruct(value, "options", WRITE_FILES_OPTION_KEYS);
+  const disposition = writeDisposition(input);
   const createParents = optionalBoolean(input["createParents"], "options.createParents");
   const skipIfUnchanged = optionalBoolean(input["skipIfUnchanged"], "options.skipIfUnchanged");
   return {
@@ -323,26 +339,17 @@ export function rpcWriteFilesOptions(value: unknown): WriteFilesOptions | undefi
 
 export function rpcAppendOptions(value: unknown): AppendFileOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcRecord(value, "options");
-  keys(input, ["ifMutationToken"], "options");
+  const input = rpcStruct(value, "options", ["ifMutationToken"]);
   return guardOptions(input);
 }
 
 export function rpcMetadataOptions(value: unknown): MetadataUpdateOptions {
-  const input = rpcRecord(value, "options");
-  keys(input, ["ifMutationToken", "mode", "modifiedAtMs"], "options");
-  const mode = optionalInteger(input["mode"], "options.mode");
-  const modifiedAtMs = optionalInteger(input["modifiedAtMs"], "options.modifiedAtMs");
-  return {
-    ...guardOptions(input),
-    ...(mode === undefined ? {} : { mode }),
-    ...(modifiedAtMs === undefined ? {} : { modifiedAtMs }),
-  };
+  const input = rpcStruct(value, "options", METADATA_OPTION_KEYS);
+  return metadataOptions(input);
 }
 
 export function rpcOwnershipOptions(value: unknown): OwnershipUpdateOptions {
-  const input = rpcRecord(value, "options");
-  keys(input, ["ifMutationToken", "uid", "gid"], "options");
+  const input = rpcStruct(value, "options", ["ifMutationToken", "uid", "gid"]);
   const uid = optionalPosixId(input["uid"], "options.uid");
   const gid = optionalPosixId(input["gid"], "options.gid");
   if (uid === undefined && gid === undefined) {
@@ -357,8 +364,7 @@ export function rpcOwnershipOptions(value: unknown): OwnershipUpdateOptions {
 
 export function rpcSymlinkOptions(value: unknown): SymlinkOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcRecord(value, "options");
-  keys(input, ["createParents", "ifMutationToken", "replace"], "options");
+  const input = rpcStruct(value, "options", ["createParents", "ifMutationToken", "replace"]);
   const createParents = optionalBoolean(input["createParents"], "options.createParents");
   const replace = optionalBoolean(input["replace"], "options.replace");
   const ifMutationToken = optionalString(input["ifMutationToken"], "options.ifMutationToken");
@@ -371,24 +377,18 @@ export function rpcSymlinkOptions(value: unknown): SymlinkOptions | undefined {
 
 export function rpcFollowOptions(value: unknown): { follow?: boolean } | undefined {
   if (value === undefined) return undefined;
-  const input = rpcRecord(value, "options");
-  keys(input, ["follow"], "options");
+  const input = rpcStruct(value, "options", ["follow"]);
   const follow = optionalBoolean(input["follow"], "options.follow");
   return follow === undefined ? {} : { follow };
 }
 
 export function rpcTouchOptions(value: unknown): TouchOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcRecord(value, "options");
-  keys(input, ["ifMutationToken", "mode", "modifiedAtMs", "create", "createParents"], "options");
+  const input = rpcStruct(value, "options", TOUCH_OPTION_KEYS);
   const create = optionalBoolean(input["create"], "options.create");
   const createParents = optionalBoolean(input["createParents"], "options.createParents");
   return {
-    ...rpcMetadataOptions({
-      ifMutationToken: input["ifMutationToken"],
-      mode: input["mode"],
-      modifiedAtMs: input["modifiedAtMs"],
-    }),
+    ...metadataOptions(input),
     ...(create === undefined ? {} : { create }),
     ...(createParents === undefined ? {} : { createParents }),
   };
@@ -396,24 +396,26 @@ export function rpcTouchOptions(value: unknown): TouchOptions | undefined {
 
 export function rpcRemoveOptions(value: unknown): RemoveOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcRecord(value, "options");
-  keys(input, ["recursive"], "options");
+  const input = rpcStruct(value, "options", ["recursive"]);
   const recursive = optionalBoolean(input["recursive"], "options.recursive");
   return recursive === undefined ? {} : { recursive };
 }
 
 export function rpcMoveOptions(value: unknown): MoveOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcRecord(value, "options");
-  keys(input, ["replace"], "options");
+  const input = rpcStruct(value, "options", ["replace"]);
   const replace = optionalBoolean(input["replace"], "options.replace");
   return replace === undefined ? {} : { replace };
 }
 
 export function rpcCopyOptions(value: unknown): CopyOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcRecord(value, "options");
-  keys(input, ["replace", "recursive", "createParents", "dereference"], "options");
+  const input = rpcStruct(value, "options", [
+    "replace",
+    "recursive",
+    "createParents",
+    "dereference",
+  ]);
   const replace = optionalBoolean(input["replace"], "options.replace");
   const recursive = optionalBoolean(input["recursive"], "options.recursive");
   const createParents = optionalBoolean(input["createParents"], "options.createParents");
@@ -428,12 +430,14 @@ export function rpcCopyOptions(value: unknown): CopyOptions | undefined {
 
 export function rpcBeginUploadOptions(value: unknown): BeginOpaqueUploadOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcRecord(value, "options");
-  keys(
-    input,
-    ["createParents", "ifMutationToken", "mode", "expectedSizeBytes", "expiresInMs", "contentType"],
-    "options",
-  );
+  const input = rpcStruct(value, "options", [
+    "createParents",
+    "ifMutationToken",
+    "mode",
+    "expectedSizeBytes",
+    "expiresInMs",
+    "contentType",
+  ]);
   const createParents = optionalBoolean(input["createParents"], "options.createParents");
   const ifMutationToken = optionalString(input["ifMutationToken"], "options.ifMutationToken");
   const mode = optionalInteger(input["mode"], "options.mode");
@@ -455,8 +459,7 @@ export function rpcBeginUploadOptions(value: unknown): BeginOpaqueUploadOptions 
 
 export function rpcCommitUploadOptions(value: unknown): CommitOpaqueUploadOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcRecord(value, "options");
-  keys(input, ["verifiedSha256"], "options");
+  const input = rpcStruct(value, "options", ["verifiedSha256"]);
   const verifiedSha256 = optionalString(input["verifiedSha256"], "options.verifiedSha256");
   return verifiedSha256 === undefined ? {} : { verifiedSha256 };
 }
