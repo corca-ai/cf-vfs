@@ -201,6 +201,15 @@ export function runVfsConformance(
     });
   });
 
+  it("conforms: refuses a same-path move when the source is missing", async () => {
+    const fileSystem = await factory();
+
+    expect(await refusal(() => fileSystem.move("/missing", "/missing"))).toMatchObject({
+      code: "ENOENT",
+      path: "/missing",
+    });
+  });
+
   it("conforms: never hands an identity out again", async () => {
     const fileSystem = await factory();
     await fileSystem.writeFile("/a", "x");

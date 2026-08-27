@@ -18,6 +18,8 @@ included.
 
 ### Fixed
 
+- A same-path `move` now verifies that its source exists instead of reporting a
+  successful no-op for a path absent from the filesystem.
 - Moving a missing source to a path lexically below it now reports the missing
   source instead of misclassifying it as a directory moved into itself.
 - RPC record validation now rejects structured-clone built-ins such as `Map`

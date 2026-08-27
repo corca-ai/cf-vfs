@@ -3504,15 +3504,14 @@ ${ENTRY_TRIGGERS}
     const target = targetAccess.path;
     if (source === "/") throw new VfsError("EINVAL", "cannot move root", source);
     if (source === target) {
-      if (posix === undefined) {
-        return { from: source, to: target, moved: 1, replaced: false };
-      }
       return this.transaction(() => {
         const entry = sourceAccess.row ?? this.requireEntry(source, false);
         this.assertTraverse(source, sourceAccess.followed, posix);
-        const parent = this.requireDirectory(dirname(source));
-        this.assertPermission(parent, posix, WRITE_PERMISSION | EXECUTE_PERMISSION, source);
-        this.assertStickyRemoval(parent, entry, posix, source);
+        if (posix !== undefined) {
+          const parent = this.requireDirectory(dirname(source));
+          this.assertPermission(parent, posix, WRITE_PERMISSION | EXECUTE_PERMISSION, source);
+          this.assertStickyRemoval(parent, entry, posix, source);
+        }
         return { from: source, to: target, moved: 1, replaced: false };
       });
     }
