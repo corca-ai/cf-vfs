@@ -49,6 +49,9 @@ function parseTextOptions(input: RpcRecord): RemoteExecuteTextOptions {
   }
   const credentials = rpcPosixCredentials(input["credentials"], "options.credentials");
   const umask = rpcOptionalNonnegativeInteger(input["umask"], "options.umask");
+  if (umask !== undefined && umask > 0o777) {
+    throw new VfsError("EINVAL", "options.umask must be an integer between 000 and 777");
+  }
   return {
     script: rpcString(input["script"], "options.script"),
     ...(input["cwd"] === undefined ? {} : { cwd: rpcString(input["cwd"], "options.cwd") }),

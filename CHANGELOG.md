@@ -18,6 +18,9 @@ included.
 
 ### Fixed
 
+- Shell RPC execution now rejects permission masks above `0777` at the input
+  boundary instead of ignoring them without credentials or failing later with
+  a credential-bound filesystem.
 - Malformed bodies in `writeFiles` now identify the failing entry index and
   field instead of reporting only a context-free `body` error.
 - RPC option records and retained opaque-upload receipts are now rebuilt from
