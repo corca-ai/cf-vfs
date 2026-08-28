@@ -195,6 +195,8 @@ export async function readAllBytes(
   maximumBytes: number,
 ): Promise<Uint8Array> {
   const collected = await collectBytes(stream, maximumBytes);
+  const only = collected.chunks[0];
+  if (only !== undefined && collected.chunks.length === 1) return only;
   const output = new Uint8Array(collected.sizeBytes);
   let offset = 0;
   for (const chunk of collected.chunks) {

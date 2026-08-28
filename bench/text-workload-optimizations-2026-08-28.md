@@ -346,3 +346,26 @@ cancellation when the byte limit is exceeded. This is an internal execution
 change to an existing API; callers neither opt in nor change how they consume
 the returned string. Tree shaking removes the helper from presets that do not
 use it, so all eight deployed bundle measurements are unchanged.
+
+## Follow-up: return the one-chunk byte snapshot directly
+
+`collectBytes()` snapshots every delivered chunk before retaining it, but
+`readAllBytes()` then always allocated a contiguous result and copied those
+snapshots into it. When exactly one non-empty chunk was collected, returning
+that already-private snapshot preserves caller ownership and removes the final
+body-sized allocation and copy. Empty and multi-chunk streams keep the previous
+assembly path. A regression test mutates the returned array and verifies the
+producer's source array is unchanged.
+
+An isolated 10,000-operation, 8 KiB byte-stream collection moved from a
+29.386 ms seven-group median to 24.642 ms (−16.1%) while eliminating 81.92 MB
+of output copies. End-to-end storage timings did not resolve that small local
+gain: the seven-group Node SQLite median was 107.020 ms before and 108.915 ms
+after, while three-process workerd medians for 512 random 8–12 KiB reads were
+23 ms on both sides. The retained claim is therefore lower transient
+allocation and GC pressure with no demonstrated storage-level latency change,
+not a throughput increase. The branch adds 109 deployed bytes to presets that
+retain `readAllBytes()` through the shell: shell is 227,182 bytes, interactive
+is 236,831, the default registry is 455,153, and Linux is 614,277. VFS-only and
+R2 presets remain unchanged. All bundle budgets, 1,397 Node tests, 98 Durable
+Object tests, and 10 workerd benchmark tests pass.

@@ -13,6 +13,20 @@ async function bytes(stream: ReadableStream<Uint8Array>): Promise<number[]> {
 }
 
 describe("byte-oriented in-memory SQLite filesystem", () => {
+  it("returns an independent one-chunk byte collection", async () => {
+    const source = Uint8Array.of(1, 2, 3);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(source);
+        controller.close();
+      },
+    });
+
+    const collected = await readAllBytes(stream, 3);
+    collected.fill(9);
+    expect([...source]).toEqual([1, 2, 3]);
+  });
+
   it("decodes bounded UTF-8 directly across stream chunk boundaries", async () => {
     const text = await readUtf8(
       streamFromChunks([Uint8Array.of(0xe2), Uint8Array.of(0x82, 0xac, 0x78)]),
