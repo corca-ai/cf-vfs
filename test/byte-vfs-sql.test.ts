@@ -730,6 +730,19 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     expect(await bytes(fileSystem.readFile("/data").stream)).toEqual([9]);
   });
 
+  it("keeps stored bytes independent from chunks transferred to a reader", async () => {
+    const fileSystem = createTestFileSystem();
+    await fileSystem.writeFile("/data", Uint8Array.of(1, 2, 3));
+
+    const reader = fileSystem.readFile("/data").stream.getReader();
+    const first = await reader.read();
+    expect(first.done).toBe(false);
+    first.value?.fill(9);
+    await reader.cancel();
+
+    expect(await bytes(fileSystem.readFile("/data").stream)).toEqual([1, 2, 3]);
+  });
+
   it("linearizes a materialized write before returning its promise", async () => {
     const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/file", "old");

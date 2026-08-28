@@ -51,6 +51,21 @@ describe("byte-oriented Durable Object filesystem", () => {
     await reader.cancel();
   });
 
+  it("keeps SQLite bytes independent from chunks transferred inside the object", async () => {
+    const stub = workspace("owned-inline-read");
+    const stored = await runInDurableObject(stub, async (instance) => {
+      await instance.writeFile("/bytes", Uint8Array.of(1, 2, 3));
+      const reader = instance.readFile("/bytes").stream.getReader();
+      const first = await reader.read();
+      if (first.done) throw new Error("inline read returned no bytes");
+      first.value.fill(9);
+      await reader.cancel();
+      return [...(await readAllBytes(instance.readFile("/bytes").stream, 16))];
+    });
+
+    expect(stored).toEqual([1, 2, 3]);
+  });
+
   it("preserves VfsError discrimination across the RPC boundary", async () => {
     const stub = workspace("rpc-error-shape");
 

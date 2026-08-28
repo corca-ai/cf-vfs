@@ -2759,7 +2759,7 @@ ${ENTRY_TRIGGERS}
         entry.id,
       )
       .toArray()
-      .map((row) => new Uint8Array(blobColumn(row, "body")).slice());
+      .map((row) => new Uint8Array(blobColumn(row, "body")));
     const sizeBytes = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
     this.inFlightBytes.acquire(sizeBytes);
     if (access.followed.length === 0) this.lastInlineRead = entry;

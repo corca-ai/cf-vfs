@@ -284,3 +284,39 @@ trailing-slash assertion also proves the hint cannot bypass pathname semantics.
 The metadata hint adds 1,111 deployed bytes and one bounded `EntryRow` per
 instance: VFS is 165,328 bytes, R2 is 167,939 bytes, and Linux is 614,176 bytes.
 All bundle budgets pass; the Node suite now contains 1,393 tests.
+
+## Follow-up: transfer the SQL-owned inline snapshot once
+
+The inline read path wrapped every returned BLOB in a `Uint8Array` and then
+called `slice()`, even though both supported storage adapters had already
+created an independently owned result buffer. The Node adapter snapshots
+`node:sqlite`'s `Uint8Array` before exposing it. Workerd's SQL implementation
+copies each SQLite BLOB into a `kj::Array<byte>`, then moves that allocation into
+the JavaScript `ArrayBuffer`; its own source explicitly describes the ownership
+transfer as avoiding another copy. See the Cloudflare
+[`SqlStorage` implementation](https://github.com/cloudflare/workerd/blob/main/src/workerd/api/sql.c%2B%2B)
+and [declaration](https://github.com/cloudflare/workerd/blob/main/src/workerd/api/sql.h).
+
+Removing the library-level `slice()` eliminates exactly one allocation and one
+body-sized memcpy for every stored inline chunk read. In the representative
+workerd run, randomly reading 512 files of 8–12 KiB therefore avoids copying
+5,242,790 bytes. Three isolated process runs had read times of 24, 21, and 25 ms
+before, versus 23, 19, and 42 ms after; medians are 24 and 23 ms (−4.2%). The
+42 ms candidate outlier makes elapsed time supporting rather than primary
+evidence. Node's seven-group 5,000-read median for an 8 KiB file moved from
+101.277 to 100.002 ms (−1.3%). SQL statements and rows are unchanged.
+
+The returned byte stream still owns and transfers each chunk. New Node and
+actual-workerd tests mutate a delivered chunk, cancel the stream, and re-read
+the file to prove that the database remains unchanged. The existing active
+reader tests additionally overwrite the file before consuming its old stream,
+covering snapshot stability across a mutation. The complete check passes with
+1,394 Node tests and 98 Durable Object tests. Removing the call reduces each
+filesystem preset by 8 deployed bytes: VFS is 165,320 bytes, R2 is 167,931
+bytes, and Linux is 614,168 bytes.
+
+A nearby allocation idea, reusing one module-level `TextEncoder`, was rejected.
+For 100,000 encodes of an 8 KiB string across seven interleaved groups, fresh
+and shared encoders had effectively identical medians (423.68 and 423.57 ms).
+It would retain global mutable-looking state without a demonstrated benefit, so
+no production code was changed for that candidate.
