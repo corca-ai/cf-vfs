@@ -25,7 +25,8 @@ function atomicFileSink(
   budget: ShellBudget,
 ): ShellSink {
   const stat = fileSystem.inspectWriteTarget(path);
-  const mutationToken = fileSystem.getMutationToken(path);
+  const mutationToken =
+    stat?.path === path ? stat.mutationToken : fileSystem.getMutationToken(path);
   const exists = stat !== null;
   if (stat !== null) {
     if (stat.kind === "directory") throw new VfsError("EISDIR", "is a directory", path);

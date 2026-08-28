@@ -980,6 +980,11 @@ export function runVfsConformance(
       "/tree/a",
       "/tree/c",
     ]);
+    expect(
+      (await fileSystem.listPage("/tree", { cursor: "/tree/a/descendant", limit: 1 })).entries.map(
+        (entry) => entry.path,
+      ),
+    ).toEqual(["/tree/c"]);
 
     expect(await fileSystem.remove("/tree", { recursive: true })).toMatchObject({ removed: 3 });
     expect((await fileSystem.list("/")).map((entry) => entry.path)).not.toContain("/tree");

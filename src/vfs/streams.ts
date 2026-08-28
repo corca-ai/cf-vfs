@@ -27,6 +27,22 @@ export function streamFromChunks(
   chunks: readonly Uint8Array[],
   onFinalize?: () => void,
 ): ReadableStream<Uint8Array> {
+  return chunkStream(chunks, (chunk) => chunk.slice(), onFinalize);
+}
+
+/** Transfers private chunks into a byte stream without cloning them first. */
+export function streamFromOwnedChunks(
+  chunks: readonly Uint8Array<ArrayBuffer>[],
+  onFinalize?: () => void,
+): ReadableStream<Uint8Array> {
+  return chunkStream(chunks, (chunk) => chunk, onFinalize);
+}
+
+function chunkStream<Buffer extends ArrayBufferLike>(
+  chunks: readonly Uint8Array<Buffer>[],
+  take: (chunk: Uint8Array<Buffer>) => Uint8Array<ArrayBuffer>,
+  onFinalize?: () => void,
+): ReadableStream<Uint8Array> {
   let index = 0;
   let finalized = false;
   const finalize = (): void => {
@@ -43,7 +59,7 @@ export function streamFromChunks(
         controller.close();
         return;
       }
-      controller.enqueue(chunk.slice());
+      controller.enqueue(take(chunk));
     },
     cancel() {
       finalize();

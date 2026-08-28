@@ -11,7 +11,10 @@ These commands are deliberately excluded from ordinary unit tests and
 [Durable Object baseline](../bench/do-baseline-2026-07-24.md) and its
 [structural-cost follow-up](../bench/do-baseline-2026-07-26.md), plus the
 [write-path follow-up](../bench/do-baseline-2026-08-27.md), record their
-environments and interpretation.
+environments and interpretation. The
+[small-text workload follow-up](../bench/text-workload-optimizations-2026-08-28.md)
+records the measured candidates retained and rejected for sub-10 KiB code and
+Markdown editing.
 
 ## Structural guards versus wall-clock benchmarks
 
@@ -85,7 +88,7 @@ query per path it resolves. A guarded listing test records exactly two more
 statements than the trusted listing (operand classification and listing each
 check their ancestors); changing the directory from 200 to 400 entries changes
 rows only, not statements. Materializing `find()` permission-preflights once
-across all pages: a 1,006-entry, two-page traversal is pinned at seven
+across all pages: a 1,006-entry, two-page traversal is pinned at five
 statements rather than repeating the range preflight per page. A
 credential-bound recursive copy is pinned at 14 statements for both 41-entry
 and 81-entry source trees; its setgid calculation grows in rows, not statement

@@ -35,7 +35,7 @@ import {
   type VfsMutationSubtree,
   type VfsQuotaLimit,
 } from "./events.js";
-import { rechunk, streamFromChunks } from "./streams.js";
+import { rechunk, streamFromOwnedChunks } from "./streams.js";
 import type {
   AppendFileOptions,
   BeginOpaqueUploadOptions,
@@ -394,6 +394,14 @@ interface InlineWriteOutcome {
 interface PathState {
   readonly entry: EntryRow | null;
   readonly mutationToken: string;
+}
+
+interface FindScanContext {
+  readonly root: string;
+  readonly rootEntry: EntryRow;
+  readonly range: { lower: string; upper: string };
+  readonly namePattern: RegExp | undefined;
+  readonly pathPattern: RegExp | undefined;
 }
 
 /** One planned write and the bytes it is holding, ready to commit. */
@@ -2389,15 +2397,20 @@ ${ENTRY_TRIGGERS}
     this.assertPermission(directory, posix, READ_PERMISSION | EXECUTE_PERMISSION, normalized);
     const limit = options.limit ?? 1000;
     validatePositiveInteger(limit, "limit");
+    const cursor = options.cursor ?? "";
+    const prefix = normalized === "/" ? "/" : `${normalized}/`;
+    const cursorName = cursor.startsWith(prefix) ? cursor.slice(prefix.length) : "";
+    const indexedCursorName = cursorName.includes("/") ? "" : cursorName;
     const rows = this.rows(
       `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e INDEXED BY vfs_entries_parent_name
        CROSS JOIN vfs_path_versions p
-       WHERE e.parent_path = ? AND e.path <> '/' AND e.path > ?
+       WHERE e.parent_path = ? AND e.name > ? AND e.path <> '/' AND e.path > ?
          AND p.path = e.path
-       ORDER BY e.path LIMIT ?`,
+       ORDER BY e.name LIMIT ?`,
       normalized,
-      options.cursor ?? "",
+      indexedCursorName,
+      cursor,
       limit + 1,
     );
     const page = rows.slice(0, limit);
@@ -2410,15 +2423,13 @@ ${ENTRY_TRIGGERS}
 
   find(options: FindOptions, access?: PosixAccessContext): VfsStat[] {
     const maximum = options.limit ?? 10_000;
+    validatePositiveInteger(maximum, "limit");
     const result: VfsStat[] = [];
     let cursor = options.cursor;
-    const effectiveOptions =
-      access === undefined
-        ? options
-        : { ...options, path: this.assertFindAccess(options.path, access) };
+    const context = this.findScanContext(options, access);
     do {
-      const page = this.findPage({
-        ...effectiveOptions,
+      const page = this.scanFindPage(context, {
+        ...options,
         ...(cursor === undefined ? {} : { cursor }),
         limit: Math.min(maximum - result.length, 1000),
       });
@@ -2428,36 +2439,43 @@ ${ENTRY_TRIGGERS}
     return result;
   }
 
-  private assertFindAccess(path: string, posix: PosixAccessContext): string {
-    const access = this.resolveAccess(path);
-    const root = access.path;
-    this.assertTraverse(root, access.followed, posix);
-    const rootEntry = access.row ?? this.requireEntry(root);
-    this.assertPermission(
-      rootEntry,
-      posix,
-      rootEntry.kind === "directory" ? READ_PERMISSION | EXECUTE_PERMISSION : 0,
-      root,
-    );
-    if (rootEntry.kind === "directory") {
-      this.assertSubtreePermissions(root, posix, 0, READ_PERMISSION | EXECUTE_PERMISSION);
-    }
-    return root;
+  findPage(options: FindOptions, posix?: PosixAccessContext): EntryPage {
+    const limit = options.limit ?? 1000;
+    validatePositiveInteger(limit, "limit");
+    return this.scanFindPage(this.findScanContext(options, posix), options);
   }
 
-  findPage(options: FindOptions, posix?: PosixAccessContext): EntryPage {
+  private findScanContext(options: FindOptions, posix?: PosixAccessContext): FindScanContext {
     const access = this.resolveAccess(options.path);
     const root = access.path;
     const rootEntry = access.row ?? this.requireEntry(root);
-    if (posix !== undefined) this.assertFindAccess(options.path, posix);
+    if (posix !== undefined) {
+      this.assertTraverse(root, access.followed, posix);
+      this.assertPermission(
+        rootEntry,
+        posix,
+        rootEntry.kind === "directory" ? READ_PERMISSION | EXECUTE_PERMISSION : 0,
+        root,
+      );
+      if (rootEntry.kind === "directory") {
+        this.assertSubtreePermissions(root, posix, 0, READ_PERMISSION | EXECUTE_PERMISSION);
+      }
+    }
+    return {
+      root,
+      rootEntry,
+      range: descendantRange(root),
+      namePattern: options.name === undefined ? undefined : globToRegExp(options.name),
+      pathPattern: options.pathGlob === undefined ? undefined : globToRegExp(options.pathGlob),
+    };
+  }
+
+  private scanFindPage(context: FindScanContext, options: FindOptions): EntryPage {
+    const { root, rootEntry, range, namePattern, pathPattern } = context;
     const limit = options.limit ?? 1000;
-    validatePositiveInteger(limit, "limit");
-    const range = descendantRange(root);
     const cursor = options.cursor ?? (root === "/" ? "" : root);
     const includeRoot =
       options.cursor === undefined && (rootEntry.kind === "file" || (options.includeRoot ?? false));
-    const namePattern = options.name === undefined ? undefined : globToRegExp(options.name);
-    const pathPattern = options.pathGlob === undefined ? undefined : globToRegExp(options.pathGlob);
     const descendants =
       rootEntry.kind === "file"
         ? []
@@ -2627,7 +2645,7 @@ ${ENTRY_TRIGGERS}
     this.inFlightBytes.acquire(sizeBytes);
     return {
       stat: rowToStat(entry) as InlineFileStat,
-      stream: streamFromChunks(chunks, () => {
+      stream: streamFromOwnedChunks(chunks, () => {
         this.inFlightBytes.release(sizeBytes);
       }),
     };

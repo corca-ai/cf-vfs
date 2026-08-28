@@ -59,4 +59,17 @@ describe("line diff", () => {
 
     expect(() => createLineDiff(before, after)).toThrowError(/comparison cells; limit is 1000000/);
   });
+
+  it("bounds only the changed middle of a large localized edit", () => {
+    const lines = Array.from({ length: 1000 }, (_value, index) => `${index}\n`);
+    const before = lines.join("");
+    lines.splice(500, 1, "changed\n", "inserted\n");
+    const after = lines.join("");
+
+    const diff = createLineDiff(before, after);
+    const patch = renderLineDiff("/before", "/after", diff);
+
+    expect(diff.changes).toBe(3);
+    expect(applyUnifiedPatch(before, patch).text).toBe(after);
+  });
 });

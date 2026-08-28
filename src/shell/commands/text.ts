@@ -1216,8 +1216,11 @@ export const patchCommand = /* @__PURE__ */ defineApplet(PATCH, async (context, 
     throw appletUsageError(PATCH, "usage: patch FILE [PATCHFILE]");
   }
   const path = commandPath(context, argv[0]);
-  const token = context.fileSystem.getMutationToken(path);
   const current = context.fileSystem.readFile(path);
+  const token =
+    current.stat.path === path
+      ? current.stat.mutationToken
+      : context.fileSystem.getMutationToken(path);
   const source = await collectText(context, current.stream, path);
   try {
     const patch =

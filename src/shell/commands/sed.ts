@@ -8,9 +8,9 @@ import {
 } from "./applet.js";
 import {
   BufferedTextWriter,
+  collectText,
   commandPath,
   inputStreams,
-  readFileText,
   readTextLines,
   writeText,
 } from "./helpers.js";
@@ -426,13 +426,12 @@ async function editInPlace(
   quiet: boolean,
 ): Promise<void> {
   const normalized = commandPath(context, path);
-  const token = context.fileSystem.getMutationToken(normalized);
-  // `stat`, not `readFile`: an inline read acquires an in-flight byte lease
-  // that is released only when its stream is consumed, and this needs the
-  // mode, not the bytes. Taking one here would leak the filesystem-wide
-  // budget on every edit.
-  const mode = context.fileSystem.stat(normalized).mode;
-  const source = await readFileText(context, path);
+  const current = context.fileSystem.readFile(normalized);
+  const token =
+    current.stat.path === normalized
+      ? current.stat.mutationToken
+      : context.fileSystem.getMutationToken(normalized);
+  const source = await collectText(context, current.stream, normalized);
   let edited: string;
   try {
     edited = applyToText(commands, source.value, quiet);
@@ -444,7 +443,7 @@ async function editInPlace(
   await context.fileSystem.writeFile(normalized, edited, {
     ifMutationToken: token,
     disposition: "replace",
-    mode,
+    mode: current.stat.mode,
   });
 }
 

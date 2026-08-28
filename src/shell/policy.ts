@@ -203,14 +203,14 @@ export class ScopedFileSystem implements ShellFileSystem {
   inspectWriteTarget(path: string): VfsStat | null {
     const normalized = normalizePath(path);
     this.write(normalized);
-    const parent = this.#inner.stat(dirname(normalized));
-    if (parent.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", parent.path);
     try {
       return this.#inner.stat(normalized);
     } catch (error) {
-      if (error instanceof VfsError && error.code === "ENOENT") return null;
-      throw error;
+      if (!(error instanceof VfsError) || error.code !== "ENOENT") throw error;
     }
+    const parent = this.#inner.stat(dirname(normalized));
+    if (parent.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", parent.path);
+    return null;
   }
 
   stat(path: string) {

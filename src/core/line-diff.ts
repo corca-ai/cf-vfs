@@ -21,13 +21,22 @@ function lineAt(lines: readonly string[], index: number): string {
   return line;
 }
 
+function equalOperation(text: string, oldLine: number, newLine: number): LineDiffOperation {
+  return { kind: "equal", text, oldLine, newLine };
+}
+
 function cellAt(cells: Uint32Array, index: number): number {
   const cell = cells[index];
   if (cell === undefined) throw new RangeError(`diff matrix index ${index} is out of bounds`);
   return cell;
 }
 
-function lineOperations(before: readonly string[], after: readonly string[]): LineDiffOperation[] {
+function lineOperations(
+  before: readonly string[],
+  after: readonly string[],
+  oldOffset = 0,
+  newOffset = 0,
+): LineDiffOperation[] {
   const columns = after.length + 1;
   const cells = (before.length + 1) * columns;
   if (cells > MAX_LCS_CELLS) {
@@ -52,12 +61,9 @@ function lineOperations(before: readonly string[], after: readonly string[]): Li
   let right = 0;
   while (left < before.length || right < after.length) {
     if (left < before.length && right < after.length && before[left] === after[right]) {
-      operations.push({
-        kind: "equal",
-        text: lineAt(before, left),
-        oldLine: left + 1,
-        newLine: right + 1,
-      });
+      operations.push(
+        equalOperation(lineAt(before, left), oldOffset + left + 1, newOffset + right + 1),
+      );
       left += 1;
       right += 1;
     } else if (
@@ -69,16 +75,16 @@ function lineOperations(before: readonly string[], after: readonly string[]): Li
       operations.push({
         kind: "delete",
         text: lineAt(before, left),
-        oldLine: left + 1,
-        newLine: right + 1,
+        oldLine: oldOffset + left + 1,
+        newLine: newOffset + right + 1,
       });
       left += 1;
     } else {
       operations.push({
         kind: "insert",
         text: lineAt(after, right),
-        oldLine: left + 1,
-        newLine: right + 1,
+        oldLine: oldOffset + left + 1,
+        newLine: newOffset + right + 1,
       });
       right += 1;
     }
@@ -94,10 +100,39 @@ function prefixedLine(prefix: "-" | "+", text: string): string {
 
 export function createLineDiff(before: string, after: string): LineDiff {
   if (before === after) return { changes: 0, operations: [] };
-  const operations = lineOperations(
-    splitLinesPreservingEndings(before),
-    splitLinesPreservingEndings(after),
+  const beforeLines = splitLinesPreservingEndings(before);
+  const afterLines = splitLinesPreservingEndings(after);
+  const shared = Math.min(beforeLines.length, afterLines.length);
+  let prefix = 0;
+  while (prefix < shared && beforeLines[prefix] === afterLines[prefix]) prefix += 1;
+  let suffix = 0;
+  while (
+    suffix < shared - prefix &&
+    beforeLines[beforeLines.length - suffix - 1] === afterLines[afterLines.length - suffix - 1]
+  ) {
+    suffix += 1;
+  }
+  const operations: LineDiffOperation[] = [];
+  for (let index = 0; index < prefix; index += 1) {
+    operations.push(equalOperation(lineAt(beforeLines, index), index + 1, index + 1));
+  }
+  operations.push(
+    ...lineOperations(
+      beforeLines.slice(prefix, beforeLines.length - suffix),
+      afterLines.slice(prefix, afterLines.length - suffix),
+      prefix,
+      prefix,
+    ),
   );
+  for (let index = 0; index < suffix; index += 1) {
+    operations.push(
+      equalOperation(
+        lineAt(beforeLines, beforeLines.length - suffix + index),
+        beforeLines.length - suffix + index + 1,
+        afterLines.length - suffix + index + 1,
+      ),
+    );
+  }
   return {
     changes: operations.filter((operation) => operation.kind !== "equal").length,
     operations,

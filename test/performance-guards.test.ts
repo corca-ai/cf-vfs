@@ -484,6 +484,28 @@ describe("common-path SQL cost", () => {
     expect(meter.rows).toBeLessThanOrEqual(210);
   });
 
+  it("reuses text-edit snapshots and redirection preflights", async () => {
+    const { fileSystem, meter } = meteredFileSystem();
+    const shell = new Shell({ fileSystem, commands: defaultShellCommands });
+    await fileSystem.writeFile("/target", "alpha\n");
+
+    meter.reset();
+    expect((await shell.executeText({ script: 'printf "gamma\\n" > /target' })).exitCode).toBe(0);
+    expect(meter.statements).toBe(8);
+
+    meter.reset();
+    expect((await shell.executeText({ script: "sed -i s/gamma/delta/ /target" })).exitCode).toBe(0);
+    expect(meter.statements).toBe(8);
+
+    await fileSystem.writeFile(
+      "/change.patch",
+      "--- before\n+++ after\n@@ -1 +1 @@\n-delta\n+omega\n",
+    );
+    meter.reset();
+    expect((await shell.executeText({ script: "patch /target /change.patch" })).exitCode).toBe(0);
+    expect(meter.statements).toBe(10);
+  });
+
   it("adds only fixed-cost credential checks to a directory listing", async () => {
     const { fileSystem, meter } = meteredFileSystem();
     fileSystem.mkdir("/many");
@@ -684,10 +706,9 @@ describe("common-path SQL cost", () => {
       .forCredentials({ uid: 1_000, gid: 1_000 })
       .find({ path: "/tree", includeRoot: true });
     expect(entries).toHaveLength(1_006);
-    // Two result pages cost the same two statements each as the trusted path.
-    // Traversal, root classification, and the set-based permission preflight
+    // Root classification, traversal, and the set-based permission preflight
     // are paid once for the whole materializing find(), not once per page.
-    expect(meter.statements).toBe(7);
+    expect(meter.statements).toBe(5);
   });
 
   it("keeps credential-bound recursive copy set-based as the subtree grows", async () => {

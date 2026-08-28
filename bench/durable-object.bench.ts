@@ -426,6 +426,20 @@ describe("Durable Object storage benchmark metrics", () => {
         rowsWritten: meter.rowsWritten,
       };
 
+      meter.reset();
+      const editSnapshot = measuredFileSystem.readFile("/point");
+      await readAllBytes(editSnapshot.stream, pointBytes);
+      pointToken = (
+        await measuredFileSystem.writeFile("/point", pointBodyA, {
+          ifMutationToken: editSnapshot.stat.mutationToken,
+        })
+      ).mutationToken;
+      const readEditCost = {
+        statements: meter.statements,
+        rowsRead: meter.rowsRead,
+        rowsWritten: meter.rowsWritten,
+      };
+
       const timedFileSystem = new DurableObjectFileSystem(state.storage);
       timedFileSystem.mkdir("/search");
       for (let index = 0; index < 1_000; index += 1) {
@@ -481,6 +495,7 @@ describe("Durable Object storage benchmark metrics", () => {
         statCost,
         populatedStatCost,
         overwriteCost,
+        readEditCost,
         statQueryPlan,
         warmInitializeMs,
         statMs,
@@ -500,6 +515,11 @@ describe("Durable Object storage benchmark metrics", () => {
     expect(metrics.overwriteCost).toMatchObject({
       statements: 4,
       rowsRead: 9,
+      rowsWritten: 3,
+    });
+    expect(metrics.readEditCost).toMatchObject({
+      statements: 6,
+      rowsRead: 12,
       rowsWritten: 3,
     });
     expect(metrics.statQueryPlan.every((detail) => detail.includes("SEARCH"))).toBe(true);
