@@ -107,6 +107,49 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
       expect(fileSystem.stat("/a").sizeBytes).toBe(4);
     });
 
+    it("reports unchanged usage after a same-size replacement", async () => {
+      const events: VfsEvent[] = [];
+      const fileSystem = createTestFileSystem({ onEvent: (event) => events.push(event) });
+      await fileSystem.writeFile("/a", "old!");
+      events.length = 0;
+
+      await fileSystem.writeFile("/a", "new!");
+
+      expect(events.filter((event) => event.type === "vfs.usage")).toEqual([
+        { type: "vfs.usage", inlineBytes: 4, entries: 2 },
+      ]);
+    });
+
+    it("reports inline-file quota refusals for synchronous and batched bodies", async () => {
+      const events: VfsEvent[] = [];
+      const fileSystem = createTestFileSystem({
+        maxInlineFileBytes: 4,
+        maxInFlightBufferedBytes: 16,
+        onEvent: (event) => events.push(event),
+      });
+
+      await expect(fileSystem.writeFile("/single", "12345")).rejects.toMatchObject({
+        code: "EFBIG",
+      });
+      expect(events).toContainEqual({
+        type: "vfs.quota",
+        limit: "maxInlineFileBytes",
+        used: 4,
+        max: 4,
+      });
+
+      events.length = 0;
+      await expect(
+        fileSystem.writeFiles([{ path: "/batch", body: "12345" }]),
+      ).rejects.toMatchObject({ code: "EFBIG" });
+      expect(events).toContainEqual({
+        type: "vfs.quota",
+        limit: "maxInlineFileBytes",
+        used: 4,
+        max: 4,
+      });
+    });
+
     describe("limits read on every check", () => {
       it("refuses and admits by whatever the limit says now", async () => {
         let maxEntries = 2;
@@ -178,6 +221,36 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
         // A function is not called until a check needs it, so an unusable one
         // does not stop the workspace from opening.
         expect(() => createTestFileSystem({ maxEntries: () => 0 })).not.toThrow();
+      });
+
+      it("still reads both dynamic limits for a same-size replacement", async () => {
+        let inlineCalls = 0;
+        let entryCalls = 0;
+        let inlineLimit = 100;
+        const fileSystem = createTestFileSystem({
+          maxInlineLogicalBytes: () => {
+            inlineCalls += 1;
+            return inlineLimit;
+          },
+          maxEntries: () => {
+            entryCalls += 1;
+            return 100;
+          },
+        });
+        await fileSystem.writeFile("/a", "old!");
+        const before = { inlineCalls, entryCalls };
+
+        await fileSystem.writeFile("/a", "new!");
+        expect(inlineCalls).toBe(before.inlineCalls + 1);
+        expect(entryCalls).toBe(before.entryCalls + 1);
+
+        inlineLimit = 0;
+        await expect(fileSystem.writeFile("/a", "old!")).rejects.toMatchObject({
+          code: "EINVAL",
+        });
+        expect(
+          new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/a").stream, 16)),
+        ).toBe("new!");
       });
 
       // Reachable the moment a limit can move, and reachable already for a host
@@ -657,6 +730,17 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     expect(await bytes(fileSystem.readFile("/data").stream)).toEqual([9]);
   });
 
+  it("linearizes a materialized write before returning its promise", async () => {
+    const fileSystem = createTestFileSystem();
+    await fileSystem.writeFile("/file", "old");
+
+    const writing = fileSystem.writeFile("/file", "new");
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/file").stream, 16)),
+    ).toBe("new");
+    await writing;
+  });
+
   it("does not publish a streaming write until close and rejects a concurrent path change", async () => {
     const fileSystem = createTestFileSystem();
     await fileSystem.writeFile("/file", "old");
@@ -681,6 +765,55 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     fileSystem.touch("/file");
     release?.();
     await expect(writing).rejects.toMatchObject({ code: "EREVISION", path: "/file" });
+  });
+
+  it("revalidates a guarded typed view after its accessors mutate the path", async () => {
+    const fileSystem = createTestFileSystem();
+    const created = await fileSystem.writeFile("/file", "old");
+    let mutated = false;
+    class MutatingBytes extends Uint8Array {
+      override get buffer(): ArrayBuffer {
+        if (!mutated) {
+          mutated = true;
+          fileSystem.touch("/file");
+        }
+        return super.buffer as ArrayBuffer;
+      }
+    }
+
+    await expect(
+      fileSystem.writeFile("/file", new MutatingBytes([110, 101, 119]), {
+        ifMutationToken: created.mutationToken,
+      }),
+    ).rejects.toMatchObject({ code: "EREVISION", path: "/file" });
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/file").stream, 16)),
+    ).toBe("old");
+  });
+
+  it("revalidates a guarded batch after a body getter mutates the path", async () => {
+    const fileSystem = createTestFileSystem();
+    const created = await fileSystem.writeFile("/file", "old");
+    let mutated = false;
+    const entry = {
+      path: "/file",
+      ifMutationToken: created.mutationToken,
+      get body(): string {
+        if (!mutated) {
+          mutated = true;
+          fileSystem.touch("/file");
+        }
+        return "new";
+      },
+    };
+
+    await expect(fileSystem.writeFiles([entry])).rejects.toMatchObject({
+      code: "EREVISION",
+      path: "/file",
+    });
+    expect(
+      new TextDecoder().decode(await readAllBytes(fileSystem.readFile("/file").stream, 16)),
+    ).toBe("old");
   });
 
   it("keeps materialized read snapshots in the shared in-flight byte budget", async () => {

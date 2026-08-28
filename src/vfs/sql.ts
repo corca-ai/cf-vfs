@@ -9,7 +9,12 @@ import {
   normalizePath,
   pathRequiresDirectory,
 } from "../core/path.js";
-import { type BufferedChunksLease, collectInlineBytes, InFlightByteBudget } from "./buffering.js";
+import {
+  type BufferedChunksLease,
+  collectInlineBytes,
+  collectInlineBytesSync,
+  InFlightByteBudget,
+} from "./buffering.js";
 import {
   type CommonFileSystemOptions,
   DEFAULT_READ_LEASE_MS,
@@ -378,6 +383,7 @@ interface InlineWritePlan {
   readonly mode: number | undefined;
   readonly guard: { readonly ifMutationToken?: string };
   readonly capturedToken: string;
+  readonly capturedEntry: EntryRow | null;
 }
 
 interface InlineWriteOutcome {
@@ -1713,6 +1719,10 @@ ${ENTRY_TRIGGERS}
   }
 
   private updateUsage(inlineDelta: number, entryDelta: number): void {
+    if (inlineDelta === 0 && entryDelta === 0) {
+      if (this.onEvent !== undefined) this.pendingUsage = this.transactionUsage ?? this.usage();
+      return;
+    }
     // `next_ino` rides this statement rather than one of its own: the row is
     // already being written, so persisting the high-water mark is free.
     this.sql.exec(
@@ -1764,7 +1774,28 @@ ${ENTRY_TRIGGERS}
    * above one -- which a limit that can move is what makes reachable.
    */
   private assertCapacity(inlineDelta: number, entryDelta: number, path?: string): void {
+    if (inlineDelta <= 0 && entryDelta <= 0) {
+      this.maxInlineLogicalBytes();
+      this.maxEntries();
+      if (this.onEvent !== undefined) this.usage();
+      this.assertDatabaseHeadroom(path);
+      return;
+    }
     this.assertCapacityFrom(this.usage(), inlineDelta, entryDelta, path);
+  }
+
+  private assertDatabaseHeadroom(path?: string): void {
+    const databaseSize = this.sql.databaseSize;
+    if (databaseSize + this.minDatabaseHeadroomBytes > this.maxDatabaseBytes) {
+      this.quotaExceeded(
+        "databaseHeadroom",
+        this.minDatabaseHeadroomBytes,
+        databaseSize,
+        this.maxDatabaseBytes,
+        "SQLite database headroom is exhausted",
+        path,
+      );
+    }
   }
 
   /**
@@ -1805,17 +1836,7 @@ ${ENTRY_TRIGGERS}
         path,
       );
     }
-    const databaseSize = this.sql.databaseSize;
-    if (databaseSize + this.minDatabaseHeadroomBytes > this.maxDatabaseBytes) {
-      this.quotaExceeded(
-        "databaseHeadroom",
-        this.minDatabaseHeadroomBytes,
-        databaseSize,
-        this.maxDatabaseBytes,
-        "SQLite database headroom is exhausted",
-        path,
-      );
-    }
+    this.assertDatabaseHeadroom(path);
   }
 
   private subtreeSummary(path: string): { entries: number; inlineBytes: number } {
@@ -2041,17 +2062,34 @@ ${ENTRY_TRIGGERS}
         heldByCaller,
       );
     } catch (error) {
-      // Collection aborts at the ceiling, so the body's real size is unknown.
-      if (isVfsError(error) && error.code === "EFBIG") {
-        emitVfsEvent(this.onEvent, {
-          type: "vfs.quota",
-          limit: "maxInlineFileBytes",
-          used: this.maxInlineFileBytes,
-          max: this.maxInlineFileBytes,
-        });
-      }
-      throw error;
+      this.throwInlineCollectionError(error);
     }
+  }
+
+  private collectInlineSync(body: string) {
+    try {
+      return collectInlineBytesSync(
+        body,
+        this.maxInlineFileBytes,
+        this.chunkBytes,
+        this.inFlightBytes,
+      );
+    } catch (error) {
+      this.throwInlineCollectionError(error);
+    }
+  }
+
+  private throwInlineCollectionError(error: unknown): never {
+    // Collection aborts at the ceiling, so the body's real size is unknown.
+    if (isVfsError(error) && error.code === "EFBIG") {
+      emitVfsEvent(this.onEvent, {
+        type: "vfs.quota",
+        limit: "maxInlineFileBytes",
+        used: this.maxInlineFileBytes,
+        max: this.maxInlineFileBytes,
+      });
+    }
+    throw error;
   }
 
   private useBuffered<T>(
@@ -2767,6 +2805,7 @@ ${ENTRY_TRIGGERS}
       mode: entry.mode,
       guard: entry,
       capturedToken: state.mutationToken,
+      capturedEntry: before,
     };
   }
 
@@ -2794,14 +2833,18 @@ ${ENTRY_TRIGGERS}
     now: number,
     posix: PosixAccessContext | undefined,
     pending?: { inlineBytes: number; entries: number },
+    revalidate = true,
   ): InlineWriteOutcome {
     const normalized = plan.path;
-    const state = this.pathState(normalized);
-    const current = state.entry;
-    if (state.mutationToken !== plan.capturedToken) {
-      throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
+    let current = plan.capturedEntry;
+    if (revalidate) {
+      const state = this.pathState(normalized);
+      current = state.entry;
+      if (state.mutationToken !== plan.capturedToken) {
+        throw new VfsError("EREVISION", "path changed while the body was streaming", normalized);
+      }
+      this.validateGuard(normalized, current, plan.guard, plan.written);
     }
-    this.validateGuard(normalized, current, plan.guard, plan.written);
     if (current?.kind === "directory") throw new VfsError("EISDIR", "is a directory", normalized);
     // The schema creates `/` before any public operation and the API cannot
     // remove or replace it. A trusted root-level create needs neither its
@@ -2810,7 +2853,7 @@ ${ENTRY_TRIGGERS}
       current === null && (posix !== undefined || dirname(normalized) !== "/")
         ? this.prepareParents(normalized, plan.createParents, now, plan.followed, posix)
         : undefined;
-    if (current !== null) {
+    if (current !== null && revalidate) {
       this.assertWriteAccess(normalized, current, false, plan.followed, posix);
     }
     // Last, so that everything a write refuses is still refused: the
@@ -2932,19 +2975,66 @@ ${ENTRY_TRIGGERS}
     };
   }
 
+  /** Publishes a collected set with one transaction and one aggregate quota decision. */
+  private commitInlineWriteSet(
+    collected: readonly CollectedWrite[],
+    posix: PosixAccessContext | undefined,
+  ): { results: WriteResult[]; queuedGarbage: boolean } {
+    let queuedGarbage = false;
+    const results = this.useBufferedSet(collected, () =>
+      this.transaction(() => {
+        const before = this.usage();
+        // Headroom is a property of the database rather than of the set, so it
+        // is weighed before the batch writes anything as well as after. The
+        // quotas can only be weighed after, because what the set costs is not
+        // known until every entry has decided whether it is writing at all.
+        this.assertCapacityFrom(before, 0, 0);
+        const now = this.now();
+        const pending = { inlineBytes: 0, entries: 0 };
+        const written: WriteResult[] = [];
+        for (const item of collected) {
+          const outcome = this.commitInlineWrite(
+            item.plan,
+            item.lease.chunks,
+            item.lease.sizeBytes,
+            item.digest,
+            now,
+            posix,
+            pending,
+          );
+          if (outcome.queuedGarbage) queuedGarbage = true;
+          written.push(outcome.result);
+        }
+        this.assertCapacityFrom(before, pending.inlineBytes, pending.entries);
+        return written;
+      }),
+    );
+    return { results, queuedGarbage };
+  }
+
   async writeFile(
     path: string,
     body: ByteBody,
     options: WriteFileOptions = {},
     posix?: PosixAccessContext,
   ): Promise<WriteResult> {
+    const materialized = options.skipIfUnchanged !== true && typeof body === "string";
     const plan = this.planInlineWrite(path, options, options, posix);
-    const buffered = await this.collectInline(body);
-    const digest = await this.incomingDigest(options, buffered);
+    const buffered = materialized ? this.collectInlineSync(body) : await this.collectInline(body);
+    const digest = materialized ? undefined : await this.incomingDigest(options, buffered);
     let queued = false;
     const result = this.useBuffered(buffered, (chunks, sizeBytes) =>
       this.transaction(() => {
-        const outcome = this.commitInlineWrite(plan, chunks, sizeBytes, digest, this.now(), posix);
+        const outcome = this.commitInlineWrite(
+          plan,
+          chunks,
+          sizeBytes,
+          digest,
+          this.now(),
+          posix,
+          undefined,
+          !materialized,
+        );
         queued = outcome.queuedGarbage;
         return outcome.result;
       }),
@@ -2959,8 +3049,9 @@ ${ENTRY_TRIGGERS}
    * The three phases are the whole design, and the order is what makes it
    * possible at all. Every entry is planned against SQLite synchronously, so
    * a batch that cannot succeed is refused before it holds a byte. Then every
-   * body is collected, which is the only part that awaits. Then one
-   * transaction publishes the set, holding no cursor across anything.
+   * body is collected; this awaits only if the set contains a stream or asks
+   * for a digest. Then one transaction publishes the set, holding no cursor
+   * across anything.
    *
    * An open transaction handed back to the host would be the other way to
    * offer this, and it is the reason this shape exists instead: it would hold
@@ -3003,43 +3094,19 @@ ${ENTRY_TRIGGERS}
         // that merely collided with a concurrent read or batch.
         const lease = await this.collectInline(entry.body, held);
         held += lease.sizeBytes;
-        collected.push({ plan, lease, digest: await this.incomingDigest(options, lease) });
+        collected.push({
+          plan,
+          lease,
+          digest: await this.incomingDigest(options, lease),
+        });
       }
     } catch (error) {
       for (const item of collected) item.lease.release();
       throw error;
     }
-    let queued = false;
-    const results = this.useBufferedSet(collected, () =>
-      this.transaction(() => {
-        const before = this.usage();
-        // Headroom is a property of the database rather than of the set, so it
-        // is weighed before the batch writes anything as well as after. The
-        // quotas can only be weighed after, because what the set costs is not
-        // known until every entry has decided whether it is writing at all.
-        this.assertCapacityFrom(before, 0, 0);
-        const now = this.now();
-        const pending = { inlineBytes: 0, entries: 0 };
-        const written: WriteResult[] = [];
-        for (const item of collected) {
-          const outcome = this.commitInlineWrite(
-            item.plan,
-            item.lease.chunks,
-            item.lease.sizeBytes,
-            item.digest,
-            now,
-            posix,
-            pending,
-          );
-          if (outcome.queuedGarbage) queued = true;
-          written.push(outcome.result);
-        }
-        this.assertCapacityFrom(before, pending.inlineBytes, pending.entries);
-        return written;
-      }),
-    );
-    if (queued) await this.scheduleGarbageAlarm();
-    return results;
+    const committed = this.commitInlineWriteSet(collected, posix);
+    if (committed.queuedGarbage) await this.scheduleGarbageAlarm();
+    return committed.results;
   }
 
   async appendFile(

@@ -214,12 +214,12 @@ describe("common-path SQL cost", () => {
     const sameSize = await overwrite(12);
     const growing = await overwrite(16);
     const shrinking = await overwrite(4);
-    expect(sameSize).toEqual({ statements: 9, chunkDeletes: 0, body: Array(12).fill(2) });
+    expect(sameSize).toEqual({ statements: 7, chunkDeletes: 0, body: Array(12).fill(2) });
     expect(growing).toEqual({ statements: 9, chunkDeletes: 0, body: Array(16).fill(2) });
-    expect(shrinking).toEqual({ statements: 10, chunkDeletes: 1, body: Array(4).fill(2) });
+    expect(shrinking).toEqual({ statements: 9, chunkDeletes: 1, body: Array(4).fill(2) });
   });
 
-  it("costs a single write nothing to have a batch form", async () => {
+  it("keeps batch aggregation cheaper than separate writes", async () => {
     async function counted(
       run: (fileSystem: NodeSqlFileSystem) => Promise<unknown>,
     ): Promise<{ statements: number; rows: number }> {
@@ -241,16 +241,15 @@ describe("common-path SQL cost", () => {
       for (const path of paths) await fileSystem.writeFile(path, "body");
     });
 
-    // The single-path form runs the same planning and the same commit that one
-    // entry of a batch runs, so a batch existing cannot move what it costs.
-    // That is what makes "costs nothing when unused" structural rather than a
-    // promise to re-measure.
-    expect(single).toEqual({ statements: 9, rows: 3 });
-    expect(batchOfOne).toEqual(single);
+    // A string write can prove that collection runs no caller code; a batch
+    // must revalidate because an entry getter can. That one-statement safety
+    // cost is paid once per batch entry and does not erase aggregation's gain.
+    expect(single).toEqual({ statements: 8, rows: 3 });
+    expect(batchOfOne).toEqual({ statements: 9, rows: 3 });
     // And a set shares one transaction and one usage read across its entries
     // rather than paying for them once per file.
     expect(batchOfThree).toEqual({ statements: 21, rows: 7 });
-    expect(threeWrites).toEqual({ statements: 27, rows: 9 });
+    expect(threeWrites).toEqual({ statements: 24, rows: 9 });
   });
 
   it("skips subtree summaries without slowing a rejected directory removal", async () => {
@@ -310,7 +309,7 @@ describe("common-path SQL cost", () => {
     // every one of these, and the equality below is what would catch that.
     const off = await statements(false);
     const on = await statements(true);
-    expect(off).toBe(46);
+    expect(off).toBe(43);
     expect(on).toBe(off);
   });
 
@@ -368,14 +367,14 @@ describe("common-path SQL cost", () => {
 
     // Everything the notification carries is already in hand where the token
     // is published, so it runs no query of its own. What the difference below
-    // measures is the guarded `usage()` read that feeds `vfs.usage`, which is
-    // cached inside a transaction and therefore costs one statement across all
-    // five operations. Five notifications for one statement is the assertion:
-    // a notification that had to look anything up could not produce that.
+    // measures is the guarded `usage()` work that feeds `vfs.usage`: one read
+    // for the same-size write whose unobserved path skips usage entirely, and
+    // one for the other mutations together. The five mutation notifications
+    // themselves still add no query.
     const unobserved = await statements(false);
     const observed = await statements(true);
-    expect(unobserved).toBe(46);
-    expect(observed - unobserved).toBe(1);
+    expect(unobserved).toBe(43);
+    expect(observed - unobserved).toBe(2);
   });
 
   it("charges skipIfUnchanged only where it can decide something", async () => {
@@ -413,9 +412,9 @@ describe("common-path SQL cost", () => {
     // that stopped observing, and the `off` arm is what proves an optional
     // feature added no statements to the path that does not use it.
     expect(measured).toEqual({
-      off: 9,
+      off: 6,
       sizeDiffers: 9,
-      sameSizeDiffers: 11,
+      sameSizeDiffers: 9,
       unchanged: 7,
       unchangedWarm: 5,
     });
@@ -749,7 +748,7 @@ describe("common-path SQL cost", () => {
       touch: 9,
       mkdir: 9,
       symlink: 9,
-      write: 13,
+      write: 12,
       recursiveTouch: 21,
     });
   });

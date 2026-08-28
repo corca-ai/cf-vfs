@@ -1,13 +1,31 @@
 import { VfsError } from "../core/errors.js";
 import { validatePositiveInteger } from "./config.js";
 import { emitVfsEvent, type VfsEventSink } from "./events.js";
-import { collectRechunkedBytes } from "./streams.js";
+import { collectRechunkedBytes, rechunk } from "./streams.js";
 import type { ByteBody } from "./types.js";
 
 export interface BufferedChunksLease {
   readonly chunks: Uint8Array[];
   readonly sizeBytes: number;
   release(): void;
+}
+
+function leasedChunks(
+  chunks: Uint8Array[],
+  sizeBytes: number,
+  budget: InFlightByteBudget,
+  accounted: number,
+): BufferedChunksLease {
+  let released = false;
+  return {
+    chunks,
+    sizeBytes,
+    release: () => {
+      if (released) return;
+      released = true;
+      budget.release(accounted);
+    },
+  };
 }
 
 export class InFlightByteBudget {
@@ -79,18 +97,29 @@ export async function collectInlineBytes(
       budget.acquire(delta, heldByCaller + accounted);
       accounted += delta;
     });
-    let released = false;
-    return {
-      chunks: collected.chunks,
-      sizeBytes: collected.sizeBytes,
-      release: () => {
-        if (released) return;
-        released = true;
-        budget.release(accounted);
-      },
-    };
+    return leasedChunks(collected.chunks, collected.sizeBytes, budget, accounted);
   } catch (error) {
     budget.release(accounted);
     throw error;
   }
+}
+
+/** Takes the same bounded lease without introducing an async boundary for materialized input. */
+export function collectInlineBytesSync(
+  body: string,
+  maximumBytes: number,
+  chunkBytes: number,
+  budget: InFlightByteBudget,
+  heldByCaller = 0,
+): BufferedChunksLease {
+  const input = new TextEncoder().encode(body);
+  const sizeBytes = input.byteLength;
+  budget.acquire(sizeBytes, heldByCaller);
+  if (sizeBytes > maximumBytes) {
+    budget.release(sizeBytes);
+    throw new VfsError("EFBIG", `stream exceeds the ${maximumBytes}-byte limit`);
+  }
+  const chunks =
+    sizeBytes === 0 ? [] : sizeBytes <= chunkBytes ? [input.slice()] : rechunk([input], chunkBytes);
+  return leasedChunks(chunks, sizeBytes, budget, sizeBytes);
 }

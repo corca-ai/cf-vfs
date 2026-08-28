@@ -1101,6 +1101,11 @@ separate shell content capability.
 Inline `readFile()` returns a stable bounded stream snapshot. Consume or cancel
 it to release the instance-wide materialization budget. Writes accept strings,
 buffers, typed views, or byte streams and publish once after normal collection.
+A string body is snapshotted and published before `writeFile()` returns its
+promise, so the completed call is immediately visible just as a POSIX `write`
+is when it returns. Byte views, buffers, and streams retain the
+collect-then-revalidate path because JavaScript accessors can run while a view
+is inspected and a stream necessarily crosses an asynchronous boundary.
 
 `writeFiles(entries, options)` writes several bodies to several paths as one
 change. `copy`, `move`, and `remove` are already atomic however many entries
@@ -1121,14 +1126,15 @@ concurrent mutation. Every path reports its own revision and token, a matched
 twice is refused. The credential-bound view offers it, and every per-entry
 permission check the single-path form performs still runs.
 
-A batch costs a single write nothing, because both run the same planning and
-the same commit: measured on the guard, `writeFile` and a `writeFiles` of one
-entry are both 12 statements and 4 rows, while three files cost 30 statements
-and 10 rows as a batch against 36 and 12 as three calls. Collection has to
-finish before the transaction opens, so what can become one unit is what a
-caller can hand over as one intent — this does not make a shell script atomic,
-and a script wanting the same guarantee should stage into a directory and
-finish with one `mv`, which already is.
+A batch keeps aggregation cheaper than separate writes: measured on the guard,
+`writeFile` and a `writeFiles` of one entry cost 8 and 9 statements respectively,
+both writing 3 rows. Three string files cost 21 statements and 7 rows as a batch
+against 24 and 9 as three calls.
+The batch retains collection and revalidation because entry getters can run
+caller code even when their resulting bodies are strings. What can become one
+unit is still what a caller can hand over as one intent — this does not make a
+shell script atomic, and a script wanting the same guarantee should stage into
+a directory and finish with one `mv`, which already is.
 
 `writeFile(path, body, { skipIfUnchanged: true })` publishes nothing when the
 body is already exactly what is stored, and reports the revision and token that

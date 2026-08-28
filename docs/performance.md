@@ -46,14 +46,18 @@ line, record, and heap budgets bound that materialization.
 
 Inline VFS reads are intentionally eager. SQLite's synchronous cursor is fully
 consumed into at most 8 MiB before a stream is returned, establishing a stable
-snapshot without holding a cursor or transaction across `await`. Writes collect
-directly into fixed slabs and insert up to 33 chunks per statement. Append reads
-and rewrites only the last partial chunk plus newly added chunks in the same
-batches; earlier chunks stay inside SQLite. The batch size uses 99 of
-Cloudflare's 100 bound parameters. A same-size or growing overwrite UPSERTs
-retained chunk slots in place; only a shrinking overwrite deletes the suffix
-that would otherwise remain. This avoids paying once to delete each chunk and
-again to insert its replacement.
+snapshot without holding a cursor or transaction across `await`. A string
+write snapshots only its actual body size and commits without an asynchronous
+boundary; it does not allocate a full 256 KiB slab for an 8 KiB input or repeat
+path and POSIX validation when nothing could have interleaved. Buffers, typed
+views, streams, and batches still revalidate after collection because view and
+entry accessors can run caller code. All forms insert up to 33 chunks per
+statement. Append reads and rewrites only the last partial chunk plus newly
+added chunks in the same batches; earlier chunks stay inside SQLite. The batch
+size uses 99 of Cloudflare's 100 bound parameters. A
+same-size or growing overwrite UPSERTs retained chunk slots in place; only a
+shrinking overwrite deletes the suffix that would otherwise remain. This
+avoids paying once to delete each chunk and again to insert its replacement.
 This is usually faster and simpler than a paged pull protocol at this size, but
 concurrent snapshots and writes are capped by the instance-wide in-flight
 budget.
@@ -70,8 +74,8 @@ also exact above `find()`'s 10,000-result ceiling.
 
 The trusted path has a hard zero-overhead SQL requirement. The workerd
 regression suite records exactly 3,584 statements, 3,584 rows read, and 3,072
-rows written for 512 root-level small writes; 7 statements/13 rows read/4 rows
-written for a point overwrite; and 9/8/9 statements for subtree
+rows written for 512 root-level small writes; 4 statements/9 rows read/3 rows
+written for an 8 KiB point overwrite; and 9/8/9 statements for subtree
 copy/move/remove. A root-level creation relies on the schema's permanent root
 invariant instead of reading `/` again, and the pre-stream/commit checks read a
 live entry or absent-path tombstone in one statement.
@@ -85,7 +89,7 @@ across all pages: a 1,006-entry, two-page traversal is pinned at seven
 statements rather than repeating the range preflight per page. A
 credential-bound recursive copy is pinned at 14 statements for both 41-entry
 and 81-entry source trees; its setgid calculation grows in rows, not statement
-round trips. Creating an entry below an existing parent costs 9/9/10/13
+round trips. Creating an entry below an existing parent costs 9/9/10/12
 statements for touch/mkdir/symlink/write, and a touch that creates three
 intermediate directories costs 21; each transaction walks its parent chain
 only once.

@@ -302,6 +302,28 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect(statError).toMatchObject({ code: "ENOENT", path: "/blocked" });
   });
 
+  it("keeps the SQLite headroom refusal on a same-size replacement", async () => {
+    const stub = workspace("database-headroom-same-size");
+    await stub.writeFile("/file", "old!");
+    const result = await runInDurableObject(stub, async (_instance, state) => {
+      const fileSystem = new DurableObjectFileSystem(state.storage, {
+        maxDatabaseBytes: state.storage.sql.databaseSize,
+        minDatabaseHeadroomBytes: 1,
+      });
+      try {
+        await fileSystem.writeFile("/file", "new!");
+        return { error: null, body: "" };
+      } catch (caught) {
+        const body = new TextDecoder().decode(
+          await readAllBytes(fileSystem.readFile("/file").stream, 16),
+        );
+        return { error: caught, body };
+      }
+    });
+    expect(result.error).toMatchObject({ code: "ENOSPC", path: "/file" });
+    expect(result.body).toBe("old!");
+  });
+
   it("rejects chunks that approach the Durable Object SQLite row limit", async () => {
     const stub = workspace("sqlite-chunk-limit");
     const error = await runInDurableObject(stub, (_instance, state) => {

@@ -80,9 +80,12 @@ Callers must consume or cancel returned streams.
 
 Write behavior:
 
-1. Collect directly into fixed-size slabs while enforcing file and shared
-   in-flight limits.
-2. Capture and later recheck the pathname mutation token.
+1. Snapshot strings at their actual size, or collect byte views and streams
+   directly into fixed-size slabs, while enforcing file and shared in-flight
+   limits.
+2. A string body has no accessor or asynchronous boundary, so its plan and
+   commit are one uninterrupted operation. Every other body captures and later
+   rechecks the pathname mutation token after collection.
 3. In one short `transactionSync()`, validate quota and headroom, write chunk
    rows in batches of at most 33, update metadata and usage, and publish one new
    revision/token. Three bindings per chunk keep each statement below
@@ -93,9 +96,10 @@ A batch write is that same sequence with one transaction around a set.
 `writeFiles()` plans every entry against SQLite synchronously — disposition,
 guard, directory check, permission — so a set that cannot succeed is refused
 before it buffers a byte. It then collects every body, each charged to the same
-in-flight budget that already bounds one. It then publishes the set in one
-`transactionSync()`, running the identical per-entry step the single-path form
-runs, which is what keeps a single write costing exactly what it did.
+in-flight budget that already bounds one. A batch always revalidates after
+collection because an entry getter can run caller code even when its resulting
+body is a string. It then runs the identical guarded per-entry commit inside one
+`transactionSync()`.
 
 Two things differ inside that transaction. The quotas are weighed once against
 the usage the batch started from rather than once per entry against what its

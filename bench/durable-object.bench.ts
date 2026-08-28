@@ -400,7 +400,10 @@ describe("Durable Object storage benchmark metrics", () => {
     const metrics = await runInDurableObject(stub, async (_instance, state) => {
       const meter = meterSqlStorage(state.storage);
       const measuredFileSystem = new DurableObjectFileSystem(meter.storage);
-      await measuredFileSystem.writeFile("/point", "abcdefgh");
+      const pointBytes = 8 * 1024;
+      const pointBodyA = `a${"x".repeat(pointBytes - 1)}`;
+      const pointBodyB = `b${"x".repeat(pointBytes - 1)}`;
+      let pointToken = (await measuredFileSystem.writeFile("/point", pointBodyA)).mutationToken;
 
       meter.reset();
       measuredFileSystem.stat("/point");
@@ -412,7 +415,11 @@ describe("Durable Object storage benchmark metrics", () => {
       };
 
       meter.reset();
-      await measuredFileSystem.writeFile("/point", "abcdefgh");
+      pointToken = (
+        await measuredFileSystem.writeFile("/point", pointBodyB, {
+          ifMutationToken: pointToken,
+        })
+      ).mutationToken;
       const overwriteCost = {
         statements: meter.statements,
         rowsRead: meter.rowsRead,
@@ -433,8 +440,15 @@ describe("Durable Object storage benchmark metrics", () => {
       const statMs = await averageDuration(100, 10_000, () => {
         timedFileSystem.stat("/point");
       });
+      let pointBodyFlip = false;
       const overwriteMs = await averageDuration(2, 200, async () => {
-        await timedFileSystem.writeFile("/point", "abcdefgh");
+        pointBodyFlip = !pointBodyFlip;
+        const body = pointBodyFlip ? pointBodyA : pointBodyB;
+        pointToken = (
+          await timedFileSystem.writeFile("/point", body, {
+            ifMutationToken: pointToken,
+          })
+        ).mutationToken;
       });
 
       const globFindMs = await averageDuration(2, 50, () => {
@@ -484,9 +498,9 @@ describe("Durable Object storage benchmark metrics", () => {
     });
     expect(metrics.populatedStatCost).toEqual({ rowsRead: 2, statements: 1 });
     expect(metrics.overwriteCost).toMatchObject({
-      statements: 7,
-      rowsRead: 13,
-      rowsWritten: 4,
+      statements: 4,
+      rowsRead: 9,
+      rowsWritten: 3,
     });
     expect(metrics.statQueryPlan.every((detail) => detail.includes("SEARCH"))).toBe(true);
     measured(metrics.warmInitializeMs);
