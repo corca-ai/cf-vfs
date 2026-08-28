@@ -711,15 +711,7 @@ export const duCommand = /* @__PURE__ */ defineApplet(DU, async (context, argv, 
   const paths = argv.length === 0 ? ["."] : [...argv];
   for (const path of paths) {
     const normalized = commandPath(context, path);
-    const root = context.fileSystem.lstat(normalized);
-    const entries =
-      root.kind === "symlink"
-        ? [root]
-        : context.fileSystem.find({ path: normalized, includeRoot: true });
-    const size = entries.reduce(
-      (total, stat) => total + (stat.kind === "file" ? stat.sizeBytes : 0),
-      0,
-    );
+    const size = context.fileSystem.subtreeSummary(normalized).logicalFileBytes;
     await writeText(fds[1], `${Math.ceil(size / 1024)}\t${path}\n`);
   }
   return 0;

@@ -1,4 +1,5 @@
 import { VfsError } from "../core/errors.js";
+import { validateByteRange } from "./range.js";
 import type {
   AppendFileOptions,
   BeginOpaqueUploadOptions,
@@ -13,6 +14,7 @@ import type {
   OwnershipUpdateOptions,
   PageOptions,
   PosixCredentials,
+  ReadFileOptions,
   RemoveOptions,
   SymlinkOptions,
   TouchOptions,
@@ -264,6 +266,14 @@ export function rpcChangesSinceOptions(value: unknown): ChangesSinceOptions | un
   const input = rpcStruct(value, "options", ["limit"]);
   const limit = rpcOptionalPositiveInteger(input["limit"], "options.limit");
   return limit === undefined ? {} : { limit };
+}
+
+export function rpcReadFileOptions(value: unknown): ReadFileOptions | undefined {
+  if (value === undefined) return undefined;
+  const input = rpcStruct(value, "options", ["range"]);
+  const range = input["range"];
+  validateByteRange(range);
+  return range === undefined ? {} : { range };
 }
 
 export function rpcFindOptions(value: unknown): FindOptions {

@@ -65,13 +65,41 @@ This is usually faster and simpler than a paged pull protocol at this size, but
 concurrent snapshots and writes are capped by the instance-wide in-flight
 budget.
 
+A byte-ranged inline read is eager only for the chunks that intersect the
+range, and SQLite trims the boundary chunks before they enter JavaScript. For
+a single chunk of at most 16 KiB, the simpler point query wins; the VFS keeps
+that query and exposes only the selected view, avoiding a measured 18–20%
+`substr` regression on the common 8–10 KiB case. The returned stat still
+describes the full file. On the structural guard, reading three bytes from a
+four-chunk file lowers returned SQL rows from five to three (the entry, stored
+chunk width, and one selected chunk); the same path powers `head -c` and
+`tail -c`. `wc -c` reads one byte to retain
+the ordinary permission and file-kind checks, then uses the transactionally
+maintained full size, likewise lowering a four-chunk file from five rows to
+three. Opaque `wc -c` remains streamed so an R2 transport failure is not hidden
+by metadata.
+
+The final workerd A/B, including stream creation and consumption, measured a
+10 KiB file at 0.17 ms both whole and ranged. An uncached stored-layout lookup
+on an 8 MiB file measured 6.6 ms whole versus 0.4 ms ranged (-93.9%); repeated
+ranges at the same entry revision reuse that small layout value.
+
 The shell preserves that property. `rm -r`, `mv`, and `cp -r` charge their
-mutation budget from one indexed range count rather than materializing the
-subtree through `find()`, so a recursive shell command costs a constant number
-of SQL statements and allocates nothing per entry. A credential-bound view uses
-the permission preflight appropriate to the mutation, so budgeting `mv` does
-not accidentally require read permission on the source subtree. The charge is
+mutation budget from the entry count in one indexed subtree aggregate rather
+than materializing the subtree through `find()`. `du` uses the logical-byte sum
+from the same aggregate, so both paths cost a constant number of SQL statements
+and allocate nothing per entry. A credential-bound view uses the permission
+preflight appropriate to the mutation, so budgeting `mv` does not accidentally
+require read permission on the source subtree. The charge and `du` result are
 also exact above `find()`'s 10,000-result ceiling.
+
+Two broader fusions were measured and deliberately not exposed as APIs. In
+workerd, one SQL statement for 100 independent 8 KiB reads reduced median time
+from 2 ms to 1 ms but raised billed rows from 299 to 399, while requiring all
+100 bodies to be materialized before sequential utilities could consume them.
+A fused 100-entry directory listing stayed at 0.3 ms and raised billed rows
+from 101 to 201. The current per-file streaming order and two-statement listing
+therefore remain preferable to lower statement count alone.
 
 ### POSIX credential cost
 

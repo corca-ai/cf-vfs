@@ -14,8 +14,10 @@ import type {
   MutationTokenOptions,
   OwnershipUpdateOptions,
   PageOptions,
+  ReadFileOptions,
   RemoveOptions,
   RemoveResult,
+  SubtreeSummary,
   SymlinkOptions,
   TouchOptions,
   VfsStat,
@@ -154,7 +156,7 @@ export class ScopedFileSystem implements ShellFileSystem {
     const candidate = this.#inner as VirtualFileSystem & Partial<MutationCountingFileSystem>;
     return typeof candidate.mutationSubtreeCount === "function"
       ? candidate.mutationSubtreeCount(path, operation)
-      : this.#inner.countSubtree(path);
+      : this.#inner.subtreeSummary(path).entries;
   }
 
   getMutationToken(path: string, options?: MutationTokenOptions) {
@@ -238,14 +240,14 @@ export class ScopedFileSystem implements ShellFileSystem {
     return this.#inner.findPage(options);
   }
 
-  countSubtree(path: string): number {
+  subtreeSummary(path: string): SubtreeSummary {
     this.read(path);
-    return this.#inner.countSubtree(path);
+    return this.#inner.subtreeSummary(path);
   }
 
-  readFile(path: string): InlineReadResult {
+  readFile(path: string, options?: ReadFileOptions): InlineReadResult {
     this.read(path);
-    return this.#inner.readFile(path);
+    return this.#inner.readFile(path, options);
   }
 
   writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult> {

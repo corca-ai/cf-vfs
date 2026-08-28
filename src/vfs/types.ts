@@ -182,6 +182,18 @@ export interface InlineReadResult {
   stream: ReadableStream<Uint8Array>;
 }
 
+export interface ReadFileOptions {
+  /** Returns only this byte range while `stat.sizeBytes` retains the full size. */
+  range?: ByteRange;
+}
+
+/** Constant-size aggregate for one entry and, when it is a directory, its descendants. */
+export interface SubtreeSummary {
+  entries: number;
+  inlineBytes: number;
+  logicalFileBytes: number;
+}
+
 export interface WriteFileOptions {
   createParents?: boolean;
   disposition?: WriteDisposition;
@@ -472,12 +484,11 @@ export interface VirtualFileSystem {
   find(options: FindOptions): VfsStat[];
   findPage(options: FindOptions): EntryPage;
   /**
-   * Counts the entries at and below `path`, including `path` itself, with one
-   * indexed range query. Unlike `find()` this materializes no `VfsStat` and has
-   * no result ceiling, so it stays correct and constant-cost for a subtree of
-   * any size.
+   * Aggregates the entry count and logical file sizes at and below `path` with
+   * one indexed range query. Unlike `find()` this materializes no `VfsStat`,
+   * has no result ceiling, and does not follow a final symbolic link.
    */
-  countSubtree(path: string): number;
+  subtreeSummary(path: string): SubtreeSummary;
   /**
    * Reports every path that changed after `since`, for a caller that was away.
    *
@@ -506,7 +517,7 @@ export interface VirtualFileSystem {
    * regard to what a user can see.
    */
   changesSince(since: number, options?: ChangesSinceOptions): ChangePage;
-  readFile(path: string): InlineReadResult;
+  readFile(path: string, options?: ReadFileOptions): InlineReadResult;
   writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult>;
   /**
    * Writes several bodies to several paths as one change.

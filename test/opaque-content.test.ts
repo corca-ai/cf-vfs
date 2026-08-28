@@ -348,6 +348,11 @@ describe("opaque content", () => {
     expect(requested).toEqual([{ offset: 0, length: 8 }]);
     expect(store.chunksDelivered).toBe(1);
 
+    requested.length = 0;
+    expect((await shell.executeText({ script: "tail -c 8 /big.bin" })).stdout).toBe("xxxxxxxx");
+    expect(requested).toEqual([{ suffix: 8 }]);
+    expect(store.chunksDelivered).toBe(2);
+
     // A command with no range still asks for the whole body.
     requested.length = 0;
     await shell.executeText({ script: "wc -c /big.bin" });

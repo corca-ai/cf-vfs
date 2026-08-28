@@ -745,7 +745,7 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     });
   });
 
-  it("counts a subtree past the ceiling that truncates find()", async () => {
+  it("summarizes a subtree past the ceiling that truncates find()", async () => {
     const fileSystem = createTestFileSystem();
     await fileSystem.mkdir("/bulk");
     for (let index = 0; index < 10_050; index += 1) {
@@ -755,7 +755,11 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     // find() materializes a VfsStat per entry and stops at its 10,000 default,
     // so it cannot be used to charge a mutation budget accurately.
     expect(fileSystem.find({ path: "/bulk", includeRoot: true })).toHaveLength(10_000);
-    expect(fileSystem.countSubtree("/bulk")).toBe(10_051);
+    expect(fileSystem.subtreeSummary("/bulk")).toEqual({
+      entries: 10_051,
+      inlineBytes: 10_050,
+      logicalFileBytes: 10_050,
+    });
     // Writing past the find() ceiling is the point of this case, so it is
     // legitimately long: about two seconds locally and more on a shared CI
     // runner. The default five-second timeout is not enough headroom.

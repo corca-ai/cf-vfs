@@ -219,6 +219,83 @@ describe("common-path SQL cost", () => {
     expect(shrinking).toEqual({ statements: 8, chunkDeletes: 1, body: Array(4).fill(2) });
   });
 
+  it("materializes only inline chunks intersecting a byte range", async () => {
+    const { fileSystem, meter } = meteredFileSystem({ chunkBytes: 4 });
+    await fileSystem.writeFile(
+      "/body",
+      Uint8Array.from({ length: 16 }, (_, index) => index),
+    );
+
+    meter.reset();
+    const middle = await readAllBytes(
+      fileSystem.readFile("/body", { range: { offset: 5, length: 3 } }).stream,
+      16,
+    );
+    expect([...middle]).toEqual([5, 6, 7]);
+    expect(meter).toMatchObject({ statements: 3, rows: 3 });
+
+    meter.reset();
+    const suffix = await readAllBytes(
+      fileSystem.readFile("/body", { range: { suffix: 2 } }).stream,
+      16,
+    );
+    expect([...suffix]).toEqual([14, 15]);
+    // The immutable entry revision keys the stored chunk-width cache.
+    expect(meter).toMatchObject({ statements: 2, rows: 2 });
+
+    meter.reset();
+    await readAllBytes(fileSystem.readFile("/body").stream, 16);
+    expect(meter).toMatchObject({ statements: 2, rows: 5 });
+  });
+
+  it("keeps the simpler range path for a small single-chunk file", async () => {
+    const queries: string[] = [];
+    const fileSystem = createTestFileSystem({
+      onStatement: (query) => queries.push(query),
+    });
+    await fileSystem.writeFile("/body", new Uint8Array(10 * 1024));
+
+    queries.length = 0;
+    await readAllBytes(
+      fileSystem.readFile("/body", { range: { offset: 0, length: 1024 } }).stream,
+      1024,
+    );
+    const chunkQuery = queries.find((query) => query.includes("vfs_inline_chunks"));
+    expect(chunkQuery).toContain("SELECT body");
+    expect(chunkQuery).not.toContain("substr(");
+  });
+
+  it("answers inline wc -c from bounded metadata work", async () => {
+    const { fileSystem, meter } = meteredFileSystem({ chunkBytes: 4 });
+    await fileSystem.writeFile("/body", new Uint8Array(16));
+    const shell = new Shell({ fileSystem, commands: defaultShellCommands });
+
+    meter.reset();
+    expect(await shell.executeText({ script: "wc -c /body" })).toMatchObject({
+      exitCode: 0,
+      stdout: "16 /body\n",
+    });
+    expect(meter).toMatchObject({ statements: 3, rows: 3 });
+
+    meter.reset();
+    expect((await shell.executeText({ script: "wc -l /body" })).exitCode).toBe(0);
+    expect(meter).toMatchObject({ statements: 2, rows: 5 });
+  });
+
+  it("answers du with a fixed-size subtree aggregate", async () => {
+    const { fileSystem, meter } = meteredFileSystem();
+    await fileSystem.writeFile("/tree/a", new Uint8Array(1_500), { createParents: true });
+    await fileSystem.writeFile("/tree/nested/b", new Uint8Array(700), { createParents: true });
+    const shell = new Shell({ fileSystem, commands: defaultShellCommands });
+
+    meter.reset();
+    expect(await shell.executeText({ script: "du /tree" })).toMatchObject({
+      exitCode: 0,
+      stdout: "3\t/tree\n",
+    });
+    expect(meter).toMatchObject({ statements: 2, rows: 2 });
+  });
+
   it("keeps batch aggregation cheaper than separate writes", async () => {
     async function counted(
       run: (fileSystem: NodeSqlFileSystem) => Promise<unknown>,

@@ -403,6 +403,25 @@ describe("collaborative filesystem", () => {
     expect(result.sizeBytes).toBe(new TextEncoder().encode(document.text()).byteLength);
   });
 
+  it("ranges pending reads and includes pending bytes in subtree summaries", async () => {
+    const inner = createTestFileSystem();
+    await inner.writeFile("/dir/doc.txt", "old", { createParents: true });
+    const registry = new DocumentRegistry();
+    const document = new TextDocument("pending");
+    registry.open("/dir/doc.txt", document, inner.stat("/dir/doc.txt").mutationToken);
+    registry.markDirty("/dir/doc.txt");
+    const fileSystem = new CollaborativeFileSystem(inner, registry);
+
+    const ranged = fileSystem.readFile("/dir/doc.txt", { range: { suffix: 3 } });
+    expect(ranged.stat.sizeBytes).toBe(7);
+    expect(await new Response(ranged.stream).text()).toBe("ing");
+    expect(fileSystem.subtreeSummary("/dir")).toEqual({
+      entries: 2,
+      inlineBytes: 3,
+      logicalFileBytes: 7,
+    });
+  });
+
   it("keeps open documents current across metadata mutations", async () => {
     const { inner, registry, fileSystem } = open("");
     const paths = ["/touched.txt", "/moded.txt", "/owned.txt"] as const;

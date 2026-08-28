@@ -1082,8 +1082,8 @@ reader; see "Opaque R2 content".
 | `touch`, `chmod`, `mv` | SQLite metadata/namespace only |
 | `cp` | creates another metadata reference; no R2 body transfer |
 | `rm` | unlinks and durably queues the last unreachable generation |
-| `cat`, `head`, `grep`, `wc`, and `<` redirection | stream the body when the host supplies a content reader and the session allows it; otherwise `ENOTSUP` before any R2 read |
-| `sort`, `sed`, `cut`, `tr`, `nl`, `fold`, `base64`, `tail`, `uniq`, `paste` | `ENOTSUP`: each holds all of its input |
+| `cat`, `head`, `tail -c`, `grep`, `wc`, and `<` redirection | stream the body when the host supplies a content reader and the session allows it; otherwise `ENOTSUP` before any R2 read |
+| `sort`, `sed`, `cut`, `tr`, `nl`, `fold`, `base64`, `tail -n`, `uniq`, `paste` | `ENOTSUP`: each holds all of its input |
 | `cmp`, `diff`, `patch`, `join`, `comm` | `ENOTSUP` if an opaque body is required |
 | `sha256sum` | emits a trusted verified digest; otherwise `ENOTSUP` |
 | `>>` and append `tee` | `ENOTSUP` |
@@ -1096,7 +1096,7 @@ they are not present on `ShellCommandContext.fileSystem`.
 
 `VirtualFileSystem` operates on bytes and canonical paths:
 
-- `stat`, `list`/`listPage`, `find`/`findPage`, and `countSubtree`, each
+- `stat`, `list`/`listPage`, `find`/`findPage`, and `subtreeSummary`, each
   reporting `ino` alongside the rest of an entry's metadata;
 - `changesSince`, when the filesystem was built with `recordChanges`;
 - `statById`, which reads an entry back by its identity;
@@ -1116,8 +1116,12 @@ consecutive and reading by one would let any credential enumerate the workspace
 by counting; opaque reads still require ordinary read permission and the
 separate shell content capability.
 
-Inline `readFile()` returns a stable bounded stream snapshot. Consume or cancel
-it to release the instance-wide materialization budget. Writes accept strings,
+Inline `readFile()` returns a stable bounded stream snapshot. Its optional
+`{ range: { offset, length } }` or `{ range: { suffix } }` selects bytes while
+the returned stat continues to describe the complete file. SQLite reads only
+the intersecting chunks, so `head -c`, `tail -c`, and metadata-only `wc -c` do
+not materialize an entire large inline body. Consume or cancel the stream to
+release the instance-wide materialization budget. Writes accept strings,
 buffers, typed views, or byte streams and publish once after normal collection.
 A string body is snapshotted and published before `writeFile()` returns its
 promise, so the completed call is immediately visible just as a POSIX `write`
@@ -1192,8 +1196,9 @@ before the cursor can be missed; restart when a fresh complete traversal is
 required.
 
 `find()` materializes a `VfsStat` per match and stops at its 10,000 default
-limit. When only the size of a subtree matters — charging a budget, deciding
-whether a recursive removal is worth confirming — use `countSubtree()`, which
-answers with one indexed range query, allocates nothing per entry, and has no
-result ceiling. It counts the root itself and raises `ENOENT` for an absent
-path.
+limit. When only aggregate subtree facts matter — charging a budget, reporting
+`du`, or deciding whether a recursive removal is worth confirming — use
+`subtreeSummary()`. One indexed range query returns `entries`, `inlineBytes`,
+and `logicalFileBytes`, allocates nothing per entry, and has no result ceiling.
+It includes the root and raises `ENOENT` for an absent path; a final symbolic
+link is one zero-byte entry and is not followed.

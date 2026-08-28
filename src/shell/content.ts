@@ -94,13 +94,13 @@ export async function openContent(
   // and ENOTSUP this would have probed for. Asking first would resolve the
   // path once to decide, and once more to read.
   if (options.reader === undefined || (options.access ?? "metadata") !== "stream") {
-    return openInline(fileSystem, path);
+    return openInline(fileSystem, path, options.range);
   }
   // `readFile` is also the VFS's ordinary read-permission check. An opaque
   // entry answers ENOTSUP only after that check, which prevents a separately
   // supplied R2 reader (built over the trusted raw VFS) from bypassing DAC.
   try {
-    return openInline(fileSystem, path);
+    return openInline(fileSystem, path, options.range);
   } catch (error) {
     if (!isVfsError(error) || error.code !== "ENOTSUP") throw error;
   }
@@ -115,9 +115,9 @@ export async function openContent(
  * `cat dirlink` is a complaint about `dirlink` — so those two are restated
  * here. Every other failure already names the operand and is left alone.
  */
-function openInline(fileSystem: ShellFileSystem, path: string): ContentBody {
+function openInline(fileSystem: ShellFileSystem, path: string, range?: ByteRange): ContentBody {
   try {
-    const inline = fileSystem.readFile(path);
+    const inline = fileSystem.readFile(path, range === undefined ? undefined : { range });
     return { stat: inline.stat, stream: inline.stream };
   } catch (error) {
     if (isVfsError(error) && (error.code === "EISDIR" || error.code === "ENOTSUP")) {

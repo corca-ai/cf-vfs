@@ -1,6 +1,7 @@
 import { VfsError } from "../core/errors.js";
 import { matchesGlob } from "../core/glob.js";
 import { depthFrom, normalizePath, pathRequiresDirectory } from "../core/path.js";
+import { validateByteRange } from "../vfs/range.js";
 import type {
   AppendFileOptions,
   ByteBody,
@@ -15,8 +16,10 @@ import type {
   MutationTokenOptions,
   OwnershipUpdateOptions,
   PageOptions,
+  ReadFileOptions,
   RemoveOptions,
   RemoveResult,
+  SubtreeSummary,
   SymlinkOptions,
   TouchOptions,
   VfsStat,
@@ -327,9 +330,9 @@ export class ReservedPathFileSystem implements ShellFileSystem {
     return at === undefined ? this.#inner.getMutationToken(path, options) : at.mutationToken;
   }
 
-  readFile(path: string): InlineReadResult {
+  readFile(path: string, options?: ReadFileOptions): InlineReadResult {
     const at = this.#reached(path);
-    if (at === undefined) return this.#inner.readFile(path);
+    if (at === undefined) return this.#inner.readFile(path, options);
     if (at.applet === true) {
       // The path exists and runs; it is not a file with bytes behind it.
       throw new VfsError("ENOTSUP", "an applet has no file content to read", at.path);
@@ -341,6 +344,7 @@ export class ReservedPathFileSystem implements ShellFileSystem {
       // that belongs, and it works.
       throw new VfsError("EINVAL", "device is not readable", at.path);
     }
+    validateByteRange(options?.range, at.path);
     return {
       stat: deviceStat(at.path, at.device) as InlineReadResult["stat"],
       stream: emptyStream(),
@@ -548,10 +552,14 @@ export class ReservedPathFileSystem implements ShellFileSystem {
     );
   }
 
-  countSubtree(path: string): number {
+  subtreeSummary(path: string): SubtreeSummary {
     const at = this.#at(path);
-    if (at === undefined) return this.#inner.countSubtree(path);
-    return this.#findHere({ path: at.path, includeRoot: true }).length;
+    if (at === undefined) return this.#inner.subtreeSummary(path);
+    return {
+      entries: this.#findHere({ path: at.path, includeRoot: true }).length,
+      inlineBytes: 0,
+      logicalFileBytes: 0,
+    };
   }
 
   touch(path: string, options?: TouchOptions): VfsStat {

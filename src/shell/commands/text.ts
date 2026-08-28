@@ -3,7 +3,7 @@ import { createLineDiff, renderLineDiff } from "../../core/line-diff.js";
 import { compareUtf8 } from "../../core/path.js";
 import { compilePosixRegex, type PosixRegex } from "../../core/posix-regex.js";
 import { applyUnifiedPatch } from "../../core/unified-patch.js";
-import type { ByteRange } from "../../vfs/types.js";
+import type { ByteRange, InlineReadResult } from "../../vfs/types.js";
 import {
   type AppletSpec,
   type AppletSpecWithOptions,
@@ -631,7 +631,8 @@ export const headCommand = /* @__PURE__ */ defineApplet(HEAD, async (context, ar
 export const tailCommand = /* @__PURE__ */ defineApplet(TAIL, async (context, argv, fds) => {
   const options = sliceCount(TAIL, argv, 10);
   if (options.bytes) {
-    for await (const input of inputStreams(context, options.paths, fds[0])) {
+    const wanted: ByteRange | undefined = options.count > 0 ? { suffix: options.count } : undefined;
+    for await (const input of inputStreams(context, options.paths, fds[0], wanted)) {
       const collected = await collectStream(context, input.stream);
       try {
         await writeBytes(
@@ -661,63 +662,91 @@ export const wcCommand = /* @__PURE__ */ defineApplet(WC, async (context, argv, 
   const linesOnly = parsed.options.some((option) => option.name === "lines");
   const wordsOnly = parsed.options.some((option) => option.name === "words");
   const bytesOnly = parsed.options.some((option) => option.name === "bytes");
-  for await (const input of inputStreams(context, parsed.operands, fds[0])) {
-    const reader = input.stream.getReader();
-    const decoder = new TextDecoder("utf-8", { fatal: true });
-    let lineCount = 0;
-    let wordCount = 0;
-    let byteCount = 0;
-    let inWord = false;
-    const needsWords = wordsOnly || (!linesOnly && !wordsOnly && !bytesOnly);
-    const needsText = linesOnly || needsWords;
-    const accountText = (text: string): void => {
-      for (const character of text) {
-        if (C_WHITESPACE.includes(character)) inWord = false;
-        else if (!inWord) {
-          wordCount += 1;
-          inWord = true;
-        }
+  const metadataOnly = bytesOnly && !linesOnly && !wordsOnly;
+  const operands: Array<string | undefined> =
+    parsed.operands.length === 0 ? [undefined] : [...parsed.operands];
+  for (const operand of operands) {
+    if (metadataOnly && operand !== undefined && operand !== "-") {
+      let read: InlineReadResult | undefined;
+      try {
+        read = context.fileSystem.readFile(commandPath(context, operand), {
+          range: { offset: 0, length: 1 },
+        });
+      } catch (error) {
+        // Opaque content still has to be streamed so transport failures remain
+        // observable. Inline SQLite bytes are immutable and their entry size
+        // is maintained transactionally, so reading one byte is sufficient to
+        // enforce access and file-kind checks before trusting that size.
+        if (!(error instanceof VfsError && error.code === "ENOTSUP")) throw error;
       }
-    };
-    try {
-      while (true) {
-        const read = await readWithAbort(reader, context.signal);
-        if (read.done) break;
-        context.budget.io(read.value.byteLength);
-        byteCount += read.value.byteLength;
-        for (const byte of read.value) if (byte === 0x0a) lineCount += 1;
+      if (read !== undefined) {
+        await read.stream.cancel();
+        await writeText(fds[1], `${read.stat.sizeBytes} ${operand}\n`);
+        continue;
+      }
+    }
+    for await (const input of inputStreams(
+      context,
+      operand === undefined ? [] : [operand],
+      fds[0],
+    )) {
+      const reader = input.stream.getReader();
+      const decoder = new TextDecoder("utf-8", { fatal: true });
+      let lineCount = 0;
+      let wordCount = 0;
+      let byteCount = 0;
+      let inWord = false;
+      const needsWords = wordsOnly || (!linesOnly && !wordsOnly && !bytesOnly);
+      const needsText = linesOnly || needsWords;
+      const accountText = (text: string): void => {
+        for (const character of text) {
+          if (C_WHITESPACE.includes(character)) inWord = false;
+          else if (!inWord) {
+            wordCount += 1;
+            inWord = true;
+          }
+        }
+      };
+      try {
+        while (true) {
+          const read = await readWithAbort(reader, context.signal);
+          if (read.done) break;
+          context.budget.io(read.value.byteLength);
+          byteCount += read.value.byteLength;
+          for (const byte of read.value) if (byte === 0x0a) lineCount += 1;
+          if (needsText) {
+            try {
+              const text = decoder.decode(read.value, { stream: true });
+              if (needsWords) accountText(text);
+            } catch {
+              throw new VfsError("EIO", "input is not valid UTF-8", input.name);
+            }
+          }
+        }
         if (needsText) {
           try {
-            const text = decoder.decode(read.value, { stream: true });
+            const text = decoder.decode();
             if (needsWords) accountText(text);
           } catch {
             throw new VfsError("EIO", "input is not valid UTF-8", input.name);
           }
         }
+      } catch (error) {
+        await reader.cancel(error).catch(() => undefined);
+        throw error;
+      } finally {
+        reader.releaseLock();
       }
-      if (needsText) {
-        try {
-          const text = decoder.decode();
-          if (needsWords) accountText(text);
-        } catch {
-          throw new VfsError("EIO", "input is not valid UTF-8", input.name);
-        }
-      }
-    } catch (error) {
-      await reader.cancel(error).catch(() => undefined);
-      throw error;
-    } finally {
-      reader.releaseLock();
+      const fields =
+        linesOnly || wordsOnly || bytesOnly
+          ? [
+              linesOnly ? lineCount : undefined,
+              wordsOnly ? wordCount : undefined,
+              bytesOnly ? byteCount : undefined,
+            ].filter((value) => value !== undefined)
+          : [lineCount, wordCount, byteCount];
+      await writeText(fds[1], `${fields.join(" ")}${input.name === "-" ? "" : ` ${input.name}`}\n`);
     }
-    const fields =
-      linesOnly || wordsOnly || bytesOnly
-        ? [
-            linesOnly ? lineCount : undefined,
-            wordsOnly ? wordCount : undefined,
-            bytesOnly ? byteCount : undefined,
-          ].filter((value) => value !== undefined)
-        : [lineCount, wordCount, byteCount];
-    await writeText(fds[1], `${fields.join(" ")}${input.name === "-" ? "" : ` ${input.name}`}\n`);
   }
   return 0;
 });

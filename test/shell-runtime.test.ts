@@ -1420,7 +1420,7 @@ describe("stream-first shell runtime", () => {
       }),
     ).toMatchObject({ exitCode: 0, stderr: "" });
 
-    expect(calls.filter((name) => name === "countSubtree")).toHaveLength(3);
+    expect(calls.filter((name) => name === "subtreeSummary")).toHaveLength(3);
     expect(calls).not.toContain("find");
     expect(calls).not.toContain("findPage");
   });
@@ -1430,7 +1430,7 @@ describe("stream-first shell runtime", () => {
     await fileSystem.writeFile("/tree/nested/leaf", "leaf", { createParents: true });
     await fileSystem.writeFile("/tree/file", "file");
     // /tree, /tree/file, /tree/nested, /tree/nested/leaf
-    expect(fileSystem.countSubtree("/tree")).toBe(4);
+    expect(fileSystem.subtreeSummary("/tree").entries).toBe(4);
 
     const denied = new Shell({
       fileSystem,

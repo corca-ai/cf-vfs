@@ -17,6 +17,7 @@ import {
   rpcOptionalPositiveInteger,
   rpcOwnershipOptions,
   rpcPageOptions,
+  rpcReadFileOptions,
   rpcRemoveOptions,
   rpcString,
   rpcSymlinkOptions,
@@ -47,8 +48,10 @@ import type {
   OpaqueUploadReservation,
   OwnershipUpdateOptions,
   PageOptions,
+  ReadFileOptions,
   RemoveOptions,
   RemoveResult,
+  SubtreeSummary,
   SymlinkOptions,
   TouchOptions,
   VfsStat,
@@ -118,8 +121,8 @@ export abstract class VfsDurableObject<Environment> extends DurableObject<Enviro
     return this.fileSystem.find(rpcFindOptions(options));
   }
 
-  countSubtree(path: string): number {
-    return this.fileSystem.countSubtree(rpcString(path, "path"));
+  subtreeSummary(path: string): SubtreeSummary {
+    return this.fileSystem.subtreeSummary(rpcString(path, "path"));
   }
 
   changesSince(since: number, options?: ChangesSinceOptions): ChangePage {
@@ -129,8 +132,8 @@ export abstract class VfsDurableObject<Environment> extends DurableObject<Enviro
     );
   }
 
-  readFile(path: string): InlineReadResult {
-    return this.fileSystem.readFile(rpcString(path, "path"));
+  readFile(path: string, options?: ReadFileOptions): InlineReadResult {
+    return this.fileSystem.readFile(rpcString(path, "path"), rpcReadFileOptions(options));
   }
 
   writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult> {

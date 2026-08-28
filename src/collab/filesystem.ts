@@ -1,4 +1,6 @@
 import { VfsError } from "../core/errors.js";
+import { isDescendant, normalizePath } from "../core/path.js";
+import { byteRangeBounds } from "../vfs/range.js";
 import { readAllBytes } from "../vfs/streams.js";
 import type {
   AppendFileOptions,
@@ -25,8 +27,10 @@ import type {
   PosixCredentials,
   PosixViewOptions,
   PosixVirtualFileSystem,
+  ReadFileOptions,
   RemoveOptions,
   RemoveResult,
+  SubtreeSummary,
   SymlinkOptions,
   TouchOptions,
   VfsStat,
@@ -55,8 +59,8 @@ async function bodyText(body: ByteBody, path: string): Promise<string> {
   return decodeText(bytes, path);
 }
 
-function streamOf(text: string): ReadableStream<Uint8Array> {
-  const bytes = new TextEncoder().encode(text);
+function streamOf(body: string | Uint8Array): ReadableStream<Uint8Array> {
+  const bytes = typeof body === "string" ? new TextEncoder().encode(body) : body;
   return new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(bytes);
@@ -252,18 +256,19 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     return this.#withPendingSize(this.#inner.statById(ino));
   }
 
-  readFile(path: string): InlineReadResult {
+  readFile(path: string, options?: ReadFileOptions): InlineReadResult {
     const resolved = this.#resolved(path);
     const pending = this.#pending(resolved);
-    const result = this.#inner.readFile(path);
+    const result = this.#inner.readFile(path, options);
     if (pending === undefined) return result;
     // The stored snapshot is released rather than left holding in-flight
     // budget for bytes nobody is going to read.
     void result.stream.cancel();
     const bytes = new TextEncoder().encode(pending.text);
+    const selected = byteRangeBounds(options?.range, bytes.byteLength, resolved);
     return {
       stat: { ...result.stat, sizeBytes: bytes.byteLength },
-      stream: streamOf(pending.text),
+      stream: streamOf(bytes.subarray(selected.offset, selected.offset + selected.length)),
     };
   }
 
@@ -431,8 +436,22 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     return { ...page, entries: page.entries.map((entry) => this.#withPendingSize(entry)) };
   }
 
-  countSubtree(path: string): number {
-    return this.#inner.countSubtree(path);
+  subtreeSummary(path: string): SubtreeSummary {
+    const summary = this.#inner.subtreeSummary(path);
+    const openPaths = this.#registry.paths();
+    if (openPaths.length === 0) return summary;
+    const root = this.#inner.lstat(path);
+    if (root.kind === "symlink") return summary;
+    const normalized = normalizePath(root.path);
+    let logicalFileBytes = summary.logicalFileBytes;
+    for (const candidate of openPaths) {
+      if (candidate !== normalized && !isDescendant(normalized, candidate)) continue;
+      const pending = this.#pending(candidate);
+      if (pending === undefined) continue;
+      const stored = this.#inner.stat(candidate);
+      logicalFileBytes += new TextEncoder().encode(pending.text).byteLength - stored.sizeBytes;
+    }
+    return { ...summary, logicalFileBytes };
   }
 
   changesSince(since: number, options?: ChangesSinceOptions): ChangePage {

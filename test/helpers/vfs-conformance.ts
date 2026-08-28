@@ -111,6 +111,42 @@ export function runVfsConformance(
     ]);
   });
 
+  it("conforms: reads clamped byte ranges while preserving full-file metadata", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/ranged", Uint8Array.of(0, 1, 2, 3, 4, 5, 6, 7));
+
+    const middle = await fileSystem.readFile("/ranged", { range: { offset: 2, length: 3 } });
+    expect(middle.stat.sizeBytes).toBe(8);
+    expect([...(await readAllBytes(middle.stream, 8))]).toEqual([2, 3, 4]);
+
+    const suffix = await fileSystem.readFile("/ranged", { range: { suffix: 3 } });
+    expect([...(await readAllBytes(suffix.stream, 8))]).toEqual([5, 6, 7]);
+
+    const throughEof = await fileSystem.readFile("/ranged", { range: { offset: 6 } });
+    expect([...(await readAllBytes(throughEof.stream, 8))]).toEqual([6, 7]);
+
+    const pastEof = await fileSystem.readFile("/ranged", { range: { offset: 99, length: 4 } });
+    expect([...(await readAllBytes(pastEof.stream, 8))]).toEqual([]);
+  });
+
+  it("conforms: rejects malformed byte ranges", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/ranged", "body");
+
+    for (const range of [
+      {},
+      { length: 0 },
+      { suffix: 0 },
+      { offset: -1 },
+      { offset: 0, suffix: 1 },
+      { offset: 0, unexpected: 1 },
+    ]) {
+      await expect(
+        (async () => fileSystem.readFile("/ranged", { range } as never))(),
+      ).rejects.toMatchObject({ code: "EINVAL" });
+    }
+  });
+
   it("conforms: keeps a streamed create absent until the complete body is published", async () => {
     const fileSystem = await factory();
     const body = gatedBody("complete");
@@ -793,24 +829,36 @@ export function runVfsConformance(
     expect(await fileSystem.getMutationToken("/moved/file")).not.toBe(movedToken);
   });
 
-  it("conforms: counts a subtree without a result ceiling", async () => {
+  it("conforms: summarizes a subtree without a result ceiling", async () => {
     const fileSystem = await factory();
     await fileSystem.mkdir("/counted/nested", true);
     await fileSystem.writeFile("/counted/file", "body");
     await fileSystem.writeFile("/counted/nested/leaf", "body");
 
     // /counted, /counted/file, /counted/nested, /counted/nested/leaf
-    expect(await fileSystem.countSubtree("/counted")).toBe(4);
-    expect(await fileSystem.countSubtree("/counted/nested")).toBe(2);
-    expect(await fileSystem.countSubtree("/counted/file")).toBe(1);
-    expect(await fileSystem.countSubtree("/")).toBe(
+    expect(await fileSystem.subtreeSummary("/counted")).toEqual({
+      entries: 4,
+      inlineBytes: 8,
+      logicalFileBytes: 8,
+    });
+    expect(await fileSystem.subtreeSummary("/counted/nested")).toEqual({
+      entries: 2,
+      inlineBytes: 4,
+      logicalFileBytes: 4,
+    });
+    expect(await fileSystem.subtreeSummary("/counted/file")).toEqual({
+      entries: 1,
+      inlineBytes: 4,
+      logicalFileBytes: 4,
+    });
+    expect((await fileSystem.subtreeSummary("/")).entries).toBe(
       (await fileSystem.find({ path: "/", includeRoot: true })).length,
     );
 
     // A local backend throws synchronously; RPC rejects. Normalize both.
-    await expect((async () => fileSystem.countSubtree("/counted/absent"))()).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    await expect(
+      (async () => fileSystem.subtreeSummary("/counted/absent"))(),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   describe("batched writes", () => {

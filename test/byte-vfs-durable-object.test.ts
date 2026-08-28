@@ -41,6 +41,35 @@ describe("byte-oriented Durable Object filesystem", () => {
     });
   });
 
+  it("ranges bodies written with a different chunk size", async () => {
+    const stub = workspace("range-reconfigured-chunks");
+    const result = await runInDurableObject(stub, async (_instance, state) => {
+      const writer = new DurableObjectFileSystem(state.storage, { chunkBytes: 2 });
+      await writer.writeFile(
+        "/small",
+        Uint8Array.from({ length: 10 }, (_, index) => index),
+      );
+      await writer.writeFile(
+        "/large",
+        Uint8Array.from({ length: 20 }, (_, index) => index),
+      );
+
+      const smallReader = new DurableObjectFileSystem(state.storage, { chunkBytes: 64 });
+      const small = await readAllBytes(
+        smallReader.readFile("/small", { range: { offset: 3, length: 5 } }).stream,
+        10,
+      );
+      const largeReader = new DurableObjectFileSystem(state.storage, { chunkBytes: 8 });
+      const large = await readAllBytes(
+        largeReader.readFile("/large", { range: { suffix: 5 } }).stream,
+        20,
+      );
+      return { small: [...small], large: [...large] };
+    });
+
+    expect(result).toEqual({ small: [3, 4, 5, 6, 7], large: [15, 16, 17, 18, 19] });
+  });
+
   it("returns RPC byte streams that support BYOB readers", async () => {
     const stub = workspace("rpc-byob");
     await stub.writeFile("/bytes", Uint8Array.of(1, 2, 3));
@@ -251,6 +280,20 @@ describe("byte-oriented Durable Object filesystem", () => {
     });
     expect(result.error).toMatchObject({ code: "EINVAL" });
     expect(result.stat.path).toBe("/dir/file");
+  });
+
+  it("rejects unsupported read options at the RPC boundary", async () => {
+    const stub = workspace("read-rpc-validation");
+    const error = await runInDurableObject(stub, async (instance) => {
+      await instance.writeFile("/file", "body");
+      try {
+        instance.readFile("/file", { unexpected: true } as never);
+      } catch (caught) {
+        return caught;
+      }
+      return null;
+    });
+    expect(error).toMatchObject({ code: "EINVAL", message: "options.unexpected is not supported" });
   });
 
   it("rejects a malformed batch before writing any entry", async () => {

@@ -16,6 +16,17 @@ included.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking: `countSubtree(path)` is now `subtreeSummary(path)`.** The same
+  unbounded indexed aggregate now returns entry count, inline logical bytes,
+  and all regular-file logical bytes, allowing `du` and recursive mutation
+  budgets to share one constant-result query instead of materializing a tree.
+- `readFile(path, { range })` now supports offset/length and suffix byte ranges
+  for inline SQLite bodies, matching the existing opaque R2 range capability.
+  `head -c`, `tail -c`, and inline `wc -c` use the common shape to avoid
+  materializing bytes they cannot consume.
+
 ### Fixed
 
 - Document registry move handling now closes open destination entries replaced
@@ -42,7 +53,7 @@ included.
   pending for the next publication instead of incorrectly marking them clean.
 - Collaborative directory traversal now reports the byte size of pending
   document text, matching `stat` and the bytes a collaborative read serves.
-- `countSubtree` now includes nested synthetic entries such as `/dev/fd/0`
+- `subtreeSummary` includes nested synthetic entries such as `/dev/fd/0`
   instead of counting only a reserved directory and its immediate children.
 - Filtered root `findPage` traversal now waits until the stored-row scan reaches
   a reserved path before merging it, preventing synthetic entries such as

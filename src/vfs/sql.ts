@@ -35,6 +35,7 @@ import {
   type VfsMutationSubtree,
   type VfsQuotaLimit,
 } from "./events.js";
+import { byteRangeBounds } from "./range.js";
 import { rechunk, streamFromOwnedChunks } from "./streams.js";
 import type {
   AppendFileOptions,
@@ -65,8 +66,10 @@ import type {
   PosixCredentials,
   PosixViewOptions,
   PosixVirtualFileSystem,
+  ReadFileOptions,
   RemoveOptions,
   RemoveResult,
+  SubtreeSummary,
   SymlinkOptions,
   TouchOptions,
   VfsStat,
@@ -81,6 +84,8 @@ import { MAX_SYMLINK_HOPS, MAX_SYMLINK_TARGET_BYTES } from "./types.js";
 const DEFAULT_MAX_DATABASE_BYTES = 10_000_000_000;
 const DEFAULT_DATABASE_HEADROOM_BYTES = 64 * 1024 * 1024;
 const MAX_GC_BATCH = 100;
+/** Below this, SQLite's `substr` setup costs more than copying the omitted bytes. */
+const MIN_INLINE_SQL_RANGE_BYTES = 16 * 1024;
 /**
  * How many changes one catch-up page carries.
  *
@@ -138,6 +143,28 @@ function posixContext(
     groups: new Set([gid, ...supplementaryGids]),
     umask,
   });
+}
+
+function sliceChunkSequence<Buffer extends ArrayBufferLike>(
+  chunks: readonly Uint8Array<Buffer>[],
+  offset: number,
+  length: number,
+): Uint8Array<Buffer>[] {
+  const selected: Uint8Array<Buffer>[] = [];
+  let skip = offset;
+  let remaining = length;
+  for (const chunk of chunks) {
+    if (skip >= chunk.byteLength) {
+      skip -= chunk.byteLength;
+      continue;
+    }
+    const take = Math.min(remaining, chunk.byteLength - skip);
+    selected.push(chunk.subarray(skip, skip + take));
+    remaining -= take;
+    skip = 0;
+    if (remaining === 0) break;
+  }
+  return selected;
 }
 
 function posixPermissions(
@@ -749,6 +776,10 @@ export class SqlFileSystem implements PosixVirtualFileSystem {
   private nextIno: number;
   /** Metadata from the last direct inline read; never file-body bytes. */
   private lastInlineRead: EntryRow | undefined;
+  /** Stored layout from the last ranged body; keyed by immutable identity and revision. */
+  private lastInlineChunkLayout:
+    | { readonly id: number; readonly revision: number; readonly chunkBytes: number }
+    | undefined;
 
   constructor(storage: SqlFileSystemStorage, options: SqlFileSystemOptions = {}) {
     const limits = resolveFileSystemLimits(options);
@@ -1926,13 +1957,15 @@ ${ENTRY_TRIGGERS}
     this.assertDatabaseHeadroom(path);
   }
 
-  private subtreeSummary(path: string): { entries: number; inlineBytes: number } {
+  private aggregateSubtree(path: string): SubtreeSummary {
     const range = descendantRange(path);
     const row = this.sql
       .exec<SqlRow>(
         `SELECT COUNT(*) AS entries,
               COALESCE(SUM(CASE WHEN content_class = 'inline' THEN size_bytes ELSE 0 END), 0)
-                AS inline_bytes
+                AS inline_bytes,
+              COALESCE(SUM(CASE WHEN kind = 'file' THEN size_bytes ELSE 0 END), 0)
+                AS logical_file_bytes
        FROM vfs_entries
        WHERE path = ? OR (path >= ? AND path < ?)`,
         path,
@@ -1943,6 +1976,7 @@ ${ENTRY_TRIGGERS}
     return {
       entries: integerColumn(row, "entries"),
       inlineBytes: integerColumn(row, "inline_bytes"),
+      logicalFileBytes: integerColumn(row, "logical_file_bytes"),
     };
   }
 
@@ -2631,16 +2665,15 @@ ${ENTRY_TRIGGERS}
     };
   }
 
-  countSubtree(path: string, posix?: PosixAccessContext): number {
-    // A link names one entry and has no subtree, so the count does not follow
-    // it. The callers are budget accounting for `rm`, `mv`, and `cp`, all of
-    // which act on the link; following would also make a dangling one throw.
+  subtreeSummary(path: string, posix?: PosixAccessContext): SubtreeSummary {
+    // A link names one zero-byte entry and has no subtree. Not following it
+    // also means a dangling link can be summarized like any other entry.
     const access = this.resolveAccess(path, false, false);
     this.assertTraverse(access.path, access.followed, posix);
     const entry = access.row ?? this.requireEntry(access.path, false);
-    if (entry.kind === "symlink") return 1;
+    if (entry.kind === "symlink") return { entries: 1, inlineBytes: 0, logicalFileBytes: 0 };
     this.assertSubtreePermissions(access.path, posix, 0, READ_PERMISSION | EXECUTE_PERMISSION);
-    return this.subtreeSummary(access.path).entries;
+    return this.aggregateSubtree(access.path);
   }
 
   /**
@@ -2680,7 +2713,7 @@ ${ENTRY_TRIGGERS}
         this.assertSubtreeSticky(access.path, posix);
       }
     }
-    return entry.kind === "symlink" ? 1 : this.subtreeSummary(access.path).entries;
+    return entry.kind === "symlink" ? 1 : this.aggregateSubtree(access.path).entries;
   }
 
   changesSince(since: number, options: ChangesSinceOptions = {}): ChangePage {
@@ -2736,7 +2769,11 @@ ${ENTRY_TRIGGERS}
     };
   }
 
-  readFile(path: string, posix?: PosixAccessContext): InlineReadResult {
+  readFile(
+    path: string,
+    options: ReadFileOptions = {},
+    posix?: PosixAccessContext,
+  ): InlineReadResult {
     const access = this.resolveAccess(path);
     const normalized = access.path;
     this.assertTraverse(normalized, access.followed, posix);
@@ -2752,21 +2789,86 @@ ${ENTRY_TRIGGERS}
         normalized,
       );
     }
-    const chunks = this.sql
-      .exec<SqlRow>(
-        `SELECT body FROM vfs_inline_chunks
-       WHERE entry_id = ? ORDER BY chunk_index`,
-        entry.id,
-      )
-      .toArray()
-      .map((row) => new Uint8Array(blobColumn(row, "body")));
-    const sizeBytes = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
-    this.inFlightBytes.acquire(sizeBytes);
+    const selected = byteRangeBounds(options.range, entry.sizeBytes, normalized);
+    const readWholeBody =
+      options.range === undefined ||
+      (selected.offset === 0 && selected.length === entry.sizeBytes) ||
+      (entry.sizeBytes <= MIN_INLINE_SQL_RANGE_BYTES && entry.sizeBytes <= this.chunkBytes);
+    let rows: SqlRow[];
+    if (selected.length === 0) {
+      rows = [];
+    } else if (readWholeBody) {
+      rows = this.sql
+        .exec<SqlRow>(
+          `SELECT body FROM vfs_inline_chunks
+           WHERE entry_id = ? ORDER BY chunk_index`,
+          entry.id,
+        )
+        .toArray();
+    } else {
+      // The configured chunk size may have changed since this body was
+      // written. Reading the stored width separately turns the body query's
+      // bounds back into constants, preserving its primary-key range scan.
+      const cachedLayout = this.lastInlineChunkLayout;
+      const storedChunkBytes =
+        cachedLayout?.id === entry.id && cachedLayout.revision === entry.revision
+          ? cachedLayout.chunkBytes
+          : integerColumn(
+              this.sql
+                .exec<SqlRow>(
+                  `SELECT length(body) AS chunk_bytes
+                   FROM vfs_inline_chunks
+                   WHERE entry_id = ?
+                   ORDER BY chunk_index
+                   LIMIT 1`,
+                  entry.id,
+                )
+                .one(),
+              "chunk_bytes",
+            );
+      if (storedChunkBytes === 0) {
+        throw new VfsError("EIO", "inline file contains an empty stored chunk", normalized);
+      }
+      this.lastInlineChunkLayout = {
+        id: entry.id,
+        revision: entry.revision,
+        chunkBytes: storedChunkBytes,
+      };
+      rows = this.sql
+        .exec<SqlRow>(
+          `SELECT substr(
+             body,
+             max(0, ? - chunk_index * ?) + 1,
+             min(length(body), ? - chunk_index * ?) -
+               max(0, ? - chunk_index * ?)
+           ) AS body
+           FROM vfs_inline_chunks
+           WHERE entry_id = ? AND chunk_index BETWEEN ? AND ?
+           ORDER BY chunk_index`,
+          selected.offset,
+          storedChunkBytes,
+          selected.offset + selected.length,
+          storedChunkBytes,
+          selected.offset,
+          storedChunkBytes,
+          entry.id,
+          Math.floor(selected.offset / storedChunkBytes),
+          Math.floor((selected.offset + selected.length - 1) / storedChunkBytes),
+        )
+        .toArray();
+    }
+    const materialized = rows.map((row) => new Uint8Array(blobColumn(row, "body")));
+    const chunks =
+      readWholeBody && options.range !== undefined && selected.length < entry.sizeBytes
+        ? sliceChunkSequence(materialized, selected.offset, selected.length)
+        : materialized;
+    const materializedBytes = materialized.reduce((total, chunk) => total + chunk.byteLength, 0);
+    this.inFlightBytes.acquire(materializedBytes);
     if (access.followed.length === 0) this.lastInlineRead = entry;
     return {
       stat: rowToStat(entry) as InlineFileStat,
       stream: streamFromOwnedChunks(chunks, () => {
-        this.inFlightBytes.release(sizeBytes);
+        this.inFlightBytes.release(materializedBytes);
       }),
     };
   }
@@ -3783,7 +3885,7 @@ ${ENTRY_TRIGGERS}
       }
       const summary =
         root.kind === "directory" && recursive
-          ? this.subtreeSummary(normalized)
+          ? this.aggregateSubtree(normalized)
           : {
               entries: 1,
               inlineBytes: root.contentClass === "inline" ? root.sizeBytes : 0,
@@ -4061,7 +4163,7 @@ ${ENTRY_TRIGGERS}
       const owner =
         targetParent === undefined ? { uid: 0, gid: 0 } : this.creationOwner(targetParent, posix);
       const sourceRange = descendantRange(source);
-      const summary = this.subtreeSummary(source);
+      const summary = this.aggregateSubtree(source);
       const replacedInlineBytes =
         destination?.contentClass === "inline" ? destination.sizeBytes : 0;
       this.assertCapacity(
@@ -4910,16 +5012,16 @@ class PosixFileSystemView implements VirtualFileSystem {
     return this.inner.findPage(options, this.access);
   }
 
-  countSubtree(path: string): number {
-    return this.inner.countSubtree(path, this.access);
+  subtreeSummary(path: string): SubtreeSummary {
+    return this.inner.subtreeSummary(path, this.access);
   }
 
   mutationSubtreeCount(path: string, operation: PosixMutationOperation): number {
     return this.inner.countPosixMutationSubtree(path, operation, this.access);
   }
 
-  readFile(path: string): InlineReadResult {
-    return this.inner.readFile(path, this.access);
+  readFile(path: string, options?: ReadFileOptions): InlineReadResult {
+    return this.inner.readFile(path, options, this.access);
   }
 
   writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult> {

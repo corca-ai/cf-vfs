@@ -1,38 +1,6 @@
 import { VfsError } from "../core/errors.js";
+import { validateByteRange } from "../vfs/range.js";
 import type { ByteBody, ByteRange, OpaqueObjectMetadata, OpaqueStore } from "../vfs/types.js";
-
-function isRangeRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function validateRange(key: string, range: unknown): asserts range is ByteRange | undefined {
-  if (range === undefined) return;
-  if (!isRangeRecord(range)) throw new VfsError("EINVAL", "byte range must be an object", key);
-  const entries = Object.entries(range);
-  for (const [name, value] of entries) {
-    if (name !== "offset" && name !== "length" && name !== "suffix") {
-      throw new VfsError("EINVAL", `unknown byte range field: ${name}`, key);
-    }
-    if (
-      typeof value !== "number" ||
-      !Number.isSafeInteger(value) ||
-      value < 0 ||
-      (name !== "offset" && value === 0)
-    ) {
-      throw new VfsError(
-        "EINVAL",
-        `${name} must be ${name === "offset" ? "a non-negative" : "a positive"} integer`,
-        key,
-      );
-    }
-  }
-  const hasOffset = "offset" in range;
-  const hasLength = "length" in range;
-  const hasSuffix = "suffix" in range;
-  if ((!hasOffset && !hasLength && !hasSuffix) || (hasSuffix && (hasOffset || hasLength))) {
-    throw new VfsError("EINVAL", "byte range must use offset/length or suffix", key);
-  }
-}
 
 function opaqueMetadata(object: R2Object): OpaqueObjectMetadata {
   const verifiedSha256 = object.checksums.toJSON().sha256;
@@ -79,7 +47,7 @@ export class R2OpaqueStore implements OpaqueStore {
   }
 
   async getStream(key: string, range?: ByteRange): Promise<ReadableStream<Uint8Array> | null> {
-    validateRange(key, range);
+    validateByteRange(range, key);
     const object = await this.bucket.get(key, range === undefined ? undefined : { range });
     return object?.body ?? null;
   }
