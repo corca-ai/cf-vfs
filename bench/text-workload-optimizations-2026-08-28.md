@@ -156,3 +156,46 @@ preset shrank by 16 bytes; the complete default command registry grew from
 453,786 to 454,961 bytes (+1,175, +0.26%). The Linux profile, which contains
 both the filesystem and full shell, grew from 605,166 to 607,835 bytes (+2,669,
 +0.44%). Every preset remains within its recorded tree-shaking budget.
+
+## Next round: redirection, fused reads, and live-token placement
+
+An atomic redirection whose output arrived in zero or one sink write now hands
+that already-owned array directly to the VFS instead of wrapping it in a new
+`ReadableStream`. Across seven runs of 500 complete 8 KiB `cat > file`
+executions, this removed exactly 500 allocations of the 256 KiB collection
+slab. Three interleaved before/after process groups, each itself the median of
+seven 500-operation runs, moved from 64.802 to 63.266 ms (−2.4%); parsing and
+SQLite dominate the full command. An isolated alternating-order collector
+benchmark exposed the affected work more directly: 20,000 one-chunk stream
+collections took 200.352 ms versus 22.537 ms for the materialized handoff
+(−88.8%). The retained change therefore removes 128 MiB of transient
+allocation per 500 small redirections while providing a small end-to-end gain.
+It adds 83 deployed bytes to shell-containing presets and nothing to the VFS-only
+or R2 presets.
+
+A fused one-chunk read was rejected. Joining metadata, path version, and the
+first BLOB reduced a small read from two statements to one, but workerd rows
+read did not move and 10,000 Node reads regressed from 323.008 to 363.814 ms
+(+12.6%). The implementation was removed: fewer statements are not useful when
+the combined query performs the same storage work more slowly.
+
+The separated live-token schema was then repeated against actual workerd
+SQLite rather than only Node's `DatabaseSync`. Each layout held 10,000 live
+8 KiB metadata rows; measurements are medians of five runs.
+
+| Metric | split path-version table | live token on entry | Result |
+| --- | ---: | ---: | ---: |
+| database bytes | 1,613,824 | 1,306,624 | −19.0% |
+| 10,000 point stats | 32 ms / 20,000 rows | 29 ms / 10,000 rows | −9.4% / −50% |
+| 500 listing pages | 40 ms / 100,000 rows | 35 ms / 50,000 rows | −12.5% / −50% |
+| 5,000 token updates | 23 ms / 10,000 statements | 16 ms / 5,000 statements | −30.4% / −50% |
+| update rows read / written | 15,000 / 10,000 | 10,000 / 5,000 | −33.3% / −50% |
+
+The candidate keeps removed-path versions in a tombstone table and keeps the
+change feed in a separate table, so a workspace with recording disabled does
+not pay a live-row index cost for that feature. These are strong structural
+results, but still a schema spike: production adoption must next prove a real
+migration plus create/delete/recreate monotonicity, symlink-chain guards,
+set-mutation sequence grouping, and feed-on costs. A prepared file handle is
+deliberately sequenced after that decision rather than designed around a token
+layout that the evidence now says should change.

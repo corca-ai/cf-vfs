@@ -50,12 +50,16 @@ function atomicFileSink(
     },
     async close() {
       if (aborted) return;
-      const body: ByteBody = new ReadableStream<Uint8Array>({
-        start(controller) {
-          for (const chunk of chunks) controller.enqueue(chunk);
-          controller.close();
-        },
-      });
+      const single = chunks[0];
+      const body: ByteBody =
+        chunks.length <= 1
+          ? (single ?? new Uint8Array(0))
+          : new ReadableStream<Uint8Array>({
+              start(controller) {
+                for (const chunk of chunks) controller.enqueue(chunk);
+                controller.close();
+              },
+            });
       try {
         if (append && exists) {
           await fileSystem.appendFile(path, body, { ifMutationToken: mutationToken });
