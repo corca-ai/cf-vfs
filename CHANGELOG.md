@@ -16,8 +16,14 @@ included.
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-08-28
+
 ### Changed
 
+- The POSIX shell profile now supports `cut` position ranges and `-s`, the
+  integer `printf` conversions with widths, precisions, and flags, and `sed -E`
+  and addressed `q`. `grep` and `sed` share the documented bounded POSIX basic
+  and extended regular-expression semantics.
 - `digestFile(path)` now exposes one revision-stamped SHA-256 primitive shared
   by inline bodies, verified opaque objects, `skipIfUnchanged`, and
   `sha256sum`. A cold inline digest populates the private cache without
@@ -33,6 +39,10 @@ included.
 
 ### Fixed
 
+- `jq` now rejects unescaped control characters in JSON strings instead of
+  accepting input that JSON and the reference utility both reject.
+- Byte-range validation now reads only an option record's own fields, so an
+  inherited `offset`, `length`, or `suffix` cannot silently select file bytes.
 - Document registry move handling now closes open destination entries replaced
   by the move before relocating any open source documents.
 - Metadata mutations on open documents now advance their registry token while
@@ -238,6 +248,7 @@ to the release, so the package can be installed by a consumer that pins
 [`a335bd1`]: https://github.com/corca-ai/cf-vfs/commit/a335bd1
 [`1a4447d`]: https://github.com/corca-ai/cf-vfs/commit/1a4447d
 [`32a2c15`]: https://github.com/corca-ai/cf-vfs/commit/32a2c15
-[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/corca-ai/cf-vfs/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/corca-ai/cf-vfs/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/corca-ai/cf-vfs/releases/tag/v0.1.0
