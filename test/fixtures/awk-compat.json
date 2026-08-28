@@ -1,0 +1,192 @@
+{
+  "image": "busybox:1.37.0",
+  "digest": "busybox@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028",
+  "version": "BusyBox v1.37.0 (2024-09-26 21:31:42 UTC) multi-call binary.",
+  "cases": [
+    {
+      "name": "default-fields-and-counters",
+      "args": [
+        "{ print NR, NF, $1, $3 }"
+      ],
+      "input": " alpha  beta 3\nsecond row 4\n",
+      "stdout": "1 3 alpha 3\n2 3 second 4\n",
+      "exitCode": 0
+    },
+    {
+      "name": "begin-pattern-accumulator-end",
+      "args": [
+        "BEGIN { FS=\":\"; OFS=\"|\" } $3 >= 10 && $1 ~ /^a/ { total += $3; print toupper($1), substr($2, 2) } END { printf \"sum=%.1f\\n\", total }"
+      ],
+      "input": "alpha:code:12\nbeta:doc:20\napricot:text:8\naxis:test:10\n",
+      "stdout": "ALPHA|ode\nAXIS|est\nsum=22.0\n",
+      "exitCode": 0
+    },
+    {
+      "name": "next-if-update-and-field-write",
+      "args": [
+        "/skip/ { next } { seen++; if ($2 > max) max=$2; $1=toupper($1); print } END { print seen, max }"
+      ],
+      "input": "one 2\nskip 99\nthree 7\n",
+      "stdout": "ONE 2\nTHREE 7\n2 7\n",
+      "exitCode": 0
+    },
+    {
+      "name": "option-bindings",
+      "args": [
+        "-F:",
+        "-v",
+        "prefix=X",
+        "-v",
+        "n=2",
+        "BEGIN { OFS=\"|\" } { print prefix, $n }"
+      ],
+      "input": "a:b:c\n",
+      "stdout": "X|b\n",
+      "exitCode": 0
+    },
+    {
+      "name": "expression-pattern-default-print",
+      "args": [
+        "$2 ~ /error|warn/"
+      ],
+      "input": "a ok\nb error\nc warn\n",
+      "stdout": "b error\nc warn\n",
+      "exitCode": 0
+    },
+    {
+      "name": "arithmetic-concatenation-and-conditional",
+      "args": [
+        "{ x=$1*2+1; print ($2 ? \"v=\" x : \"none\") }"
+      ],
+      "input": "3 1\n4 0\n",
+      "stdout": "v=7\nnone\n",
+      "exitCode": 0
+    },
+    {
+      "name": "string-builtins-and-sprintf",
+      "args": [
+        "BEGIN { print length(\"alpha\"), index(\"abcd\",\"bc\"), substr(\"abcdef\",2,3), sprintf(\"%.2f\", 5/2), sprintf(\"%.2e\", 5/2), sprintf(\"%.3g\", 12345) }"
+      ],
+      "input": "",
+      "stdout": "5 2 bcd 2.50 2.50e+00 1.23e+04\n",
+      "exitCode": 0
+    },
+    {
+      "name": "literal-and-dynamic-regular-expressions",
+      "args": [
+        "BEGIN { p=\"^[a-z]+$\" } /ok/ && $1 ~ p { print /ok/, $1 }"
+      ],
+      "input": "ok\nOK\nok2\n",
+      "stdout": "1 ok\n",
+      "exitCode": 0
+    },
+    {
+      "name": "numeric-string-comparison",
+      "args": [
+        "{ if ($1 == 2) print $1+3; if ($2) print \"truthy\" } END { if (missing == 0) print \"zero\" }"
+      ],
+      "input": "02 0\n2 1\n",
+      "stdout": "5\n5\ntruthy\nzero\n",
+      "exitCode": 0
+    },
+    {
+      "name": "exit-still-runs-end",
+      "args": [
+        "{ if (NR == 2) exit 7; print $1 } END { print \"end\", NR }"
+      ],
+      "input": "one\ntwo\nthree\n",
+      "stdout": "one\nend 2\n",
+      "exitCode": 7
+    },
+    {
+      "name": "field-separator-snapshot",
+      "args": [
+        "BEGIN { FS=\":\" } { FS=\",\"; print $2 }"
+      ],
+      "input": "a:b\nc,d\n",
+      "stdout": "b\nd\n",
+      "exitCode": 0
+    },
+    {
+      "name": "exponent-precedence-and-assignment",
+      "args": [
+        "BEGIN { x=3; x ^= 2; print -2^2, 2^-2, x }"
+      ],
+      "input": "",
+      "stdout": "-4 0.25 9\n",
+      "exitCode": 0
+    },
+    {
+      "name": "default-number-conversion",
+      "args": [
+        "BEGIN { print 1/3, 25/1, 1e-7 }"
+      ],
+      "input": "",
+      "stdout": "0.333333 25 1e-07\n",
+      "exitCode": 0
+    },
+    {
+      "name": "field-separator-does-not-change-dollar-zero",
+      "args": [
+        "BEGIN { FS=\"[,:]+\" } { print }"
+      ],
+      "input": "unchanged\n",
+      "stdout": "unchanged\n",
+      "exitCode": 0
+    },
+    {
+      "name": "associative-arrays-and-for-in",
+      "args": [
+        "{ count[$1]++; pair[$1,$2]=$3 } END { for (key in count) total += count[key]; print count[\"a\"], pair[\"a\",2], ((\"a\",2) in pair), (\"b\" in count), total, length(count); delete count[\"b\"]; print (\"b\" in count) }"
+      ],
+      "input": "a 1 first\na 2 second\nb 1 third\n",
+      "stdout": "2 second 1 1 3 2\n0\n",
+      "exitCode": 0
+    },
+    {
+      "name": "array-lvalue-evaluated-once",
+      "args": [
+        "BEGIN { i=1; a[i++]=i; a[i++]++; sub(/2/,\"x\",a[1]); print a[1], a[2], i }"
+      ],
+      "input": "",
+      "stdout": "x 1 3\n",
+      "exitCode": 0
+    },
+    {
+      "name": "split-match-sub-and-gsub",
+      "args": [
+        "{ n=split($0, part, /[:,]/); gsub(/[0-9]+/, \"#\", part[2]); sub(/^./, \"&-\", part[1]); found=match(part[3], /[A-Z]+/); print n, part[1], part[2], found, RSTART, RLENGTH }"
+      ],
+      "input": "ab:123:XYZ\n",
+      "stdout": "3 a-b # 1 1 3\n",
+      "exitCode": 0
+    },
+    {
+      "name": "substitution-and-split-state",
+      "args": [
+        "BEGIN { s=\"aba\"; n=gsub(/a/,\"[&]\",s); print n,s; sub(/b/,\"X\",s); print s; print match(s,/z/),RSTART,RLENGTH; old[9]=1; print split(\"a b\",old), (9 in old), old[2] }"
+      ],
+      "input": "",
+      "stdout": "2 [a]b[a]\n[a]X[a]\n0 0 -1\n2 0 b\n",
+      "exitCode": 0
+    },
+    {
+      "name": "bounded-loop-forms",
+      "args": [
+        "BEGIN { for (i=0; i<5; i++) { if (i==2) continue; sum+=i } while (i<7) i++; do { i++; if (i==9) break } while (i<20); print sum, i }"
+      ],
+      "input": "",
+      "stdout": "8 9\n",
+      "exitCode": 0
+    },
+    {
+      "name": "inclusive-range-patterns",
+      "args": [
+        "/start/,/end/ { print $1 } /open/,/close/ { count++ } END { print count }"
+      ],
+      "input": "skip\nstart\nopen\nend\nclose\nstart end\nafter\n",
+      "stdout": "start\nopen\nend\nstart\n3\n",
+      "exitCode": 0
+    }
+  ]
+}

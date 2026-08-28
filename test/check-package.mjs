@@ -83,6 +83,7 @@ try {
     import { Shell, BASH_COMPATIBILITY_VERSION, parseShellScript } from "@corca-ai/cf-vfs/shell";
     import { InteractiveShell } from "@corca-ai/cf-vfs/shell/interactive";
     import { lsCommand } from "@corca-ai/cf-vfs/shell/commands/ls";
+    import { awkCommand } from "@corca-ai/cf-vfs/shell/commands/awk";
     import { createAppletRegistry, defineApplet } from "@corca-ai/cf-vfs/shell/commands/applet";
     import { typeCommand, whichCommand } from "@corca-ai/cf-vfs/shell/commands/discovery";
     import {
@@ -97,6 +98,8 @@ try {
     if (MAX_INLINE_FILE_BYTES !== 8 * 1024 * 1024) throw new Error("inline limit");
     if (BASH_COMPATIBILITY_VERSION !== 5) throw new Error("language version");
     if (lsCommand.name !== "ls") throw new Error("ls export");
+    if (awkCommand.name !== "awk") throw new Error("awk export");
+    if (defaultShellCommands.includes(awkCommand)) throw new Error("awk must remain opt-in");
     const applets = createAppletRegistry([
       lsCommand,
       defineApplet({ name: "probe", aliases: ["p"], usage: "", summary: "probe" }, () => 0),

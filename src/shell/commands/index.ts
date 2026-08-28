@@ -1,3 +1,4 @@
+export * from "./awk.js";
 export * from "./core.js";
 export * from "./curl.js";
 export * from "./discovery.js";

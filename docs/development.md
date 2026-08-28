@@ -390,16 +390,16 @@ was traded and for what.
 
 ## Compatibility, bundle, and performance gates
 
-`test/check-tree-shaking.mjs` builds eight representative Worker bundles — one
-applet, a small explicit registry, the SQLite filesystem alone, shell-only,
-interactive, the full default registry, the opt-in Linux profile, and the R2
-opaque adapter. Each preset
+`test/check-tree-shaking.mjs` builds nine representative Worker bundles — one
+applet, a small explicit registry, the opt-in AWK applet, the SQLite filesystem
+alone, shell-only, interactive, the full default registry, the opt-in Linux
+profile, and the R2 opaque adapter. Each preset
 declares the library modules that must and must not be reachable *and* a
 recorded byte budget in `test/fixtures/bundle-budgets.json`. Size alone is
 insufficient, so the inclusion check reads the emitted source map, whose
 `sources` array is exactly the module list esbuild kept: renaming a diagnostic
 or rewording a comment cannot weaken it. Every fixture imports through a package
-subpath so all eight measure the same compiled output. A bundle far below its
+subpath so all nine measure the same compiled output. A bundle far below its
 budget fails too, so a stale budget can never quietly stop protecting anything;
 record new sizes with `npm run test:bundle-budgets:record` and explain the diff
 in review.
@@ -413,6 +413,13 @@ diagnostics are outside the declared profile and a case with them would weaken
 rather than prove the claim. Every declared divergence needs a declarative
 demonstration in `test/utility-differential.test.ts`, which fails when the two
 lists drift apart.
+
+Language-shaped opt-in utilities keep dedicated fixtures. AWK's common POSIX
+core is recorded from the already-pinned BusyBox 1.37.0 image in
+`test/fixtures/awk-compat.json`; regenerate it with
+`npm run test:awk-fixtures:regenerate`. `jq` likewise uses its own fixture and
+oracle image. These suites pass argv directly to their oracle rather than
+making an oracle shell reinterpret the language program.
 
 `test/performance-guards.test.ts` asserts counted work rather than elapsed time:
 output slab batching, SQL statement and row counts for the common no-opaque

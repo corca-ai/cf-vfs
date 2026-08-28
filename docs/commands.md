@@ -655,6 +655,7 @@ decides which directory is provisioned; pass the same path as the execution
 | deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, from the dedicated `/shell/commands/system` subpath |
 | bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
 | argument dispatch | `xargs -n -0 -r -t`, from the dedicated `/shell/commands/xargs` subpath |
+| opt-in record language | `awk -F -v -f`, from the dedicated `/shell/commands/awk` subpath; not part of `defaultShellCommands` |
 
 `cut -f` and `cut -c` selection lists accept POSIX single positions, closed
 ranges (`2-4`), prefix ranges (`-4`), and suffix ranges (`2-`). Commas or
@@ -942,6 +943,53 @@ is exactly `{}`, so `-exec mv {} {}.bak ';'` renames rather than writing to a
 file called `{}.bak`. A failing invocation does not stop the walk; as POSIX has
 it, only the `+` form reports it in `find`'s own status.
 
+### The AWK profile
+
+`awkCommand` is opt-in so applications that do not need an AWK parser pay zero
+bundle bytes. Import it from its dedicated subpath and add it to the registry:
+
+```ts
+import { awkCommand } from "@corca-ai/cf-vfs/shell/commands/awk";
+import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
+
+const commands = [...defaultShellCommands, awkCommand];
+```
+
+The profile covers the streaming POSIX core used by ordinary one-liners:
+`BEGIN` and `END`; expression, ERE, and inclusive range patterns; action-only
+rules and the default print action; `$0`, fields, `NF`, `NR`, `FNR`, and
+`FILENAME`; `FS`, `OFS`, `ORS`, and `SUBSEP`; arithmetic, comparison, regex,
+boolean, concatenation, conditional, assignment, compound-assignment, and
+update expressions; `if`, `next`, and `exit`; C-style `for`, `while`, and
+`do` loops with `break`/`continue`; and `print` plus bounded
+`printf`/`sprintf`. Associative arrays support scalar and composite subscripts,
+membership, element deletion, `for (key in array)`, and `length(array)`.
+Builtins include `length`, `substr`, `index`, `tolower`, `toupper`, `int`,
+`split`, `match`, `sub`, and `gsub`; successful `match` calls update `RSTART`
+and `RLENGTH`. `-F` and repeated `-v NAME=VALUE` initialize variables, while
+repeated `-f PROGRAM_FILE` operands concatenate bounded UTF-8 programs read
+from the VFS. Input operands use the same VFS and opaque-content policy as the
+other streaming utilities.
+
+Records stream and fields are split lazily: a program that tests a regular
+expression against `$0` never allocates a field array. The separator in effect
+when a record is read is retained for that record, matching AWK when `FS`
+changes inside an action. Program bytes, AST nodes, nesting, records, regex
+work, loop iterations, execution steps, associative-array entries and bytes,
+buffered output, and total I/O all use existing shell limits. The complete
+program, including every `-f` source, is compiled before stdin or a data-file
+operand is opened.
+
+User functions, `getline`, `system`, whole-array `delete`, AWK-internal output
+redirection, assignments after the program, and locale-dependent behavior are
+outside the profile and fail explicitly instead of being approximated. The
+third capture-array argument to `match` is also outside the profile. Records
+are newline-delimited; changing `RS`, `OFMT`, or `CONVFMT` is refused, as are
+empty or empty-matching `FS` values. The C locale is fixed: string ordering is
+UTF-8 byte order and case conversion is ASCII-only. Twenty representative
+common-subset cases are pinned against BusyBox 1.37.0 by image digest in
+`test/fixtures/awk-compat.json`.
+
 ### The jq profile
 
 `jq` runs a declared subset of the filter language, and refuses the rest where
@@ -949,10 +997,9 @@ it is written — status 3, before any input is read. That is the same stance th
 `sed` profile and the regular-expression subset take, and it is what lets a
 filter this accepts mean here what it means in `jq`.
 
-It is the only language in this shell with an oracle. `jq` is deterministic and
-containerized, so the profile is held to answers recorded from
-`ghcr.io/jqlang/jq:1.7.1` rather than to an argument about what it ought to
-print.
+`jq` is deterministic and containerized, so the profile is held to answers
+recorded from `ghcr.io/jqlang/jq:1.7.1` rather than to an argument about what it
+ought to print.
 
 **In the profile.** Paths — `.a`, `.a.b`, `.["k"]`, `.[0]`, `.[-1]`, `.[]`,
 `.a[]`, `.[1:3]`, and a trailing `?`. Composition — `|`, `,`, and `//`.

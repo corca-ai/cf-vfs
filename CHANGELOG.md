@@ -18,6 +18,11 @@ included.
 
 ### Added
 
+- An opt-in, tree-shakable `awkCommand` implements a bounded streaming AWK
+  profile with `BEGIN`/`END`, pattern-action rules, fields and record counters,
+  associative arrays, range patterns, loops, expressions and accumulation,
+  `if`, `next`, `exit`, `print`/`printf`, `split`/`match`/`sub`/`gsub`, and
+  VFS-backed `-f` programs, verified against a pinned BusyBox 1.37.0 oracle.
 - Bash compatibility Version 5 adds `set --`, `$*`, scalar `${!name}`
   indirection, plain `read` backslash processing, the
   single-equals and variable-existence double-bracket tests, and atomic combined
