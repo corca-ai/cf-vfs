@@ -108,11 +108,11 @@ describe("Durable Object storage benchmark metrics", () => {
     expect(metrics.writeCost).toEqual({
       statements: 3_584,
       rowsRead: 3_584,
-      rowsWritten: 3_072,
+      rowsWritten: 2_560,
     });
     expect(metrics.readCost).toEqual({
       statements: 1_024,
-      rowsRead: 2_047,
+      rowsRead: 1_535,
       rowsWritten: 0,
     });
   });
@@ -325,14 +325,14 @@ describe("Durable Object storage benchmark metrics", () => {
       small: {
         copied: { copied: 2, opaqueBodiesCopied: 0 },
         moved: { moved: 2 },
-        moveCost: { statements: 8, rowsRead: 95 },
+        moveCost: { statements: 8, rowsRead: 66 },
         movedBody: "abcdefgh",
         removed: { removed: 2 },
       },
       large: {
         copied: { copied: 25, opaqueBodiesCopied: 0 },
         moved: { moved: 25 },
-        moveCost: { statements: 8, rowsRead: 164 },
+        moveCost: { statements: 8, rowsRead: 112 },
         movedBody: "abcdefgh",
         removed: { removed: 25 },
       },
@@ -340,6 +340,57 @@ describe("Durable Object storage benchmark metrics", () => {
     });
     expect(metrics.large.statements).toEqual(metrics.small.statements);
     expect(metrics.large.statements).toEqual({ copy: 9, move: 8, remove: 9 });
+  });
+
+  it("measures the independent change cursor on production mutations", async () => {
+    const run = async (recordChanges: boolean) => {
+      const stub: DurableObjectStub<TestWorkspaceVfs> = env.VFS_TEST.getByName(
+        `storage-benchmark-change-cursor-${recordChanges ? "on" : "off"}`,
+      );
+      return runInDurableObject(stub, async (_instance, state) => {
+        const meter = meterSqlStorage(state.storage);
+        const fileSystem = new DurableObjectFileSystem(meter.storage, { recordChanges });
+        fileSystem.mkdir("/tree/inner", true);
+        for (let index = 0; index < 8; index += 1) {
+          await fileSystem.writeFile(`/tree/inner/f${index}`, "x");
+        }
+        await fileSystem.writeFile("/point", "x");
+
+        meter.reset();
+        await fileSystem.writeFile("/point", "y");
+        const point = {
+          statements: meter.statements,
+          rowsRead: meter.rowsRead,
+          rowsWritten: meter.rowsWritten,
+        };
+
+        meter.reset();
+        await fileSystem.writeFile("/tree/inner/f0", "y");
+        fileSystem.setMetadata("/tree/inner/f1", { mode: 0o600 });
+        await fileSystem.copy("/tree", "/copy", { recursive: true });
+        await fileSystem.move("/copy", "/moved");
+        await fileSystem.remove("/moved", { recursive: true });
+        return {
+          statements: meter.statements,
+          rowsRead: meter.rowsRead,
+          rowsWritten: meter.rowsWritten,
+          point,
+          databaseBytes: state.storage.sql.databaseSize,
+          changes: state.storage.sql
+            .exec<{ count: number }>("SELECT COUNT(*) AS count FROM vfs_path_changes")
+            .one().count,
+        };
+      });
+    };
+
+    const metrics = { off: await run(false), on: await run(true) };
+    console.info(`DO change-cursor benchmark: ${JSON.stringify(metrics)}`);
+    expect(metrics.off.changes).toBe(0);
+    expect(metrics.on.changes).toBe(31);
+    expect(metrics.off.point).toEqual({ statements: 3, rowsRead: 5, rowsWritten: 2 });
+    expect(metrics.on.point).toEqual({ statements: 4, rowsRead: 5, rowsWritten: 4 });
+    expect(metrics.off.statements).toBe(31);
+    expect(metrics.on.statements).toBe(37);
   });
 
   it("measures subtree latency by entry count", async () => {
@@ -482,10 +533,9 @@ describe("Durable Object storage benchmark metrics", () => {
          SELECT
            e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,
            e.opaque_object_id, e.size_bytes, e.mode, e.created_at_ms,
-           e.modified_at_ms, e.revision, p.version AS mutation_version
+           e.modified_at_ms, e.revision, e.mutation_version
          FROM vfs_entries e INDEXED BY vfs_entries_path
-         CROSS JOIN vfs_path_versions p
-         WHERE e.path = ? AND p.path = e.path`,
+         WHERE e.path = ?`,
           "/point",
         )
         .toArray()
@@ -511,16 +561,16 @@ describe("Durable Object storage benchmark metrics", () => {
       toArrayCalls: 1,
       oneCalls: 0,
     });
-    expect(metrics.populatedStatCost).toEqual({ rowsRead: 2, statements: 1 });
+    expect(metrics.populatedStatCost).toEqual({ rowsRead: 1, statements: 1 });
     expect(metrics.overwriteCost).toMatchObject({
-      statements: 4,
-      rowsRead: 7,
-      rowsWritten: 3,
+      statements: 3,
+      rowsRead: 5,
+      rowsWritten: 2,
     });
     expect(metrics.readEditCost).toMatchObject({
-      statements: 6,
-      rowsRead: 10,
-      rowsWritten: 3,
+      statements: 5,
+      rowsRead: 7,
+      rowsWritten: 2,
     });
     expect(metrics.statQueryPlan.every((detail) => detail.includes("SEARCH"))).toBe(true);
     measured(metrics.warmInitializeMs);

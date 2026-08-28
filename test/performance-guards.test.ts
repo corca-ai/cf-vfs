@@ -214,9 +214,9 @@ describe("common-path SQL cost", () => {
     const sameSize = await overwrite(12);
     const growing = await overwrite(16);
     const shrinking = await overwrite(4);
-    expect(sameSize).toEqual({ statements: 7, chunkDeletes: 0, body: Array(12).fill(2) });
-    expect(growing).toEqual({ statements: 9, chunkDeletes: 0, body: Array(16).fill(2) });
-    expect(shrinking).toEqual({ statements: 9, chunkDeletes: 1, body: Array(4).fill(2) });
+    expect(sameSize).toEqual({ statements: 6, chunkDeletes: 0, body: Array(12).fill(2) });
+    expect(growing).toEqual({ statements: 8, chunkDeletes: 0, body: Array(16).fill(2) });
+    expect(shrinking).toEqual({ statements: 8, chunkDeletes: 1, body: Array(4).fill(2) });
   });
 
   it("keeps batch aggregation cheaper than separate writes", async () => {
@@ -244,12 +244,12 @@ describe("common-path SQL cost", () => {
     // A string write can prove that collection runs no caller code; a batch
     // must revalidate because an entry getter can. That one-statement safety
     // cost is paid once per batch entry and does not erase aggregation's gain.
-    expect(single).toEqual({ statements: 8, rows: 3 });
-    expect(batchOfOne).toEqual({ statements: 9, rows: 3 });
+    expect(single).toEqual({ statements: 8, rows: 2 });
+    expect(batchOfOne).toEqual({ statements: 9, rows: 2 });
     // And a set shares one transaction and one usage read across its entries
     // rather than paying for them once per file.
-    expect(batchOfThree).toEqual({ statements: 21, rows: 7 });
-    expect(threeWrites).toEqual({ statements: 24, rows: 9 });
+    expect(batchOfThree).toEqual({ statements: 21, rows: 4 });
+    expect(threeWrites).toEqual({ statements: 24, rows: 6 });
   });
 
   it("skips subtree summaries without slowing a rejected directory removal", async () => {
@@ -287,7 +287,7 @@ describe("common-path SQL cost", () => {
     });
   });
 
-  it("costs the same whether or not the change cursor records", async () => {
+  it("does not touch the change table while its cursor is disabled", async () => {
     async function statements(recordChanges: boolean): Promise<number> {
       const { fileSystem, meter } = meteredFileSystem({ recordChanges });
       await fileSystem.mkdir("/tree/inner", true);
@@ -303,14 +303,13 @@ describe("common-path SQL cost", () => {
       return meter.statements;
     }
 
-    // The sequence rides the UPSERT that already publishes the token and the
-    // counter lives in memory, so recording adds a bound parameter rather than
-    // a statement. A counter row in SQLite would have been a second write on
-    // every one of these, and the equality below is what would catch that.
+    // Live token updates ride the entry writes themselves. The opt-in cursor
+    // records its independent latest-path rows, while the default path performs
+    // no statement against that table at all.
     const off = await statements(false);
     const on = await statements(true);
-    expect(off).toBe(43);
-    expect(on).toBe(off);
+    expect(off).toBe(41);
+    expect(on).toBe(47);
   });
 
   it("reads a catch-up page with one indexed query", async () => {
@@ -322,8 +321,8 @@ describe("common-path SQL cost", () => {
     const page = fileSystem.changesSince(0, { limit: 50 });
     expect(page.changes).toHaveLength(50);
     expect(page.more).toBe(true);
-    // One statement however many entries the page carries: the join reports
-    // whether a path is still there without a lookup per path.
+    // One statement however many entries the page carries: the change row
+    // records presence directly, without a lookup per path.
     expect(meter.statements).toBe(1);
   });
 
@@ -373,7 +372,7 @@ describe("common-path SQL cost", () => {
     // themselves still add no query.
     const unobserved = await statements(false);
     const observed = await statements(true);
-    expect(unobserved).toBe(43);
+    expect(unobserved).toBe(41);
     expect(observed - unobserved).toBe(2);
   });
 
@@ -412,13 +411,15 @@ describe("common-path SQL cost", () => {
     // that stopped observing, and the `off` arm is what proves an optional
     // feature added no statements to the path that does not use it.
     expect(measured).toEqual({
-      off: 6,
-      sizeDiffers: 9,
-      sameSizeDiffers: 9,
+      off: 5,
+      sizeDiffers: 8,
+      sameSizeDiffers: 8,
       unchanged: 7,
       unchangedWarm: 5,
     });
-    expect(measured.unchangedWarm).toBeLessThan(measured.off);
+    // The warm no-op now ties the ordinary overwrite on statements while
+    // avoiding every content and metadata write.
+    expect(measured.unchangedWarm).toBeLessThanOrEqual(measured.off);
   });
 
   it("reads by entry identity in one statement, whatever the path costs", async () => {
@@ -491,11 +492,11 @@ describe("common-path SQL cost", () => {
 
     meter.reset();
     expect((await shell.executeText({ script: 'printf "gamma\\n" > /target' })).exitCode).toBe(0);
-    expect(meter.statements).toBe(8);
+    expect(meter.statements).toBe(7);
 
     meter.reset();
     expect((await shell.executeText({ script: "sed -i s/gamma/delta/ /target" })).exitCode).toBe(0);
-    expect(meter.statements).toBe(8);
+    expect(meter.statements).toBe(7);
 
     await fileSystem.writeFile(
       "/change.patch",
@@ -503,7 +504,7 @@ describe("common-path SQL cost", () => {
     );
     meter.reset();
     expect((await shell.executeText({ script: "patch /target /change.patch" })).exitCode).toBe(0);
-    expect(meter.statements).toBe(10);
+    expect(meter.statements).toBe(9);
   });
 
   it("adds only fixed-cost credential checks to a directory listing", async () => {

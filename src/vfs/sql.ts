@@ -305,7 +305,7 @@ async function digestHex(chunks: readonly Uint8Array[], sizeBytes: number): Prom
 const ENTRY_COLUMNS = `
   e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,
   e.opaque_object_id, e.link_target, e.size_bytes, e.mode, e.uid, e.gid, e.created_at_ms,
-  e.modified_at_ms, e.revision, p.version AS mutation_version
+  e.modified_at_ms, e.revision, e.mutation_version
 `;
 
 export type VfsSqlRow = Readonly<Record<string, SqlStorageValue>>;
@@ -348,6 +348,7 @@ interface EntryRow {
   createdAtMs: number;
   modifiedAtMs: number;
   revision: number;
+  mutationVersion: number;
   mutationToken: string;
 }
 
@@ -591,6 +592,7 @@ function parseEntry(row: SqlRow, mutationEpoch: string): EntryRow {
     createdAtMs: integerColumn(row, "created_at_ms"),
     modifiedAtMs: integerColumn(row, "modified_at_ms"),
     revision: integerColumn(row, "revision"),
+    mutationVersion: integerColumn(row, "mutation_version"),
     mutationToken: formatMutationToken(mutationEpoch, integerColumn(row, "mutation_version")),
   };
 }
@@ -1311,6 +1313,55 @@ ${ENTRY_TRIGGERS}
         );
         migrated = true;
       }
+      if (currentVersion < 7) {
+        // Live paths carry their mutation version on the entry row that every
+        // stat/list operation already reads. Only removed paths need a
+        // tombstone, and only workspaces with the change cursor enabled write
+        // the independent latest-change table.
+        //
+        // The column is added here even for a fresh database so fresh and
+        // upgraded schemas have equivalent table definitions. Existing live
+        // versions and cursor state are copied before the combined table is
+        // dropped; no token or unread change is reset.
+        this.execBatch(`
+        ALTER TABLE vfs_entries
+          ADD COLUMN mutation_version INTEGER NOT NULL DEFAULT 1
+          CHECK (mutation_version >= 1);
+        UPDATE vfs_entries
+           SET mutation_version = (
+             SELECT version FROM vfs_path_versions WHERE path = vfs_entries.path
+           );
+        DROP INDEX vfs_path_changes;
+        CREATE TABLE vfs_path_tombstones (
+          path TEXT PRIMARY KEY,
+          version INTEGER NOT NULL CHECK (version >= 1)
+        ) WITHOUT ROWID;
+        INSERT INTO vfs_path_tombstones (path, version)
+        SELECT versions.path, versions.version
+          FROM vfs_path_versions versions
+         WHERE NOT EXISTS (
+           SELECT 1 FROM vfs_entries entries WHERE entries.path = versions.path
+         );
+        CREATE TABLE vfs_path_changes (
+          path TEXT PRIMARY KEY,
+          change_seq INTEGER NOT NULL CHECK (change_seq >= 1),
+          present INTEGER NOT NULL CHECK (present IN (0, 1))
+        ) WITHOUT ROWID;
+        INSERT INTO vfs_path_changes (path, change_seq, present)
+        SELECT versions.path, versions.change_seq,
+               EXISTS (SELECT 1 FROM vfs_entries entries WHERE entries.path = versions.path)
+          FROM vfs_path_versions versions
+         WHERE versions.change_seq > 0;
+        CREATE INDEX vfs_path_changes_sequence
+          ON vfs_path_changes(change_seq, path);
+        DROP TABLE vfs_path_versions;
+      `);
+        this.sql.exec(
+          "INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (7, ?)",
+          now,
+        );
+        migrated = true;
+      }
       return stringColumn(
         this.sql.exec<SqlRow>("SELECT mutation_epoch FROM vfs_state WHERE singleton = 1").one(),
         "mutation_epoch",
@@ -1332,8 +1383,7 @@ ${ENTRY_TRIGGERS}
       this.sql.exec<SqlRow>(
         `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e INDEXED BY vfs_entries_path
-       CROSS JOIN vfs_path_versions p
-       WHERE e.path = ? AND p.path = e.path`,
+       WHERE e.path = ?`,
         path,
       ),
     );
@@ -1345,18 +1395,24 @@ ${ENTRY_TRIGGERS}
    *
    * Ordinary reads need only an entry and use `oneEntry`. A streamed write
    * also has to reserve the version of an absent path before it awaits its
-   * body, then compare that version inside the commit transaction. Starting
-   * from the version table lets one statement answer both questions: a live
-   * path joins its entry, a removed path returns only its tombstone, and a path
+   * body, then compare that version inside the commit transaction. A UNION
+   * lets one statement answer both questions without making the live
+   * row join anything: a removed path returns only its tombstone, and a path
    * never used returns no row at all.
    */
   private pathState(path: string): PathState {
     const row = firstRow(
       this.sql.exec<SqlRow>(
         `SELECT ${ENTRY_COLUMNS}
-       FROM vfs_path_versions p
-       LEFT JOIN vfs_entries e INDEXED BY vfs_entries_path ON e.path = p.path
-       WHERE p.path = ?`,
+         FROM vfs_entries e INDEXED BY vfs_entries_path
+         WHERE e.path = ?
+         UNION ALL
+         SELECT NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+                NULL, NULL, NULL, NULL, NULL, NULL, NULL, version
+         FROM vfs_path_tombstones
+         WHERE path = ?
+         LIMIT 1`,
+        path,
         path,
       ),
     );
@@ -1402,9 +1458,8 @@ ${ENTRY_TRIGGERS}
       this.sql.exec<SqlRow>(
         `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e
-       CROSS JOIN vfs_path_versions p
        WHERE e.kind = 'symlink'
-         AND e.path IN (SELECT value FROM json_each(?)) AND p.path = e.path
+         AND e.path IN (SELECT value FROM json_each(?))
        ORDER BY length(e.path) ASC
        LIMIT 1`,
         JSON.stringify(ancestors),
@@ -1458,7 +1513,7 @@ ${ENTRY_TRIGGERS}
   /**
    * The mutation token for `path`, taken from a row already resolved for it.
    *
-   * `oneEntry` joins `vfs_path_versions` and `parseEntry` builds the token from
+   * `oneEntry` reads the live version and `parseEntry` builds the token from
    * that column, so a row in hand carries exactly what `tokenFor` would read.
    * Callers pass a row only when it was fetched at the same point as the
    * decision being made — never across an `await`, where re-reading is the
@@ -1602,7 +1657,15 @@ ${ENTRY_TRIGGERS}
 
   private tokenFor(path: string): string {
     const current = firstRow(
-      this.sql.exec<SqlRow>("SELECT version FROM vfs_path_versions WHERE path = ?", path),
+      this.sql.exec<SqlRow>(
+        `SELECT mutation_version AS version FROM vfs_entries INDEXED BY vfs_entries_path
+         WHERE path = ?
+         UNION ALL
+         SELECT version FROM vfs_path_tombstones WHERE path = ?
+         LIMIT 1`,
+        path,
+        path,
+      ),
     );
     if (current !== undefined) {
       return formatMutationToken(this.mutationEpoch, integerColumn(current, "version"));
@@ -1627,7 +1690,7 @@ ${ENTRY_TRIGGERS}
     if (this.lastChangeSeq === undefined) {
       this.lastChangeSeq = integerColumn(
         this.sql
-          .exec<SqlRow>("SELECT COALESCE(MAX(change_seq), 0) AS seq FROM vfs_path_versions")
+          .exec<SqlRow>("SELECT COALESCE(MAX(change_seq), 0) AS seq FROM vfs_path_changes")
           .one(),
         "seq",
       );
@@ -1636,20 +1699,16 @@ ${ENTRY_TRIGGERS}
     return this.lastChangeSeq;
   }
 
-  private publishPathVersion(path: string): number {
-    return integerColumn(
-      this.sql
-        .exec<SqlRow>(
-          `INSERT INTO vfs_path_versions (path, version, change_seq) VALUES (?, 1, ?)
-         ON CONFLICT(path) DO UPDATE SET
-           version = vfs_path_versions.version + 1,
-           change_seq = excluded.change_seq
-         RETURNING version`,
-          path,
-          this.nextChangeSeq(),
-        )
-        .one(),
-      "version",
+  private recordPathChange(path: string, present: boolean, changeSeq?: number): void {
+    if (!this.recordChanges) return;
+    this.sql.exec(
+      `INSERT INTO vfs_path_changes (path, change_seq, present) VALUES (?, ?, ?)
+       ON CONFLICT(path) DO UPDATE SET
+         change_seq = excluded.change_seq,
+         present = excluded.present`,
+      path,
+      changeSeq ?? this.nextChangeSeq(),
+      present ? 1 : 0,
     );
   }
 
@@ -1661,10 +1720,25 @@ ${ENTRY_TRIGGERS}
    * making it required is what turns "did every mutation report itself" into a
    * question the type checker answers instead of a review does.
    */
-  private bumpToken(path: string, op: VfsMutationOp): string {
-    const token = formatMutationToken(this.mutationEpoch, this.publishPathVersion(path));
+  private publishToken(path: string, version: number, present: boolean, op: VfsMutationOp): string {
+    this.recordPathChange(path, present);
+    const token = formatMutationToken(this.mutationEpoch, version);
     this.recordMutation({ op, path, mutationToken: token });
     return token;
+  }
+
+  /** Consumes an absent path's tombstone and returns its next live version. */
+  private nextEntryVersion(path: string, previousVersion = 0): number {
+    const tombstone = firstRow(
+      this.sql.exec<SqlRow>(
+        "DELETE FROM vfs_path_tombstones WHERE path = ? RETURNING version",
+        path,
+      ),
+    );
+    return (
+      Math.max(previousVersion, tombstone === undefined ? 0 : integerColumn(tombstone, "version")) +
+      1
+    );
   }
 
   /**
@@ -1867,35 +1941,59 @@ ${ENTRY_TRIGGERS}
     };
   }
 
-  private publishSubtreeVersions(path: string): void {
+  private publishSubtreeRemoval(path: string, changeSeq = this.nextChangeSeq()): void {
     const range = descendantRange(path);
     this.sql.exec(
-      `INSERT INTO vfs_path_versions (path, version, change_seq)
-       SELECT path, 1, ? FROM vfs_entries
+      `INSERT INTO vfs_path_tombstones (path, version)
+       SELECT path, mutation_version + 1 FROM vfs_entries
        WHERE path = ? OR (path >= ? AND path < ?)
        ON CONFLICT(path) DO UPDATE SET
-         version = vfs_path_versions.version + 1,
-         change_seq = excluded.change_seq`,
-      this.nextChangeSeq(),
+         version = MAX(vfs_path_tombstones.version, excluded.version)`,
+      path,
+      range.lower,
+      range.upper,
+    );
+    if (!this.recordChanges) return;
+    this.sql.exec(
+      `INSERT INTO vfs_path_changes (path, change_seq, present)
+       SELECT path, ?, 0 FROM vfs_entries
+       WHERE path = ? OR (path >= ? AND path < ?)
+       ON CONFLICT(path) DO UPDATE SET
+         change_seq = excluded.change_seq,
+         present = 0`,
+      changeSeq,
       path,
       range.lower,
       range.upper,
     );
   }
 
-  private publishTranslatedSubtreeVersions(source: string, target: string): void {
-    const range = descendantRange(source);
+  private recordPresentSubtree(path: string, changeSeq: number): void {
+    if (!this.recordChanges) return;
+    const range = descendantRange(path);
     this.sql.exec(
-      `INSERT INTO vfs_path_versions (path, version, change_seq)
-       SELECT ? || substr(path, ?), 1, ? FROM vfs_entries
+      `INSERT INTO vfs_path_changes (path, change_seq, present)
+       SELECT path, ?, 1 FROM vfs_entries
        WHERE path = ? OR (path >= ? AND path < ?)
        ON CONFLICT(path) DO UPDATE SET
-         version = vfs_path_versions.version + 1,
-         change_seq = excluded.change_seq`,
-      target,
-      source.length + 1,
-      this.nextChangeSeq(),
-      source,
+         change_seq = excluded.change_seq,
+         present = 1`,
+      changeSeq,
+      path,
+      range.lower,
+      range.upper,
+    );
+  }
+
+  private clearSubtreeTombstones(path: string): void {
+    const range = descendantRange(path);
+    this.sql.exec(
+      `DELETE FROM vfs_path_tombstones
+       WHERE (path = ? OR (path >= ? AND path < ?))
+         AND EXISTS (
+           SELECT 1 FROM vfs_entries WHERE vfs_entries.path = vfs_path_tombstones.path
+         )`,
+      path,
       range.lower,
       range.upper,
     );
@@ -1917,13 +2015,14 @@ ${ENTRY_TRIGGERS}
     const effectiveMode =
       parent === undefined ? mode : this.creationMode(mode, access, parent, true, intermediate);
     const owner = parent === undefined ? { uid: 0, gid: 0 } : this.creationOwner(parent, access);
-    const token = this.bumpToken(path, "create");
+    const mutationVersion = this.nextEntryVersion(path);
     const inserted = this.sql
       .exec<SqlRow>(
         `INSERT INTO vfs_entries (
          id, path, parent_path, name, kind, content_class, opaque_object_id,
-         size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
-       ) VALUES (?, ?, ?, ?, 'directory', NULL, NULL, 0, ?, ?, ?, ?, ?, 1)
+         size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
+         mutation_version
+       ) VALUES (?, ?, ?, ?, 'directory', NULL, NULL, 0, ?, ?, ?, ?, ?, 1, ?)
        RETURNING id`,
         this.allocateIno(),
         path,
@@ -1934,8 +2033,10 @@ ${ENTRY_TRIGGERS}
         owner.gid,
         now,
         now,
+        mutationVersion,
       )
       .one();
+    const token = this.publishToken(path, mutationVersion, true, "create");
     const id = integerColumn(inserted, "id");
     this.updateUsage(0, 1);
     return {
@@ -1954,6 +2055,7 @@ ${ENTRY_TRIGGERS}
       createdAtMs: now,
       modifiedAtMs: now,
       revision: 1,
+      mutationVersion,
       mutationToken: token,
     };
   }
@@ -2311,8 +2413,7 @@ ${ENTRY_TRIGGERS}
       this.sql.exec<SqlRow>(
         `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e
-       CROSS JOIN vfs_path_versions p
-       WHERE e.id = ? AND p.path = e.path`,
+       WHERE e.id = ?`,
         ino,
       ),
     );
@@ -2401,8 +2502,7 @@ ${ENTRY_TRIGGERS}
     return this.rows(
       `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e INDEXED BY vfs_entries_parent_name
-       CROSS JOIN vfs_path_versions p
-       WHERE e.parent_path = ? AND e.path <> '/' AND p.path = e.path
+       WHERE e.parent_path = ? AND e.path <> '/'
        ORDER BY e.name`,
       normalized,
     ).map(rowToStat);
@@ -2423,9 +2523,7 @@ ${ENTRY_TRIGGERS}
     const rows = this.rows(
       `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e INDEXED BY vfs_entries_parent_name
-       CROSS JOIN vfs_path_versions p
        WHERE e.parent_path = ? AND e.name > ? AND e.path <> '/' AND e.path > ?
-         AND p.path = e.path
        ORDER BY e.name LIMIT ?`,
       normalized,
       indexedCursorName,
@@ -2501,9 +2599,7 @@ ${ENTRY_TRIGGERS}
         : this.rows(
             `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e INDEXED BY vfs_entries_path
-       CROSS JOIN vfs_path_versions p
        WHERE e.path >= ? AND e.path < ? AND e.path > ? AND e.path <> ?
-         AND p.path = e.path
        ORDER BY e.path LIMIT ?`,
             range.lower,
             range.upper,
@@ -2603,19 +2699,18 @@ ${ENTRY_TRIGGERS}
         `WITH cutoff AS (
            SELECT (
              SELECT change_seq
-             FROM vfs_path_versions
+             FROM vfs_path_changes
              WHERE change_seq > ?
              ORDER BY change_seq, path
              LIMIT 1 OFFSET ?
            ) AS seq
          )
-       SELECT v.path AS path, (e.path IS NOT NULL) AS present, v.change_seq AS seq,
+       SELECT v.path AS path, v.present AS present, v.change_seq AS seq,
               EXISTS (
-                SELECT 1 FROM vfs_path_versions remaining
+                SELECT 1 FROM vfs_path_changes remaining
                 WHERE cutoff.seq IS NOT NULL AND remaining.change_seq > cutoff.seq
               ) AS more
-       FROM vfs_path_versions v
-       LEFT JOIN vfs_entries e INDEXED BY vfs_entries_path ON e.path = v.path
+       FROM vfs_path_changes v
        CROSS JOIN cutoff
        WHERE v.change_seq > ? AND (cutoff.seq IS NULL OR v.change_seq <= cutoff.seq)
        ORDER BY v.change_seq, v.path`,
@@ -2746,7 +2841,14 @@ ${ENTRY_TRIGGERS}
     }
     this.sql.exec("DELETE FROM vfs_entries WHERE id = ?", entry.id);
     if (entry.kind === "symlink") this.symlinkCountStale = true;
-    if (bumpPath) this.bumpToken(path, "remove");
+    const mutationVersion = entry.mutationVersion + (bumpPath ? 1 : 0);
+    this.sql.exec(
+      `INSERT INTO vfs_path_tombstones (path, version) VALUES (?, ?)
+       ON CONFLICT(path) DO UPDATE SET version = MAX(version, excluded.version)`,
+      path,
+      mutationVersion,
+    );
+    if (bumpPath) this.publishToken(path, mutationVersion, false, "remove");
     this.updateUsage(entry.contentClass === "inline" ? -entry.sizeBytes : 0, -1);
     if (
       entry.contentClass === "opaque" &&
@@ -2948,7 +3050,8 @@ ${ENTRY_TRIGGERS}
       pending.inlineBytes += inlineDelta;
       pending.entries += entryDelta;
     }
-    const token = this.bumpToken(normalized, current === null ? "create" : "write");
+    const mutationVersion =
+      current === null ? this.nextEntryVersion(normalized) : current.mutationVersion + 1;
     if (
       current?.contentClass === "inline" &&
       chunks.length < Math.ceil(current.sizeBytes / this.chunkBytes)
@@ -2968,12 +3071,14 @@ ${ENTRY_TRIGGERS}
             .exec<SqlRow>(
               `UPDATE vfs_entries SET
                  size_bytes = ?, mode = ?, modified_at_ms = ?, revision = revision + 1,
-                 body_digest = ?, body_digest_revision = revision + 1
+                 body_digest = ?, body_digest_revision = revision + 1,
+                 mutation_version = ?
                WHERE id = ? RETURNING id, revision`,
               sizeBytes,
               mode,
               now,
               digest ?? null,
+              mutationVersion,
               current.id,
             )
             .one()
@@ -2982,15 +3087,16 @@ ${ENTRY_TRIGGERS}
               `INSERT INTO vfs_entries (
            id, path, parent_path, name, kind, content_class, opaque_object_id,
            size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
-           body_digest, body_digest_revision
-         ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, ?, ?, ?, ?, ?, ?, 1, ?, 1)
+           body_digest, body_digest_revision, mutation_version
+         ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, ?, ?, ?, ?, ?, ?, 1, ?, 1, ?)
          ON CONFLICT(path) DO UPDATE SET
            kind = 'file', content_class = 'inline', opaque_object_id = NULL,
            size_bytes = excluded.size_bytes, mode = excluded.mode,
            modified_at_ms = excluded.modified_at_ms,
            revision = vfs_entries.revision + 1,
            body_digest = excluded.body_digest,
-           body_digest_revision = vfs_entries.revision + 1
+           body_digest_revision = vfs_entries.revision + 1,
+           mutation_version = excluded.mutation_version
          RETURNING id, revision`,
               current?.id ?? this.allocateIno(),
               normalized,
@@ -3006,8 +3112,15 @@ ${ENTRY_TRIGGERS}
               // earlier revision left behind rather than relying on the stamp
               // alone to retire it.
               digest ?? null,
+              mutationVersion,
             )
             .one();
+    const token = this.publishToken(
+      normalized,
+      mutationVersion,
+      true,
+      current === null ? "create" : "write",
+    );
     const entryId = integerColumn(written, "id");
     this.writeChunks(
       entryId,
@@ -3251,14 +3364,17 @@ ${ENTRY_TRIGGERS}
         }
         this.writeChunks(current.id, firstChunkIndex, chunks);
         const now = this.now();
-        const token = this.bumpToken(normalized, "write");
+        const mutationVersion = current.mutationVersion + 1;
         this.sql.exec(
-          `UPDATE vfs_entries SET size_bytes = ?, modified_at_ms = ?, revision = revision + 1
+          `UPDATE vfs_entries SET size_bytes = ?, modified_at_ms = ?, revision = revision + 1,
+             mutation_version = ?
          WHERE id = ?`,
           sizeBytes,
           now,
+          mutationVersion,
           current.id,
         );
+        const token = this.publishToken(normalized, mutationVersion, true, "write");
         this.updateUsage(suffixBytes, 0);
         return {
           path: normalized,
@@ -3290,20 +3406,24 @@ ${ENTRY_TRIGGERS}
         this.assertPermission(entry, posix, WRITE_PERMISSION, normalized);
       }
       this.validateGuard(normalized, entry, options);
-      const token = this.bumpToken(normalized, "metadata");
+      const mutationVersion = entry.mutationVersion + 1;
       const modifiedAtMs = options.modifiedAtMs ?? this.now();
       this.sql.exec(
-        `UPDATE vfs_entries SET mode = ?, modified_at_ms = ?, revision = revision + 1
+        `UPDATE vfs_entries SET mode = ?, modified_at_ms = ?, revision = revision + 1,
+           mutation_version = ?
          WHERE id = ?`,
         options.mode ?? entry.mode,
         modifiedAtMs,
+        mutationVersion,
         entry.id,
       );
+      const token = this.publishToken(normalized, mutationVersion, true, "metadata");
       return rowToStat({
         ...entry,
         mode: options.mode ?? entry.mode,
         modifiedAtMs,
         revision: entry.revision + 1,
+        mutationVersion,
         mutationToken: token,
       });
     });
@@ -3331,7 +3451,7 @@ ${ENTRY_TRIGGERS}
         }
       }
       this.validateGuard(normalized, entry, options);
-      const token = this.bumpToken(normalized, "metadata");
+      const mutationVersion = entry.mutationVersion + 1;
       const modifiedAtMs = this.now();
       const mode =
         posix !== undefined &&
@@ -3341,14 +3461,17 @@ ${ENTRY_TRIGGERS}
           : entry.mode;
       this.sql.exec(
         `UPDATE vfs_entries
-         SET uid = ?, gid = ?, mode = ?, modified_at_ms = ?, revision = revision + 1
+         SET uid = ?, gid = ?, mode = ?, modified_at_ms = ?, revision = revision + 1,
+             mutation_version = ?
          WHERE id = ?`,
         uid ?? entry.uid,
         gid ?? entry.gid,
         mode,
         modifiedAtMs,
+        mutationVersion,
         entry.id,
       );
+      const token = this.publishToken(normalized, mutationVersion, true, "metadata");
       return rowToStat({
         ...entry,
         uid: uid ?? entry.uid,
@@ -3356,6 +3479,7 @@ ${ENTRY_TRIGGERS}
         mode,
         modifiedAtMs,
         revision: entry.revision + 1,
+        mutationVersion,
         mutationToken: token,
       });
     });
@@ -3401,15 +3525,16 @@ ${ENTRY_TRIGGERS}
           ? (options.mode ?? FILE_MODE)
           : this.creationMode(options.mode ?? FILE_MODE, posix, parent, false);
       this.assertCapacity(0, 1, normalized);
-      const token = this.bumpToken(normalized, "create");
+      const mutationVersion = this.nextEntryVersion(normalized);
       // `RETURNING id` rather than a second read: the identity the caller is
       // handed has to be the one the row was actually given.
       const inserted = this.sql
         .exec<SqlRow>(
           `INSERT INTO vfs_entries (
            id, path, parent_path, name, kind, content_class, opaque_object_id,
-           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
-         ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, 0, ?, ?, ?, ?, ?, 1)
+           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
+           mutation_version
+         ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, 0, ?, ?, ?, ?, ?, 1, ?)
          RETURNING id`,
           this.allocateIno(),
           normalized,
@@ -3420,8 +3545,10 @@ ${ENTRY_TRIGGERS}
           owner.gid,
           now,
           options.modifiedAtMs ?? now,
+          mutationVersion,
         )
         .one();
+      const token = this.publishToken(normalized, mutationVersion, true, "create");
       this.updateUsage(0, 1);
       return {
         path: normalized,
@@ -3519,13 +3646,15 @@ ${ENTRY_TRIGGERS}
       // on an occupied path -- a non-empty directory cannot be replaced, so
       // every descendant lands somewhere that was absent.
       const revision = (existing?.revision ?? 0) + 1;
+      const mutationVersion = this.nextEntryVersion(normalized, existing?.mutationVersion);
       this.assertCapacity(0, 1, normalized);
       const inserted = this.sql
         .exec<SqlRow>(
           `INSERT INTO vfs_entries (
              id, path, parent_path, name, kind, content_class, opaque_object_id,
-             link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
-          ) VALUES (?, ?, ?, ?, 'symlink', NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)
+             link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
+             mutation_version
+          ) VALUES (?, ?, ?, ?, 'symlink', NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            RETURNING id`,
           this.allocateIno(),
           normalized,
@@ -3539,10 +3668,16 @@ ${ENTRY_TRIGGERS}
           now,
           now,
           revision,
+          mutationVersion,
         )
         .one();
       this.updateUsage(0, 1);
-      const token = this.bumpToken(normalized, existing === null ? "create" : "write");
+      const token = this.publishToken(
+        normalized,
+        mutationVersion,
+        true,
+        existing === null ? "create" : "write",
+      );
       this.symlinkCount += 1;
       return rowToStat({
         id: integerColumn(inserted, "id"),
@@ -3560,6 +3695,7 @@ ${ENTRY_TRIGGERS}
         createdAtMs: now,
         modifiedAtMs: now,
         revision,
+        mutationVersion,
         mutationToken: token,
       });
     });
@@ -3613,7 +3749,7 @@ ${ENTRY_TRIGGERS}
               inlineBytes: root.contentClass === "inline" ? root.sizeBytes : 0,
             };
       const now = this.now();
-      this.publishSubtreeVersions(normalized);
+      this.publishSubtreeRemoval(normalized);
       this.sql.exec(
         `INSERT INTO vfs_gc_queue (
            r2_key, not_before_ms, attempts, next_attempt_at_ms, last_error
@@ -3679,7 +3815,7 @@ ${ENTRY_TRIGGERS}
          )`,
       );
       this.updateUsage(-summary.inlineBytes, -summary.entries);
-      // Recorded here rather than in `publishSubtreeVersions`, which cannot
+      // Recorded here rather than in `publishSubtreeRemoval`, which cannot
       // know whether it is publishing one path or a range, and which `move`
       // calls twice for what is a single change.
       this.recordMutation(
@@ -3762,10 +3898,14 @@ ${ENTRY_TRIGGERS}
       const sourceRange = descendantRange(source);
       const now = this.now();
       if (destination !== null) queued += this.removeExact(target, now, false);
-      this.publishSubtreeVersions(source);
-      this.publishTranslatedSubtreeVersions(source, target);
+      const sourceChangeSeq = this.nextChangeSeq();
+      this.publishSubtreeRemoval(source, sourceChangeSeq);
       this.sql.exec(
         `UPDATE vfs_entries SET
+           mutation_version = COALESCE((
+             SELECT version + 1 FROM vfs_path_tombstones
+             WHERE path = ? || substr(vfs_entries.path, ?)
+           ), 1),
            path = ? || substr(path, ?),
            parent_path = CASE WHEN path = ? THEN ?
              ELSE ? || substr(parent_path, ?) END,
@@ -3773,6 +3913,8 @@ ${ENTRY_TRIGGERS}
            modified_at_ms = CASE WHEN path = ? THEN ? ELSE modified_at_ms END,
            revision = CASE WHEN path = ? THEN MAX(revision, ?) + 1 ELSE revision + 1 END
          WHERE path = ? OR (path >= ? AND path < ?)`,
+        target,
+        source.length + 1,
         target,
         source.length + 1,
         source,
@@ -3794,6 +3936,8 @@ ${ENTRY_TRIGGERS}
         this.sql.exec<SqlRow>("SELECT changes() AS value").one(),
         "value",
       );
+      this.clearSubtreeTombstones(target);
+      this.recordPresentSubtree(target, this.nextChangeSeq());
       // One change, though two ranges were republished. A move is a prefix
       // rename, so `root` and `to` are enough for a consumer to recompute
       // every path it holds without being told them.
@@ -3886,7 +4030,7 @@ ${ENTRY_TRIGGERS}
         target,
       );
       if (destination !== null) queued += this.removeExact(target, now, false);
-      this.publishTranslatedSubtreeVersions(source, target);
+      const changeSeq = this.nextChangeSeq();
       // Copying one file over another keeps the destination's identity, the
       // way `cp` keeps its inode: it opens the destination and writes through
       // it, and unlinking first is what `--remove-destination` is for. That
@@ -3913,7 +4057,8 @@ ${ENTRY_TRIGGERS}
         this.sql.exec(
           `INSERT INTO vfs_entries (
            id, path, parent_path, name, kind, content_class, opaque_object_id,
-           link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
+           link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
+           mutation_version
          )
          SELECT
            ? + ROW_NUMBER() OVER (ORDER BY e.path),
@@ -3923,7 +4068,11 @@ ${ENTRY_TRIGGERS}
            CASE WHEN e.path = ? THEN ? ELSE e.name END,
            e.kind, e.content_class, e.opaque_object_id,
            e.link_target, e.size_bytes, e.mode, e.uid, e.gid, ?, ?,
-           CASE WHEN e.path = ? THEN ? ELSE 1 END
+           CASE WHEN e.path = ? THEN ? ELSE 1 END,
+           COALESCE((
+             SELECT version + 1 FROM vfs_path_tombstones
+             WHERE path = ? || substr(e.path, ?)
+           ), 1)
          FROM vfs_entries e
          WHERE e.path = ? OR (e.path >= ? AND e.path < ?)`,
           inoBase,
@@ -3939,6 +4088,8 @@ ${ENTRY_TRIGGERS}
           now,
           source,
           rootRevision,
+          target,
+          source.length + 1,
           source,
           sourceRange.lower,
           sourceRange.upper,
@@ -3986,7 +4137,8 @@ ${ENTRY_TRIGGERS}
            )
            INSERT INTO vfs_entries (
              id, path, parent_path, name, kind, content_class, opaque_object_id,
-             link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
+             link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
+             mutation_version
            )
            SELECT
              ? + ROW_NUMBER() OVER (ORDER BY copied.path),
@@ -3997,7 +4149,11 @@ ${ENTRY_TRIGGERS}
              copied.kind, copied.content_class, copied.opaque_object_id,
              copied.link_target, copied.size_bytes,
              copied.copied_mode, copied.copied_uid, copied.copied_gid, ?, ?,
-             CASE WHEN copied.path = ? THEN ? ELSE 1 END
+             CASE WHEN copied.path = ? THEN ? ELSE 1 END,
+             COALESCE((
+               SELECT version + 1 FROM vfs_path_tombstones
+               WHERE path = ? || substr(copied.path, ?)
+             ), 1)
            FROM copied`,
           ~posix.umask,
           targetParent?.mode ?? 0,
@@ -4025,8 +4181,12 @@ ${ENTRY_TRIGGERS}
           now,
           source,
           rootRevision,
+          target,
+          source.length + 1,
         );
       }
+      this.clearSubtreeTombstones(target);
+      this.recordPresentSubtree(target, changeSeq);
       this.sql.exec(
         `INSERT INTO vfs_inline_chunks (entry_id, chunk_index, body)
          SELECT destination.id, chunk.chunk_index, chunk.body
@@ -4374,7 +4534,8 @@ ${ENTRY_TRIGGERS}
         if (existing?.contentClass === "inline") {
           this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", existing.id);
         }
-        const token = this.bumpToken(session.path, existing === null ? "create" : "write");
+        const mutationVersion =
+          existing === null ? this.nextEntryVersion(session.path) : existing.mutationVersion + 1;
         const parentPath = dirname(session.path);
         const name = basename(session.path);
         const mode = session.mode ?? existing?.mode ?? FILE_MODE;
@@ -4385,13 +4546,15 @@ ${ENTRY_TRIGGERS}
           .exec<SqlRow>(
             `INSERT INTO vfs_entries (
            id, path, parent_path, name, kind, content_class, opaque_object_id,
-           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision
-         ) VALUES (?, ?, ?, ?, 'file', 'opaque', ?, ?, ?, ?, ?, ?, ?, 1)
+           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
+           mutation_version
+         ) VALUES (?, ?, ?, ?, 'file', 'opaque', ?, ?, ?, ?, ?, ?, ?, 1, ?)
          ON CONFLICT(path) DO UPDATE SET
            kind = 'file', content_class = 'opaque', opaque_object_id = excluded.opaque_object_id,
            size_bytes = excluded.size_bytes, mode = excluded.mode,
            modified_at_ms = excluded.modified_at_ms,
-           revision = vfs_entries.revision + 1
+           revision = vfs_entries.revision + 1,
+           mutation_version = excluded.mutation_version
          RETURNING id, revision`,
             existing?.id ?? this.allocateIno(),
             session.path,
@@ -4404,8 +4567,15 @@ ${ENTRY_TRIGGERS}
             gid,
             createdAtMs,
             now,
+            mutationVersion,
           )
           .one();
+        const token = this.publishToken(
+          session.path,
+          mutationVersion,
+          true,
+          existing === null ? "create" : "write",
+        );
         this.updateUsage(
           existing?.contentClass === "inline" ? -existing.sizeBytes : 0,
           existing === null ? 1 : 0,

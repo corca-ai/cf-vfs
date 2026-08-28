@@ -338,10 +338,9 @@ export class RemoteBenchmarkHarness {
        SELECT
          e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,
          e.opaque_object_id, e.size_bytes, e.mode, e.created_at_ms,
-         e.modified_at_ms, e.revision, p.version AS mutation_version
+         e.modified_at_ms, e.revision, e.mutation_version
        FROM vfs_entries e INDEXED BY vfs_entries_path
-       CROSS JOIN vfs_path_versions p
-       WHERE e.path = ? AND p.path = e.path`,
+       WHERE e.path = ?`,
         "/point",
       )
       .toArray()

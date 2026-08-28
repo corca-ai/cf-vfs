@@ -192,13 +192,13 @@ export interface WriteFileOptions {
    *
    * This is the only guard the library offers, because it is the only one that
    * can be sound. It composes the workspace epoch with the version of every
-   * path crossed on the way, and `vfs_path_versions` retains a version as a
-   * tombstone while its path is absent -- so a path that was removed and
-   * recreated, or repointed at a different file through a link, fails it. A
-   * number carried on the entry row can express none of that: the row is
-   * destroyed by a removal, and nothing on it records that the path became a
-   * link. `revision` remains on every result as an observable, for display,
-   * logging, and cheap change detection; it is not a precondition.
+   * path crossed on the way. A live path carries that version with its entry;
+   * removing it transfers the next version to a tombstone, and recreating it
+   * consumes the tombstone. Thus removal/recreation and repointing through a
+   * link both fail a stale guard without making ordinary stat/list operations
+   * join a second namespace table. `revision` remains on every result as an
+   * observable, for display, logging, and cheap change detection; it is not a
+   * precondition.
    *
    * It is not path-qualified. Two paths at the same version compose the same
    * token, so it answers "has anything at this version changed" rather than

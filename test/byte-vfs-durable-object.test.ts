@@ -206,9 +206,9 @@ describe("byte-oriented Durable Object filesystem", () => {
           mutation_epoch: string;
           version: number;
         }>(
-          `SELECT e.id, typeof(e.id) AS id_type, s.mutation_epoch, p.version
+          `SELECT e.id, typeof(e.id) AS id_type, s.mutation_epoch,
+                  e.mutation_version AS version
          FROM vfs_entries e
-         JOIN vfs_path_versions p ON p.path = e.path
          JOIN vfs_state s ON s.singleton = 1
          WHERE e.path = '/file'`,
         )
@@ -342,16 +342,16 @@ describe("byte-oriented Durable Object filesystem", () => {
     });
   });
 
-  it("does not create persistent path-version rows for absent token reads", async () => {
+  it("does not create tombstones for absent token reads", async () => {
     const stub = workspace("absent-token-read");
     const result = await runInDurableObject(stub, (instance, state) => {
       const before = state.storage.sql
-        .exec<{ count: number }>("SELECT COUNT(*) AS count FROM vfs_path_versions")
+        .exec<{ count: number }>("SELECT COUNT(*) AS count FROM vfs_path_tombstones")
         .one().count;
       const first = instance.getMutationToken("/never-created");
       const second = instance.getMutationToken("/another-absent");
       const after = state.storage.sql
-        .exec<{ count: number }>("SELECT COUNT(*) AS count FROM vfs_path_versions")
+        .exec<{ count: number }>("SELECT COUNT(*) AS count FROM vfs_path_tombstones")
         .one().count;
       return { before, after, first, second };
     });

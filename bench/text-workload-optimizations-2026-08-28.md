@@ -77,7 +77,7 @@ database bytes by 7.5%, but makes metadata-only updates 131.2% slower and scans
 performance semantics of `chmod`, `chown`, `stat`-oriented scans, and directory
 work in the wrong direction, so this layout is not retained.
 
-## Promising but deferred token schema
+## Token schema candidate (adopted after production validation below)
 
 The same script models 100,000 live files, 100,000 point operations, 2,000
 100-entry listing pages, 2,000 change-feed pages, 20,000 feed-enabled updates,
@@ -98,11 +98,8 @@ only when recording is enabled — produced:
 | token updates, feed on | 77.908 ms | 66.558 ms | −14.6% |
 | delete and recreate | 66.655 ms | 52.420 ms | −21.4% |
 
-This is a schema spike, not production evidence. Adopting it requires a new
-migration and must prove token monotonicity for creation, deletion, recursive
-copy/move/remove, symlink guards, and change-sequence groups on real workerd
-storage. It is kept as the next high-value candidate rather than being mixed
-into the low-risk changes without those proofs.
+This first result was a schema spike rather than production evidence. The later
+round below adds the migration and exercises the real filesystem operations.
 
 ## Follow-up: allocation, decoding, and one-chunk writes
 
@@ -193,9 +190,63 @@ SQLite rather than only Node's `DatabaseSync`. Each layout held 10,000 live
 
 The candidate keeps removed-path versions in a tombstone table and keeps the
 change feed in a separate table, so a workspace with recording disabled does
-not pay a live-row index cost for that feature. These are strong structural
-results, but still a schema spike: production adoption must next prove a real
-migration plus create/delete/recreate monotonicity, symlink-chain guards,
-set-mutation sequence grouping, and feed-on costs. A prepared file handle is
-deliberately sequenced after that decision rather than designed around a token
-layout that the evidence now says should change.
+not pay a live-row index cost for that feature. These results justified the
+production validation below.
+
+## Production adoption: colocated live mutation versions
+
+Schema migration 7 moves each live version onto `vfs_entries`, copies absent
+versions into `vfs_path_tombstones`, copies non-zero cursor state into
+`vfs_path_changes`, and then drops the combined table. New and upgraded
+databases both execute the same migration, so their final schema descriptions
+remain identical. A live path and a tombstone are mutually exclusive after
+every transaction.
+
+The mutation version now rides the entry statement that already changes
+content or metadata. Remove transfers `version + 1` to a tombstone; recreate
+consumes it. Recursive copy and move derive every destination version from that
+destination path's history, while source removals retain their own history.
+This is path-token behavior, not inode-token behavior, and matches the previous
+API semantics.
+
+Actual workerd storage counters changed as follows:
+
+| Production workload | Before | After | Result |
+| --- | ---: | ---: | ---: |
+| populated point stat | 1 statement / 2 rows read | 1 / 1 | rows −50.0% |
+| guarded one-chunk overwrite | 4 statements / 7 read / 3 written | 3 / 5 / 2 | statements −25.0%, read −28.6%, written −33.3% |
+| 8 KiB read then guarded edit | 6 statements / 10 read / 3 written | 5 / 7 / 2 | statements −16.7%, read −30.0%, written −33.3% |
+| create 512 files of 8–12 KiB | 3,584 statements / 3,584 read / 3,072 written | 3,584 / 3,584 / 2,560 | written −16.7% |
+| randomly read those 512 files | 1,024 statements / 2,047 rows | 1,024 / 1,535 | rows −25.0% |
+| move 2-entry subtree | 8 statements / 95 rows read | 8 / 66 | rows −30.5% |
+| move 25-entry subtree | 8 statements / 164 rows read | 8 / 112 | rows −31.7% |
+
+Across five workerd process runs, structural point counts were identical. The
+median 200-operation overwrite sample was 0.025 ms, equal to the immediately
+preceding production median; removing storage work did not produce a stable
+clock-level improvement at that size. The 10,000-row isolated workerd A/B
+remained stable at 1,306,624 versus 1,613,824 bytes (−19.0%), half the stat and
+listing rows, and half the token-update statements.
+
+The cursor stays opt-in and physically independent. In a production mixed run
+of overwrite, metadata, recursive copy, move, and remove, cursor-off used 31
+statements / 348 rows read / 111 rows written and left zero change rows.
+Cursor-on used 37 / 436 / 195 and retained 31 latest-path changes. For the most
+frequent point overwrite specifically, off cost 3 / 5 / 2; on cost 4 / 5 / 4.
+The extra change-table/index writes are therefore explicit and confined to the
+feature that requested them rather than charged to every workspace.
+
+Validation covers migration from versions 1, 2, and a seeded version 6 with a
+live token, an absent tombstone, and unread cursor changes. Behavioral tests
+exercise create/delete/recreate monotonicity, unrelated descendant tombstone
+retention, symlink replacement and link-chain ABA, recursive copy/move/remove,
+page boundaries through set mutations, and rollback silence. The complete Node
+suite (1,392 tests), Durable Object conformance suite (97 tests), and workerd
+performance suite (10 tests) pass.
+
+The migration and set-mutation SQL add 5,147 deployed bytes to filesystem
+presets: VFS is 164,217 bytes and R2 is 166,828 bytes. The shell-only preset is
+unchanged by this schema work; the Linux profile is 613,065 bytes. All eight
+tree-shaking presets remain inside their recorded budgets. The roughly 3.2%
+VFS bundle increase is the principal retained cost of removing the permanent
+second namespace index and its per-operation storage work.

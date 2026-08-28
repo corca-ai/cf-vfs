@@ -265,7 +265,7 @@ const V2_SCHEMA = `
     ('/kept.txt', '/', 'kept.txt', 'file', 'inline', NULL, NULL, 5, 33188, 0, 0, 2);
 `;
 
-function openOver(database: DatabaseSync): SqlFileSystem {
+function openOver(database: DatabaseSync, recordChanges = false): SqlFileSystem {
   const sql: VfsSqlStorage = {
     get databaseSize() {
       return 0;
@@ -313,15 +313,16 @@ function openOver(database: DatabaseSync): SqlFileSystem {
     setAlarm: async () => undefined,
     deleteAlarm: async () => undefined,
   };
-  return new SqlFileSystem(storage);
+  return new SqlFileSystem(storage, { recordChanges });
 }
 
 /**
  * The part of the schema the migration rebuilds, as SQLite reports it.
  *
  * Scoped to the entry table, its indexes, and the triggers, because those are
- * what the current migrations recreate. The other tables are carried across untouched and
- * keep whatever text created them, which here is this file's own formatting.
+ * what the entry-shape migrations recreate. Version 7 separately replaces the
+ * path-version table; the entry definition remains the part whose constraints
+ * and triggers need direct fresh-versus-upgraded comparison here.
  */
 function schemaOf(database: DatabaseSync): string[] {
   return database
@@ -391,7 +392,7 @@ describe("symlink schema", () => {
       database
         .prepare("SELECT GROUP_CONCAT(version, ',') AS versions FROM vfs_schema_migrations")
         .get()?.["versions"],
-    ).toBe("1,2,3,4,5,6");
+    ).toBe("1,2,3,4,5,6,7");
     // The version-6 columns exist on a migrated database and carry nothing:
     // the digest cache is filled by use rather than backfilled by a migration.
     expect(
@@ -410,11 +411,94 @@ describe("symlink schema", () => {
     database.close();
   });
 
+  it("preserves live tokens, tombstones, and unread changes in version 7", () => {
+    const database = new DatabaseSync(":memory:");
+    database.exec(V2_SCHEMA);
+    database.exec(`
+      ALTER TABLE vfs_entries ADD COLUMN uid INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE vfs_entries ADD COLUMN gid INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE vfs_usage ADD COLUMN next_ino INTEGER NOT NULL DEFAULT 3;
+      ALTER TABLE vfs_entries ADD COLUMN body_digest TEXT;
+      ALTER TABLE vfs_entries ADD COLUMN body_digest_revision INTEGER;
+      ALTER TABLE vfs_path_versions ADD COLUMN change_seq INTEGER NOT NULL DEFAULT 0;
+      CREATE INDEX vfs_path_changes
+        ON vfs_path_versions(change_seq) WHERE change_seq > 0;
+      INSERT INTO vfs_schema_migrations (version, applied_at_ms)
+        VALUES (3, 0), (4, 0), (5, 0), (6, 0);
+      UPDATE vfs_path_versions SET change_seq = 11 WHERE path = '/kept.txt';
+      INSERT INTO vfs_path_versions (path, version, change_seq)
+        VALUES ('/gone.txt', 9, 12);
+    `);
+
+    const migrated = openOver(database, true);
+    expect(migrated.getMutationToken("/kept.txt")).toBe("epoch-v2:7");
+    expect(migrated.getMutationToken("/gone.txt")).toBe("epoch-v2:9");
+    expect(migrated.changesSince(0).changes).toEqual([
+      { path: "/kept.txt", present: true },
+      { path: "/gone.txt", present: false },
+    ]);
+    expect(database.prepare("SELECT COUNT(*) AS n FROM vfs_path_tombstones").get()?.["n"]).toBe(1);
+    expect(
+      database
+        .prepare(
+          `SELECT COUNT(*) AS n FROM vfs_entries e
+           JOIN vfs_path_tombstones t ON t.path = e.path`,
+        )
+        .get()?.["n"],
+    ).toBe(0);
+    expect(() => database.prepare("SELECT * FROM vfs_path_versions").all()).toThrowError();
+    database.close();
+  });
+
+  it("keeps live rows and tombstones exclusive across point and set mutations", async () => {
+    const database = new DatabaseSync(":memory:");
+    const fileSystem = openOver(database, true);
+    const version = (token: string): number => Number(token.slice(token.lastIndexOf(":") + 1));
+
+    const created = await fileSystem.writeFile("/file", "one");
+    await fileSystem.remove("/file");
+    const removed = fileSystem.getMutationToken("/file");
+    const recreated = await fileSystem.writeFile("/file", "two");
+    expect([
+      version(created.mutationToken),
+      version(removed),
+      version(recreated.mutationToken),
+    ]).toEqual([1, 2, 3]);
+
+    fileSystem.symlink("/link", "/file");
+    const linkBefore = fileSystem.getMutationToken("/link", { follow: false });
+    fileSystem.symlink("/link", "/elsewhere", { replace: true });
+    expect(version(fileSystem.getMutationToken("/link", { follow: false }))).toBe(
+      version(linkBefore) + 1,
+    );
+
+    await fileSystem.writeFile("/tree/child", "body", { createParents: true });
+    await fileSystem.writeFile("/destination/old", "history", { createParents: true });
+    await fileSystem.remove("/destination", { recursive: true });
+    const unrelatedTombstone = fileSystem.getMutationToken("/destination/old");
+    await fileSystem.copy("/tree", "/destination", { recursive: true });
+    expect(fileSystem.getMutationToken("/destination/old")).toBe(unrelatedTombstone);
+    await fileSystem.copy("/tree", "/copy", { recursive: true });
+    await fileSystem.move("/copy", "/moved");
+    await fileSystem.remove("/moved", { recursive: true });
+    expect(version(fileSystem.getMutationToken("/copy/child"))).toBe(2);
+    expect(version(fileSystem.getMutationToken("/moved/child"))).toBe(2);
+
+    expect(
+      database
+        .prepare(
+          `SELECT COUNT(*) AS n FROM vfs_entries e
+           JOIN vfs_path_tombstones t ON t.path = e.path`,
+        )
+        .get()?.["n"],
+    ).toBe(0);
+    database.close();
+  });
+
   it("describes the change cursor identically whether fresh or migrated", () => {
-    // Version 4 alters `vfs_path_versions` unconditionally rather than adding
-    // the column to the version-1 definition, so both paths reach the same
-    // `sqlite_master` text. Declaring it inline for a fresh database would
-    // leave the two describing the same table differently.
+    // Versions 4 and 7 run unconditionally, so both paths reach the same
+    // `sqlite_master` text even though the live versions are moved onto entries
+    // and tombstones/change records become independent tables.
     function cursorSchema(database: DatabaseSync): unknown[] {
       return database
         .prepare(
@@ -432,13 +516,9 @@ describe("symlink schema", () => {
     openOver(fresh);
 
     expect(cursorSchema(upgraded)).toEqual(cursorSchema(fresh));
-    // Every path recorded before the cursor existed starts at zero, so a
-    // caller reading from zero is told about all of them.
-    expect(
-      upgraded.prepare("SELECT COUNT(*) AS n FROM vfs_path_versions WHERE change_seq = 0").get()?.[
-        "n"
-      ],
-    ).toBeGreaterThan(0);
+    // Paths that predate the cursor do not fabricate changes during migration.
+    expect(upgraded.prepare("SELECT COUNT(*) AS n FROM vfs_path_changes").get()?.["n"]).toBe(0);
+    expect(upgraded.prepare("SELECT COUNT(*) AS n FROM vfs_path_tombstones").get()?.["n"]).toBe(0);
     upgraded.close();
     fresh.close();
   });
