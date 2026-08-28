@@ -96,10 +96,12 @@ Deliberate deterministic choices include:
 
 - `grep` and `sed` patterns are a declared subset of POSIX basic and extended
   regular expressions, translated rather than passed to the JavaScript engine.
+  Basic expressions are the default and `-E` selects extended expressions.
   Back-references and the GNU extensions are usage errors, and `-i` folds ASCII
   only;
-- `sed` implements `s`, `p`, and `d` with addresses; the rest of the language is
-  a usage error. `-i` is one guarded whole-file publication, never a temporary
+- `sed` implements `s`, `p`, `d`, and `q` with addresses; the rest of the
+  language is a usage error. `q` closes the current input without opening later
+  operands, while `-i` is one guarded whole-file publication, never a temporary
   file;
 - `find -exec` and `xargs` dispatch an already-expanded argv through the command
   registry, so a matched path cannot become shell syntax;
@@ -253,16 +255,15 @@ Currently declared divergences:
 
 | Command | Divergence |
 | --- | --- |
-| `cut` | `-f` and `-c` accept a comma-separated list of positive integers. A range such as `-c2-4` is a usage error with status 2 rather than an approximation. |
 | `wc` | Multi-field output is single-space separated. GNU right-aligns each count in a width derived from the largest input, which the streaming profile never buffers. Single-field forms such as `wc -l` match exactly. |
 | `diff` | Output is always the unified format `patch` consumes; the normal, context, and `ed` formats are outside the profile. |
-| `grep`, `sed` | Patterns use JavaScript regular-expression syntax under the Unicode flag, not POSIX basic or extended regular expressions. Literals, `.`, `*`, `^`, `$`, and bracket expressions agree with both and are pinned by fixtures; every other metacharacter differs. `a+` repeats here and is a literal plus under POSIX, while `a\|x` alternates under POSIX and is a literal here. |
+| `grep`, `sed` | Patterns implement the documented bounded subset of POSIX basic and extended regular expressions. Unsupported constructs are usage errors, and alternation selects the first matching branch rather than POSIX leftmost-longest. |
 | script execution | An executable file runs only as the cf-vfs shell profile, whatever its shebang names. There is no process runtime to hand a file to, so an unsupported interpreter — including an interpreter argument such as `#!/bin/sh -e` — is status 126 rather than something the file did not ask for. |
 | `test` | Without execution credentials, `-r`, `-w`, and `-x` report whether any class carries the bit so existing compatibility fixtures remain deterministic. With credentials they use the selected owner/group/other class. They do not consult the shell's read and write roots, and `test -x /bin/cat` is false even though `/bin/cat` runs: an applet path has no namespace entry. |
 | `$-` | Lists only `e` and `u`. Bash also reports flags for hashing, brace expansion, and invocation mode, none of which exist here. |
 | `cd` | `cd -` with no `OLDPWD`, a bare `cd` with no `HOME`, and an empty operand are usage errors with status 2 rather than Bash's 1. A missing or non-directory target is status 1, as in Bash. `OLDPWD` comes from the working directory the shell tracks, not from `$PWD`, so a reassigned `PWD` cannot desynchronize `cd -`. |
 | `type` | Reports that a name is a function without printing its definition. Bash re-renders the parsed body, which would make the output depend on the formatter rather than on the profile. |
-| `sed` | The replacement is literal text. GNU expands `&` to the match and `\1` to a capture group; both are written literally here, and JavaScript's `$&`, ``$` ``, `$'`, and `$n` forms are escaped so replacement text taken from data can never splice another part of the record into the output. |
+| `sed` | The language is limited to `s`, `p`, `d`, and single-address `q`. Hold space, branching, labels, and `a`, `i`, `c`, `y`, `r`, and `w` are usage errors. |
 
 Regenerate with `npm run test:utility-fixtures:regenerate` and review the diff;
 Docker is required only for regeneration.

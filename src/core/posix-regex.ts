@@ -3,9 +3,9 @@ import { VfsError } from "./errors.js";
 /**
  * The two POSIX regular-expression dialects this project declares.
  *
- * `basic` is what `grep` and `sed` accept by default; `extended` is `grep -E`.
- * They differ only in which characters carry a special meaning bare and which
- * need a backslash.
+ * `basic` is what `grep` and `sed` accept by default; `extended` is what their
+ * `-E` forms accept. They differ only in which characters carry a special
+ * meaning bare and which need a backslash.
  */
 export type PosixRegexDialect = "basic" | "extended";
 

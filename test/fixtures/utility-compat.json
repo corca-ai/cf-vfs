@@ -48,13 +48,6 @@
   "timezone": "UTC",
   "divergences": [
     {
-      "id": "cut-list-ranges-unsupported",
-      "command": "cut",
-      "oracle": "coreutils",
-      "summary": "-f and -c accept a comma-separated list of positive integers, not ranges or open-ended selections",
-      "reason": "A range needs an ordering and clamping model the streaming record profile does not yet declare. `cut -c2-4` is a usage error with status 2 rather than a silent approximation of GNU behavior."
-    },
-    {
       "id": "wc-multi-field-padding",
       "command": "wc",
       "oracle": "coreutils",
@@ -128,8 +121,8 @@
       "id": "sed-language-is-a-bounded-subset",
       "command": "sed",
       "oracle": "coreutils",
-      "summary": "sed implements s, p, and d with addresses; the rest of the language is refused",
-      "reason": "Hold space, branching, labels, and `a`, `i`, `c`, `y`, `r`, and `w` are a programming language rather than a utility, and several of them need state across records that a streaming profile cannot bound. Every command in the subset reads only the current record, so ordinary operation streams; `-i` is the one barrier and publishes a single guarded whole-file write. An unsupported command is status 2."
+      "summary": "sed implements s, p, d, and q with addresses; the rest of the language is refused",
+      "reason": "Hold space, branching, labels, and `a`, `i`, `c`, `y`, `r`, and `w` are a programming language rather than a utility, and several of them need state across records that a streaming profile cannot bound. Every command in the subset reads only the current record, so ordinary operation streams; `q` cancels the current input and does not open later operands, while `-i` publishes one guarded whole-file write. An unsupported command is status 2."
     },
     {
       "id": "regexp-alternation-is-leftmost-first",
@@ -296,6 +289,46 @@
       },
       "script": "cut -c2,3,4 in.txt",
       "stdout": "bcd\nhij\n",
+      "exitCode": 0
+    },
+    {
+      "name": "cut-character-ranges",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "abcdef\n"
+      },
+      "script": "cut -c '6,2,4-7,1,2' in.txt; cut -c-3 in.txt; cut -c3- in.txt",
+      "stdout": "abdef\nabc\ncdef\n",
+      "exitCode": 0
+    },
+    {
+      "name": "cut-field-ranges",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "a:b:c:d\n"
+      },
+      "script": "cut -d: -f '3-,1,2-3' in.txt",
+      "stdout": "a:b:c:d\n",
+      "exitCode": 0
+    },
+    {
+      "name": "cut-blank-separated-list",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "abcdef\n"
+      },
+      "script": "cut -c '1 3' in.txt",
+      "stdout": "ac\n",
+      "exitCode": 0
+    },
+    {
+      "name": "cut-suppress-nondelimited",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "plain\na:b\n"
+      },
+      "script": "cut -s -d: -f2 in.txt",
+      "stdout": "b\n",
       "exitCode": 0
     },
     {
@@ -628,6 +661,20 @@
       "oracle": "coreutils",
       "script": "printf '<%s>' a b c; printf '\\n'",
       "stdout": "<a><b><c>\n",
+      "exitCode": 0
+    },
+    {
+      "name": "printf-posix-static-integer-formats",
+      "oracle": "coreutils",
+      "script": "printf '<%c>|<%i>|<%u>|<%o>|<%x>|<%X>\\n' alpha -12 -1 10 255 255; printf '<%05d>|<%-5s>|<%.3s>|<%8.4d>\\n' -12 xy abcdef 12; printf '<%+d>|<% d>|<%#o>|<%#x>|<%#X>\\n' 12 12 10 255 255; printf '<%.0d>|<%#.0o>|<%.0x>\\n' 0 0 0",
+      "stdout": "<a>|<-12>|<18446744073709551615>|<12>|<ff>|<FF>\n<-0012>|<xy   >|<abc>|<    0012>\n<+12>|< 12>|<012>|<0xff>|<0XFF>\n<>|<0>|<>\n",
+      "exitCode": 0
+    },
+    {
+      "name": "printf-dynamic-width-and-precision",
+      "oracle": "coreutils",
+      "script": "printf '<%*s>|<%.*s>|<%*.*d>\\n' 5 x 3 abcdef 8 4 12; printf '<%*s>|<%.*s>\\n' -5 x -1 abc; printf '<%*s>' 3 a -3 b",
+      "stdout": "<    x>|<abc>|<    0012>\n<x    >|<abc>\n<  a><b  >",
       "exitCode": 0
     },
     {
@@ -1251,6 +1298,26 @@
       },
       "script": "sed -e 's/one/1/' -e 's/two/2/' in.txt",
       "stdout": "1\n2\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-extended-regexp",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "one\ntwo\nthree\n"
+      },
+      "script": "sed -E 's/(one|two)/X/' in.txt",
+      "stdout": "X\nX\nthree\n",
+      "exitCode": 0
+    },
+    {
+      "name": "sed-quit-address",
+      "oracle": "coreutils",
+      "files": {
+        "in.txt": "one\ntwo\nthree\nfour\n"
+      },
+      "script": "sed 's/two/TWO/;2q;s/three/THREE/' in.txt",
+      "stdout": "one\nTWO\n",
       "exitCode": 0
     },
     {

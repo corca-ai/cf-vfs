@@ -622,20 +622,33 @@ decides which directory is provisioned; pass the same path as the execution
 
 | Registry group | Available commands and principal options |
 | --- | --- |
-| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%s`, `%d`, `%b`), `pwd`, `cd -`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (clustered `-eu/+eu`, `-o/+o errexit`, `-o/+o nounset`, `-o/+o pipefail`), `test`/`[` (`-e -f -d -s -r -w -x`, string and integer comparison), `id -u -g -G -n`, `groups` |
+| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%b`, `%c`, `%d`, `%i`, `%o`, `%s`, `%u`, `%x`, `%X`), `pwd`, `cd -`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (clustered `-eu/+eu`, `-o/+o errexit`, `-o/+o nounset`, `-o/+o pipefail`), `test`/`[` (`-e -f -d -s -r -w -x`, string and integer comparison), `id -u -g -G -n`, `groups` |
 | discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
 | help | `help -s`, from the dedicated `/shell/commands/help` subpath |
 | shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
 | namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p -P`, `ls -l -n -d -a -A -1 -R`, `find -name -type -maxdepth -print -print0 -exec`, `stat -L -c` (`%i` identity, `%u/%g/%U/%G` ownership), `chmod`, `chown`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | links | `ln -s -f`, `readlink -f`, from the dedicated `/shell/commands/link` subpath |
-| streaming text/bytes | `cat`, `grep -i -v -n -F -E -c -l -q -r -R -h`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c`, `tr`, `nl`, `fold -w`, `sed -n -e -i`, `seq -s -w` |
+| streaming text/bytes | `cat`, `grep -i -v -n -F -E -c -l -q -r -R -h`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c -s`, `tr`, `nl`, `fold -w`, `sed -E -n -e -i`, `seq -s -w` |
 | deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, from the dedicated `/shell/commands/system` subpath |
 | bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
 | argument dispatch | `xargs -n -0 -r -t`, from the dedicated `/shell/commands/xargs` subpath |
 
+`cut -f` and `cut -c` selection lists accept POSIX single positions, closed
+ranges (`2-4`), prefix ranges (`-4`), and suffix ranges (`2-`). Commas or
+blanks separate selections. Overlapping, repeated, or out-of-order selections
+still emit each selected field or character once, in input order.
+With `-f`, `-s` suppresses records that contain no delimiter; without it those
+records pass through unchanged.
+
+`printf` accepts static or argument-supplied (`*`) field widths and precisions
+plus the applicable `-`, `+`, space, `#`, and `0` flags for its documented
+conversions. A negative dynamic width selects left alignment and a negative
+dynamic precision is treated as omitted. Floating-point conversions remain
+outside the bounded profile.
+
 ### Regular expressions
 
-`grep` and `sed` take POSIX basic regular expressions, and `grep -E` takes
+`grep` and `sed` take POSIX basic regular expressions, and their `-E` forms take
 extended ones. Patterns are parsed and matched here rather than handed to the
 JavaScript engine, so no JavaScript-only construct can mean something here that
 it does not mean in `grep`: `a+` repeats in an extended expression and is a
@@ -951,16 +964,21 @@ The whole input is read before the first output, so an opaque R2 body is
 ### The sed profile
 
 `sed` implements `s`, `p`, and `d`, each optionally selected by a line number,
-`$`, a `/regex/`, or a two-address range, and optionally negated with `!`.
-`-n` suppresses the automatic print, `-e` repeats, and the `s` flags are `g`,
-`p`, `i`, and an occurrence number, which combine as `2g` does in GNU sed. A
+`$`, a `/regex/`, or a two-address range, and optionally negated with `!`. The
+`q` command accepts at most one such address, as POSIX requires.
+`-E` selects extended regular expressions, `-n` suppresses the automatic print,
+`-e` repeats, and the `s` flags are `g`, `p`, `i`, and an occurrence number,
+which combine as `2g` does in GNU sed. A
 replacement expands `&` and `\1`…`\9` and writes everything else literally.
 
 Hold space, branching, labels, and `a`, `i`, `c`, `y`, `r`, and `w` are outside
 the profile and are usage errors: they are a programming language rather than a
 utility, and several need state across records that a streaming profile cannot
 bound. Every command in the subset reads only the current record, so ordinary
-operation streams.
+operation streams. A selected `q` stops immediately, cancels the current input,
+and never opens later operands. A script containing a `$` address necessarily
+keeps one record of lookahead; scripts without one emit their first record as
+soon as it arrives.
 
 Several details follow GNU exactly because getting them wrong is silent. The
 operands are one stream: line numbers run continuously across them and `$` is

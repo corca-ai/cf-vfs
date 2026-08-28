@@ -241,6 +241,32 @@ describe("sed profile", () => {
       stdout: "1\n2\nthree\nfour\n",
     },
     {
+      name: "selects POSIX extended regular expressions with -E",
+      script: `${INPUT}sed -E 's/(one|two)/X/'`,
+      stdout: "X\nX\nthree\nfour\n",
+    },
+    {
+      name: "quits after the addressed record",
+      script: `${INPUT}sed 's/two/TWO/;2q;s/three/THREE/'`,
+      stdout: "one\nTWO\n",
+    },
+    {
+      name: "honors quiet and explicit printing before q",
+      script: `${INPUT}sed -n '2p;2q'`,
+      stdout: "two\n",
+    },
+    {
+      name: "q terminates an unterminated record with a newline",
+      script: "printf x | sed 'q'",
+      stdout: "x\n",
+    },
+    {
+      name: "refuses a q command with two addresses",
+      script: `${INPUT}sed '1,2q'`,
+      exitCode: 2,
+      stderrIncludes: "sed: q accepts at most one address",
+    },
+    {
       name: "expands a capture group and the whole match",
       script: String.raw`printf 'two\n' | sed 's/\(t\)wo/[\1]/'`,
       stdout: "[t]\n",
@@ -288,6 +314,16 @@ describe("sed profile", () => {
     const result = await harness.run("printf 'x\\n' | sed -i 's/x/y/'");
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("sed: -i requires a file operand");
+  });
+
+  it("stops an in-place edit at q without opening later operands", async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/first.txt", "one\ntwo\nthree\n");
+    await harness.fileSystem.writeFile("/second.txt", "untouched\n");
+    const result = await harness.run("sed -i '2q' /first.txt /second.txt");
+    expect(result.exitCode).toBe(0);
+    expect(await harness.readText("/first.txt")).toBe("one\ntwo\n");
+    expect(await harness.readText("/second.txt")).toBe("untouched\n");
   });
 
   it("leaves the file untouched when a concurrent write wins", async () => {

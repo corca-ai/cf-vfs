@@ -61,6 +61,52 @@ describe("stream-first shell runtime", () => {
     });
   });
 
+  it("bounds printf field widths before formatting output", async () => {
+    const { shell } = createBashHarness({ limits: { maxStdoutBytes: 64 } });
+    expect(await shell.executeText({ script: "printf '%65s' x" })).toMatchObject({
+      exitCode: 1,
+      stdout: "",
+      stderr: expect.stringContaining("printf field width exceeds the execution limit"),
+    });
+    expect(await shell.executeText({ script: "printf '%*s' 65 x" })).toMatchObject({
+      exitCode: 1,
+      stdout: "",
+      stderr: expect.stringContaining("printf field width exceeds the execution limit"),
+    });
+    expect(await shell.executeText({ script: "printf '%#u' 1" })).toMatchObject({
+      exitCode: 2,
+      stdout: "",
+      stderr: expect.stringContaining("printf: unsupported flag #"),
+    });
+  });
+
+  it("cancels sed input as soon as an addressed q runs", async () => {
+    const encoder = new TextEncoder();
+    let pulls = 0;
+    let cancelled = false;
+    const stdin = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          pulls += 1;
+          if (pulls > 1_000) controller.close();
+          else controller.enqueue(encoder.encode(`${pulls}\n`));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const { shell } = createBashHarness();
+    expect(await shell.executeText({ script: "sed '1q'", stdin })).toEqual({
+      exitCode: 0,
+      stdout: "1\n",
+      stderr: "",
+    });
+    expect(pulls).toBe(1);
+    expect(cancelled).toBe(true);
+  });
+
   it("keeps ! inside command words and follows Bash positional expansion rules", async () => {
     const bang = defineTestApplet("!echo", async (_context, argv, fds) => {
       await writeText(fds[1], `${argv.join("|")}\n`);
@@ -1101,6 +1147,30 @@ describe("stream-first shell runtime", () => {
 
     for (const script of ["cut -d", "cut -d :: -f 1"]) {
       expect(await shell.executeText({ script })).toMatchObject({ exitCode: 2 });
+    }
+  });
+
+  it("supports POSIX cut selections and nondelimited suppression", async () => {
+    const { shell } = createBashHarness();
+    expect(
+      await shell.executeText({
+        script: [
+          "printf 'abcdef\\n' | cut -c '6,2,4-7,1,2'",
+          "printf 'abcdef\\n' | cut -c-3",
+          "printf 'abcdef\\n' | cut -c3-",
+          "printf 'a:b:c:d\\n' | cut -d: -f '3-,1,2-3'",
+          "printf 'abcdef\\n' | cut -c '1 3'",
+          "printf 'plain\\na:b\\n' | cut -s -d: -f2",
+        ].join("; "),
+      }),
+    ).toEqual({
+      exitCode: 0,
+      stdout: "abdef\nabc\ncdef\na:b:c:d\nac\nb\n",
+      stderr: "",
+    });
+
+    for (const script of ["cut -c 0", "cut -c 4-2", "cut -c 2,,3", "cut -s -c1", "cut -d: -c1"]) {
+      expect(await shell.executeText({ script })).toMatchObject({ exitCode: 2, stdout: "" });
     }
   });
 

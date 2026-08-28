@@ -1,4 +1,9 @@
-import { compilePosixRegex, type PosixMatch, type PosixRegex } from "../../core/posix-regex.js";
+import {
+  compilePosixRegex,
+  type PosixMatch,
+  type PosixRegex,
+  type PosixRegexDialect,
+} from "../../core/posix-regex.js";
 import type { ShellCommandContext } from "../types.js";
 import {
   type AppletSpecWithOptions,
@@ -17,11 +22,12 @@ import {
 
 const SED = {
   name: "sed",
-  usage: "[-n] [-i] [-e SCRIPT] [SCRIPT] [FILE...]",
+  usage: "[-En] [-i] [-e SCRIPT] [SCRIPT] [FILE...]",
   summary: "edits records with a bounded subset of the sed language",
   options: {
     short: {
       n: { name: "quiet" },
+      E: { name: "extended" },
       i: { name: "in-place" },
       e: { name: "expression", argument: true },
     },
@@ -31,7 +37,7 @@ const SED = {
       expression: { name: "expression", argument: true },
     },
   },
-} as const satisfies AppletSpecWithOptions<"quiet" | "in-place" | "expression">;
+} as const satisfies AppletSpecWithOptions<"quiet" | "extended" | "in-place" | "expression">;
 
 /**
  * A record selector.
@@ -69,7 +75,8 @@ interface Selected {
 type SedCommand =
   | (Substitute & Selected)
   | ({ readonly kind: "p" } & Selected)
-  | ({ readonly kind: "d" } & Selected);
+  | ({ readonly kind: "d" } & Selected)
+  | ({ readonly kind: "q" } & Selected);
 
 /** Mutable per-record state for a range selector. */
 interface RangeState {
@@ -98,12 +105,16 @@ function readDelimited(script: string, start: number, delimiter: string): [strin
   throw appletUsageError(SED, "unterminated expression");
 }
 
-function parseAddress(script: string, start: number): [Address, number] {
+function parseAddress(
+  script: string,
+  start: number,
+  dialect: PosixRegexDialect,
+): [Address, number] {
   const character = script[start] ?? "";
   if (character === "$") return [{ kind: "last" }, start + 1];
   if (character === "/") {
     const [pattern, next] = readDelimited(script, start + 1, "/");
-    return [{ kind: "regex", pattern: compilePosixRegex(pattern, "basic", SED.name) }, next];
+    return [{ kind: "regex", pattern: compilePosixRegex(pattern, dialect, SED.name) }, next];
   }
   const digits = /^[0-9]+/u.exec(script.slice(start))?.[0] ?? "";
   const line = Number(digits);
@@ -116,13 +127,13 @@ function parseAddress(script: string, start: number): [Address, number] {
 /**
  * Parses one bounded sed script.
  *
- * The declared subset is `s`, `p`, and `d`, each optionally selected by a line
+ * The declared subset is `s`, `p`, `d`, and `q`, each optionally selected by a line
  * number, `$`, a regular expression, or a two-address range, and optionally
  * negated with `!`. Everything else — hold space, branching, labels, `a`, `i`,
  * `c`, `y`, `r`, `w` — is refused with a usage error, because a partial
  * implementation of a language is worse than a command that says no.
  */
-function parseSedScript(script: string): SedCommand[] {
+function parseSedScript(script: string, dialect: PosixRegexDialect): SedCommand[] {
   const commands: SedCommand[] = [];
   let index = 0;
   while (index < script.length) {
@@ -138,10 +149,10 @@ function parseSedScript(script: string): SedCommand[] {
     }
     let selector: Selector | undefined;
     if (ADDRESS_START.test(script.slice(index))) {
-      const [start, afterStart] = parseAddress(script, index);
+      const [start, afterStart] = parseAddress(script, index, dialect);
       index = afterStart;
       if (script[index] === ",") {
-        const [end, afterEnd] = parseAddress(script, index + 1);
+        const [end, afterEnd] = parseAddress(script, index + 1, dialect);
         index = afterEnd;
         selector = { start, end };
       } else {
@@ -180,7 +191,7 @@ function parseSedScript(script: string): SedCommand[] {
       }
       commands.push({
         kind: "s",
-        pattern: compilePosixRegex(pattern, "basic", SED.name, {
+        pattern: compilePosixRegex(pattern, dialect, SED.name, {
           ...(ignoreCase ? { ignoreCase: true } : {}),
         }),
         replacement,
@@ -196,6 +207,18 @@ function parseSedScript(script: string): SedCommand[] {
       index += 1;
       const selected = { negated, ...(selector === undefined ? {} : { selector }) };
       commands.push(verb === "p" ? { kind: "p", ...selected } : { kind: "d", ...selected });
+      continue;
+    }
+    if (verb === "q") {
+      if (selector?.end !== undefined) {
+        throw appletUsageError(SED, "q accepts at most one address");
+      }
+      index += 1;
+      commands.push({
+        kind: "q",
+        negated,
+        ...(selector === undefined ? {} : { selector }),
+      });
       continue;
     }
     throw appletUsageError(SED, `unsupported command ${verb ?? "at end of script"}`);
@@ -311,7 +334,7 @@ function substitute(command: Substitute, record: string): { value: string; chang
 
 interface RecordResult {
   readonly output: string;
-  readonly deleted: boolean;
+  readonly quit: boolean;
 }
 
 function applyRecord(
@@ -327,16 +350,25 @@ function applyRecord(
   for (const [index, command] of commands.entries()) {
     const state = states[index] ?? { active: false };
     if (!selects(command, state, space, line, last)) continue;
-    if (command.kind === "d") return { output: printed, deleted: true };
+    if (command.kind === "d") return { output: printed, quit: false };
     if (command.kind === "p") {
       printed += `${space}\n`;
       continue;
+    }
+    if (command.kind === "q") {
+      return { output: quiet ? printed : `${printed}${space}\n`, quit: true };
     }
     const result = substitute(command, space);
     space = result.value;
     if (command.print && result.changed) printed += `${space}\n`;
   }
-  return { output: quiet ? printed : `${printed}${space}\n`, deleted: false };
+  return { output: quiet ? printed : `${printed}${space}\n`, quit: false };
+}
+
+function needsLastRecord(commands: readonly SedCommand[]): boolean {
+  return commands.some(
+    (command) => command.selector?.start.kind === "last" || command.selector?.end?.kind === "last",
+  );
 }
 
 /**
@@ -351,6 +383,9 @@ function applyRecord(
 export const sedCommand = /* @__PURE__ */ defineApplet(SED, async (context, argv, fds) => {
   const parsed = parseAppletOptions(SED, argv);
   const quiet = parsed.options.some((option) => option.name === "quiet");
+  const dialect = parsed.options.some((option) => option.name === "extended")
+    ? "extended"
+    : "basic";
   const inPlace = parsed.options.some((option) => option.name === "in-place");
   const expressions = parsed.options
     .filter((option) => option.name === "expression" && "argument" in option)
@@ -361,7 +396,7 @@ export const sedCommand = /* @__PURE__ */ defineApplet(SED, async (context, argv
     if (script === undefined) throw appletUsageError(SED, "missing expression");
     expressions.push(script);
   }
-  const commands = parseSedScript(expressions.join("\n"));
+  const commands = parseSedScript(expressions.join("\n"), dialect);
   if (inPlace && operands.length === 0) {
     throw appletUsageError(SED, "-i requires a file operand");
   }
@@ -372,7 +407,7 @@ export const sedCommand = /* @__PURE__ */ defineApplet(SED, async (context, argv
       let failed = false;
       for (const path of operands) {
         try {
-          await editInPlace(context, commands, path, quiet);
+          if (await editInPlace(context, commands, path, quiet)) break;
         } catch (error) {
           // One bad operand is that operand's failure. The remaining files are
           // still edited, each under its own mutation token, and the status
@@ -390,15 +425,43 @@ export const sedCommand = /* @__PURE__ */ defineApplet(SED, async (context, argv
     // Numbering and `$` span the operands as one stream, the way `sed` reads
     // them: `$` is the last record of the last file, not of each file.
     let line = 0;
+    if (!needsLastRecord(commands)) {
+      const inputCount = Math.max(1, operands.length);
+      let inputIndex = 0;
+      inputLoop: for await (const input of inputStreams(context, operands, fds[0])) {
+        inputIndex += 1;
+        const lastInput = inputIndex === inputCount;
+        for await (const record of readTextLines(context, input.stream, input.name)) {
+          const terminated = record.endsWith("\n");
+          const value = terminated ? record.slice(0, -1) : record;
+          line += 1;
+          const result = applyRecord(commands, states, value, line, false, quiet);
+          // POSIX `q` writes the pattern space followed by a newline even when
+          // the input record was unterminated. Ordinary end-of-input retains
+          // the source's missing newline.
+          const preserveEnding = terminated || result.quit || !lastInput;
+          await output.write(preserveEnding ? result.output : result.output.replace(/\n$/u, ""));
+          if (result.quit) break inputLoop;
+        }
+      }
+      await output.flush();
+      return 0;
+    }
+
     let pending: string | undefined;
     let pendingEndedWithNewline = true;
-    for await (const input of inputStreams(context, operands, fds[0])) {
+    inputLoop: for await (const input of inputStreams(context, operands, fds[0])) {
       for await (const record of readTextLines(context, input.stream, input.name)) {
         const terminated = record.endsWith("\n");
         const value = terminated ? record.slice(0, -1) : record;
         if (pending !== undefined) {
           line += 1;
-          await output.write(applyRecord(commands, states, pending, line, false, quiet).output);
+          const result = applyRecord(commands, states, pending, line, false, quiet);
+          await output.write(result.output);
+          if (result.quit) {
+            pending = undefined;
+            break inputLoop;
+          }
         }
         pending = value;
         pendingEndedWithNewline = terminated;
@@ -424,7 +487,7 @@ async function editInPlace(
   commands: readonly SedCommand[],
   path: string,
   quiet: boolean,
-): Promise<void> {
+): Promise<boolean> {
   const normalized = commandPath(context, path);
   const current = context.fileSystem.readFile(normalized);
   const token =
@@ -432,7 +495,7 @@ async function editInPlace(
       ? current.stat.mutationToken
       : context.fileSystem.getMutationToken(normalized);
   const source = await collectText(context, current.stream, normalized);
-  let edited: string;
+  let edited: { output: string; quit: boolean };
   try {
     edited = applyToText(commands, source.value, quiet);
   } finally {
@@ -440,28 +503,38 @@ async function editInPlace(
   }
   // The edit is either the whole new file or nothing, and a concurrent write
   // to the same path loses.
-  await context.fileSystem.writeFile(normalized, edited, {
+  await context.fileSystem.writeFile(normalized, edited.output, {
     ifMutationToken: token,
     disposition: "replace",
     mode: current.stat.mode,
   });
+  return edited.quit;
 }
 
 /** Applies the script to a whole buffered text, for `-i`. */
-function applyToText(commands: readonly SedCommand[], text: string, quiet: boolean): string {
+function applyToText(
+  commands: readonly SedCommand[],
+  text: string,
+  quiet: boolean,
+): { output: string; quit: boolean } {
   const states: RangeState[] = commands.map(() => ({ active: false }));
   const records = text.split("\n");
   // A trailing newline produces a final empty element that is not a record.
   const trailing = records.at(-1) === "";
   if (trailing) records.pop();
   let output = "";
+  let quit = false;
   for (const [index, record] of records.entries()) {
     const last = index === records.length - 1;
-    const piece = applyRecord(commands, states, record, index + 1, last, quiet).output;
+    const result = applyRecord(commands, states, record, index + 1, last, quiet);
     // An unterminated final record stays unterminated, and only that record's
     // own output loses a newline: a `d` on the last line must not strip the
     // newline that belonged to the line before it.
-    output += last && !trailing ? piece.replace(/\n$/u, "") : piece;
+    output += last && !trailing && !result.quit ? result.output.replace(/\n$/u, "") : result.output;
+    if (result.quit) {
+      quit = true;
+      break;
+    }
   }
-  return output;
+  return { output, quit };
 }

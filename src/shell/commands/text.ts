@@ -136,16 +136,17 @@ const UNIQ = {
 
 const CUT = {
   name: "cut",
-  usage: "-f LIST [-d DELIM] | -c LIST [FILE...]",
+  usage: "-f LIST [-d DELIM] [-s] | -c LIST [FILE...]",
   summary: "prints selected fields or characters of each record",
   options: {
     short: {
       d: { name: "delimiter", argument: true },
       f: { name: "fields", argument: true },
       c: { name: "characters", argument: true },
+      s: { name: "suppress" },
     },
   },
-} as const satisfies AppletSpecWithOptions<"delimiter" | "fields" | "characters">;
+} as const satisfies AppletSpecWithOptions<"delimiter" | "fields" | "characters" | "suppress">;
 
 const TR = {
   name: "tr",
@@ -770,26 +771,90 @@ export const uniqCommand = /* @__PURE__ */ defineApplet(UNIQ, async (context, ar
   return 0;
 });
 
+interface CutRange {
+  readonly start: number;
+  readonly end: number;
+}
+
+function parseCutRanges(value: string, unit: "character" | "field"): CutRange[] {
+  const parts = value.split(/[,\t ]/u);
+  if (parts.some((part) => part === "")) {
+    throw appletUsageError(CUT, `${unit} list is invalid`);
+  }
+  const ranges = parts.map((part): CutRange => {
+    if (/^\d+$/u.test(part)) {
+      const position = parseInteger(part, `${CUT.name}: ${unit}`, 1);
+      return { start: position, end: position };
+    }
+    const range = /^(\d*)-(\d*)$/u.exec(part);
+    if (range === null || (range[1] === "" && range[2] === "")) {
+      throw appletUsageError(CUT, `${unit} list is invalid`);
+    }
+    const start = range[1] === "" ? 1 : parseInteger(range[1] ?? "", `${CUT.name}: ${unit}`, 1);
+    const end =
+      range[2] === ""
+        ? Number.POSITIVE_INFINITY
+        : parseInteger(range[2] ?? "", `${CUT.name}: ${unit}`, 1);
+    if (end < start) throw appletUsageError(CUT, `${unit} range is decreasing`);
+    return { start, end };
+  });
+
+  ranges.sort((left, right) => left.start - right.start || left.end - right.end);
+  const merged: CutRange[] = [];
+  for (const range of ranges) {
+    const previous = merged.at(-1);
+    if (previous !== undefined && range.start <= previous.end + 1) {
+      merged[merged.length - 1] = {
+        start: previous.start,
+        end: Math.max(previous.end, range.end),
+      };
+    } else {
+      merged.push(range);
+    }
+  }
+  return merged;
+}
+
+function selectCutValues<T>(values: readonly T[], ranges: readonly CutRange[]): T[] {
+  let rangeIndex = 0;
+  let range = ranges[rangeIndex];
+  return values.filter((_value, index) => {
+    const position = index + 1;
+    while (range !== undefined && range.end < position) {
+      rangeIndex += 1;
+      range = ranges[rangeIndex];
+    }
+    return range !== undefined && range.start <= position;
+  });
+}
+
 export const cutCommand = /* @__PURE__ */ defineApplet(CUT, async (context, argv, fds) => {
   const parsed = parseAppletOptions(CUT, argv);
   let delimiter = "\t";
-  let fields: number[] | undefined;
-  let characters: number[] | undefined;
+  let delimiterSpecified = false;
+  let suppress = false;
+  let fields: CutRange[] | undefined;
+  let characters: CutRange[] | undefined;
   for (const option of parsed.options) {
+    if (option.name === "suppress") {
+      suppress = true;
+      continue;
+    }
     if (!("argument" in option)) continue;
-    if (option.name === "delimiter") delimiter = option.argument;
-    else if (option.name === "fields") {
-      fields = option.argument
-        .split(",")
-        .map((part) => parseInteger(part, `${CUT.name}: field`, 1));
+    if (option.name === "delimiter") {
+      delimiter = option.argument;
+      delimiterSpecified = true;
+    } else if (option.name === "fields") {
+      fields = parseCutRanges(option.argument, "field");
     } else if (option.name === "characters") {
-      characters = option.argument
-        .split(",")
-        .map((part) => parseInteger(part, `${CUT.name}: character`, 1));
+      characters = parseCutRanges(option.argument, "character");
     }
   }
   if ((fields === undefined) === (characters === undefined)) {
     throw appletUsageError(CUT, "specify exactly one of -f or -c");
+  }
+  if (fields === undefined && (delimiterSpecified || suppress)) {
+    throw appletUsageError(CUT, "-d and -s require -f");
   }
   if ([...delimiter].length !== 1) {
     throw appletUsageError(CUT, "delimiter must be exactly one character");
@@ -800,17 +865,15 @@ export const cutCommand = /* @__PURE__ */ defineApplet(CUT, async (context, argv
       for await (const line of readTextLines(context, input.stream, input.name)) {
         const newline = line.endsWith("\n") ? "\n" : "";
         const content = newline ? line.slice(0, -1) : line;
-        await output.write(
-          fields === undefined
-            ? [...content].filter((_character, index) => characters?.includes(index + 1)).join("") +
-                newline
-            : (content.includes(delimiter)
-                ? content
-                    .split(delimiter)
-                    .filter((_field, index) => fields?.includes(index + 1))
-                    .join(delimiter)
-                : content) + newline,
-        );
+        if (fields === undefined) {
+          await output.write(selectCutValues([...content], characters ?? []).join("") + newline);
+        } else if (content.includes(delimiter)) {
+          await output.write(
+            selectCutValues(content.split(delimiter), fields).join(delimiter) + newline,
+          );
+        } else if (!suppress) {
+          await output.write(content + newline);
+        }
       }
     }
     await output.flush();

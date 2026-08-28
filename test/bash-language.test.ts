@@ -104,6 +104,37 @@ describe("Bash v2 words, assignments, and statuses", () => {
       },
     },
     {
+      name: "formats POSIX characters, integer bases, widths, precisions, and flags",
+      script: [
+        "printf '<%c>|<%i>|<%u>|<%o>|<%x>|<%X>\\n' alpha -12 -1 10 255 255",
+        "printf '<%05d>|<%-5s>|<%.3s>|<%8.4d>\\n' -12 xy abcdef 12",
+        "printf '<%+d>|<% d>|<%#o>|<%#x>|<%#X>\\n' 12 12 10 255 255",
+        "printf '<%.0d>|<%#.0o>|<%.0x>\\n' 0 0 0",
+      ].join("; "),
+      stdout: [
+        "<a>|<-12>|<18446744073709551615>|<12>|<ff>|<FF>",
+        "<-0012>|<xy   >|<abc>|<    0012>",
+        "<+12>|< 12>|<012>|<0xff>|<0XFF>",
+        "<>|<0>|<>",
+        "",
+      ].join("\n"),
+    },
+    {
+      name: "consumes dynamic printf widths and precisions in POSIX order",
+      script: [
+        "printf '<%*s>|<%.*s>|<%*.*d>\\n' 5 x 3 abcdef 8 4 12",
+        "printf '<%*s>|<%.*s>\\n' -5 x -1 abc",
+        "printf '<%*s>' 3 a -3 b",
+      ].join("; "),
+      stdout: "<    x>|<abc>|<    0012>\n<x    >|<abc>\n<  a><b  >",
+    },
+    {
+      name: "reports an invalid dynamic printf width after formatting with zero",
+      script: "printf '<%*s>' nope x 2> /errors; printf '|%s' \"$?\"",
+      stdout: "<x>|1",
+      expectedFiles: { "/errors": "printf: nope: invalid number\n" },
+    },
+    {
       name: "preserves unknown printf format and percent-b escapes",
       script: `printf '\\q|%b' '\\q'`,
       stdout: "\\q|\\q",

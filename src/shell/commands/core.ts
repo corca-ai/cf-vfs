@@ -54,7 +54,7 @@ const ECHO = {
 const PRINTF = {
   name: "printf",
   usage: "FORMAT [ARGUMENT...]",
-  summary: "formats arguments with %s, %d, %b, and %%",
+  summary: "formats strings, characters, and integers with POSIX-style conversions",
   kind: "builtin",
 } as const satisfies AppletSpec;
 
@@ -207,6 +207,7 @@ export const echoCommand = /* @__PURE__ */ defineApplet(ECHO, async (_context, a
 function formatPrintfOnce(
   format: string,
   values: readonly string[],
+  maximumOutputCharacters: number,
 ): {
   output: string;
   consumed: number;
@@ -215,38 +216,194 @@ function formatPrintfOnce(
   let index = 0;
   let output = "";
   const diagnostics: string[] = [];
+  const append = (value: string): void => {
+    if (output.length + value.length > maximumOutputCharacters) {
+      throw new VfsError("E2BIG", "printf output exceeds the execution limit");
+    }
+    output += value;
+  };
   for (let offset = 0; offset < format.length; offset += 1) {
     const character = format[offset];
     if (character === "\\") {
       const next = format[++offset];
-      if (next === "n") output += "\n";
-      else if (next === "t") output += "\t";
-      else if (next === "r") output += "\r";
-      else if (next === "\\") output += "\\";
-      else output += next === undefined ? "\\" : `\\${next}`;
+      if (next === "n") append("\n");
+      else if (next === "t") append("\t");
+      else if (next === "r") append("\r");
+      else if (next === "\\") append("\\");
+      else append(next === undefined ? "\\" : `\\${next}`);
       continue;
     }
     if (character !== "%") {
-      output += character;
+      append(character ?? "");
       continue;
     }
-    const specifier = format[++offset];
-    if (specifier === "%") output += "%";
-    else if (specifier === "s") output += values[index++] ?? "";
-    else if (specifier === "d") {
-      const parsed = parsePrintfInteger(values[index++] ?? "0");
-      output += String(parsed.value);
+    const conversion = /^([-+ #0]*)(\*|[0-9]*)(?:\.(\*|[0-9]*))?([A-Za-z%])/u.exec(
+      format.slice(offset + 1),
+    );
+    if (conversion === null) {
+      throw appletUsageError(PRINTF, `unsupported conversion %${format[offset + 1] ?? ""}`);
+    }
+    offset += conversion[0].length;
+    let flags = conversion[1] ?? "";
+    const widthToken = conversion[2] ?? "";
+    let width: number | undefined;
+    if (widthToken === "*") {
+      const field = parsePrintfDynamicFieldSize(
+        values[index++] ?? "0",
+        "field width",
+        maximumOutputCharacters,
+        false,
+      );
+      width = field.value;
+      if (field.left) flags += "-";
+      if (field.diagnostic !== undefined) diagnostics.push(field.diagnostic);
+    } else {
+      width = parsePrintfFieldSize(widthToken, "field width", maximumOutputCharacters);
+    }
+    const precisionToken = conversion[3];
+    let precision: number | undefined;
+    if (precisionToken === "*") {
+      const field = parsePrintfDynamicFieldSize(
+        values[index++] ?? "0",
+        "precision",
+        maximumOutputCharacters,
+        true,
+      );
+      precision = field.value;
+      if (field.diagnostic !== undefined) diagnostics.push(field.diagnostic);
+    } else if (precisionToken !== undefined) {
+      precision = parsePrintfFieldSize(precisionToken, "precision", maximumOutputCharacters, 0);
+    }
+    const specifier = conversion[4] ?? "";
+    if (specifier === "%") {
+      if (flags !== "" || width !== undefined || precision !== undefined) {
+        throw appletUsageError(PRINTF, "flags, width, and precision do not apply to %%");
+      }
+      append("%");
+    } else if (specifier === "s" || specifier === "b" || specifier === "c") {
+      assertPrintfFlags(flags, "-");
+      if (specifier === "c" && precision !== undefined) {
+        throw appletUsageError(PRINTF, "precision does not apply to %c");
+      }
+      const argument = values[index++] ?? "";
+      const value =
+        specifier === "b"
+          ? decodeBackslashEscapes(argument)
+          : specifier === "c"
+            ? ([...argument][0] ?? "")
+            : argument;
+      append(formatPrintfText(value, width, precision, flags.includes("-")));
+    } else if (/^[diouxX]$/u.test(specifier)) {
+      const signed = specifier === "d" || specifier === "i";
+      assertPrintfFlags(flags, signed ? "-+ 0" : specifier === "u" ? "-0" : "-#0");
+      const parsed = parsePrintfInteger(values[index++] ?? "0", !signed);
+      append(formatPrintfInteger(parsed.value, specifier, flags, width, precision));
       if (parsed.diagnostic !== undefined) diagnostics.push(parsed.diagnostic);
-    } else if (specifier === "b") output += decodeBackslashEscapes(values[index++] ?? "");
-    else throw appletUsageError(PRINTF, `unsupported conversion %${specifier ?? ""}`);
+    } else {
+      throw appletUsageError(PRINTF, `unsupported conversion %${specifier}`);
+    }
   }
   return { output, consumed: index, diagnostics };
 }
 
 const MIN_PRINTF_INTEGER = -(1n << 63n);
 const MAX_PRINTF_INTEGER = (1n << 63n) - 1n;
+const MAX_PRINTF_UNSIGNED_INTEGER = (1n << 64n) - 1n;
 
-function parsePrintfInteger(value: string): { value: bigint; diagnostic?: string } {
+function parsePrintfFieldSize(
+  digits: string,
+  label: string,
+  maximum: number,
+  empty?: number,
+): number | undefined {
+  if (digits === "") return empty;
+  const value = Number(digits);
+  if (!Number.isSafeInteger(value) || value > maximum) {
+    throw new VfsError("E2BIG", `printf ${label} exceeds the execution limit`);
+  }
+  return value;
+}
+
+function parsePrintfDynamicFieldSize(
+  input: string,
+  label: string,
+  maximum: number,
+  negativeIsOmitted: boolean,
+): { value: number | undefined; left: boolean; diagnostic?: string } {
+  const parsed = parsePrintfInteger(input);
+  if (negativeIsOmitted && parsed.value < 0) {
+    return {
+      value: undefined,
+      left: false,
+      ...(parsed.diagnostic === undefined ? {} : { diagnostic: parsed.diagnostic }),
+    };
+  }
+  const left = parsed.value < 0;
+  const magnitude = left ? -parsed.value : parsed.value;
+  if (magnitude > BigInt(maximum)) {
+    throw new VfsError("E2BIG", `printf ${label} exceeds the execution limit`);
+  }
+  return {
+    value: Number(magnitude),
+    left,
+    ...(parsed.diagnostic === undefined ? {} : { diagnostic: parsed.diagnostic }),
+  };
+}
+
+function assertPrintfFlags(flags: string, supported: string): void {
+  for (const flag of flags) {
+    if (!supported.includes(flag)) {
+      throw appletUsageError(PRINTF, `unsupported flag ${flag}`);
+    }
+  }
+}
+
+function formatPrintfText(
+  value: string,
+  width: number | undefined,
+  precision: number | undefined,
+  left: boolean,
+): string {
+  if (width === undefined && precision === undefined) return value;
+  const characters = [...value];
+  const rendered = precision === undefined ? value : characters.slice(0, precision).join("");
+  const padding = Math.max(0, (width ?? 0) - Math.min(characters.length, precision ?? Infinity));
+  return left ? rendered + " ".repeat(padding) : " ".repeat(padding) + rendered;
+}
+
+function formatPrintfInteger(
+  value: bigint,
+  specifier: string,
+  flags: string,
+  width: number | undefined,
+  precision: number | undefined,
+): string {
+  const signed = specifier === "d" || specifier === "i";
+  const radix = specifier === "o" ? 8 : specifier === "x" || specifier === "X" ? 16 : 10;
+  const negative = signed && value < 0;
+  const magnitude = signed ? (negative ? -value : value) : BigInt.asUintN(64, value);
+  let digits = magnitude.toString(radix);
+  if (specifier === "X") digits = digits.toUpperCase();
+  if (precision === 0 && magnitude === 0n) digits = "";
+  else if (precision !== undefined) digits = digits.padStart(precision, "0");
+
+  let prefix = negative ? "-" : signed && flags.includes("+") ? "+" : "";
+  if (prefix === "" && signed && flags.includes(" ")) prefix = " ";
+  if (flags.includes("#") && specifier === "o" && !digits.startsWith("0")) prefix += "0";
+  else if (flags.includes("#") && magnitude !== 0n && (specifier === "x" || specifier === "X")) {
+    prefix += specifier === "x" ? "0x" : "0X";
+  }
+
+  const padding = Math.max(0, (width ?? 0) - prefix.length - digits.length);
+  if (flags.includes("-")) return prefix + digits + " ".repeat(padding);
+  if (flags.includes("0") && precision === undefined) return prefix + "0".repeat(padding) + digits;
+  return " ".repeat(padding) + prefix + digits;
+}
+
+function parsePrintfInteger(
+  value: string,
+  unsigned = false,
+): { value: bigint; diagnostic?: string } {
   if (value.startsWith("'") || value.startsWith('"')) {
     const character = [...value.slice(1)][0];
     if (character !== undefined) return { value: BigInt(character.codePointAt(0) ?? 0) };
@@ -254,20 +411,20 @@ function parsePrintfInteger(value: string): { value: bigint; diagnostic?: string
 
   const input = value.trimStart();
   const sign = input.startsWith("-") ? -1n : 1n;
-  const unsigned = input.startsWith("-") || input.startsWith("+") ? input.slice(1) : input;
+  const magnitudeInput = input.startsWith("-") || input.startsWith("+") ? input.slice(1) : input;
   let digits = "";
   let consumed = 0;
   let radix: 8 | 10 | 16 = 10;
-  if (/^0[xX]/u.test(unsigned)) {
+  if (/^0[xX]/u.test(magnitudeInput)) {
     radix = 16;
-    digits = /^[0-9a-f]+/iu.exec(unsigned.slice(2))?.[0] ?? "";
+    digits = /^[0-9a-f]+/iu.exec(magnitudeInput.slice(2))?.[0] ?? "";
     consumed = 2 + digits.length;
-  } else if (unsigned.startsWith("0")) {
+  } else if (magnitudeInput.startsWith("0")) {
     radix = 8;
-    digits = /^0[0-7]*/u.exec(unsigned)?.[0] ?? "";
+    digits = /^0[0-7]*/u.exec(magnitudeInput)?.[0] ?? "";
     consumed = digits.length;
   } else {
-    digits = /^[0-9]+/u.exec(unsigned)?.[0] ?? "";
+    digits = /^[0-9]+/u.exec(magnitudeInput)?.[0] ?? "";
     consumed = digits.length;
   }
 
@@ -280,14 +437,15 @@ function parsePrintfInteger(value: string): { value: bigint; diagnostic?: string
   }
 
   let diagnostic: string | undefined;
-  const remaining = unsigned.slice(consumed);
+  const remaining = magnitudeInput.slice(consumed);
   if (digits.length === 0 || remaining.length > 0) {
     const message =
       radix === 8 && /^[89]/u.test(remaining) ? "invalid octal number" : "invalid number";
     diagnostic = `printf: ${value}: ${message}\n`;
   }
-  if (parsed < MIN_PRINTF_INTEGER || parsed > MAX_PRINTF_INTEGER) {
-    parsed = parsed < MIN_PRINTF_INTEGER ? MIN_PRINTF_INTEGER : MAX_PRINTF_INTEGER;
+  const maximum = unsigned ? MAX_PRINTF_UNSIGNED_INTEGER : MAX_PRINTF_INTEGER;
+  if (parsed < MIN_PRINTF_INTEGER || parsed > maximum) {
+    parsed = parsed < MIN_PRINTF_INTEGER ? MIN_PRINTF_INTEGER : maximum;
     diagnostic = `printf: ${value}: Result not representable\n`;
   }
   return { value: parsed, ...(diagnostic === undefined ? {} : { diagnostic }) };
@@ -314,6 +472,7 @@ function decodeBackslashEscapes(value: string): string {
 function formatPrintf(
   format: string,
   values: readonly string[],
+  maximumOutputCharacters: number,
 ): {
   output: string;
   diagnostics: string[];
@@ -322,7 +481,10 @@ function formatPrintf(
   const diagnostics: string[] = [];
   let offset = 0;
   do {
-    const result = formatPrintfOnce(format, values.slice(offset));
+    const result = formatPrintfOnce(format, values.slice(offset), maximumOutputCharacters);
+    if (output.length + result.output.length > maximumOutputCharacters) {
+      throw new VfsError("E2BIG", "printf output exceeds the execution limit");
+    }
     output += result.output;
     diagnostics.push(...result.diagnostics);
     offset += result.consumed;
@@ -331,13 +493,17 @@ function formatPrintf(
   return { output, diagnostics };
 }
 
-export const printfCommand = /* @__PURE__ */ defineApplet(PRINTF, async (_context, argv, fds) => {
+export const printfCommand = /* @__PURE__ */ defineApplet(PRINTF, async (context, argv, fds) => {
   // `--` ends the options, so a format that begins with a dash can still be
   // written. `printf` has no options here, but a caller writing portable
   // scripts has no way to know that.
   const operands = argv[0] === "--" ? argv.slice(1) : argv;
   if (operands.length === 0) throw appletUsageError(PRINTF, "missing format");
-  const formatted = formatPrintf(operands[0] ?? "", operands.slice(1));
+  const formatted = formatPrintf(
+    operands[0] ?? "",
+    operands.slice(1),
+    context.budget.limits.maxStdoutBytes,
+  );
   await Promise.all([
     writeText(fds[1], formatted.output),
     formatted.diagnostics.length === 0

@@ -26,13 +26,6 @@ const oracleLabel = (name: string): string => {
  * cf-vfs produces where it deliberately differs from the oracle.
  */
 const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
-  "cut-list-ranges-unsupported": async () => {
-    const harness = createBashHarness();
-    const result = await harness.run("printf 'abcdef\\n' | cut -c2-4");
-    expect(result.exitCode).toBe(2);
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toBe("cut: character must be an integer\n");
-  },
   "wc-multi-field-padding": async () => {
     const harness = createBashHarness();
     const result = await harness.run("printf 'one two\\nthree\\n' | wc");
