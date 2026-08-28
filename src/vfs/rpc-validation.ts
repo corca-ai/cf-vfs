@@ -11,6 +11,7 @@ import type {
   FindOptions,
   MetadataUpdateOptions,
   MoveOptions,
+  MutationTokenOptions,
   OwnershipUpdateOptions,
   PageOptions,
   PosixCredentials,
@@ -27,6 +28,7 @@ import type {
 const MAX_POSIX_ID = 0xffff_ffff;
 
 export type RpcRecord = Readonly<Record<string, unknown>>;
+export type RpcKeySet<Shape> = Readonly<Record<Extract<keyof Shape, string>, true>>;
 
 const ENTRY_KINDS = {
   directory: true,
@@ -40,20 +42,113 @@ const WRITE_DISPOSITIONS = {
   upsert: true,
 } as const satisfies Readonly<Record<WriteDisposition, true>>;
 
-const PAGE_OPTION_KEYS = ["cursor", "limit"] as const;
-const FIND_OPTION_KEYS = [
-  "path",
-  "includeRoot",
-  "maxDepth",
-  "name",
-  "pathGlob",
-  "type",
+const POSIX_CREDENTIAL_KEYS = {
+  uid: true,
+  gid: true,
+  supplementaryGids: true,
+} as const satisfies RpcKeySet<PosixCredentials>;
+
+const PAGE_OPTION_KEYS = {
+  cursor: true,
+  limit: true,
+} as const satisfies RpcKeySet<PageOptions>;
+
+const FIND_OPTION_KEYS = {
+  path: true,
+  includeRoot: true,
+  maxDepth: true,
+  name: true,
+  pathGlob: true,
+  type: true,
   ...PAGE_OPTION_KEYS,
-] as const;
-const WRITE_FILES_OPTION_KEYS = ["createParents", "disposition", "skipIfUnchanged"] as const;
-const WRITE_OPTION_KEYS = [...WRITE_FILES_OPTION_KEYS, "ifMutationToken", "mode"] as const;
-const METADATA_OPTION_KEYS = ["ifMutationToken", "mode", "modifiedAtMs"] as const;
-const TOUCH_OPTION_KEYS = [...METADATA_OPTION_KEYS, "create", "createParents"] as const;
+} as const satisfies RpcKeySet<FindOptions>;
+
+const CHANGES_SINCE_OPTION_KEYS = {
+  limit: true,
+} as const satisfies RpcKeySet<ChangesSinceOptions>;
+
+const READ_FILE_OPTION_KEYS = {
+  range: true,
+} as const satisfies RpcKeySet<ReadFileOptions>;
+
+const WRITE_FILES_ENTRY_KEYS = {
+  path: true,
+  body: true,
+  ifMutationToken: true,
+  mode: true,
+} as const satisfies RpcKeySet<WriteFilesEntry>;
+
+const WRITE_FILES_OPTION_KEYS = {
+  createParents: true,
+  disposition: true,
+  skipIfUnchanged: true,
+} as const satisfies RpcKeySet<WriteFilesOptions>;
+
+const WRITE_OPTION_KEYS = {
+  ...WRITE_FILES_OPTION_KEYS,
+  ifMutationToken: true,
+  mode: true,
+} as const satisfies RpcKeySet<WriteFileOptions>;
+
+const APPEND_OPTION_KEYS = {
+  ifMutationToken: true,
+} as const satisfies RpcKeySet<AppendFileOptions>;
+
+const METADATA_OPTION_KEYS = {
+  ifMutationToken: true,
+  mode: true,
+  modifiedAtMs: true,
+} as const satisfies RpcKeySet<MetadataUpdateOptions>;
+
+const OWNERSHIP_OPTION_KEYS = {
+  ifMutationToken: true,
+  uid: true,
+  gid: true,
+} as const satisfies RpcKeySet<OwnershipUpdateOptions>;
+
+const SYMLINK_OPTION_KEYS = {
+  createParents: true,
+  ifMutationToken: true,
+  replace: true,
+} as const satisfies RpcKeySet<SymlinkOptions>;
+
+const MUTATION_TOKEN_OPTION_KEYS = {
+  follow: true,
+} as const satisfies RpcKeySet<MutationTokenOptions>;
+
+const TOUCH_OPTION_KEYS = {
+  ...METADATA_OPTION_KEYS,
+  create: true,
+  createParents: true,
+} as const satisfies RpcKeySet<TouchOptions>;
+
+const REMOVE_OPTION_KEYS = {
+  recursive: true,
+} as const satisfies RpcKeySet<RemoveOptions>;
+
+const MOVE_OPTION_KEYS = {
+  replace: true,
+} as const satisfies RpcKeySet<MoveOptions>;
+
+const COPY_OPTION_KEYS = {
+  replace: true,
+  recursive: true,
+  createParents: true,
+  dereference: true,
+} as const satisfies RpcKeySet<CopyOptions>;
+
+const BEGIN_UPLOAD_OPTION_KEYS = {
+  createParents: true,
+  ifMutationToken: true,
+  mode: true,
+  expectedSizeBytes: true,
+  expiresInMs: true,
+  contentType: true,
+} as const satisfies RpcKeySet<BeginOpaqueUploadOptions>;
+
+const COMMIT_UPLOAD_OPTION_KEYS = {
+  verifiedSha256: true,
+} as const satisfies RpcKeySet<CommitOpaqueUploadOptions>;
 
 function isRpcRecord(value: unknown): value is RpcRecord {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -68,9 +163,13 @@ function rpcRecord(value: unknown, name: string): RpcRecord {
   return value;
 }
 
-export function rpcStruct(value: unknown, name: string, allowedKeys: readonly string[]): RpcRecord {
+export function rpcStruct(
+  value: unknown,
+  name: string,
+  allowedKeys: Readonly<Record<string, true>>,
+): RpcRecord {
   const input = rpcRecord(value, name);
-  const extra = Object.keys(input).find((key) => !allowedKeys.includes(key));
+  const extra = Object.keys(input).find((key) => !Object.hasOwn(allowedKeys, key));
   if (extra !== undefined) throw new VfsError("EINVAL", `${name}.${extra} is not supported`);
   return input;
 }
@@ -185,7 +284,7 @@ function optionalPosixId(value: unknown, name: string): number | undefined {
 
 export function rpcPosixCredentials(value: unknown, name: string): PosixCredentials | undefined {
   if (value === undefined) return undefined;
-  const input = rpcStruct(value, name, ["uid", "gid", "supplementaryGids"]);
+  const input = rpcStruct(value, name, POSIX_CREDENTIAL_KEYS);
   const uid = optionalPosixId(input["uid"], `${name}.uid`);
   const gid = optionalPosixId(input["gid"], `${name}.gid`);
   if (uid === undefined || gid === undefined) {
@@ -208,7 +307,7 @@ export function rpcPosixCredentials(value: unknown, name: string): PosixCredenti
   };
 }
 
-function guardOptions(input: RpcRecord): { ifMutationToken?: string } {
+function guardOptions(input: RpcRecord): AppendFileOptions {
   const ifMutationToken = optionalString(input["ifMutationToken"], "options.ifMutationToken");
   return ifMutationToken === undefined ? {} : { ifMutationToken };
 }
@@ -263,14 +362,14 @@ export function rpcNonnegativeInteger(value: unknown, name: string): number {
 
 export function rpcChangesSinceOptions(value: unknown): ChangesSinceOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcStruct(value, "options", ["limit"]);
+  const input = rpcStruct(value, "options", CHANGES_SINCE_OPTION_KEYS);
   const limit = rpcOptionalPositiveInteger(input["limit"], "options.limit");
   return limit === undefined ? {} : { limit };
 }
 
 export function rpcReadFileOptions(value: unknown): ReadFileOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcStruct(value, "options", ["range"]);
+  const input = rpcStruct(value, "options", READ_FILE_OPTION_KEYS);
   const range = input["range"];
   validateByteRange(range);
   return range === undefined ? {} : { range };
@@ -325,7 +424,7 @@ export function rpcWriteFilesEntries(value: unknown): WriteFilesEntry[] {
   if (!Array.isArray(value)) throw new VfsError("EINVAL", "entries must be an array");
   return value.map((entry, index) => {
     const name = `entries[${index}]`;
-    const input = rpcStruct(entry, name, ["path", "body", "ifMutationToken", "mode"]);
+    const input = rpcStruct(entry, name, WRITE_FILES_ENTRY_KEYS);
     const ifMutationToken = optionalString(input["ifMutationToken"], `${name}.ifMutationToken`);
     const mode = optionalInteger(input["mode"], `${name}.mode`);
     return {
@@ -352,7 +451,7 @@ export function rpcWriteFilesOptions(value: unknown): WriteFilesOptions | undefi
 
 export function rpcAppendOptions(value: unknown): AppendFileOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcStruct(value, "options", ["ifMutationToken"]);
+  const input = rpcStruct(value, "options", APPEND_OPTION_KEYS);
   return guardOptions(input);
 }
 
@@ -362,7 +461,7 @@ export function rpcMetadataOptions(value: unknown): MetadataUpdateOptions {
 }
 
 export function rpcOwnershipOptions(value: unknown): OwnershipUpdateOptions {
-  const input = rpcStruct(value, "options", ["ifMutationToken", "uid", "gid"]);
+  const input = rpcStruct(value, "options", OWNERSHIP_OPTION_KEYS);
   const uid = optionalPosixId(input["uid"], "options.uid");
   const gid = optionalPosixId(input["gid"], "options.gid");
   if (uid === undefined && gid === undefined) {
@@ -377,7 +476,7 @@ export function rpcOwnershipOptions(value: unknown): OwnershipUpdateOptions {
 
 export function rpcSymlinkOptions(value: unknown): SymlinkOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcStruct(value, "options", ["createParents", "ifMutationToken", "replace"]);
+  const input = rpcStruct(value, "options", SYMLINK_OPTION_KEYS);
   const createParents = optionalBoolean(input["createParents"], "options.createParents");
   const replace = optionalBoolean(input["replace"], "options.replace");
   const ifMutationToken = optionalString(input["ifMutationToken"], "options.ifMutationToken");
@@ -388,9 +487,9 @@ export function rpcSymlinkOptions(value: unknown): SymlinkOptions | undefined {
   };
 }
 
-export function rpcFollowOptions(value: unknown): { follow?: boolean } | undefined {
+export function rpcFollowOptions(value: unknown): MutationTokenOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcStruct(value, "options", ["follow"]);
+  const input = rpcStruct(value, "options", MUTATION_TOKEN_OPTION_KEYS);
   const follow = optionalBoolean(input["follow"], "options.follow");
   return follow === undefined ? {} : { follow };
 }
@@ -409,26 +508,21 @@ export function rpcTouchOptions(value: unknown): TouchOptions | undefined {
 
 export function rpcRemoveOptions(value: unknown): RemoveOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcStruct(value, "options", ["recursive"]);
+  const input = rpcStruct(value, "options", REMOVE_OPTION_KEYS);
   const recursive = optionalBoolean(input["recursive"], "options.recursive");
   return recursive === undefined ? {} : { recursive };
 }
 
 export function rpcMoveOptions(value: unknown): MoveOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcStruct(value, "options", ["replace"]);
+  const input = rpcStruct(value, "options", MOVE_OPTION_KEYS);
   const replace = optionalBoolean(input["replace"], "options.replace");
   return replace === undefined ? {} : { replace };
 }
 
 export function rpcCopyOptions(value: unknown): CopyOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcStruct(value, "options", [
-    "replace",
-    "recursive",
-    "createParents",
-    "dereference",
-  ]);
+  const input = rpcStruct(value, "options", COPY_OPTION_KEYS);
   const replace = optionalBoolean(input["replace"], "options.replace");
   const recursive = optionalBoolean(input["recursive"], "options.recursive");
   const createParents = optionalBoolean(input["createParents"], "options.createParents");
@@ -443,14 +537,7 @@ export function rpcCopyOptions(value: unknown): CopyOptions | undefined {
 
 export function rpcBeginUploadOptions(value: unknown): BeginOpaqueUploadOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcStruct(value, "options", [
-    "createParents",
-    "ifMutationToken",
-    "mode",
-    "expectedSizeBytes",
-    "expiresInMs",
-    "contentType",
-  ]);
+  const input = rpcStruct(value, "options", BEGIN_UPLOAD_OPTION_KEYS);
   const createParents = optionalBoolean(input["createParents"], "options.createParents");
   const ifMutationToken = optionalString(input["ifMutationToken"], "options.ifMutationToken");
   const mode = optionalInteger(input["mode"], "options.mode");
@@ -472,7 +559,7 @@ export function rpcBeginUploadOptions(value: unknown): BeginOpaqueUploadOptions 
 
 export function rpcCommitUploadOptions(value: unknown): CommitOpaqueUploadOptions | undefined {
   if (value === undefined) return undefined;
-  const input = rpcStruct(value, "options", ["verifiedSha256"]);
+  const input = rpcStruct(value, "options", COMMIT_UPLOAD_OPTION_KEYS);
   const verifiedSha256 = optionalString(input["verifiedSha256"], "options.verifiedSha256");
   return verifiedSha256 === undefined ? {} : { verifiedSha256 };
 }

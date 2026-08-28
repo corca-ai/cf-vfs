@@ -1,15 +1,11 @@
 import { normalizePath } from "../core/path.js";
-import type { PosixCredentials } from "../vfs/types.js";
 import { ShellEnvironment } from "./environment.js";
-import type { ShellSession } from "./types.js";
+import type { ExecuteStreamOptions, ShellSession } from "./types.js";
 
-export interface ShellSessionOptions {
-  cwd?: string;
-  env?: Readonly<Record<string, string>>;
-  args?: readonly string[];
-  credentials?: PosixCredentials;
-  umask?: number;
-}
+export type ShellSessionOptions = Pick<
+  ExecuteStreamOptions,
+  "cwd" | "env" | "args" | "credentials" | "umask"
+>;
 
 export function createShellSession(options: ShellSessionOptions = {}): ShellSession {
   const cwd = normalizePath(options.cwd ?? "/");

@@ -226,6 +226,7 @@ class JsonReader {
         return value;
       }
       if (character !== "\\") {
+        if (character.charCodeAt(0) < 0x20) this.fail("unescaped control character");
         value += character;
         this.offset += 1;
         continue;

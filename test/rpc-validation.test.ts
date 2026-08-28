@@ -4,14 +4,195 @@ import {
   parseRemoteTextOptions,
 } from "../src/shell/rpc-validation.js";
 import {
+  rpcAppendOptions,
+  rpcBeginUploadOptions,
+  rpcChangesSinceOptions,
+  rpcCommitUploadOptions,
+  rpcCopyOptions,
   rpcFindOptions,
+  rpcFollowOptions,
   rpcIdentity,
+  rpcMetadataOptions,
+  rpcMoveOptions,
   rpcOptionalNonnegativeInteger,
   rpcOptionalPositiveInteger,
+  rpcOwnershipOptions,
+  rpcPageOptions,
   rpcPosixCredentials,
+  rpcReadFileOptions,
+  rpcRemoveOptions,
+  rpcSymlinkOptions,
+  rpcTouchOptions,
   rpcWriteFilesEntries,
+  rpcWriteFilesOptions,
   rpcWriteOptions,
 } from "../src/vfs/rpc-validation.js";
+
+const VFS_OPTION_BOUNDARIES: readonly {
+  readonly name: string;
+  readonly parse: (value: unknown) => unknown;
+  readonly input: Readonly<Record<string, unknown>>;
+  readonly expected: unknown;
+}[] = [
+  {
+    name: "page",
+    parse: rpcPageOptions,
+    input: { cursor: "next", limit: 25 },
+    expected: { cursor: "next", limit: 25 },
+  },
+  {
+    name: "change feed",
+    parse: rpcChangesSinceOptions,
+    input: { limit: 50 },
+    expected: { limit: 50 },
+  },
+  {
+    name: "read",
+    parse: rpcReadFileOptions,
+    input: { range: { offset: 10, length: 20 } },
+    expected: { range: { offset: 10, length: 20 } },
+  },
+  {
+    name: "find",
+    parse: rpcFindOptions,
+    input: {
+      path: "/src",
+      includeRoot: true,
+      maxDepth: 2,
+      name: "*.ts",
+      pathGlob: "/src/**",
+      type: "file",
+      cursor: "next",
+      limit: 10,
+    },
+    expected: {
+      path: "/src",
+      includeRoot: true,
+      maxDepth: 2,
+      name: "*.ts",
+      pathGlob: "/src/**",
+      type: "file",
+      cursor: "next",
+      limit: 10,
+    },
+  },
+  {
+    name: "write",
+    parse: rpcWriteOptions,
+    input: {
+      createParents: true,
+      disposition: "replace",
+      ifMutationToken: "epoch:1",
+      mode: 0o640,
+      skipIfUnchanged: true,
+    },
+    expected: {
+      createParents: true,
+      disposition: "replace",
+      ifMutationToken: "epoch:1",
+      mode: 0o640,
+      skipIfUnchanged: true,
+    },
+  },
+  {
+    name: "batch write",
+    parse: rpcWriteFilesOptions,
+    input: { createParents: true, disposition: "create", skipIfUnchanged: true },
+    expected: { createParents: true, disposition: "create", skipIfUnchanged: true },
+  },
+  {
+    name: "append",
+    parse: rpcAppendOptions,
+    input: { ifMutationToken: "epoch:2" },
+    expected: { ifMutationToken: "epoch:2" },
+  },
+  {
+    name: "metadata",
+    parse: rpcMetadataOptions,
+    input: { ifMutationToken: "epoch:3", mode: 0o600, modifiedAtMs: 1234 },
+    expected: { ifMutationToken: "epoch:3", mode: 0o600, modifiedAtMs: 1234 },
+  },
+  {
+    name: "ownership",
+    parse: rpcOwnershipOptions,
+    input: { ifMutationToken: "epoch:4", uid: 1000, gid: 100 },
+    expected: { ifMutationToken: "epoch:4", uid: 1000, gid: 100 },
+  },
+  {
+    name: "symlink",
+    parse: rpcSymlinkOptions,
+    input: { createParents: true, ifMutationToken: "epoch:5", replace: true },
+    expected: { createParents: true, ifMutationToken: "epoch:5", replace: true },
+  },
+  {
+    name: "link following",
+    parse: rpcFollowOptions,
+    input: { follow: false },
+    expected: { follow: false },
+  },
+  {
+    name: "touch",
+    parse: rpcTouchOptions,
+    input: {
+      create: false,
+      createParents: true,
+      ifMutationToken: "epoch:6",
+      mode: 0o644,
+      modifiedAtMs: 5678,
+    },
+    expected: {
+      create: false,
+      createParents: true,
+      ifMutationToken: "epoch:6",
+      mode: 0o644,
+      modifiedAtMs: 5678,
+    },
+  },
+  {
+    name: "remove",
+    parse: rpcRemoveOptions,
+    input: { recursive: true },
+    expected: { recursive: true },
+  },
+  {
+    name: "move",
+    parse: rpcMoveOptions,
+    input: { replace: true },
+    expected: { replace: true },
+  },
+  {
+    name: "copy",
+    parse: rpcCopyOptions,
+    input: { replace: true, recursive: true, createParents: true, dereference: true },
+    expected: { replace: true, recursive: true, createParents: true, dereference: true },
+  },
+  {
+    name: "begin upload",
+    parse: rpcBeginUploadOptions,
+    input: {
+      createParents: true,
+      ifMutationToken: "epoch:7",
+      mode: 0o640,
+      expectedSizeBytes: 4096,
+      expiresInMs: 60_000,
+      contentType: "text/plain",
+    },
+    expected: {
+      createParents: true,
+      ifMutationToken: "epoch:7",
+      mode: 0o640,
+      expectedSizeBytes: 4096,
+      expiresInMs: 60_000,
+      contentType: "text/plain",
+    },
+  },
+  {
+    name: "commit upload",
+    parse: rpcCommitUploadOptions,
+    input: { verifiedSha256: "abc123" },
+    expected: { verifiedSha256: "abc123" },
+  },
+];
 
 describe("shell RPC option parsing", () => {
   it("normalizes every supported text-execution field", () => {
@@ -135,33 +316,7 @@ describe("VFS RPC option parsing", () => {
     );
   });
 
-  it("preserves supported find and write modes while rejecting unknown literals", () => {
-    expect(
-      rpcFindOptions({
-        path: "/src",
-        includeRoot: true,
-        maxDepth: 2,
-        name: "*.ts",
-        pathGlob: "/src/**",
-        type: "file",
-        cursor: "next",
-        limit: 10,
-      }),
-    ).toEqual({
-      path: "/src",
-      includeRoot: true,
-      maxDepth: 2,
-      name: "*.ts",
-      pathGlob: "/src/**",
-      type: "file",
-      cursor: "next",
-      limit: 10,
-    });
-    expect(rpcWriteOptions({ disposition: "replace", createParents: true })).toEqual({
-      disposition: "replace",
-      createParents: true,
-    });
-
+  it("rejects unknown find and write literals", () => {
     expect(() => rpcFindOptions({ path: "/", type: "device" })).toThrowError(
       expect.objectContaining({ code: "EINVAL" }),
     );
@@ -169,6 +324,25 @@ describe("VFS RPC option parsing", () => {
       expect.objectContaining({ code: "EINVAL" }),
     );
   });
+
+  it.each(VFS_OPTION_BOUNDARIES)(
+    "normalizes every supported $name option",
+    ({ parse, input, expected }) => {
+      expect(parse(input)).toEqual(expected);
+    },
+  );
+
+  it.each(VFS_OPTION_BOUNDARIES)(
+    "$name options reject fields outside their public contract",
+    ({ parse, input }) => {
+      expect(() => parse({ ...input, unexpected: true })).toThrowError(
+        expect.objectContaining({
+          code: "EINVAL",
+          message: "options.unexpected is not supported",
+        }),
+      );
+    },
+  );
 
   it("identifies the malformed entry in a batch", () => {
     expect(() =>

@@ -32,6 +32,17 @@ describe(`jq differential fixtures (${fixtures.image})`, () => {
       expect(result.exitCode).toBe(fixture.exitCode);
     });
   }
+
+  it("rejects unescaped control characters inside JSON strings", async () => {
+    const harness = createBashHarness();
+    await harness.fileSystem.writeFile("/input", '"line\nbreak"');
+
+    const result = await harness.run("jq -c . < /input");
+
+    expect(result.exitCode).toBe(5);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("unescaped control character");
+  });
 });
 
 /** One demonstration per declared divergence, as the utility registry requires. */

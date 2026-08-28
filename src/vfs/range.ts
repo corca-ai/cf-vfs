@@ -29,9 +29,9 @@ export function validateByteRange(
       );
     }
   }
-  const hasOffset = "offset" in range;
-  const hasLength = "length" in range;
-  const hasSuffix = "suffix" in range;
+  const hasOffset = Object.hasOwn(range, "offset");
+  const hasLength = Object.hasOwn(range, "length");
+  const hasSuffix = Object.hasOwn(range, "suffix");
   if ((!hasOffset && !hasLength && !hasSuffix) || (hasSuffix && (hasOffset || hasLength))) {
     throw new VfsError("EINVAL", "byte range must use offset/length or suffix", path);
   }

@@ -47,7 +47,7 @@ import type {
   CommitOpaqueUploadOptions,
   CopyOptions,
   CopyResult,
-  EntryKind,
+  DirectoryStat,
   EntryPage,
   FindOptions,
   GarbageDrainResult,
@@ -72,6 +72,7 @@ import type {
   RemoveResult,
   SubtreeSummary,
   SymlinkOptions,
+  SymlinkStat,
   TouchOptions,
   VfsStat,
   VirtualFileSystem,
@@ -334,25 +335,51 @@ export interface SqlFileSystemStorage {
 
 type SqlRow = VfsSqlRow;
 
-interface EntryRow {
-  id: number;
-  path: string;
-  parentPath: string;
-  name: string;
-  kind: EntryKind;
-  contentClass: "inline" | "opaque" | null;
-  opaqueObjectId: number | null;
-  linkTarget: string | null;
-  sizeBytes: number;
-  mode: number;
-  uid: number;
-  gid: number;
-  createdAtMs: number;
-  modifiedAtMs: number;
-  revision: number;
-  mutationVersion: number;
-  mutationToken: string;
+interface EntryRowCommon {
+  readonly id: number;
+  readonly path: string;
+  readonly parentPath: string;
+  readonly name: string;
+  readonly sizeBytes: number;
+  readonly mode: number;
+  readonly uid: number;
+  readonly gid: number;
+  readonly createdAtMs: number;
+  readonly modifiedAtMs: number;
+  readonly revision: number;
+  readonly mutationVersion: number;
+  readonly mutationToken: string;
 }
+
+interface DirectoryEntryRow extends EntryRowCommon {
+  readonly kind: "directory";
+  readonly contentClass: null;
+  readonly opaqueObjectId: null;
+  readonly linkTarget: null;
+}
+
+interface SymlinkEntryRow extends EntryRowCommon {
+  readonly kind: "symlink";
+  readonly contentClass: null;
+  readonly opaqueObjectId: null;
+  readonly linkTarget: string;
+}
+
+interface InlineEntryRow extends EntryRowCommon {
+  readonly kind: "file";
+  readonly contentClass: "inline";
+  readonly opaqueObjectId: null;
+  readonly linkTarget: null;
+}
+
+interface OpaqueEntryRow extends EntryRowCommon {
+  readonly kind: "file";
+  readonly contentClass: "opaque";
+  readonly opaqueObjectId: number;
+  readonly linkTarget: null;
+}
+
+type EntryRow = DirectoryEntryRow | SymlinkEntryRow | InlineEntryRow | OpaqueEntryRow;
 
 /** A committed namespace change, waiting for its transaction to commit. */
 interface PendingMutation {
@@ -566,30 +593,19 @@ function parseEntry(row: SqlRow, mutationEpoch: string): EntryRow {
   const contentClass = nullableStringColumn(row, "content_class");
   const opaqueObjectId = nullableIntegerColumn(row, "opaque_object_id");
   const linkTarget = nullableStringColumn(row, "link_target");
+  const path = stringColumn(row, "path");
   if (kind !== "directory" && kind !== "file" && kind !== "symlink") {
     invalidColumn("kind", "directory, file, or symlink");
   }
   if (contentClass !== null && contentClass !== "inline" && contentClass !== "opaque") {
     invalidColumn("content_class", "inline, opaque, or null");
   }
-  if (
-    (kind === "directory" && (contentClass !== null || opaqueObjectId !== null)) ||
-    (kind === "file" && contentClass === null) ||
-    (contentClass === "inline" && opaqueObjectId !== null) ||
-    (contentClass === "opaque" && opaqueObjectId === null) ||
-    (kind === "symlink") !== (linkTarget !== null)
-  ) {
-    throw new VfsError("EIO", "invalid SQLite entry state", stringColumn(row, "path"));
-  }
-  return {
+  const mutationVersion = integerColumn(row, "mutation_version");
+  const common: EntryRowCommon = {
     id: integerColumn(row, "id"),
-    path: stringColumn(row, "path"),
+    path,
     parentPath: stringColumn(row, "parent_path"),
     name: stringColumn(row, "name"),
-    kind,
-    contentClass,
-    linkTarget,
-    opaqueObjectId,
     sizeBytes: integerColumn(row, "size_bytes"),
     mode: integerColumn(row, "mode"),
     uid: integerColumn(row, "uid"),
@@ -597,11 +613,49 @@ function parseEntry(row: SqlRow, mutationEpoch: string): EntryRow {
     createdAtMs: integerColumn(row, "created_at_ms"),
     modifiedAtMs: integerColumn(row, "modified_at_ms"),
     revision: integerColumn(row, "revision"),
-    mutationVersion: integerColumn(row, "mutation_version"),
-    mutationToken: formatMutationToken(mutationEpoch, integerColumn(row, "mutation_version")),
+    mutationVersion,
+    mutationToken: formatMutationToken(mutationEpoch, mutationVersion),
   };
+  if (
+    kind === "directory" &&
+    contentClass === null &&
+    opaqueObjectId === null &&
+    linkTarget === null
+  ) {
+    return { ...common, kind, contentClass, opaqueObjectId, linkTarget };
+  }
+  if (
+    kind === "symlink" &&
+    contentClass === null &&
+    opaqueObjectId === null &&
+    linkTarget !== null
+  ) {
+    return { ...common, kind, contentClass, opaqueObjectId, linkTarget };
+  }
+  if (
+    kind === "file" &&
+    contentClass === "inline" &&
+    opaqueObjectId === null &&
+    linkTarget === null
+  ) {
+    return { ...common, kind, contentClass, opaqueObjectId, linkTarget };
+  }
+  if (
+    kind === "file" &&
+    contentClass === "opaque" &&
+    opaqueObjectId !== null &&
+    linkTarget === null
+  ) {
+    return { ...common, kind, contentClass, opaqueObjectId, linkTarget };
+  }
+  throw new VfsError("EIO", "invalid SQLite entry state", path);
 }
 
+function rowToStat(row: DirectoryEntryRow): DirectoryStat;
+function rowToStat(row: SymlinkEntryRow): SymlinkStat;
+function rowToStat(row: InlineEntryRow): InlineFileStat;
+function rowToStat(row: OpaqueEntryRow): OpaqueFileStat;
+function rowToStat(row: EntryRow): VfsStat;
 function rowToStat(row: EntryRow): VfsStat {
   const common = {
     path: row.path,
@@ -621,12 +675,10 @@ function rowToStat(row: EntryRow): VfsStat {
   };
   if (row.kind === "directory") return { ...common, kind: "directory", contentClass: null };
   if (row.kind === "symlink") {
-    if (row.linkTarget === null) throw new VfsError("EIO", "invalid SQLite entry state", row.path);
     return { ...common, kind: "symlink", contentClass: null, linkTarget: row.linkTarget };
   }
   if (row.contentClass === "inline") return { ...common, kind: "file", contentClass: "inline" };
-  if (row.contentClass === "opaque") return { ...common, kind: "file", contentClass: "opaque" };
-  throw new VfsError("EIO", "invalid SQLite entry state", row.path);
+  return { ...common, kind: "file", contentClass: "opaque" };
 }
 
 function parseOpaqueObject(row: SqlRow): OpaqueObjectRow {
@@ -750,7 +802,7 @@ export class SqlFileSystem implements PosixVirtualFileSystem {
   /** The next entry identity, read once per instance from `vfs_usage`. */
   private nextIno: number;
   /** Metadata from the last direct inline read; never file-body bytes. */
-  private lastInlineRead: EntryRow | undefined;
+  private lastInlineRead: InlineEntryRow | undefined;
   /** Stored layout from the last ranged body; keyed by immutable identity and revision. */
   private lastInlineChunkLayout:
     | { readonly id: number; readonly revision: number; readonly chunkBytes: number }
@@ -1448,9 +1500,10 @@ ${ENTRY_TRIGGERS}
    * not the working directory of whoever is looking, so a tree keeps meaning
    * the same thing wherever it is read from.
    */
-  private linkDestination(row: EntryRow): string {
-    const target = row.linkTarget ?? "";
-    return target.startsWith("/") ? normalizePath(target) : normalizePath(target, row.parentPath);
+  private linkDestination(row: SymlinkEntryRow): string {
+    return row.linkTarget.startsWith("/")
+      ? normalizePath(row.linkTarget)
+      : normalizePath(row.linkTarget, row.parentPath);
   }
 
   /**
@@ -1461,7 +1514,7 @@ ${ENTRY_TRIGGERS}
    * by exact path uses the partial link index and costs one query, rather than
    * one query per component.
    */
-  private linkAncestor(path: string): EntryRow | null {
+  private linkAncestor(path: string): SymlinkEntryRow | null {
     const ancestors: string[] = [];
     for (let at = dirname(path); at !== "/"; at = dirname(at)) ancestors.push(at);
     if (ancestors.length === 0) return null;
@@ -1476,7 +1529,12 @@ ${ENTRY_TRIGGERS}
         JSON.stringify(ancestors),
       ),
     );
-    return row === undefined ? null : parseEntry(row, this.mutationEpoch);
+    if (row === undefined) return null;
+    const entry = parseEntry(row, this.mutationEpoch);
+    if (entry.kind !== "symlink") {
+      throw new VfsError("EIO", "invalid SQLite entry state", entry.path);
+    }
+    return entry;
   }
 
   /**
@@ -1589,14 +1647,14 @@ ${ENTRY_TRIGGERS}
     return row;
   }
 
-  private requireDirectory(path: string, resolved?: EntryRow | null): EntryRow {
+  private requireDirectory(path: string, resolved?: EntryRow | null): DirectoryEntryRow {
     // The row resolution already landed on, when the caller has it.
     const row = resolved ?? this.requireEntry(path);
     if (row.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", path);
     return row;
   }
 
-  private requireInline(path: string, resolved?: EntryRow | null): EntryRow {
+  private requireInline(path: string, resolved?: EntryRow | null): InlineEntryRow {
     // The row resolution already landed on, when the caller has it: looking it
     // up again would resolve the same path a second time.
     const row = resolved ?? this.requireEntry(path);
@@ -2440,7 +2498,7 @@ ${ENTRY_TRIGGERS}
     this.assertTraverse(resolved.path, resolved.followed, access);
     const row = resolved.row;
     if (row === null) throw new VfsError("ENOENT", "no such file or directory", resolved.path);
-    if (row.kind !== "symlink" || row.linkTarget === null) {
+    if (row.kind !== "symlink") {
       throw new VfsError("EINVAL", "not a symbolic link", row.path);
     }
     return row.linkTarget;
@@ -2473,7 +2531,7 @@ ${ENTRY_TRIGGERS}
     }
     const row = access.row;
     const stat = rowToStat(row);
-    if (stat.kind !== "file" || stat.contentClass !== "opaque" || row.opaqueObjectId === null) {
+    if (row.contentClass !== "opaque") {
       return stat;
     }
     const object = this.opaqueObject(row.opaqueObjectId);
@@ -2781,9 +2839,6 @@ ${ENTRY_TRIGGERS}
     }
     this.assertPermission(entry, posix, READ_PERMISSION, normalized);
     if (entry.contentClass === "opaque") {
-      if (entry.opaqueObjectId === null) {
-        throw new VfsError("EIO", "opaque object metadata is missing", normalized);
-      }
       const object = this.opaqueObject(entry.opaqueObjectId);
       if (object === null) {
         throw new VfsError("EIO", "opaque object metadata is missing", normalized);
@@ -2927,7 +2982,7 @@ ${ENTRY_TRIGGERS}
     this.inFlightBytes.acquire(materializedBytes);
     if (access.followed.length === 0) this.lastInlineRead = entry;
     return {
-      stat: rowToStat(entry) as InlineFileStat,
+      stat: rowToStat(entry),
       stream: streamFromOwnedChunks(chunks, () => {
         this.inFlightBytes.release(materializedBytes);
       }),
@@ -4890,7 +4945,7 @@ ${ENTRY_TRIGGERS}
     return this.transaction(() => {
       const entry = this.requireEntry(normalized);
       if (entry.kind === "directory") throw new VfsError("EISDIR", "is a directory", normalized);
-      if (entry.contentClass !== "opaque" || entry.opaqueObjectId === null) {
+      if (entry.contentClass !== "opaque") {
         throw new VfsError("ENOTSUP", "file is not opaque", normalized);
       }
       const object = this.opaqueObject(entry.opaqueObjectId);
@@ -4904,7 +4959,7 @@ ${ENTRY_TRIGGERS}
         object.id,
       );
       return {
-        stat: rowToStat(entry) as OpaqueFileStat,
+        stat: rowToStat(entry),
         object: metadataFromObject(object),
         leaseExpiresAtMs,
       };

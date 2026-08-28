@@ -1,5 +1,5 @@
 import { VfsError } from "../core/errors.js";
-import type { RpcRecord } from "../vfs/rpc-validation.js";
+import type { RpcKeySet, RpcRecord } from "../vfs/rpc-validation.js";
 import {
   rpcByteBody,
   rpcOptionalNonnegativeInteger,
@@ -9,28 +9,25 @@ import {
   rpcString,
   rpcStruct,
 } from "../vfs/rpc-validation.js";
-import type { PosixCredentials } from "../vfs/types.js";
 import type { RemoteExecuteTextOptions } from "./types.js";
 
-const REMOTE_TEXT_OPTION_KEYS = [
-  "script",
-  "cwd",
-  "env",
-  "args",
-  "stdin",
-  "credentials",
-  "umask",
-] as const;
+const REMOTE_TEXT_OPTION_KEYS = {
+  script: true,
+  cwd: true,
+  env: true,
+  args: true,
+  stdin: true,
+  credentials: true,
+  umask: true,
+} as const satisfies RpcKeySet<RemoteExecuteTextOptions>;
 
-const REMOTE_EXECUTE_TO_OPTION_KEYS = [...REMOTE_TEXT_OPTION_KEYS, "stdout", "stderr"] as const;
+const REMOTE_EXECUTE_TO_OPTION_KEYS = {
+  ...REMOTE_TEXT_OPTION_KEYS,
+  stdout: true,
+  stderr: true,
+} as const satisfies RpcKeySet<ExecuteToOptions>;
 
-export interface ExecuteToOptions {
-  script: string;
-  cwd?: string;
-  env?: Readonly<Record<string, string>>;
-  args?: readonly string[];
-  credentials?: PosixCredentials;
-  umask?: number;
+export interface ExecuteToOptions extends Omit<RemoteExecuteTextOptions, "stdin"> {
   stdin: ReadableStream<Uint8Array>;
   stdout: WritableStream<Uint8Array>;
   stderr: WritableStream<Uint8Array>;
