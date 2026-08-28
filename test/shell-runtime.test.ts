@@ -937,19 +937,21 @@ describe("stream-first shell runtime", () => {
       commands: defaultShellCommands,
       limits: { deadlineMs: 1_000 },
     });
+    const reading = Promise.withResolvers<void>();
     const execution = shell.executeStream({
       script: "set -e; cat; touch /after",
-      stdin: new ReadableStream<Uint8Array>({ pull: () => new Promise(() => undefined) }),
+      stdin: new ReadableStream<Uint8Array>({
+        pull() {
+          reading.resolve();
+          return new Promise(() => undefined);
+        },
+      }),
     });
     const stdout = readAllBytes(execution.stdout, 16).catch(() => new Uint8Array());
     const stderr = readAllBytes(execution.stderr, 1024).catch(() => new Uint8Array());
+    await reading.promise;
     execution.cancel();
-    const result = await Promise.race([
-      execution.completed,
-      new Promise<never>((_resolve, reject) =>
-        setTimeout(() => reject(new Error("cancel hung")), 100),
-      ),
-    ]);
+    const result = await execution.completed;
     expect(result).toEqual({ exitCode: 1 });
     await Promise.all([stdout, stderr]);
   });
@@ -1028,21 +1030,18 @@ describe("stream-first shell runtime", () => {
     );
   });
 
-  it("settles command-budget overflow and rejects invalid plugin exit statuses", async () => {
+  it("settles command-budget overflow as an execution failure", async () => {
     const limited = new Shell({
       fileSystem: createTestFileSystem(),
       commands: defaultShellCommands,
       limits: { maxCommands: 1 },
     });
-    await expect(
-      Promise.race([
-        limited.executeText({ script: "true; true" }),
-        new Promise<never>((_resolve, reject) =>
-          setTimeout(() => reject(new Error("budget hung")), 100),
-        ),
-      ]),
-    ).resolves.toMatchObject({ exitCode: 1 });
+    await expect(limited.executeText({ script: "true; true" })).resolves.toMatchObject({
+      exitCode: 1,
+    });
+  });
 
+  it("rejects an invalid plugin exit status as a broken command contract", async () => {
     const invalid = defineTestApplet("invalid", () => Number.NaN);
     const { shell } = createBashHarness({ extraCommands: [invalid] });
     await expect(shell.executeStream({ script: "invalid" }).completed).rejects.toThrow(
@@ -1124,7 +1123,7 @@ describe("stream-first shell runtime", () => {
     });
     expect(result).toEqual({
       exitCode: 0,
-      stdout: "x\nx\ny\nx\nx\ny\n01\n",
+      stdout: "x\nx\ny\nx\nx\ny\n1\n",
       stderr: "",
     });
   });
@@ -1471,6 +1470,18 @@ describe("stream-first shell runtime", () => {
       stdout: "",
     });
     expect(await shell.executeText({ script: "grep x", stdin: "xxxxx" })).toMatchObject({
+      exitCode: 1,
+      stdout: "",
+    });
+    expect(await shell.executeText({ script: "find /tree -type f" })).toMatchObject({
+      exitCode: 1,
+      stdout: "",
+    });
+    expect(await shell.executeText({ script: "find /tree -name '*.missing'" })).toMatchObject({
+      exitCode: 1,
+      stdout: "",
+    });
+    expect(await shell.executeText({ script: "tree /tree" })).toMatchObject({
       exitCode: 1,
       stdout: "",
     });

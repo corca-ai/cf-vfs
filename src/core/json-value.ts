@@ -1,4 +1,6 @@
 import { VfsError } from "./errors.js";
+import { compareUtf8 } from "./path.js";
+import { utf8ByteLength } from "./unicode.js";
 
 /**
  * A JSON value as `jq` sees one.
@@ -52,14 +54,9 @@ export function isTruthy(value: JsonValue): boolean {
   return value !== null && value !== false;
 }
 
-const KIND_ORDER: Record<JsonKind, number> = {
-  null: 0,
-  boolean: 1,
-  number: 2,
-  string: 3,
-  array: 4,
-  object: 5,
-};
+function invalidJsonValue(): never {
+  throw new TypeError("invalid JsonValue");
+}
 
 /**
  * `jq`'s total order: null < false < true < numbers < strings < arrays <
@@ -70,48 +67,51 @@ const KIND_ORDER: Record<JsonKind, number> = {
  * only in member order compare equal.
  */
 export function compareJson(left: JsonValue, right: JsonValue): number {
-  const leftKind = jsonKind(left);
-  const rightKind = jsonKind(right);
-  if (leftKind !== rightKind) return KIND_ORDER[leftKind] < KIND_ORDER[rightKind] ? -1 : 1;
-  switch (leftKind) {
-    case "null":
-      return 0;
-    case "boolean":
-      return left === right ? 0 : left === false ? -1 : 1;
-    case "number": {
-      const a = numberOf(left as number | JsonNumber);
-      const b = numberOf(right as number | JsonNumber);
-      return a === b ? 0 : a < b ? -1 : 1;
-    }
-    case "string":
-      return left === right ? 0 : (left as string) < (right as string) ? -1 : 1;
-    case "array": {
-      const a = left as JsonValue[];
-      const b = right as JsonValue[];
-      for (let index = 0; index < Math.min(a.length, b.length); index += 1) {
-        const order = compareJson(a[index] as JsonValue, b[index] as JsonValue);
-        if (order !== 0) return order;
-      }
-      return a.length === b.length ? 0 : a.length < b.length ? -1 : 1;
-    }
-    default: {
-      const a = left as JsonObject;
-      const b = right as JsonObject;
-      const aKeys = [...a.keys()].sort(compareStrings);
-      const bKeys = [...b.keys()].sort(compareStrings);
-      const keyOrder = compareJson(aKeys, bKeys);
-      if (keyOrder !== 0) return keyOrder;
-      for (const key of aKeys) {
-        const order = compareJson(a.get(key) as JsonValue, b.get(key) as JsonValue);
-        if (order !== 0) return order;
-      }
-      return 0;
-    }
+  if (left === null) return right === null ? 0 : -1;
+  if (right === null) return 1;
+  if (typeof left === "boolean") {
+    return typeof right !== "boolean" ? -1 : left === right ? 0 : left === false ? -1 : 1;
   }
+  if (typeof right === "boolean") return 1;
+  if (isJsonNumber(left)) {
+    if (!isJsonNumber(right)) return -1;
+    const a = numberOf(left);
+    const b = numberOf(right);
+    return a === b ? 0 : a < b ? -1 : 1;
+  }
+  if (isJsonNumber(right)) return 1;
+  if (typeof left === "string") {
+    return typeof right !== "string" ? -1 : compareStrings(left, right);
+  }
+  if (typeof right === "string") return 1;
+  if (Array.isArray(left)) {
+    if (!Array.isArray(right)) return -1;
+    for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
+      const a = left[index];
+      const b = right[index];
+      if (a === undefined || b === undefined) return invalidJsonValue();
+      const order = compareJson(a, b);
+      if (order !== 0) return order;
+    }
+    return left.length === right.length ? 0 : left.length < right.length ? -1 : 1;
+  }
+  if (Array.isArray(right)) return 1;
+  const aKeys = [...left.keys()].sort(compareStrings);
+  const bKeys = [...right.keys()].sort(compareStrings);
+  const keyOrder = compareJson(aKeys, bKeys);
+  if (keyOrder !== 0) return keyOrder;
+  for (const key of aKeys) {
+    const a = left.get(key);
+    const b = right.get(key);
+    if (a === undefined || b === undefined) return invalidJsonValue();
+    const order = compareJson(a, b);
+    if (order !== 0) return order;
+  }
+  return 0;
 }
 
 function compareStrings(left: string, right: string): number {
-  return left === right ? 0 : left < right ? -1 : 1;
+  return compareUtf8(left, right);
 }
 
 export function equalJson(left: JsonValue, right: JsonValue): boolean {
@@ -172,7 +172,8 @@ class JsonReader {
   }
 
   private fail(message: string): never {
-    throw new VfsError("EINVAL", `${this.command}: ${message} at byte ${this.offset}`);
+    const byteOffset = utf8ByteLength(this.text.slice(0, this.offset));
+    throw new VfsError("EINVAL", `${this.command}: ${message} at byte ${byteOffset}`);
   }
 
   private expect(character: string): void {
@@ -372,16 +373,21 @@ function write(
   const close = indent === undefined ? "" : `\n${current}`;
   if (Array.isArray(value)) {
     if (value.length === 0) return "[]";
-    const items = value.map((item) => write(item, indent, inner, sortKeys));
+    const items: string[] = [];
+    for (let index = 0; index < value.length; index += 1) {
+      const item = value[index];
+      items.push(item === undefined ? invalidJsonValue() : write(item, indent, inner, sortKeys));
+    }
     return `[${open}${items.join(separator)}${close}]`;
   }
   const keys = [...value.keys()];
   if (keys.length === 0) return "{}";
   if (sortKeys) keys.sort(compareStrings);
   const space = indent === undefined ? "" : " ";
-  const members = keys.map(
-    (key) =>
-      `${renderJsonString(key)}:${space}${write(value.get(key) as JsonValue, indent, inner, sortKeys)}`,
-  );
+  const members = keys.map((key) => {
+    const member = value.get(key);
+    if (member === undefined) return invalidJsonValue();
+    return `${renderJsonString(key)}:${space}${write(member, indent, inner, sortKeys)}`;
+  });
   return `{${open}${members.join(separator)}${close}}`;
 }

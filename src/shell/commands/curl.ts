@@ -1,4 +1,5 @@
 import { isVfsError, VfsError } from "../../core/errors.js";
+import { encodeUtf8 } from "../../core/unicode.js";
 import type { ShellRequest } from "../network.js";
 import { fetchThrough, redirectTarget } from "../network.js";
 import type { ShellCommandContext } from "../types.js";
@@ -91,7 +92,7 @@ async function collectBody(
 ): Promise<Uint8Array> {
   const chunks: Uint8Array[] = [];
   let total = 0;
-  const encoded = new TextEncoder().encode(prefix);
+  const encoded = encodeUtf8(prefix);
   if (encoded.byteLength > 0) {
     chunks.push(encoded);
     total = encoded.byteLength;
@@ -161,9 +162,17 @@ export const curlCommand = /* @__PURE__ */ defineApplet(CURL, async (context, ar
 
   const head = has("head");
   const data = argumentsFor("data");
-  const method = argumentsFor("request")[0] ?? (head ? "HEAD" : data.length > 0 ? "POST" : "GET");
+  const requestedMethod = argumentsFor("request")[0];
+  const method = requestedMethod ?? (head ? "HEAD" : data.length > 0 ? "POST" : "GET");
+  const normalizedMethod = method.toUpperCase();
   const headers = argumentsFor("header").map(parseHeader);
   const body = data.length === 0 ? undefined : data.join("&");
+  if (body !== undefined && (normalizedMethod === "GET" || normalizedMethod === "HEAD")) {
+    throw new VfsError(
+      "ENOTSUP",
+      `curl: a request body with ${normalizedMethod} is not supported by the Fetch request capability`,
+    );
+  }
   if (body !== undefined && !headers.some(([name]) => name.toLowerCase() === "content-type")) {
     headers.push(["content-type", "application/x-www-form-urlencoded"]);
   }
@@ -181,6 +190,7 @@ export const curlCommand = /* @__PURE__ */ defineApplet(CURL, async (context, ar
     method,
     headers,
     ...(body === undefined ? {} : { body }),
+    ...(requestedMethod === undefined ? {} : { preserveMethodOnRedirect: true }),
   };
 
   let response: Response;

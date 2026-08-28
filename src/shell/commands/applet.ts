@@ -78,6 +78,10 @@ export interface ShellApplet<Name extends string = string> extends ShellCommand 
   readonly spec: AppletSpec<Name>;
 }
 
+function isShellApplet(command: ShellCommand): command is ShellApplet {
+  return "spec" in command;
+}
+
 /* @__NO_SIDE_EFFECTS__ */
 export function defineApplet<Name extends string = string>(
   spec: AppletSpec<Name>,
@@ -193,7 +197,7 @@ export function createAppletRegistry(commands: readonly ShellCommand[]): AppletR
   const registered = [...commands];
   const byName = new Map<string, AppletEntry>();
   for (const command of registered) {
-    const spec = (command as Partial<ShellApplet>).spec;
+    const spec = isShellApplet(command) ? command.spec : undefined;
     const entry: AppletEntry = { command, kind: spec?.kind ?? "program" };
     for (const name of [command.name, ...(spec?.aliases ?? [])]) {
       if (byName.has(name)) throw new VfsError("EINVAL", `duplicate command: ${name}`);

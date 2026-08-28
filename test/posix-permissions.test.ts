@@ -9,7 +9,7 @@ import type {
   PosixVirtualFileSystem,
   VirtualFileSystem,
 } from "../src/vfs/types.js";
-import { createTestFileSystem } from "./helpers/node-sql.js";
+import { createTestFileSystem, withoutPosixCredentials } from "./helpers/node-sql.js";
 
 const USER: PosixCredentials = { uid: 1_000, gid: 10, supplementaryGids: [20] };
 const OTHER: PosixCredentials = { uid: 2_000, gid: 30, supplementaryGids: [] };
@@ -89,6 +89,18 @@ function prepareHome(fileSystem: PosixVirtualFileSystem): void {
 }
 
 describe("POSIX VFS views", () => {
+  it("rejects execution when credentials require an unsupported filesystem view", async () => {
+    const shell = new Shell({
+      fileSystem: withoutPosixCredentials(createTestFileSystem()),
+      commands: defaultShellCommands,
+    });
+
+    await expect(shell.executeText({ script: "true", credentials: USER })).rejects.toMatchObject({
+      code: "ENOTSUP",
+      message: "filesystem does not support POSIX credentials",
+    });
+  });
+
   it("validates numeric identities and umasks at the trust boundary", () => {
     const fileSystem = createTestFileSystem();
     expect(() => fileSystem.forCredentials({ uid: -1, gid: 0 })).toThrowError(

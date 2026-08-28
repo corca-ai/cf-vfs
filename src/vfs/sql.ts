@@ -9,6 +9,7 @@ import {
   normalizePath,
   pathRequiresDirectory,
 } from "../core/path.js";
+import { utf8ByteLength } from "../core/unicode.js";
 import {
   type BufferedChunksLease,
   collectInlineBytes,
@@ -510,11 +511,12 @@ function invalidReceipt(path: string): never {
   throw new VfsError("EIO", "invalid committed upload receipt", path);
 }
 
+function isReceiptRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function receiptRecord(value: unknown, path: string): Readonly<Record<string, unknown>> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) invalidReceipt(path);
-  // JavaScript has no indexable-object narrowing. The shape remains unknown
-  // at every field until the accessors below parse it.
-  return value as Readonly<Record<string, unknown>>;
+  return isReceiptRecord(value) ? value : invalidReceipt(path);
 }
 
 function receiptString(
@@ -3866,7 +3868,7 @@ ${ENTRY_TRIGGERS}
     const name = basename(normalized);
     if (normalized === "/") throw new VfsError("EEXIST", "file or directory exists", normalized);
     if (target.length === 0) throw new VfsError("EINVAL", "link target is empty", normalized);
-    const bytes = new TextEncoder().encode(target).byteLength;
+    const bytes = utf8ByteLength(target);
     if (bytes > MAX_SYMLINK_TARGET_BYTES) {
       throw new VfsError("ENAMETOOLONG", "link target is too long", normalized);
     }

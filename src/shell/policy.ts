@@ -46,6 +46,12 @@ interface MutationCountingFileSystem {
   mutationSubtreeCount(path: string, operation: MutationOperation): number;
 }
 
+function countsMutations(
+  fileSystem: VirtualFileSystem,
+): fileSystem is VirtualFileSystem & MutationCountingFileSystem {
+  return typeof Reflect.get(fileSystem, "mutationSubtreeCount") === "function";
+}
+
 export class ScopedFileSystem implements ShellFileSystem {
   readonly #inner: VirtualFileSystem;
   readonly #policy: ShellPolicy;
@@ -153,9 +159,8 @@ export class ScopedFileSystem implements ShellFileSystem {
   }
 
   private mutationSubtreeCount(path: string, operation: MutationOperation): number {
-    const candidate = this.#inner as VirtualFileSystem & Partial<MutationCountingFileSystem>;
-    return typeof candidate.mutationSubtreeCount === "function"
-      ? candidate.mutationSubtreeCount(path, operation)
+    return countsMutations(this.#inner)
+      ? this.#inner.mutationSubtreeCount(path, operation)
       : this.#inner.subtreeSummary(path).entries;
   }
 

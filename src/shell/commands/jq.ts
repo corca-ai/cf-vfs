@@ -142,7 +142,7 @@ export const jqCommand = /* @__PURE__ */ defineApplet(JQ, async (context, argv, 
     collected?.release();
   }
 
-  const subjects = has("null-input") ? [null] : has("slurp") ? [inputs as JsonValue] : inputs;
+  const subjects = has("null-input") ? [null] : has("slurp") ? [inputs] : inputs;
   const output = new BufferedTextWriter(context, fds[1]);
   let last: JsonValue | undefined;
   try {

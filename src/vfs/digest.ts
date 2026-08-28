@@ -11,9 +11,11 @@ export async function sha256Hex(chunks: readonly Uint8Array[], sizeBytes: number
       offset += chunk.byteLength;
     }
   }
-  const digest = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", source as unknown as ArrayBuffer),
-  );
+  const digestInput: Uint8Array<ArrayBuffer> =
+    source.buffer instanceof ArrayBuffer
+      ? new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
+      : new Uint8Array(source);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", digestInput));
   let hex = "";
   for (const byte of digest) hex += byte.toString(16).padStart(2, "0");
   return hex;

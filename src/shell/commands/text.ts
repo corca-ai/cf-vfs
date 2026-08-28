@@ -2,8 +2,10 @@ import { VfsError } from "../../core/errors.js";
 import { createLineDiff, renderLineDiff } from "../../core/line-diff.js";
 import { compareUtf8 } from "../../core/path.js";
 import { compilePosixRegex, type PosixRegex } from "../../core/posix-regex.js";
+import { utf8ByteLength } from "../../core/unicode.js";
 import { applyUnifiedPatch } from "../../core/unified-patch.js";
 import type { ByteRange, InlineReadResult } from "../../vfs/types.js";
+import type { ShellCommandContext } from "../types.js";
 import {
   type AppletSpec,
   type AppletSpecWithOptions,
@@ -234,9 +236,8 @@ const PATCH = {
 function checkedLines(text: string, maximumRecords: number, maximumLineBytes: number): string[] {
   const lines = splitLines(text);
   if (lines.length > maximumRecords) throw new VfsError("E2BIG", "buffered record limit exceeded");
-  const encoder = new TextEncoder();
   for (const line of lines) {
-    if (encoder.encode(line).byteLength > maximumLineBytes) {
+    if (utf8ByteLength(line) > maximumLineBytes) {
       throw new VfsError("E2BIG", "line byte limit exceeded");
     }
   }
@@ -310,7 +311,9 @@ export const sortCommand = /* @__PURE__ */ defineApplet(SORT, async (context, ar
         : compareUtf8(left.value, right.value);
     records.sort((left, right) => {
       let order = compareKeys(left, right);
-      if (order === 0) order = compareUtf8(left.value, right.value);
+      // GNU disables its last-resort whole-line comparison under `-u`, so a
+      // stable sort preserves the first spelling of equal numeric keys.
+      if (order === 0 && !unique) order = compareUtf8(left.value, right.value);
       return reverse ? -order : order;
     });
     if (unique) {
@@ -392,7 +395,7 @@ export const grepCommand = /* @__PURE__ */ defineApplet(GREP, async (context, ar
   const values = [...parsed.operands];
   const pattern = values.shift();
   if (pattern === undefined) throw appletUsageError(GREP, "missing pattern");
-  if (new TextEncoder().encode(pattern).byteLength > 4096) {
+  if (utf8ByteLength(pattern) > 4096) {
     throw new VfsError("E2BIG", "grep pattern is too large");
   }
   const regular = fixed
@@ -912,22 +915,28 @@ export const cutCommand = /* @__PURE__ */ defineApplet(CUT, async (context, argv
   return 0;
 });
 
-function characterSet(value: string): string[] {
-  const match = /^(.?)-(.?)$/u.exec(value);
-  if (match?.[1] !== undefined && match[2] !== undefined) {
-    const start = match[1].codePointAt(0) ?? 0;
-    const end = match[2].codePointAt(0) ?? 0;
-    return Array.from({ length: Math.max(0, end - start + 1) }, (_unused, index) =>
-      String.fromCodePoint(start + index),
-    );
+function characterSet(value: string, context: ShellCommandContext): string[] {
+  const characters = [...value];
+  let count = characters.length;
+  let start: number | undefined;
+  if (characters.length === 3 && characters[1] === "-") {
+    start = characters[0]?.codePointAt(0);
+    const end = characters[2]?.codePointAt(0);
+    if (start !== undefined && end !== undefined) count = Math.max(0, end - start + 1);
   }
-  return [...value];
+  if (count > context.budget.limits.maxExpansionChars) {
+    throw new VfsError("E2BIG", "tr: character set exceeds the expansion limit");
+  }
+  context.budget.expansionWork(count);
+  return start === undefined
+    ? characters
+    : Array.from({ length: count }, (_unused, index) => String.fromCodePoint(start + index));
 }
 
 export const trCommand = /* @__PURE__ */ defineApplet(TR, async (context, argv, fds) => {
   if (argv.length !== 2) throw appletUsageError(TR, "requires SET1 and SET2");
-  const from = characterSet(argv[0] ?? "");
-  const to = characterSet(argv[1] ?? "");
+  const from = characterSet(argv[0] ?? "", context);
+  const to = characterSet(argv[1] ?? "", context);
   const reader = fds[0].getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const output = new BufferedTextWriter(context, fds[1]);
@@ -1370,12 +1379,17 @@ export const seqCommand = /* @__PURE__ */ defineApplet(SEQ, async (context, argv
     values.push(value);
   }
   const width = equalWidth ? Math.max(0, ...values.map((value) => String(value).length)) : 0;
+  const render = (value: number): string => {
+    const text = String(value);
+    if (width === 0) return text;
+    return value < 0 ? `-${text.slice(1).padStart(width - 1, "0")}` : text.padStart(width, "0");
+  };
   const output = new BufferedTextWriter(context, fds[1]);
   try {
     // The separator joins values; the sequence always ends with one newline,
     // so the default separator produces one record per value.
     for (const [index, value] of values.entries()) {
-      await output.write(`${index === 0 ? "" : separator}${String(value).padStart(width, "0")}`);
+      await output.write(`${index === 0 ? "" : separator}${render(value)}`);
     }
     if (values.length > 0) await output.write("\n");
     await output.flush();

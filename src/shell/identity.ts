@@ -1,4 +1,5 @@
 import { isVfsError, VfsError } from "../core/errors.js";
+import { utf8ByteLength } from "../core/unicode.js";
 
 const MAX_ID = 0xffff_ffff;
 const MAX_IDENTITY_NAME_BYTES = 255;
@@ -59,7 +60,7 @@ function validIdentityName(value: string): boolean {
   return (
     value.length > 0 &&
     !INVALID_IDENTITY_NAME.test(value) &&
-    new TextEncoder().encode(value).byteLength <= MAX_IDENTITY_NAME_BYTES
+    utf8ByteLength(value) <= MAX_IDENTITY_NAME_BYTES
   );
 }
 

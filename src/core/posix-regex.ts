@@ -427,10 +427,12 @@ function compile(node: Node, command: string): readonly Instruction[] {
         emit(current.right);
         return;
       case "alt": {
-        const frame = program[push({ op: "split", x: 0, y: 0 })] as Split;
+        const frame: Split = { op: "split", x: 0, y: 0 };
+        push(frame);
         frame.x = program.length;
         emit(current.left);
-        const jump = program[push({ op: "jmp", to: 0 })] as Jump;
+        const jump: Jump = { op: "jmp", to: 0 };
+        push(jump);
         frame.y = program.length;
         emit(current.right);
         jump.to = program.length;
@@ -448,8 +450,8 @@ function compile(node: Node, command: string): readonly Instruction[] {
   };
 
   const star = (body: Node): void => {
-    const at = push({ op: "split", x: 0, y: 0 });
-    const frame = program[at] as Split;
+    const frame: Split = { op: "split", x: 0, y: 0 };
+    const at = push(frame);
     frame.x = program.length;
     emit(body);
     push({ op: "jmp", to: at });
@@ -466,7 +468,8 @@ function compile(node: Node, command: string): readonly Instruction[] {
     // The optional copies nest, so the whole tail can be skipped at any point.
     const frames: Split[] = [];
     for (let count = min; count < max; count += 1) {
-      const frame = program[push({ op: "split", x: 0, y: 0 })] as Split;
+      const frame: Split = { op: "split", x: 0, y: 0 };
+      push(frame);
       frame.x = program.length;
       frames.push(frame);
       emit(body);

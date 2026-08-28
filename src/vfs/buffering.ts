@@ -1,4 +1,5 @@
 import { VfsError } from "../core/errors.js";
+import { encodeUtf8 } from "../core/unicode.js";
 import { validatePositiveInteger } from "./config.js";
 import { emitVfsEvent, type VfsEventSink } from "./events.js";
 import { collectRechunkedBytes, rechunk } from "./streams.js";
@@ -112,7 +113,7 @@ export function collectInlineBytesSync(
   budget: InFlightByteBudget,
   heldByCaller = 0,
 ): BufferedChunksLease {
-  const input = new TextEncoder().encode(body);
+  const input = encodeUtf8(body);
   const sizeBytes = input.byteLength;
   budget.acquire(sizeBytes, heldByCaller);
   if (sizeBytes > maximumBytes) {

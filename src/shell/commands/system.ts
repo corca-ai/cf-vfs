@@ -1,5 +1,6 @@
 import { compareDecimalIntegers, normalizeDecimalInteger } from "../../core/decimal-integer.js";
 import { VfsError } from "../../core/errors.js";
+import { isOneOf } from "../../core/literals.js";
 import {
   type AppletSpec,
   type AppletSpecWithOptions,
@@ -181,7 +182,7 @@ function evaluateExpr(argv: readonly string[]): string {
   if (argv.length === 2 && argv[0] === "length") return String([...(argv[1] ?? "")].length);
   const [left = "", operator = "", right = ""] = argv;
   if (argv.length !== 3) throw appletUsageError(EXPR, "expected a single infix expression");
-  if (ARITHMETIC.includes(operator as (typeof ARITHMETIC)[number])) {
+  if (isOneOf(operator, ARITHMETIC)) {
     const a = integer(left);
     const b = integer(right);
     if ((operator === "/" || operator === "%") && b === 0n) {
@@ -199,7 +200,7 @@ function evaluateExpr(argv: readonly string[]): string {
               : a % b;
     return result.toString();
   }
-  if (COMPARISONS.includes(operator as (typeof COMPARISONS)[number])) {
+  if (isOneOf(operator, COMPARISONS)) {
     const numericLeft = normalizeDecimalInteger(left);
     const numericRight = normalizeDecimalInteger(right);
     // POSIX compares numerically when both sides are integers and by byte order

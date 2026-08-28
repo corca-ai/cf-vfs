@@ -1,4 +1,5 @@
 import { VfsError } from "../../core/errors.js";
+import { utf8ByteLength } from "../../core/unicode.js";
 import { type AppletSpecWithOptions, defineApplet, parseAppletOptions } from "./applet.js";
 import { parseInteger, readTextLines, writeText } from "./helpers.js";
 
@@ -56,7 +57,7 @@ export const xargsCommand = /* @__PURE__ */ defineApplet(XARGS, async (context, 
     if (value.length === 0) return;
     context.budget.step();
     collected.push(value);
-    heldBytes += new TextEncoder().encode(value).byteLength;
+    heldBytes += utf8ByteLength(value);
     release();
     release = context.budget.buffered(heldBytes);
   };

@@ -1,7 +1,7 @@
 import { VfsError } from "../../core/errors.js";
 import { matchesGlob } from "../../core/glob.js";
-import { normalizePath } from "../../core/path.js";
-import type { EntryKind, VfsStat } from "../../vfs/types.js";
+import { depthFrom, normalizePath } from "../../core/path.js";
+import type { EntryKind, FindOptions, VfsStat } from "../../vfs/types.js";
 import { openContent } from "../content.js";
 import {
   identityLabel,
@@ -11,6 +11,7 @@ import {
   resolveIdentityNames,
   type ShellIdentitySource,
 } from "../identity.js";
+import type { ShellCommandContext } from "../types.js";
 import {
   type AppletSpec,
   type AppletSpecWithOptions,
@@ -300,7 +301,9 @@ export const rmdirCommand = /* @__PURE__ */ defineApplet(RMDIR, async (context, 
   if (argv.length === 0) throw appletUsageError(RMDIR, "missing operand");
   for (const path of argv) {
     const normalized = commandPath(context, path);
-    const stat = context.fileSystem.stat(normalized);
+    // The final component is the object `rmdir` removes; following a link here
+    // would validate its target and then unlink the link itself.
+    const stat = context.fileSystem.lstat(normalized);
     if (stat.kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", normalized);
     await context.fileSystem.remove(normalized);
   }
@@ -355,6 +358,24 @@ export const cpCommand = /* @__PURE__ */ defineApplet(CP, async (context, argv) 
   }
   return 0;
 });
+
+function boundedFind(
+  context: ShellCommandContext,
+  options: Pick<FindOptions, "path" | "includeRoot">,
+): VfsStat[] {
+  // Ask for one sentinel entry beyond the budget. `find()` keeps one scan
+  // context across its internal pages, so a credential view pays its set-based
+  // subtree permission preflight once rather than once per page.
+  const maximum = context.budget.limits.maxGlobMatches;
+  const entries = context.fileSystem.find({
+    ...options,
+    limit: maximum === Number.MAX_SAFE_INTEGER ? maximum : maximum + 1,
+  });
+  // Charge before retaining or printing the result, so crossing the limit can
+  // never return a plausible truncated traversal.
+  context.budget.glob(entries.length);
+  return entries;
+}
 
 /**
  * Walks a subtree and prints or runs a command on matching paths.
@@ -427,6 +448,7 @@ export const findCommand = /* @__PURE__ */ defineApplet(FIND, async (context, ar
     // operand walk a tree that is not below where the caller pointed.
     const operand = context.fileSystem.lstat(normalized);
     if (operand.kind === "symlink") {
+      context.budget.glob(1);
       const selected =
         (type === undefined || type === "symlink") &&
         (name === undefined || matchesGlob(operand.name, name));
@@ -434,16 +456,18 @@ export const findCommand = /* @__PURE__ */ defineApplet(FIND, async (context, ar
       if (selected) matched.push(displayPath(root, normalized, normalized));
       continue;
     }
-    const entries = context.fileSystem.find({
+    const traversalRoot = context.fileSystem.realpath(normalized);
+    const entries = boundedFind(context, {
       path: normalized,
       includeRoot: true,
-      ...(name === undefined ? {} : { name }),
-      ...(type === undefined ? {} : { type }),
-      ...(maxDepth === undefined ? {} : { maxDepth }),
-      limit: context.budget.limits.maxGlobMatches,
     });
     // Report each match the way the operand was written, as `find` does.
-    for (const entry of entries) matched.push(displayPath(root, normalized, entry.path));
+    for (const entry of entries) {
+      if (type !== undefined && entry.kind !== type) continue;
+      if (name !== undefined && !matchesGlob(entry.name, name)) continue;
+      if (maxDepth !== undefined && depthFrom(traversalRoot, entry.path) > maxDepth) continue;
+      matched.push(displayPath(root, traversalRoot, entry.path));
+    }
   }
 
   if (exec === undefined) {
@@ -720,7 +744,7 @@ export const duCommand = /* @__PURE__ */ defineApplet(DU, async (context, argv, 
 export const treeCommand = /* @__PURE__ */ defineApplet(TREE, async (context, argv, fds) => {
   const rootValue = argv[0] ?? ".";
   const root = commandPath(context, rootValue);
-  const entries = context.fileSystem.find({ path: root, includeRoot: true });
+  const entries = boundedFind(context, { path: root, includeRoot: true });
   const output = new BufferedTextWriter(context, fds[1]);
   try {
     for (const entry of entries) {

@@ -1,6 +1,7 @@
 import { VfsError } from "../../core/errors.js";
 import { splitLinesPreservingEndings } from "../../core/lines.js";
 import { basename, normalizePath } from "../../core/path.js";
+import { encodeUtf8, utf8ByteLength } from "../../core/unicode.js";
 import type { ByteRange, EntryPage, InlineReadResult } from "../../vfs/types.js";
 import { openContent } from "../content.js";
 import type { ShellCommandContext, ShellSink } from "../types.js";
@@ -19,7 +20,7 @@ export async function writeBytes(sink: ShellSink, bytes: Uint8Array): Promise<vo
 }
 
 export async function writeText(sink: ShellSink, value: string): Promise<void> {
-  await writeBytes(sink, new TextEncoder().encode(value));
+  await writeBytes(sink, encodeUtf8(value));
 }
 
 export async function readWithAbort(
@@ -62,7 +63,7 @@ export class BufferedTextWriter {
   }
 
   async write(value: string): Promise<void> {
-    const bytes = new TextEncoder().encode(value).byteLength;
+    const bytes = utf8ByteLength(value);
     if (this.bytes > 0 && this.bytes + bytes > this.slabBytes) await this.flush();
     if (bytes >= this.slabBytes) {
       await writeText(this.sink, value);
@@ -249,7 +250,6 @@ export async function* readTextLines(
 ): AsyncGenerator<string> {
   const reader = stream.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
-  const encoder = new TextEncoder();
   let pending = "";
   let finished = false;
   let records = 0;
@@ -279,7 +279,7 @@ export async function* readTextLines(
         if (newline < 0) break;
         const line = pending.slice(0, newline + 1);
         pending = pending.slice(newline + 1);
-        if (encoder.encode(line).byteLength > context.budget.limits.maxLineBytes) {
+        if (utf8ByteLength(line) > context.budget.limits.maxLineBytes) {
           throw new VfsError("E2BIG", "line byte limit exceeded", path);
         }
         context.budget.step();
@@ -289,7 +289,7 @@ export async function* readTextLines(
         }
         yield line;
       }
-      if (encoder.encode(pending).byteLength > context.budget.limits.maxLineBytes) {
+      if (utf8ByteLength(pending) > context.budget.limits.maxLineBytes) {
         throw new VfsError("E2BIG", "line byte limit exceeded", path);
       }
     }

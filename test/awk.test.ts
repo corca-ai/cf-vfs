@@ -197,6 +197,20 @@ print "second" }'`,
     });
   });
 
+  it("returns array entry and byte budget after deletion and split replacement", async () => {
+    const deleted = await awkHarness({
+      limits: { maxBufferedBytes: 6, maxBufferedRecords: 1 },
+    }).run(
+      `/bin/awk 'BEGIN { value["가"]="나"; delete value["가"]; value["다"]="라"; saved=value["다"]; delete value["다"]; print saved }'`,
+    );
+    expect(deleted).toMatchObject({ exitCode: 0, stdout: "라\n", stderr: "" });
+
+    const replaced = await awkHarness({ limits: { maxBufferedRecords: 3 } }).run(
+      `/bin/awk 'BEGIN { split("a:b:c", part, /:/); split("d:e", part, /:/); print length(part), part[1], part[2] }'`,
+    );
+    expect(replaced).toMatchObject({ exitCode: 0, stdout: "2 d e\n", stderr: "" });
+  });
+
   it("supports split, match, sub, and gsub with writable targets", async () => {
     const result = await awkHarness().run(
       `/bin/awk '{ n=split($0, part, /[:,]/); gsub(/[0-9]+/, "#", part[2]); sub(/^./, "&-", part[1]); found=match(part[3], /[A-Z]+/); print n, part[1], part[2], found, RSTART, RLENGTH }'`,

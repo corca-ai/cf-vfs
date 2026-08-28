@@ -5,8 +5,10 @@ import {
 } from "../core/decimal-integer.js";
 import { isVfsError, VfsError, type VfsErrorCode } from "../core/errors.js";
 import { compareUtf8, normalizePath, normalizePathPreservingTrailingSlash } from "../core/path.js";
+import { encodeUtf8, utf8ByteLength } from "../core/unicode.js";
+import { supportsPosixCredentials } from "../vfs/capabilities.js";
 import { bodyToStream, readAllBytes } from "../vfs/streams.js";
-import type { PosixVirtualFileSystem, VfsStat, VirtualFileSystem } from "../vfs/types.js";
+import type { VfsStat, VirtualFileSystem } from "../vfs/types.js";
 import { shellModeAllows } from "./access.js";
 import { evaluateArithmetic } from "./arithmetic.js";
 import { ExecutionBudget, resolveShellLimits } from "./budget.js";
@@ -107,7 +109,7 @@ async function runIsolatedShellScope(
     return await run();
   } catch (error) {
     if (!(error instanceof ShellNounsetError)) throw error;
-    await stderr.write(new TextEncoder().encode(`${formatError(error)}\n`));
+    await stderr.write(encodeUtf8(`${formatError(error)}\n`));
     return evaluationResult(statusFor(error));
   }
 }
@@ -195,7 +197,7 @@ function parseScriptUnit(
   executionBudget: Pick<ShellBudget, "checkDeadline">,
   path?: string,
 ): ScriptNode {
-  const sourceBytes = new TextEncoder().encode(source).byteLength;
+  const sourceBytes = utf8ByteLength(source);
   if (sourceBytes > limits.maxScriptBytes) {
     throw new VfsError("E2BIG", "shell source exceeds the script byte limit", path);
   }
@@ -599,12 +601,16 @@ async function resolveExecutableScript(
  * An applet without a specification is still listed, so a consumer's own
  * `ShellCommand` appears in help rather than silently missing.
  */
+function hasAppletSpec(command: ShellCommand): command is ShellApplet {
+  return "spec" in command;
+}
+
 function describeCommands(registry: Pick<Runtime, "commands">): readonly ShellCommandDescription[] {
   const described: ShellCommandDescription[] = [];
   for (const name of registry.commands.names()) {
     const entry = registry.commands.find(name);
     if (entry === undefined) continue;
-    const spec = (entry.command as Partial<ShellApplet>).spec;
+    const spec = hasAppletSpec(entry.command) ? entry.command.spec : undefined;
     described.push({
       name,
       kind: entry.kind,
@@ -924,7 +930,7 @@ async function executeSimpleCommand(
           emitShellEvent(runtime.onEvent, { type: "shell.command", name: script.path, exitCode });
           return exitCode;
         }
-        await fds[2].write(new TextEncoder().encode(`${name}: command not found\n`));
+        await fds[2].write(encodeUtf8(`${name}: command not found\n`));
         emitShellEvent(runtime.onEvent, { type: "shell.command", name, exitCode: 127 });
         return 127;
       }
@@ -1440,7 +1446,7 @@ async function runCommandNode(
     semanticFailure = true;
     const message = formatError(error);
     try {
-      await semanticStderr.write(new TextEncoder().encode(`${message}\n`));
+      await semanticStderr.write(encodeUtf8(`${message}\n`));
     } finally {
       await Promise.allSettled([fds[1].close(), fds[2].close()]);
     }
@@ -1702,11 +1708,10 @@ export class Shell {
 
   #sessionFileSystem(session: ShellSession): VirtualFileSystem {
     if (session.credentials === undefined) return this.fileSystem;
-    const candidate = this.fileSystem as Partial<PosixVirtualFileSystem>;
-    if (typeof candidate.forCredentials !== "function") {
+    if (!supportsPosixCredentials(this.fileSystem)) {
       throw new VfsError("ENOTSUP", "filesystem does not support POSIX credentials");
     }
-    return candidate.forCredentials(session.credentials, { umask: session.umask });
+    return this.fileSystem.forCredentials(session.credentials, { umask: session.umask });
   }
 
   /**
@@ -1845,7 +1850,7 @@ export class Shell {
     const completed = (async () => {
       try {
         if (parseError !== undefined) {
-          await rootFds[2].write(new TextEncoder().encode(`${parseError.message}\n`));
+          await rootFds[2].write(encodeUtf8(`${parseError.message}\n`));
           await closeDescriptors(rootFds);
           const exitCode = parseError.code === "EINVAL" ? 2 : 1;
           session.lastExitCode = exitCode;
@@ -1881,7 +1886,7 @@ export class Shell {
         failureCode = error.code;
         if (!controller.signal.aborted || error.code === "ETIMEDOUT") {
           try {
-            await rootFds[2].write(new TextEncoder().encode(`${message}\n`));
+            await rootFds[2].write(encodeUtf8(`${message}\n`));
           } catch {
             // The caller may have cancelled stderr too.
           }

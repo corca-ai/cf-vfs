@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { curlCommand } from "../src/shell/commands/curl.js";
 import type { ShellNetwork } from "../src/shell/network.js";
 import { createBashHarness } from "./helpers/bash.js";
@@ -33,6 +33,8 @@ function harness(network: ShellNetwork | undefined, access: "off" | "allow" | "u
     ...(access === "unset" ? {} : { policy: { network: access } }),
   });
 }
+
+afterEach(() => vi.useRealTimers());
 
 describe("curl", () => {
   it("refuses without the capability, before building a request", async () => {
@@ -133,6 +135,39 @@ describe("curl", () => {
     expect(network.seen[1]?.headers.get("content-type")).toBeNull();
   });
 
+  it("keeps an explicitly requested method while dropping its body after a 302", async () => {
+    const network = recordingNetwork((_request, hop) =>
+      hop === 0
+        ? new Response("", { status: 302, headers: { location: "/after" } })
+        : new Response("done"),
+    );
+    await harness(network).run("curl -L -X PUT -d 'a=1' https://example.test/submit");
+    expect(network.seen[1]?.method).toBe("PUT");
+    expect(await network.seen[1]?.text()).toBe("");
+    expect(network.seen[1]?.headers.get("content-type")).toBeNull();
+  });
+
+  it("keeps entity headers when an explicit redirect method had no body", async () => {
+    const network = recordingNetwork((_request, hop) =>
+      hop === 0
+        ? new Response("", { status: 302, headers: { location: "/after" } })
+        : new Response("done"),
+    );
+    await harness(network).run(
+      "curl -L -X PUT -H 'Content-Type: x-test' https://example.test/submit",
+    );
+    expect(network.seen[1]?.method).toBe("PUT");
+    expect(network.seen[1]?.headers.get("content-type")).toBe("x-test");
+  });
+
+  it("refuses a GET body before asking the Fetch request capability", async () => {
+    const network = recordingNetwork(() => new Response("unreachable"));
+    const result = await harness(network).run("curl -X get -d a=1 https://example.test/");
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("request body with GET is not supported");
+    expect(network.seen).toHaveLength(0);
+  });
+
   it("preserves the method and body across a 308", async () => {
     const network = recordingNetwork((_request, hop) =>
       hop === 0
@@ -216,7 +251,8 @@ describe("curl", () => {
     expect(network.seen).toHaveLength(0);
   });
 
-  it("stops a redirect chain when the execution is cancelled", async () => {
+  it("stops a redirect chain at the execution deadline", async () => {
+    vi.useFakeTimers();
     let hops = 0;
     const network: ShellNetwork = {
       async fetch() {
@@ -231,13 +267,16 @@ describe("curl", () => {
       policy: { network: "allow" },
       limits: { deadlineMs: 60 },
     });
-    const result = await shell.run("curl -L --max-redirs 9007199254740991 https://example.test/");
+    const running = shell.run("curl -L --max-redirs 9007199254740991 https://example.test/");
+    await vi.advanceTimersByTimeAsync(60);
+    const result = await running;
     expect(result.exitCode).not.toBe(0);
     // Without the deadline reaching the loop this runs until the number ends.
     expect(hops).toBeLessThan(500);
   });
 
-  it("does not wait forever on a host that never answers", async () => {
+  it("ends at the deadline when the host never answers", async () => {
+    vi.useFakeTimers();
     const network: ShellNetwork = { fetch: () => new Promise<Response>(() => undefined) };
     const shell = createBashHarness({
       extraCommands: [curlCommand],
@@ -245,11 +284,14 @@ describe("curl", () => {
       policy: { network: "allow" },
       limits: { deadlineMs: 60 },
     });
-    const result = await shell.run("curl https://example.test/");
+    const running = shell.run("curl https://example.test/");
+    await vi.advanceTimersByTimeAsync(60);
+    const result = await running;
     expect(result.exitCode).not.toBe(0);
   });
 
-  it("returns a status rather than rejecting when the host throws on abort", async () => {
+  it("returns a status when the host rejects after the deadline abort", async () => {
+    vi.useFakeTimers();
     const network: ShellNetwork = {
       async fetch() {
         await new Promise((resolve) => setTimeout(resolve, 50));
@@ -264,7 +306,10 @@ describe("curl", () => {
       policy: { network: "allow" },
       limits: { deadlineMs: 20 },
     });
-    const result = await shell.run("curl https://example.test/");
+    const running = shell.run("curl https://example.test/");
+    await vi.advanceTimersByTimeAsync(20);
+    const result = await running;
+    await vi.advanceTimersByTimeAsync(30);
     expect(typeof result.exitCode).toBe("number");
   });
 

@@ -1,4 +1,5 @@
 import { VfsError } from "../core/errors.js";
+import { encodeUtf8 } from "../core/unicode.js";
 import type { ByteBody } from "./types.js";
 
 export interface CollectedBytes {
@@ -7,7 +8,7 @@ export interface CollectedBytes {
 }
 
 function rawBodyBytes(body: Exclude<ByteBody, ReadableStream<Uint8Array>>): Uint8Array {
-  if (typeof body === "string") return new TextEncoder().encode(body);
+  if (typeof body === "string") return encodeUtf8(body);
   if (body instanceof ArrayBuffer) return new Uint8Array(body);
   return new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
 }
@@ -19,7 +20,7 @@ function copyView(value: ArrayBuffer | ArrayBufferView): Uint8Array {
 
 export function bodyToStream(body: ByteBody): ReadableStream<Uint8Array> {
   if (body instanceof ReadableStream) return body;
-  const bytes = typeof body === "string" ? new TextEncoder().encode(body) : copyView(body);
+  const bytes = typeof body === "string" ? encodeUtf8(body) : copyView(body);
   return streamFromChunks(bytes.byteLength === 0 ? [] : [bytes]);
 }
 

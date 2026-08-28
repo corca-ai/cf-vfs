@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SHELL_LIMITS, ExecutionBudget } from "../src/shell/budget.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
-import { ReservedPathFileSystem } from "../src/shell/devices.js";
+import { ReservedPathFileSystem, shellDevice } from "../src/shell/devices.js";
 import { ScopedFileSystem } from "../src/shell/policy.js";
 import { Shell } from "../src/shell/shell.js";
 import { hasEntryIdentity, NO_ENTRY_IDENTITY } from "../src/vfs/types.js";
@@ -37,6 +37,18 @@ describe("reserved paths carry no entry identity", () => {
 });
 
 describe("virtual devices", () => {
+  it("does not inherit device entries from Object.prototype", () => {
+    Object.defineProperty(Object.prototype, "/not-a-device", {
+      configurable: true,
+      value: "null",
+    });
+    try {
+      expect(shellDevice("/not-a-device")).toBeUndefined();
+    } finally {
+      Reflect.deleteProperty(Object.prototype, "/not-a-device");
+    }
+  });
+
   bashCases([
     {
       name: "discards a redirection to /dev/null",
@@ -172,22 +184,26 @@ describe("virtual devices", () => {
     expect(result.stdout).toBe("line\n");
   });
 
-  it("wakes a device write when the execution is cancelled", async () => {
-    const harness = createBashHarness();
+  it("stops an active device-writing loop when execution is cancelled", async () => {
+    const started = Promise.withResolvers<void>();
+    const harness = createBashHarness({
+      onEvent(event) {
+        if (event.type === "shell.command" && event.name === "echo") started.resolve();
+      },
+    });
     const controller = new AbortController();
-    const started = Date.now();
     // Cancelled while bytes are actually moving into the device, which a sleep
-    // in front of one would never exercise. The producer is a loop so it
-    // cannot finish before the abort lands.
+    // in front of one would never exercise. Observing the first completed echo
+    // makes the synchronization independent of machine speed.
     const running = harness.run(
       "i=0; while [ $i -lt 200000 ]; do echo x; i=$((i+1)); done > /dev/null; echo finished",
       { signal: controller.signal },
     );
-    setTimeout(() => controller.abort(), 20);
+    await started.promise;
+    controller.abort();
     const result = await running;
     expect(result.stdout).toBe("");
     expect(result.exitCode).not.toBe(0);
-    expect(Date.now() - started).toBeLessThan(5_000);
   });
 
   it("exempts a device from the roots without letting it reach the namespace", async () => {

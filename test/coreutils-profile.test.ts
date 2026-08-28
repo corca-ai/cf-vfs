@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { compilePosixRegex } from "../src/core/posix-regex.js";
 import { bashCases, createBashHarness } from "./helpers/bash.js";
 
@@ -7,6 +7,8 @@ const TREE = {
   "/t/sub/b.txt": "gamma\nalpha\n",
   "/t/c.log": "nothing\n",
 };
+
+afterEach(() => vi.useRealTimers());
 
 describe("POSIX regular-expression matching", () => {
   const matches = (
@@ -131,6 +133,35 @@ describe("POSIX regular-expression matching", () => {
     expect(compiled.exec("xxaabyy")).toEqual({ index: 2, end: 5, groups: ["aab", "aa"] });
     expect(compiled.exec("xxaabyy", 5)).toBeUndefined();
     expect(compilePosixRegex("b", "basic", "sed").exec("aba", 2)).toBeUndefined();
+  });
+});
+
+describe("sort profile", () => {
+  bashCases([
+    {
+      name: "keeps the first input spelling when numeric unique keys compare equal",
+      script: "printf '2\\n02\\n' | sort -nu",
+      stdout: "2\n",
+    },
+  ]);
+});
+
+describe("tr profile", () => {
+  bashCases([
+    {
+      name: "treats a lone hyphen as a literal set member",
+      script: "printf 'a-b' | tr '-' '_'",
+      stdout: "a_b",
+    },
+  ]);
+
+  it("bounds character-range materialization", async () => {
+    const result = await createBashHarness({ limits: { maxExpansionChars: 100 } }).run(
+      "tr 'Ā-Ȁ' x",
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("tr: character set exceeds the expansion limit");
   });
 });
 
@@ -426,9 +457,32 @@ describe("find actions", () => {
     expect(result.exitCode).toBe(126);
     expect(result.stderr).toContain("command is not allowed: cat");
   });
+
+  it("measures maxdepth from a root reached through an intermediate link", async () => {
+    const harness = createBashHarness();
+    harness.fileSystem.mkdir("/target/sub/deep", true);
+    harness.fileSystem.symlink("/link", "/target");
+
+    const result = await harness.run("find /link/sub -maxdepth 0");
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("/link/sub\n");
+  });
 });
 
 describe("listing and metadata", () => {
+  it("refuses a symbolic link to a directory without removing the link", async () => {
+    const harness = createBashHarness();
+    harness.fileSystem.mkdir("/target");
+    harness.fileSystem.symlink("/link", "/target");
+
+    const result = await harness.run("rmdir /link");
+
+    expect(result.exitCode).not.toBe(0);
+    expect(harness.fileSystem.lstat("/link").kind).toBe("symlink");
+    expect(harness.fileSystem.stat("/target").kind).toBe("directory");
+  });
+
   bashCases([
     {
       name: "lists one entry per line",
@@ -531,16 +585,16 @@ describe("small deterministic utilities", () => {
   });
 
   it("wakes a sleep when the execution is cancelled", async () => {
+    vi.useFakeTimers();
     const harness = createBashHarness();
     const controller = new AbortController();
-    const started = Date.now();
     const running = harness.run("sleep 20; printf finished", { signal: controller.signal });
-    setTimeout(() => controller.abort(), 20);
+    await vi.advanceTimersByTimeAsync(1);
+    controller.abort();
     const result = await running;
     expect(result.stdout).toBe("");
     // A cancelled execution reports failure rather than succeeding silently,
     // and the statement after the sleep never runs.
     expect(result.exitCode).not.toBe(0);
-    expect(Date.now() - started).toBeLessThan(5_000);
   });
 });

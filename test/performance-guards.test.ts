@@ -828,13 +828,21 @@ describe("common-path SQL cost", () => {
     }
 
     meter.reset();
-    const entries = fileSystem
-      .forCredentials({ uid: 1_000, gid: 1_000 })
-      .find({ path: "/tree", includeRoot: true });
+    const user = fileSystem.forCredentials({ uid: 1_000, gid: 1_000 });
+    const entries = user.find({ path: "/tree", includeRoot: true });
     expect(entries).toHaveLength(1_006);
     // Root classification, traversal, and the set-based permission preflight
     // are paid once for the whole materializing find(), not once per page.
     expect(meter.statements).toBe(5);
+
+    meter.reset();
+    const shell = new Shell({ fileSystem: user, commands: defaultShellCommands });
+    const result = await shell.executeText({ script: "find /tree -type f | wc -l" });
+    expect(result).toMatchObject({ exitCode: 0, stdout: "1005\n" });
+    // The shell must keep using the materializing traversal above: manually
+    // paging a credential view repeats the whole permission preflight.
+    expect(meter.statements).toBeGreaterThanOrEqual(5);
+    expect(meter.statements).toBeLessThanOrEqual(8);
   });
 
   it("keeps credential-bound recursive copy set-based as the subtree grows", async () => {

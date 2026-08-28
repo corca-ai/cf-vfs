@@ -732,11 +732,15 @@ export async function expandAssignmentValue(
   // The whole word carries the assignment shape, so the shared rule applies to
   // every boundary it names, including one a later literal part opens.
   const parts = withTildePrefix([first, ...rest], session, budget);
+  const expandedFirst = parts[0];
+  if (expandedFirst?.kind !== "literal") {
+    throw new VfsError("EIO", "assignment expansion lost its literal prefix");
+  }
   const value = await scalarParts(
     [
       {
-        ...(parts[0] as LiteralWordPart),
-        value: (parts[0] as LiteralWordPart).value.slice(name.length + 1),
+        ...expandedFirst,
+        value: expandedFirst.value.slice(name.length + 1),
       },
       ...parts.slice(1),
     ],

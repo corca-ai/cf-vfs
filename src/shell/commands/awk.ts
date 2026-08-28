@@ -1,6 +1,7 @@
 import { VfsError } from "../../core/errors.js";
 import { compareUtf8 } from "../../core/path.js";
 import { compilePosixRegex, type PosixRegex } from "../../core/posix-regex.js";
+import { utf8ByteLength } from "../../core/unicode.js";
 import type { ShellCommandContext } from "../types.js";
 import {
   type AppletSpecWithOptions,
@@ -23,8 +24,6 @@ const AWK = {
     stopAtFirstOperand: true,
   },
 } as const satisfies AppletSpecWithOptions<"field-separator" | "assign" | "program-file">;
-
-const AWK_ENCODER = new TextEncoder();
 
 type TokenKind = "number" | "string" | "identifier" | "regex" | "operator" | "newline" | "eof";
 
@@ -315,6 +314,31 @@ interface Rule {
   readonly action?: readonly Statement[];
 }
 
+const PRINT_KINDS = ["print", "printf"] as const;
+const LOOP_CONTROL_KINDS = ["break", "continue"] as const;
+const ASSIGNMENT_OPERATORS = [
+  "=",
+  "+=",
+  "-=",
+  "*=",
+  "/=",
+  "%=",
+  "^=",
+] as const satisfies readonly AssignmentOperator[];
+const COMPARISON_OPERATORS = [
+  "==",
+  "!=",
+  "<",
+  "<=",
+  ">",
+  ">=",
+  "~",
+  "!~",
+] as const satisfies readonly Extract<Expression, { kind: "binary" }>["operator"][];
+const ADDITIVE_OPERATORS = ["+", "-"] as const;
+const MULTIPLICATIVE_OPERATORS = ["*", "/", "%"] as const;
+const UNARY_OPERATORS = ["!", "+", "-"] as const;
+
 const BUILTINS = new Set([
   "gsub",
   "index",
@@ -410,6 +434,24 @@ class Parser {
     return token;
   }
 
+  private atOneOf(kind: TokenKind, values: readonly string[]): boolean {
+    const current = this.current();
+    return current.kind === kind && values.some((value) => value === current.value);
+  }
+
+  private takeOneOf<const Values extends readonly string[]>(
+    kind: TokenKind,
+    values: Values,
+  ): Values[number] {
+    const token = this.take();
+    if (token.kind === kind) {
+      for (const value of values) {
+        if (token.value === value) return value;
+      }
+    }
+    this.fail(`unexpected ${token.value}`, token);
+  }
+
   private expectOperator(value: string): void {
     if (!this.atOperator(value)) this.fail(`expected ${value}`);
     this.take();
@@ -485,7 +527,7 @@ class Parser {
 
   private statement(): Statement {
     if (this.atIdentifier("print") || this.atIdentifier("printf")) {
-      const kind = this.take().value as "print" | "printf";
+      const kind = this.takeOneOf("identifier", PRINT_KINDS);
       const parenthesized = this.atOperator("(");
       if (parenthesized) this.take();
       const values: Expression[] = [];
@@ -594,8 +636,8 @@ class Parser {
       return this.node({ kind: "delete", target });
     }
     if (this.atIdentifier("break") || this.atIdentifier("continue")) {
-      const token = this.take();
-      const kind = token.value as "break" | "continue";
+      const token = this.current();
+      const kind = this.takeOneOf("identifier", LOOP_CONTROL_KINDS);
       if (this.loopDepth === 0) this.fail(`${kind} is not inside a loop`, token);
       return this.node({ kind });
     }
@@ -621,15 +663,12 @@ class Parser {
 
   private assignment(): Expression {
     const left = this.conditional();
-    if (
-      !this.at("operator") ||
-      !["=", "+=", "-=", "*=", "/=", "%=", "^="].includes(this.current().value)
-    ) {
+    if (!this.atOneOf("operator", ASSIGNMENT_OPERATORS)) {
       return left;
     }
     if (left.kind !== "variable" && left.kind !== "field" && left.kind !== "array")
       this.fail("assignment target is not writable");
-    const operator = this.take().value as AssignmentOperator;
+    const operator = this.takeOneOf("operator", ASSIGNMENT_OPERATORS);
     return this.node({
       kind: "assign",
       target: left,
@@ -682,11 +721,8 @@ class Parser {
 
   private comparison(): Expression {
     let expression = this.concatenation();
-    while (
-      this.at("operator") &&
-      ["==", "!=", "<", "<=", ">", ">=", "~", "!~"].includes(this.current().value)
-    ) {
-      const operator = this.take().value as Extract<Expression, { kind: "binary" }>["operator"];
+    while (this.atOneOf("operator", COMPARISON_OPERATORS)) {
+      const operator = this.takeOneOf("operator", COMPARISON_OPERATORS);
       expression = this.node({
         kind: "binary",
         operator,
@@ -733,8 +769,8 @@ class Parser {
 
   private additive(): Expression {
     let expression = this.multiplicative();
-    while (this.atOperator("+") || this.atOperator("-")) {
-      const operator = this.take().value as "+" | "-";
+    while (this.atOneOf("operator", ADDITIVE_OPERATORS)) {
+      const operator = this.takeOneOf("operator", ADDITIVE_OPERATORS);
       expression = this.node({
         kind: "binary",
         operator,
@@ -747,8 +783,8 @@ class Parser {
 
   private multiplicative(): Expression {
     let expression = this.unary();
-    while (this.atOperator("*") || this.atOperator("/") || this.atOperator("%")) {
-      const operator = this.take().value as "*" | "/" | "%";
+    while (this.atOneOf("operator", MULTIPLICATIVE_OPERATORS)) {
+      const operator = this.takeOneOf("operator", MULTIPLICATIVE_OPERATORS);
       expression = this.node({
         kind: "binary",
         operator,
@@ -760,8 +796,8 @@ class Parser {
   }
 
   private unary(): Expression {
-    if (this.atOperator("!") || this.atOperator("+") || this.atOperator("-")) {
-      const operator = this.take().value as "!" | "+" | "-";
+    if (this.atOneOf("operator", UNARY_OPERATORS)) {
+      const operator = this.takeOneOf("operator", UNARY_OPERATORS);
       return this.node({ kind: "unary", operator, operand: this.unary() });
     }
     if (this.atOperator("++") || this.atOperator("--")) {
@@ -858,7 +894,8 @@ class Parser {
         values.push(this.expression());
       }
       this.expectOperator(")");
-      if (values.length === 1) return values[0] as Expression;
+      const only = values[0];
+      if (values.length === 1 && only !== undefined) return only;
       if (!this.atIdentifier("in")) this.fail("a parenthesized expression list requires in");
       return this.node({ kind: "tuple", values });
     }
@@ -993,6 +1030,10 @@ function arrayKey(indices: readonly Expression[], state: RuntimeState): string {
   return indices.map((index) => asString(evaluate(index, state))).join(separator);
 }
 
+function arrayEntryBytes(key: string, value: AwkValue): number {
+  return utf8ByteLength(key) + utf8ByteLength(asString(value));
+}
+
 function putArray(state: RuntimeState, name: string, key: string, value: AwkValue): void {
   const array = getArray(state, name);
   const previous = array.get(key);
@@ -1002,12 +1043,8 @@ function putArray(state: RuntimeState, name: string, key: string, value: AwkValu
     }
     state.arrayEntries += 1;
   }
-  const previousBytes =
-    previous === undefined
-      ? 0
-      : AWK_ENCODER.encode(key).byteLength + AWK_ENCODER.encode(asString(previous)).byteLength;
-  const nextBytes =
-    AWK_ENCODER.encode(key).byteLength + AWK_ENCODER.encode(asString(value)).byteLength;
+  const previousBytes = previous === undefined ? 0 : arrayEntryBytes(key, previous);
+  const nextBytes = arrayEntryBytes(key, value);
   resizeArrayBuffer(state, state.arrayBytes + nextBytes - previousBytes);
   array.set(key, value);
 }
@@ -1023,13 +1060,20 @@ function clearArray(state: RuntimeState, name: string): Map<string, AwkValue> {
   const array = getArray(state, name);
   let releasedBytes = 0;
   for (const [key, value] of array) {
-    releasedBytes +=
-      AWK_ENCODER.encode(key).byteLength + AWK_ENCODER.encode(asString(value)).byteLength;
+    releasedBytes += arrayEntryBytes(key, value);
   }
   resizeArrayBuffer(state, state.arrayBytes - releasedBytes);
   state.arrayEntries -= array.size;
   array.clear();
   return array;
+}
+
+function removeArrayEntry(state: RuntimeState, array: Map<string, AwkValue>, key: string): void {
+  const value = array.get(key);
+  if (value === undefined) return;
+  resizeArrayBuffer(state, state.arrayBytes - arrayEntryBytes(key, value));
+  array.delete(key);
+  state.arrayEntries -= 1;
 }
 
 function fieldIndex(value: AwkValue): number {
@@ -1086,6 +1130,25 @@ function validateFieldSeparator(state: RuntimeState, separator: string): void {
   if (separator !== " " && [...separator].length > 1) separatorRegex(state, separator);
 }
 
+function splitByRegex(state: RuntimeState, text: string, pattern: PosixRegex): AwkString[] {
+  const fields: AwkString[] = [];
+  let offset = 0;
+  for (;;) {
+    const match = pattern.exec(text, offset);
+    if (match === undefined) break;
+    if (fields.length >= state.context.budget.limits.maxBufferedRecords) {
+      throw new VfsError("E2BIG", "awk: field limit exceeded");
+    }
+    fields.push(inputValue(text.slice(offset, match.index)));
+    offset = match.end;
+  }
+  if (fields.length >= state.context.budget.limits.maxBufferedRecords) {
+    throw new VfsError("E2BIG", "awk: field limit exceeded");
+  }
+  fields.push(inputValue(text.slice(offset)));
+  return fields;
+}
+
 function splitText(state: RuntimeState, text: string, separator: string): AwkString[] {
   const checkCount = (count: number): void => {
     if (count > state.context.budget.limits.maxBufferedRecords)
@@ -1118,19 +1181,7 @@ function splitText(state: RuntimeState, text: string, separator: string): AwkStr
     }
     return text.split(separator).map((value) => inputValue(value));
   }
-  const pattern = separatorRegex(state, separator);
-  const fields: AwkString[] = [];
-  let offset = 0;
-  for (;;) {
-    const match = pattern.exec(text, offset);
-    if (match === undefined) break;
-    checkCount(fields.length + 1);
-    fields.push(inputValue(text.slice(offset, match.index)));
-    offset = match.end;
-  }
-  checkCount(fields.length + 1);
-  fields.push(inputValue(text.slice(offset)));
-  return fields;
+  return splitByRegex(state, text, separatorRegex(state, separator));
 }
 
 function splitRecord(state: RuntimeState): void {
@@ -1272,9 +1323,17 @@ function evaluateSpecialCall(
     return getArray(state, arguments_[0].name).size;
   }
   if (expression.name === "match") {
-    if (arguments_.length !== 2) throw new VfsError("EINVAL", "awk: match expects two arguments");
-    const source = asString(evaluate(arguments_[0] as Expression, state));
-    const found = expressionRegex(arguments_[1] as Expression, state).exec(source);
+    const sourceExpression = arguments_[0];
+    const patternExpression = arguments_[1];
+    if (
+      arguments_.length !== 2 ||
+      sourceExpression === undefined ||
+      patternExpression === undefined
+    ) {
+      throw new VfsError("EINVAL", "awk: match expects two arguments");
+    }
+    const source = asString(evaluate(sourceExpression, state));
+    const found = expressionRegex(patternExpression, state).exec(source);
     if (found === undefined) {
       setVariable(state, "RSTART", 0);
       setVariable(state, "RLENGTH", -1);
@@ -1286,41 +1345,34 @@ function evaluateSpecialCall(
     return start;
   }
   if (expression.name === "split") {
-    if (arguments_.length < 2 || arguments_.length > 3)
-      throw new VfsError("EINVAL", "awk: split expects two or three arguments");
+    const sourceExpression = arguments_[0];
     const target = arguments_[1];
-    if (target?.kind !== "variable")
+    if (
+      arguments_.length < 2 ||
+      arguments_.length > 3 ||
+      sourceExpression === undefined ||
+      target === undefined
+    ) {
+      throw new VfsError("EINVAL", "awk: split expects two or three arguments");
+    }
+    if (target.kind !== "variable")
       throw new VfsError("EINVAL", "awk: split requires an array name as its second argument");
-    const source = asString(evaluate(arguments_[0] as Expression, state));
-    const separator =
-      arguments_[2] === undefined
-        ? asString(getVariable(state, "FS"))
-        : arguments_[2].kind === "regex"
-          ? undefined
-          : asString(evaluate(arguments_[2], state));
+    const source = asString(evaluate(sourceExpression, state));
+    const separatorExpression = arguments_[2];
     let fields: AwkString[];
-    if (separator !== undefined) {
+    if (separatorExpression === undefined) {
+      const separator = asString(getVariable(state, "FS"));
       validateFieldSeparator(state, separator);
       fields = splitText(state, source, separator);
-    } else {
-      const pattern = expressionRegex(arguments_[2] as Expression, state);
+    } else if (separatorExpression.kind === "regex") {
+      const pattern = expressionRegex(separatorExpression, state);
       if (pattern.test(""))
         throw new VfsError("EINVAL", "awk: an empty-matching split separator is unsupported");
-      fields = [];
-      if (source !== "") {
-        let offset = 0;
-        for (;;) {
-          const found = pattern.exec(source, offset);
-          if (found === undefined) break;
-          if (fields.length >= state.context.budget.limits.maxBufferedRecords)
-            throw new VfsError("E2BIG", "awk: field limit exceeded");
-          fields.push(inputValue(source.slice(offset, found.index)));
-          offset = found.end;
-        }
-        if (fields.length >= state.context.budget.limits.maxBufferedRecords)
-          throw new VfsError("E2BIG", "awk: field limit exceeded");
-        fields.push(inputValue(source.slice(offset)));
-      }
+      fields = source === "" ? [] : splitByRegex(state, source, pattern);
+    } else {
+      const separator = asString(evaluate(separatorExpression, state));
+      validateFieldSeparator(state, separator);
+      fields = splitText(state, source, separator);
     }
     clearArray(state, target.name);
     for (let index = 0; index < fields.length; index += 1) {
@@ -1329,10 +1381,18 @@ function evaluateSpecialCall(
     return fields.length;
   }
   if (expression.name === "sub" || expression.name === "gsub") {
-    if (arguments_.length < 2 || arguments_.length > 3)
+    const patternExpression = arguments_[0];
+    const replacementExpression = arguments_[1];
+    if (
+      arguments_.length < 2 ||
+      arguments_.length > 3 ||
+      patternExpression === undefined ||
+      replacementExpression === undefined
+    ) {
       throw new VfsError("EINVAL", `awk: ${expression.name} expects two or three arguments`);
-    const pattern = expressionRegex(arguments_[0] as Expression, state);
-    const replacement = asString(evaluate(arguments_[1] as Expression, state));
+    }
+    const pattern = expressionRegex(patternExpression, state);
+    const replacement = asString(evaluate(replacementExpression, state));
     const target = arguments_[2];
     if (
       target !== undefined &&
@@ -1698,17 +1758,7 @@ async function executeStatements(
     if (statement.kind === "delete") {
       const array = getArray(state, statement.target.name);
       const key = arrayKey(statement.target.indices, state);
-      const value = array.get(key);
-      if (value !== undefined) {
-        resizeArrayBuffer(
-          state,
-          state.arrayBytes -
-            AWK_ENCODER.encode(key).byteLength -
-            AWK_ENCODER.encode(asString(value)).byteLength,
-        );
-        array.delete(key);
-        state.arrayEntries -= 1;
-      }
+      removeArrayEntry(state, array, key);
       continue;
     }
     if (statement.kind === "break" || statement.kind === "continue")
@@ -1795,7 +1845,7 @@ export const awkCommand = /* @__PURE__ */ defineApplet(AWK, async (context, argv
         if (lease.value.includes("\0")) {
           throw new VfsError("EINVAL", "awk: program file contains a NUL byte", path);
         }
-        bytes += AWK_ENCODER.encode(lease.value).byteLength + separatorBytes;
+        bytes += utf8ByteLength(lease.value) + separatorBytes;
         chunks.push(lease.value);
       } finally {
         lease.release();
@@ -1809,7 +1859,7 @@ export const awkCommand = /* @__PURE__ */ defineApplet(AWK, async (context, argv
   if (operandAssignment !== undefined) {
     throw appletUsageError(AWK, "assignments after the program are unsupported; use -v");
   }
-  if (AWK_ENCODER.encode(source).byteLength > context.budget.limits.maxScriptBytes) {
+  if (utf8ByteLength(source) > context.budget.limits.maxScriptBytes) {
     throw new VfsError("E2BIG", "awk: program byte limit exceeded");
   }
   const rules = new Parser(

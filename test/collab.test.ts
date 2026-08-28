@@ -11,7 +11,7 @@ import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { Shell } from "../src/shell/shell.js";
 import type { VfsEvent } from "../src/vfs/events.js";
 import { readAllBytes } from "../src/vfs/streams.js";
-import { createTestFileSystem } from "./helpers/node-sql.js";
+import { createTestFileSystem, withoutPosixCredentials } from "./helpers/node-sql.js";
 
 /**
  * A document that keeps plain text and records what arrived from outside.
@@ -47,6 +47,37 @@ async function read(
   path: string,
 ) {
   return new TextDecoder().decode(await readAllBytes(fileSystem.readFile(path).stream, 1 << 20));
+}
+
+function delayNextRead(inner: ReturnType<typeof createTestFileSystem>) {
+  const started = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  const fileSystem = new Proxy(inner, {
+    get(target, property) {
+      if (property === "readFile") {
+        return (path: string) => {
+          const source = target.readFile(path);
+          let delivered = false;
+          return {
+            stat: source.stat,
+            stream: new ReadableStream<Uint8Array>({
+              async pull(controller) {
+                if (delivered) return;
+                delivered = true;
+                started.resolve();
+                await resume.promise;
+                controller.enqueue(await readAllBytes(source.stream, 1 << 20));
+                controller.close();
+              },
+            }),
+          };
+        };
+      }
+      const value: unknown = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return { fileSystem, started: started.promise, resume };
 }
 
 describe("text edits", () => {
@@ -214,6 +245,61 @@ describe("document registry", () => {
     expect(registry.get("/doc.txt")?.dirty).toBe(true);
     expect(await view.publish("/doc.txt")).toBe(true);
     expect(await read(fileSystem, "/doc.txt")).toBe("remote\nlocal\n");
+  });
+
+  it("does not reconcile into a document that closed while storage was being read", async () => {
+    const inner = createTestFileSystem();
+    await inner.writeFile("/doc.txt", "stored\n");
+    const delayed = delayNextRead(inner);
+    const registry = new DocumentRegistry();
+    const closed = new TextDocument("closed\n");
+    registry.open("/doc.txt", closed, inner.stat("/doc.txt").mutationToken);
+    const view = new CollaborativeFileSystem(delayed.fileSystem, registry);
+
+    const reconciling = view.reconcile("/doc.txt");
+    await delayed.started;
+    registry.close("/doc.txt");
+    registry.open("/doc.txt", closed, inner.stat("/doc.txt").mutationToken);
+    delayed.resume.resolve();
+
+    await expect(reconciling).resolves.toBe(false);
+    expect(closed.text()).toBe("closed\n");
+  });
+
+  it("does not let a stale reconciliation undo an in-flight publication", async () => {
+    const inner = createTestFileSystem();
+    await inner.writeFile("/doc.txt", "old\n");
+    const delayed = delayNextRead(inner);
+    const registry = new DocumentRegistry();
+    const document = new TextDocument("old\n");
+    registry.open("/doc.txt", document, inner.stat("/doc.txt").mutationToken);
+    const view = new CollaborativeFileSystem(delayed.fileSystem, registry);
+
+    const reconciling = view.reconcile("/doc.txt");
+    await delayed.started;
+    document.type(0, "new\n");
+    registry.markDirty("/doc.txt");
+    await expect(view.publish("/doc.txt")).resolves.toBe(true);
+    const publishedToken = inner.stat("/doc.txt").mutationToken;
+    delayed.resume.resolve();
+
+    await expect(reconciling).resolves.toBe(false);
+    expect(document.text()).toBe("new\nold\n");
+    expect(await read(inner, "/doc.txt")).toBe("new\nold\n");
+    expect(registry.get("/doc.txt")?.token).toBe(publishedToken);
+  });
+});
+
+describe("collaborative filesystem capabilities", () => {
+  it("refuses a credential view when the wrapped filesystem does not provide one", () => {
+    const fileSystem = new CollaborativeFileSystem(
+      withoutPosixCredentials(createTestFileSystem()),
+      new DocumentRegistry(),
+    );
+
+    expect(() => fileSystem.forCredentials({ uid: 1_000, gid: 1_000 })).toThrowError(
+      "the underlying filesystem does not support POSIX credentials",
+    );
   });
 });
 

@@ -52,10 +52,13 @@ export class VfsError extends Error {
 export function isVfsError(error: unknown): error is VfsError {
   if (error instanceof VfsError) return true;
   if (!(error instanceof Error)) return false;
-  const candidate = error as { readonly name?: unknown; readonly code?: unknown };
-  return (
-    candidate.name === "VfsError" &&
-    typeof candidate.code === "string" &&
-    RECOGNIZED_CODES.has(candidate.code)
-  );
+  try {
+    if (error.name !== "VfsError") return false;
+    const code: unknown = Reflect.get(error, "code");
+    return typeof code === "string" && RECOGNIZED_CODES.has(code);
+  } catch {
+    // Predicates at an unknown boundary must not replace the original failure
+    // merely because a foreign Error exposes an accessor that throws.
+    return false;
+  }
 }

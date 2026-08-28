@@ -1979,7 +1979,12 @@ describe("Bash v3 input and positional built-ins", () => {
 
   it("cancels an in-flight read with the shared execution signal", async () => {
     let cancelled = false;
+    const reading = Promise.withResolvers<void>();
     const input = new ReadableStream<Uint8Array>({
+      pull() {
+        reading.resolve();
+        return new Promise(() => undefined);
+      },
       cancel() {
         cancelled = true;
       },
@@ -1989,7 +1994,7 @@ describe("Bash v3 input and positional built-ins", () => {
       stdin: input,
       signal: controller.signal,
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await reading.promise;
     controller.abort();
     await expect(execution).resolves.toMatchObject({ exitCode: 1, stdout: "", stderr: "" });
     expect(cancelled).toBe(true);
@@ -2490,6 +2495,11 @@ describe("argument, sequence, encoding, and environment utilities", () => {
       name: "seq joins values with an explicit separator and pads equal widths",
       script: "seq -s , -w 8 11",
       stdout: "08,09,10,11\n",
+    },
+    {
+      name: "seq pads negative values after their sign",
+      script: "seq -w -10 2 2",
+      stdout: "-10\n-08\n-06\n-04\n-02\n000\n002\n",
     },
     {
       name: "seq rejects a zero increment as a usage error",

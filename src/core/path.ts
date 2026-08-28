@@ -1,15 +1,12 @@
 import { VfsError } from "./errors.js";
+import { encodeUtf8, utf8ByteLength } from "./unicode.js";
 
 const MAX_PATH_BYTES = 4096;
 const MAX_NAME_BYTES = 255;
 
-function utf8Length(value: string): number {
-  return new TextEncoder().encode(value).byteLength;
-}
-
 export function compareUtf8(left: string, right: string): number {
-  const leftBytes = new TextEncoder().encode(left);
-  const rightBytes = new TextEncoder().encode(right);
+  const leftBytes = encodeUtf8(left);
+  const rightBytes = encodeUtf8(right);
   const length = Math.min(leftBytes.byteLength, rightBytes.byteLength);
   for (let index = 0; index < length; index += 1) {
     const leftByte = leftBytes[index];
@@ -24,7 +21,7 @@ function validatePath(path: string): void {
   if (path.includes("\0")) {
     throw new VfsError("EINVAL", "paths cannot contain NUL bytes", path);
   }
-  if (utf8Length(path) > MAX_PATH_BYTES) {
+  if (utf8ByteLength(path) > MAX_PATH_BYTES) {
     throw new VfsError("ENAMETOOLONG", `path exceeds ${MAX_PATH_BYTES} UTF-8 bytes`, path);
   }
 }
@@ -42,7 +39,7 @@ export function normalizePath(path: string, cwd = "/"): string {
       segments.pop();
       continue;
     }
-    if (utf8Length(segment) > MAX_NAME_BYTES) {
+    if (utf8ByteLength(segment) > MAX_NAME_BYTES) {
       throw new VfsError(
         "ENAMETOOLONG",
         `path segment exceeds ${MAX_NAME_BYTES} UTF-8 bytes`,

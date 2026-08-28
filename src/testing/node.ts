@@ -16,7 +16,9 @@ class ArrayCursor<Row extends VfsSqlRow> implements VfsSqlCursor<Row> {
     if (this.rows.length !== 1) {
       throw new Error(`expected exactly one SQLite row, received ${this.rows.length}`);
     }
-    return this.rows[0] as Row;
+    const row = this.rows[0];
+    if (row === undefined) throw new Error("SQLite cursor lost its only row");
+    return row;
   }
 
   toArray(): Row[] {
@@ -67,6 +69,8 @@ class NodeSqlStorage implements VfsSqlStorage {
 
   exec<Row extends VfsSqlRow>(query: string, ...bindings: VfsSqlBinding[]): VfsSqlCursor<Row> {
     const statement = this.database.prepare(query);
+    // The SQL string is the schema for `Row`; SQLite exposes no metadata from
+    // which that caller-owned generic can be reconstructed at runtime.
     const rows = statement.all(...bindings.map(inputValue)).map(outputRow) as Row[];
     this.observe?.(query, rows.length);
     return new ArrayCursor(rows);

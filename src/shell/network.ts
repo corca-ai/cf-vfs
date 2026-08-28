@@ -53,6 +53,8 @@ export interface ShellRequest {
   readonly method: string;
   readonly headers: readonly (readonly [string, string])[];
   readonly body?: string | undefined;
+  /** `curl -X` keeps the named method even when a redirect discards its body. */
+  readonly preserveMethodOnRedirect?: boolean | undefined;
 }
 
 /** Statuses that name a new location, and whether the method survives one. */
@@ -144,7 +146,12 @@ function afterRedirect(request: ShellRequest, location: string, status: number):
     );
   }
   const disposition = REDIRECTS.get(status);
-  const toGet = disposition === "to-get" && request.method !== "GET" && request.method !== "HEAD";
+  const discardBody = disposition === "to-get" && request.body !== undefined;
+  const toGet =
+    disposition === "to-get" &&
+    request.method !== "GET" &&
+    request.method !== "HEAD" &&
+    request.preserveMethodOnRedirect !== true;
   // Credentials the caller set were addressed to the origin it named. Real
   // `curl` and the fetch specification both drop them when the origin changes,
   // and so must this: an allowed origin that redirects elsewhere must not be
@@ -153,11 +160,16 @@ function afterRedirect(request: ShellRequest, location: string, status: number):
   const headers = request.headers.filter(
     ([name]) =>
       (sameOrigin || !CROSS_ORIGIN_STRIPPED.has(name.toLowerCase())) &&
-      (!toGet ||
+      (!discardBody ||
         (name.toLowerCase() !== "content-type" && name.toLowerCase() !== "content-length")),
   );
-  const next: ShellRequest = { url: target.href, method: toGet ? "GET" : request.method, headers };
-  return toGet || request.body === undefined ? next : { ...next, body: request.body };
+  const next: ShellRequest = {
+    url: target.href,
+    method: toGet ? "GET" : request.method,
+    headers,
+    ...(request.preserveMethodOnRedirect === true ? { preserveMethodOnRedirect: true } : {}),
+  };
+  return discardBody || request.body === undefined ? next : { ...next, body: request.body };
 }
 
 /**

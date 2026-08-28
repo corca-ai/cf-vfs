@@ -1,4 +1,5 @@
 import { VfsError } from "../core/errors.js";
+import { utf8ByteLength } from "../core/unicode.js";
 import { ShellNounsetError } from "./errors.js";
 
 type UnaryOperator = "+" | "-" | "!" | "~";
@@ -127,7 +128,7 @@ export class ArithmeticSyntaxError extends VfsError {
   readonly byteOffset: number;
 
   constructor(detail: string, source: string, offset: number) {
-    const byteOffset = new TextEncoder().encode(source.slice(0, offset)).byteLength;
+    const byteOffset = utf8ByteLength(source.slice(0, offset));
     super("EINVAL", `${detail} in arithmetic expression at byte ${byteOffset}`);
     this.detail = detail;
     this.byteOffset = byteOffset;

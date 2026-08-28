@@ -4,11 +4,13 @@ import {
   normalizeDecimalInteger,
 } from "../../core/decimal-integer.js";
 import { VfsError } from "../../core/errors.js";
+import { isOneOf } from "../../core/literals.js";
 import {
   compareUtf8,
   normalizePath,
   normalizePathPreservingTrailingSlash,
 } from "../../core/path.js";
+import { utf8ByteLength } from "../../core/unicode.js";
 import { type PosixPermission, shellModeAllows } from "../access.js";
 import { optindGeneration, setOptindFromGetopts } from "../environment.js";
 import { identityLabel, resolveIdentityNames } from "../identity.js";
@@ -632,8 +634,6 @@ export const unsetCommand = /* @__PURE__ */ defineApplet(UNSET, (context, argv) 
 
 const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const READ_IFS = /[ \t\n]/u;
-const READ_ENCODER = new TextEncoder();
-
 function readVariableNames(argv: readonly string[]): {
   names: string[];
   reply: boolean;
@@ -690,7 +690,7 @@ async function readEscapedRecord(
     while (true) {
       const record = await readInputRecord(fds[0], context.budget, context.signal);
       const decoded = decodeReadRecord(record.value);
-      retainedBytes += READ_ENCODER.encode(decoded.value).byteLength;
+      retainedBytes += utf8ByteLength(decoded.value);
       if (retainedBytes > context.budget.limits.maxLineBytes) {
         throw new VfsError("E2BIG", "read: logical line byte limit exceeded");
       }
@@ -1080,7 +1080,6 @@ export const setCommand = /* @__PURE__ */ defineApplet(SET, (context, argv) => {
 
 /** Unary predicates that consult namespace metadata. */
 const FILE_PREDICATES = ["-e", "-f", "-d", "-s", "-r", "-w", "-x", "-L", "-h", "-c"] as const;
-type FilePredicate = (typeof FILE_PREDICATES)[number];
 type PermissionPredicate = "-r" | "-w" | "-x";
 
 const PERMISSION_BITS: Readonly<Record<PermissionPredicate, PosixPermission>> = {
@@ -1108,12 +1107,12 @@ async function evaluateTest(
   if (values.length === 0) return false;
   if (values[0] === "!") return !(await evaluateTest(context, values.slice(1)));
   if (values.length === 1) return values[0] !== "";
-  const unary = values[0];
+  const unary = values[0] ?? "";
   const operand = values[1];
   if (values.length === 2 && operand !== undefined) {
     if (unary === "-n") return operand.length > 0;
     if (unary === "-z") return operand.length === 0;
-    if (FILE_PREDICATES.includes(unary as FilePredicate)) {
+    if (isOneOf(unary, FILE_PREDICATES)) {
       if (operand.length === 0) return false;
       try {
         const path = normalizePathPreservingTrailingSlash(operand, context.session.cwd);
@@ -1121,20 +1120,26 @@ async function evaluateTest(
         // about what it points at, which is why a dangling link fails `-e`.
         const asks = unary === "-L" || unary === "-h";
         const stat = asks ? context.fileSystem.lstat(path) : context.fileSystem.stat(path);
-        if (asks) return stat.kind === "symlink";
-        if (unary === "-c") return isCharacterDevice(stat);
-        if (unary === "-e") return true;
-        // A regular file, which a character device is not.
-        if (unary === "-f") {
-          return stat.kind === "file" && isRegularFile(stat);
+        switch (unary) {
+          case "-L":
+          case "-h":
+            return stat.kind === "symlink";
+          case "-c":
+            return isCharacterDevice(stat);
+          case "-e":
+            return true;
+          case "-f":
+            // A regular file, which a character device is not.
+            return stat.kind === "file" && isRegularFile(stat);
+          case "-d":
+            return stat.kind === "directory";
+          case "-s":
+            return stat.sizeBytes > 0;
+          case "-r":
+          case "-w":
+          case "-x":
+            return shellModeAllows(stat, context.session.credentials, PERMISSION_BITS[unary]);
         }
-        if (unary === "-d") return stat.kind === "directory";
-        if (unary === "-s") return stat.sizeBytes > 0;
-        return shellModeAllows(
-          stat,
-          context.session.credentials,
-          PERMISSION_BITS[unary as PermissionPredicate],
-        );
       } catch (error) {
         if (error instanceof VfsError && (error.code === "ENOENT" || error.code === "ENOTDIR")) {
           return false;

@@ -7,8 +7,10 @@ import type {
   ByteBody,
   CopyOptions,
   CopyResult,
+  DirectoryStat,
   EntryPage,
   FindOptions,
+  InlineFileStat,
   InlineReadResult,
   MetadataUpdateOptions,
   MoveOptions,
@@ -19,6 +21,7 @@ import type {
   ReadFileOptions,
   RemoveOptions,
   RemoveResult,
+  StatBase,
   SubtreeSummary,
   SymlinkOptions,
   TouchOptions,
@@ -38,7 +41,9 @@ import type { ShellFileDescriptors, ShellFileSystem, ShellSink } from "./types.j
  * an endless stream, a width, a mode — that this runtime has no way to make
  * true, so they stay absent and report `ENOENT` like any other path.
  */
-const DEVICES = {
+export type ShellDevice = "null" | "stdin" | "stdout" | "stderr";
+
+const DEVICES: Readonly<Record<string, ShellDevice | undefined>> = {
   "/dev/null": "null",
   "/dev/stdin": "stdin",
   "/dev/stdout": "stdout",
@@ -46,9 +51,7 @@ const DEVICES = {
   "/dev/fd/0": "stdin",
   "/dev/fd/1": "stdout",
   "/dev/fd/2": "stderr",
-} as const satisfies Readonly<Record<string, string>>;
-
-export type ShellDevice = (typeof DEVICES)[keyof typeof DEVICES];
+};
 
 /** `S_IFCHR` with the `666` bits Linux gives `/dev/null`. */
 const DEVICE_MODE = 0o020000 | 0o666;
@@ -87,27 +90,31 @@ export interface ReservedPathOptions {
  * of it.
  */
 export function shellDevice(path: string): ShellDevice | undefined {
-  return Object.hasOwn(DEVICES, path) ? DEVICES[path as keyof typeof DEVICES] : undefined;
+  return Object.hasOwn(DEVICES, path) ? DEVICES[path] : undefined;
 }
 
-function deviceStat(path: string, device: ShellDevice): VfsStat {
+function reservedStatBase(path: string, mode: number, mutationToken: string): StatBase {
   return {
     path,
     parentPath: path.slice(0, path.lastIndexOf("/")) || "/",
     name: path.slice(path.lastIndexOf("/") + 1),
     ino: NO_ENTRY_IDENTITY,
-    kind: "file",
-    contentClass: "inline",
     sizeBytes: 0,
-    mode: DEVICE_MODE,
+    mode,
     uid: 0,
     gid: 0,
     createdAtMs: 0,
     modifiedAtMs: 0,
     revision: 1,
-    // Never a usable guard: a device has no state to reserve, and a token that
-    // looked usable would invite a caller to guard on nothing.
-    mutationToken: `vfs:device:${device}`,
+    mutationToken,
+  };
+}
+
+function deviceStat(path: string, device: ShellDevice): InlineFileStat {
+  return {
+    ...reservedStatBase(path, DEVICE_MODE, `vfs:device:${device}`),
+    kind: "file",
+    contentClass: "inline",
   };
 }
 
@@ -118,31 +125,19 @@ function deviceStat(path: string, device: ShellDevice): VfsStat {
  * true because running it is exactly what the path is for, and its size is
  * zero because there is no file behind it to have a size.
  */
-function appletStat(path: string): VfsStat {
+function appletStat(path: string): InlineFileStat {
   return {
-    ...directoryStat(path),
+    ...reservedStatBase(path, APPLET_MODE, "vfs:device:dev"),
     kind: "file",
     contentClass: "inline",
-    mode: APPLET_MODE,
-  } as VfsStat;
+  };
 }
 
-function directoryStat(path: string): VfsStat {
+function directoryStat(path: string): DirectoryStat {
   return {
-    path,
-    parentPath: path.slice(0, path.lastIndexOf("/")) || "/",
-    name: path.slice(path.lastIndexOf("/") + 1),
-    ino: NO_ENTRY_IDENTITY,
+    ...reservedStatBase(path, DEVICE_DIRECTORY_MODE, "vfs:device:dev"),
     kind: "directory",
     contentClass: null,
-    sizeBytes: 0,
-    mode: DEVICE_DIRECTORY_MODE,
-    uid: 0,
-    gid: 0,
-    createdAtMs: 0,
-    modifiedAtMs: 0,
-    revision: 1,
-    mutationToken: "vfs:device:dev",
   };
 }
 
@@ -360,7 +355,7 @@ export class ReservedPathFileSystem implements ShellFileSystem {
     }
     validateByteRange(options?.range, at.path);
     return {
-      stat: deviceStat(at.path, at.device) as InlineReadResult["stat"],
+      stat: deviceStat(at.path, at.device),
       stream: emptyStream(),
     };
   }

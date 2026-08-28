@@ -1,4 +1,5 @@
 import { normalizePath } from "../core/path.js";
+import { utf8ByteLength } from "../core/unicode.js";
 import type { VfsStat } from "../vfs/types.js";
 
 /**
@@ -154,7 +155,7 @@ export function completeShellLine(
     truncated: false,
     scanned: 0,
   };
-  if (new TextEncoder().encode(word).byteLength > limits.maxWordBytes) return empty;
+  if (utf8ByteLength(word) > limits.maxWordBytes) return empty;
 
   if (word.startsWith("$"))
     return complete(variableCandidates(word, context), start, at, limits, 0);

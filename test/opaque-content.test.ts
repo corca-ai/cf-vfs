@@ -400,15 +400,18 @@ describe("opaque content", () => {
     const { fileSystem, store } = await withOpaque();
     // A bucket that never answers must not leave the execution pending: this
     // is the first place a command awaits the network.
-    store.getStream = () => new Promise(() => undefined);
+    const requested = Promise.withResolvers<void>();
+    store.getStream = () => {
+      requested.resolve();
+      return new Promise(() => undefined);
+    };
     const shell = shellFor(fileSystem, store);
     const controller = new AbortController();
-    const started = Date.now();
     const running = shell.executeText({ script: "cat /blob.txt", signal: controller.signal });
-    setTimeout(() => controller.abort(), 20);
+    await requested.promise;
+    controller.abort();
     const result = await running;
     expect(result.exitCode).not.toBe(0);
-    expect(Date.now() - started).toBeLessThan(5_000);
   });
 
   it("reports a transfer failure rather than rejecting the execution", async () => {

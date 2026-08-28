@@ -26,6 +26,10 @@ function marker(name: string, aliases?: readonly string[]): ShellApplet {
   });
 }
 
+function hasAppletSpec(command: { readonly name: string }): command is ShellApplet {
+  return "spec" in command;
+}
+
 /**
  * The exact convenience preset. A command silently dropped from
  * `defaultShellCommands` would otherwise pass every other gate: bundle presets
@@ -122,7 +126,7 @@ describe("applet specifications", () => {
   it("publishes a unique, non-empty specification for every default applet", () => {
     const seen = new Set<string>();
     for (const command of defaultShellCommands) {
-      const spec = (command as Partial<ShellApplet>).spec;
+      const spec = hasAppletSpec(command) ? command.spec : undefined;
       expect(spec, command.name).toBeDefined();
       if (spec === undefined) continue;
       expect(spec.name).toBe(command.name);

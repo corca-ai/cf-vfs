@@ -804,6 +804,9 @@ other unbounded thing in this shell ends.
 Absent by design: `-u`, cookies, `-F`, `--data-binary`, `-w`, `-k`, and
 compression flags. This is a profile, not a reimplementation, and every one of
 those is either the host's decision or a shape this environment does not have.
+Because `ShellNetwork` deliberately receives a Fetch `Request`, combining
+`-d` with an effective `GET` or `HEAD` method is refused: Fetch cannot
+represent a body on either method.
 
 ### Virtual devices
 

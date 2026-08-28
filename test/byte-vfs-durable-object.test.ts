@@ -134,6 +134,14 @@ describe("byte-oriented Durable Object filesystem", () => {
     expect((shellError as VfsError).code).toBe("EINVAL");
 
     expect(isVfsError(new Error("plain"))).toBe(false);
+    const accessor = new Error("foreign");
+    accessor.name = "VfsError";
+    Object.defineProperty(accessor, "code", {
+      get() {
+        throw new Error("accessor must not run");
+      },
+    });
+    expect(isVfsError(accessor)).toBe(false);
     expect(isVfsError({ name: "VfsError", code: "ENOENT" })).toBe(false);
     expect(
       isVfsError(

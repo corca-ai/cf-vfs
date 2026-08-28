@@ -353,22 +353,24 @@ class Parser {
 
   private or(): Node {
     let left = this.and();
-    while (this.peek().type === "ident" && (this.peek() as { value: string }).value === "or") {
+    for (;;) {
+      const token = this.peek();
+      if (token.type !== "ident" || token.value !== "or") return left;
       this.take();
       this.count();
       left = { kind: "binary", operator: "or", left, right: this.and() };
     }
-    return left;
   }
 
   private and(): Node {
     let left = this.comparison();
-    while (this.peek().type === "ident" && (this.peek() as { value: string }).value === "and") {
+    for (;;) {
+      const token = this.peek();
+      if (token.type !== "ident" || token.value !== "and") return left;
       this.take();
       this.count();
       left = { kind: "binary", operator: "and", left, right: this.comparison() };
     }
-    return left;
   }
 
   private comparison(): Node {
@@ -787,19 +789,19 @@ export class JqFilter {
     optional: boolean,
   ): JsonValue | typeof SKIP {
     if (target === null) return null;
-    const length = Array.isArray(target)
-      ? target.length
-      : typeof target === "string"
-        ? [...target].length
-        : -1;
-    if (length < 0) {
-      if (optional) return SKIP;
-      throw new JqRuntimeError(`jq: cannot slice ${jsonKind(target)}`);
+    if (typeof target === "string") {
+      const points = [...target];
+      const start = clampIndex(from, 0, points.length);
+      const end = clampIndex(to, points.length, points.length);
+      return points.slice(start, Math.max(start, end)).join("");
     }
-    const start = clampIndex(from, 0, length);
-    const end = clampIndex(to, length, length);
-    if (typeof target === "string") return [...target].slice(start, Math.max(start, end)).join("");
-    return (target as JsonValue[]).slice(start, Math.max(start, end));
+    if (Array.isArray(target)) {
+      const start = clampIndex(from, 0, target.length);
+      const end = clampIndex(to, target.length, target.length);
+      return target.slice(start, Math.max(start, end));
+    }
+    if (optional) return SKIP;
+    throw new JqRuntimeError(`jq: cannot slice ${jsonKind(target)}`);
   }
 
   private *call(node: Extract<Node, { kind: "call" }>, input: JsonValue): Generator<JsonValue> {
@@ -889,7 +891,7 @@ export class JqFilter {
       case "sort_by/1": {
         const keyed = requireArray(input, "sort_by").map((item) => ({
           item,
-          key: [...this.evaluate(one(0), item)] as JsonValue,
+          key: [...this.evaluate(one(0), item)],
         }));
         keyed.sort((a, b) => compareJson(a.key, b.key));
         yield keyed.map((entry) => entry.item);
@@ -897,9 +899,10 @@ export class JqFilter {
       }
       case "unique/0": {
         const sorted = [...requireArray(input, "unique")].sort(compareJson);
-        yield sorted.filter(
-          (item, index) => index === 0 || !equalJson(item, sorted[index - 1] as JsonValue),
-        );
+        yield sorted.filter((item, index) => {
+          const previous = sorted[index - 1];
+          return previous === undefined || !equalJson(item, previous);
+        });
         return;
       }
       case "min/0":
@@ -920,12 +923,12 @@ export class JqFilter {
         return;
       case "first/0": {
         const items = requireArray(input, "first");
-        yield items.length === 0 ? null : (items[0] as JsonValue);
+        yield items.at(0) ?? null;
         return;
       }
       case "last/0": {
         const items = requireArray(input, "last");
-        yield items.length === 0 ? null : (items[items.length - 1] as JsonValue);
+        yield items.at(-1) ?? null;
         return;
       }
       case "any/0":

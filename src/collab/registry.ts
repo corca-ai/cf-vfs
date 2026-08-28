@@ -19,6 +19,7 @@ interface Entry {
  */
 export class DocumentRegistry {
   readonly #open = new Map<string, Entry>();
+  readonly #snapshots = new WeakMap<OpenDocument, Entry>();
 
   /**
    * Registers a document already holding the text at `token`.
@@ -38,9 +39,21 @@ export class DocumentRegistry {
   get(path: string): OpenDocument | undefined {
     const normalized = normalizePath(path);
     const entry = this.#open.get(normalized);
-    return entry === undefined
-      ? undefined
-      : { path: normalized, document: entry.document, token: entry.token, dirty: entry.dirty };
+    if (entry === undefined) return undefined;
+    const snapshot: OpenDocument = {
+      path: normalized,
+      document: entry.document,
+      token: entry.token,
+      dirty: entry.dirty,
+    };
+    this.#snapshots.set(snapshot, entry);
+    return snapshot;
+  }
+
+  /** Whether a snapshot still names the same registration at the same token. */
+  isUnchanged(path: string, snapshot: OpenDocument): boolean {
+    const entry = this.#open.get(normalizePath(path));
+    return entry === this.#snapshots.get(snapshot) && entry?.token === snapshot.token;
   }
 
   paths(): string[] {

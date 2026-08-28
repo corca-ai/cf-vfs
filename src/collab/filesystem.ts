@@ -1,5 +1,7 @@
 import { VfsError } from "../core/errors.js";
 import { isDescendant, normalizePath } from "../core/path.js";
+import { encodeUtf8, utf8ByteLength } from "../core/unicode.js";
+import { supportsPosixCredentials } from "../vfs/capabilities.js";
 import { sha256Hex } from "../vfs/digest.js";
 import { byteRangeBounds } from "../vfs/range.js";
 import { readAllBytes } from "../vfs/streams.js";
@@ -43,7 +45,7 @@ import type {
 } from "../vfs/types.js";
 import { textEdits } from "./edits.js";
 import { type DocumentRegistry, decodeText } from "./registry.js";
-import type { CollaborativeDocument, OpenDocument } from "./types.js";
+import type { OpenDocument } from "./types.js";
 
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 
@@ -61,7 +63,7 @@ async function bodyText(body: ByteBody, path: string): Promise<string> {
 }
 
 function streamOf(body: string | Uint8Array): ReadableStream<Uint8Array> {
-  const bytes = typeof body === "string" ? new TextEncoder().encode(body) : body;
+  const bytes = typeof body === "string" ? encodeUtf8(body) : body;
   return new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(bytes);
@@ -124,7 +126,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
       ifMutationToken: open.token,
       skipIfUnchanged: true,
     });
-    this.#recordStoredText(path, open.document, publishedText, result.mutationToken);
+    this.#recordStoredText(path, open, publishedText, result.mutationToken);
     return true;
   }
 
@@ -142,19 +144,19 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     const read = this.#inner.readFile(path);
     const bytes = await readAllBytes(read.stream, MAX_DOCUMENT_BYTES);
     const storedText = decodeText(bytes, path);
+    if (!this.#registry.isUnchanged(path, open)) return false;
     const edits = textEdits(open.document.text(), storedText);
     if (edits.length > 0) open.document.applyExternal(edits);
-    this.#recordStoredText(path, open.document, storedText, read.stat.mutationToken);
+    this.#recordStoredText(path, open, storedText, read.stat.mutationToken);
     return edits.length > 0;
   }
 
   forCredentials(credentials: PosixCredentials, options?: PosixViewOptions): VirtualFileSystem {
-    const candidate = this.#inner as Partial<PosixVirtualFileSystem>;
-    if (typeof candidate.forCredentials !== "function") {
+    if (!supportsPosixCredentials(this.#inner)) {
       throw new TypeError("the underlying filesystem does not support POSIX credentials");
     }
     const view = new CollaborativeFileSystem(
-      candidate.forCredentials(credentials, options),
+      this.#inner.forCredentials(credentials, options),
       this.#registry,
     );
     view.#credentials = {
@@ -175,14 +177,13 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
 
   #recordStoredText(
     path: string,
-    document: CollaborativeDocument,
+    open: OpenDocument,
     storedText: string,
     mutationToken: string,
   ): void {
-    const current = this.#registry.get(path);
-    if (current?.document !== document) return;
+    if (!this.#registry.isUnchanged(path, open)) return;
     this.#registry.markPublished(path, mutationToken);
-    if (current.document.text() !== storedText) this.#registry.markDirty(path);
+    if (open.document.text() !== storedText) this.#registry.markDirty(path);
   }
 
   #metadataResult(path: string, open: OpenDocument | undefined, stat: VfsStat): VfsStat {
@@ -196,9 +197,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
 
   #withPendingSize(stat: VfsStat): VfsStat {
     const pending = this.#pending(stat.path);
-    return pending === undefined
-      ? stat
-      : { ...stat, sizeBytes: new TextEncoder().encode(pending.text).byteLength };
+    return pending === undefined ? stat : { ...stat, sizeBytes: utf8ByteLength(pending.text) };
   }
 
   #assertDocumentWrite(path: string): void {
@@ -265,7 +264,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     // The stored snapshot is released rather than left holding in-flight
     // budget for bytes nobody is going to read.
     void result.stream.cancel();
-    const bytes = new TextEncoder().encode(pending.text);
+    const bytes = encodeUtf8(pending.text);
     const selected = byteRangeBounds(options?.range, bytes.byteLength, resolved);
     return {
       stat: { ...result.stat, sizeBytes: bytes.byteLength },
@@ -301,7 +300,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
       // rather than the one underneath, which is a mistake nothing would
       // report.
       const result = await this.#inner.writeFile(path, next, options);
-      this.#recordStoredText(resolved, open.document, next, result.mutationToken);
+      this.#recordStoredText(resolved, open, next, result.mutationToken);
       return result;
     }
     const stat =
@@ -328,7 +327,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
       path: resolved,
       revision: stat.revision,
       mutationToken: stat.mutationToken,
-      sizeBytes: new TextEncoder().encode(open.document.text()).byteLength,
+      sizeBytes: utf8ByteLength(open.document.text()),
       created: false,
     };
   }
@@ -402,7 +401,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
       path: resolved,
       revision: stat.revision,
       mutationToken: stat.mutationToken,
-      sizeBytes: new TextEncoder().encode(open.document.text()).byteLength,
+      sizeBytes: utf8ByteLength(open.document.text()),
       created: false,
     };
   }
@@ -458,7 +457,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
       const pending = this.#pending(candidate);
       if (pending === undefined) continue;
       const stored = this.#inner.stat(candidate);
-      logicalFileBytes += new TextEncoder().encode(pending.text).byteLength - stored.sizeBytes;
+      logicalFileBytes += utf8ByteLength(pending.text) - stored.sizeBytes;
     }
     return { ...summary, logicalFileBytes };
   }
