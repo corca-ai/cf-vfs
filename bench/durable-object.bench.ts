@@ -491,6 +491,22 @@ describe("Durable Object storage benchmark metrics", () => {
         rowsWritten: meter.rowsWritten,
       };
 
+      await measuredFileSystem.writeFile("/digest", pointBodyA);
+      meter.reset();
+      await measuredFileSystem.digestFile("/digest");
+      const coldDigestCost = {
+        statements: meter.statements,
+        rowsRead: meter.rowsRead,
+        rowsWritten: meter.rowsWritten,
+      };
+      meter.reset();
+      await measuredFileSystem.digestFile("/digest");
+      const warmDigestCost = {
+        statements: meter.statements,
+        rowsRead: meter.rowsRead,
+        rowsWritten: meter.rowsWritten,
+      };
+
       const timedFileSystem = new DurableObjectFileSystem(state.storage);
       timedFileSystem.mkdir("/search");
       for (let index = 0; index < 1_000; index += 1) {
@@ -588,6 +604,8 @@ describe("Durable Object storage benchmark metrics", () => {
         populatedStatCost,
         overwriteCost,
         readEditCost,
+        coldDigestCost,
+        warmDigestCost,
         statQueryPlan,
         warmInitializeMs,
         statMs,
@@ -615,6 +633,16 @@ describe("Durable Object storage benchmark metrics", () => {
       statements: 4,
       rowsRead: 6,
       rowsWritten: 2,
+    });
+    expect(metrics.coldDigestCost).toMatchObject({
+      statements: 3,
+      rowsRead: 3,
+      rowsWritten: 1,
+    });
+    expect(metrics.warmDigestCost).toMatchObject({
+      statements: 1,
+      rowsRead: 1,
+      rowsWritten: 0,
     });
     expect(metrics.statQueryPlan.every((detail) => detail.includes("SEARCH"))).toBe(true);
     measured(metrics.warmInitializeMs);

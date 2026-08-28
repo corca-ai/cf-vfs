@@ -132,6 +132,10 @@ export abstract class VfsDurableObject<Environment> extends DurableObject<Enviro
     );
   }
 
+  digestFile(path: string): Promise<string> {
+    return this.fileSystem.digestFile(rpcString(path, "path"));
+  }
+
   readFile(path: string, options?: ReadFileOptions): InlineReadResult {
     return this.fileSystem.readFile(rpcString(path, "path"), rpcReadFileOptions(options));
   }

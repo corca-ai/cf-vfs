@@ -369,3 +369,55 @@ retain `readAllBytes()` through the shell: shell is 227,182 bytes, interactive
 is 236,831, the default registry is 455,153, and Linux is 614,277. VFS-only and
 R2 presets remain unchanged. All bundle budgets, 1,397 Node tests, 98 Durable
 Object tests, and 10 workerd benchmark tests pass.
+
+## Follow-up: one revision-stamped content digest
+
+At baseline revision `a940984`, inline `sha256sum` performed a metadata read, a
+second path resolution and body read, then copied and hashed the returned bytes
+for every operand on every execution. One hundred files therefore cost 300
+statements and 300 returned rows whether or not any file changed. The VFS
+already held a private SHA-256 cache for `skipIfUnchanged`, but only writes that
+requested that option could populate or consume it.
+
+`digestFile(path)` makes that one cache the content-inspection primitive. A
+cold inline call resolves the entry and cache together, reads its chunks, hashes
+the stable snapshot, and conditionally stamps the result only if the same
+identity and revision remain current after the asynchronous digest. A warm
+call is one indexed point query. Opaque content returns only its store-verified
+SHA-256, collaborative views hash unpublished document text, credential views
+enforce read permission, and `/dev/null` hashes as the empty byte source.
+Ordinary stat and listing rows remain narrow.
+
+Each Node result below is the median of seven fresh-filesystem runs. Every run
+writes its files before timing, measures one cold `sha256sum`, then immediately
+measures the warm execution. The before values are seven repeated executions
+of the old path over one prepared filesystem; because that implementation had
+no cache, every repetition did the same storage and hash work.
+
+| Files | Bytes/file | Before | Cold | Warm | Cold SQL | Warm SQL |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 | 1,024 | 7.054 ms | 5.504 ms (-22.0%) | 2.043 ms (-71.0%) | 300 statements / 200 rows | 100 / 100 |
+| 100 | 8,192 | 6.602 ms | 5.502 ms (-16.7%) | 1.898 ms (-71.3%) | 300 / 200 | 100 / 100 |
+| 100 | 10,240 | 6.486 ms | 5.258 ms (-18.9%) | 1.825 ms (-71.9%) | 300 / 200 | 100 / 100 |
+| 1,000 | 1,024 | — | 46.207 ms | 18.906 ms | 3,000 / 2,000 | 1,000 / 1,000 |
+| 1,000 | 8,192 | — | 50.553 ms | 18.605 ms | 3,000 / 2,000 | 1,000 / 1,000 |
+| 1,000 | 10,240 | — | 53.163 ms | 16.977 ms | 3,000 / 2,000 | 1,000 / 1,000 |
+
+Actual workerd confirms the billing shape for one 8 KiB file: cold is 3
+statements / 3 rows read / 1 row written, and warm is 1 / 1 / 0. The first
+call's private cache write is the retained tradeoff; it changes no revision,
+timestamp, mutation token, or change-feed row. A digest computed by
+`skipIfUnchanged` is immediately warm for `digestFile()` as well. The existing
+8 KiB read-then-guarded-edit guard remains 4 statements / 6 rows read / 2 rows
+written, and ordinary stat remains 1 / 1, so the common editing and metadata
+paths pay nothing for the API.
+
+Against the same baseline revision, the VFS preset grows from 169,892 to
+172,746 deployed bytes (+2,854, +1.7%), and the R2 preset grows by the same
+amount. The one-applet shell and interactive presets grow by 668 bytes for the
+policy and reserved-path forwarding methods. Removing the applet's private
+hash implementation makes the complete default registry 29 bytes smaller;
+the Linux profile grows from 629,741 to 632,566 bytes (+2,825, +0.4%). The
+standalone `ls` and two-command presets are unchanged, and all eight recorded
+bundle budgets pass. The complete check passes with 1,429 Node tests and 103
+Durable Object tests; all 10 workerd performance tests pass separately.

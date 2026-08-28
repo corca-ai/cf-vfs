@@ -1100,7 +1100,7 @@ they are not present on `ShellCommandContext.fileSystem`.
   reporting `ino` alongside the rest of an entry's metadata;
 - `changesSince`, when the filesystem was built with `recordChanges`;
 - `statById`, which reads an entry back by its identity;
-- `readFile`, `writeFile`, `writeFiles`, `appendFile`, `touch`,
+- `digestFile`, `readFile`, `writeFile`, `writeFiles`, `appendFile`, `touch`,
   `setMetadata`, and `setOwnership`;
 - `mkdir`, `remove`, `move`, and `copy`;
 - `getMutationToken` and the optional `ifMutationToken` guard;
@@ -1128,6 +1128,18 @@ promise, so the completed call is immediately visible just as a POSIX `write`
 is when it returns. Byte views, buffers, and streams retain the
 collect-then-revalidate path because JavaScript accessors can run while a view
 is inspected and a stream necessarily crosses an asynchronous boundary.
+
+`await digestFile(path)` returns lowercase SHA-256 for the same byte snapshot
+a read would observe. An inline body is hashed at most once per revision; the
+result is stored in the private cache already used by `skipIfUnchanged`, and a
+write that computed that digest primes the same cache. The first digest reads
+the body and performs one internal cache write without changing the entry's
+revision, timestamps, mutation token, or change feed. Later calls read one
+metadata row and no body. Ordinary `stat`, listing, and reads do not select the
+cache columns and therefore pay nothing for the feature. A credential-bound
+view requires file read permission. An opaque entry returns only a SHA-256
+verified by its backing store and otherwise reports `ENOTSUP`; the metadata
+filesystem never downloads an R2 body to manufacture one.
 
 `writeFiles(entries, options)` writes several bodies to several paths as one
 change. `copy`, `move`, and `remove` are already atomic however many entries

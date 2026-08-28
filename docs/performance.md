@@ -84,6 +84,19 @@ The final workerd A/B, including stream creation and consumption, measured a
 on an 8 MiB file measured 6.6 ms whole versus 0.4 ms ranged (-93.9%); repeated
 ranges at the same entry revision reuse that small layout value.
 
+Repeated content hashing uses a revision-stamped SQLite cache rather than
+moving and hashing the same body again. `digestFile()` and `skipIfUnchanged`
+share it; no cache column is selected by ordinary metadata or read operations.
+On actual workerd, a cold 8 KiB digest costs 3 statements, 3 rows read, and 1
+row written, while a warm digest costs 1 statement, 1 row read, and no write.
+The cache write changes no observable file metadata. In the 100-file Node
+shell A/B, the previous `sha256sum` path cost 300 statements and 300 returned
+rows on every run. The new cold path remains 300 statements but returns 200
+rows, and the warm path costs 100 statements and 100 rows. Across 1, 8, and 10
+KiB files, cold median time improved 16.7–22.0% and warm time improved
+71.0–71.9%. The detailed method and 1,000-file results are recorded in the
+[small-text workload follow-up](../bench/text-workload-optimizations-2026-08-28.md).
+
 The shell preserves that property. `rm -r`, `mv`, and `cp -r` charge their
 mutation budget from the entry count in one indexed subtree aggregate rather
 than materializing the subtree through `find()`. `du` uses the logical-byte sum

@@ -543,6 +543,54 @@ describe("common-path SQL cost", () => {
     expect(measured).toEqual({ oneChunk: 3, fourChunks: 3, sixteenChunks: 3 });
   });
 
+  it("caches a file digest by revision without taxing ordinary metadata reads", async () => {
+    const { fileSystem, meter } = meteredFileSystem();
+    await fileSystem.writeFile("/digest", "x".repeat(8 * 1024));
+
+    meter.reset();
+    const cold = await fileSystem.digestFile("/digest");
+    const coldCost = { statements: meter.statements, rows: meter.rows };
+    meter.reset();
+    expect(await fileSystem.digestFile("/digest")).toBe(cold);
+    const warmCost = { statements: meter.statements, rows: meter.rows };
+    meter.reset();
+    fileSystem.stat("/digest");
+    const statCost = { statements: meter.statements, rows: meter.rows };
+    await fileSystem.writeFile("/primed", "body", { skipIfUnchanged: true });
+    meter.reset();
+    await fileSystem.digestFile("/primed");
+    const sharedWriteDigestCost = { statements: meter.statements, rows: meter.rows };
+
+    expect(coldCost).toEqual({ statements: 3, rows: 2 });
+    expect(warmCost).toEqual({ statements: 1, rows: 1 });
+    expect(statCost).toEqual({ statements: 1, rows: 1 });
+    expect(sharedWriteDigestCost).toEqual({ statements: 1, rows: 1 });
+  });
+
+  it("reuses cached digests across a many-file sha256sum", async () => {
+    const { fileSystem, meter } = meteredFileSystem();
+    const paths: string[] = [];
+    for (let index = 0; index < 100; index += 1) {
+      const path = `/digest-${index}`;
+      paths.push(path);
+      await fileSystem.writeFile(path, `${index}:`.padEnd(8 * 1024, "x"));
+    }
+    const shell = new Shell({ fileSystem, commands: defaultShellCommands });
+    const script = `sha256sum ${paths.join(" ")}`;
+
+    meter.reset();
+    const cold = await shell.executeText({ script });
+    const coldCost = { statements: meter.statements, rows: meter.rows };
+    meter.reset();
+    const warm = await shell.executeText({ script });
+    const warmCost = { statements: meter.statements, rows: meter.rows };
+
+    expect(cold).toMatchObject({ exitCode: 0, stderr: "" });
+    expect(warm).toEqual(cold);
+    expect(coldCost).toEqual({ statements: 300, rows: 200 });
+    expect(warmCost).toEqual({ statements: 100, rows: 100 });
+  });
+
   it("lists a directory with one traversal rather than one query per entry", async () => {
     const { fileSystem, meter } = meteredFileSystem();
     fileSystem.mkdir("/many", true);

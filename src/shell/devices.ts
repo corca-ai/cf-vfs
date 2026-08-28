@@ -62,6 +62,7 @@ const DEVICE_DIRECTORIES: Readonly<Record<string, readonly string[]>> = {
 
 /** The mode an applet path reports: a regular file anyone may execute. */
 const APPLET_MODE = 0o100755;
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 export interface ReservedPathOptions {
   /**
@@ -328,6 +329,19 @@ export class ReservedPathFileSystem implements ShellFileSystem {
   getMutationToken(path: string, options?: MutationTokenOptions): string {
     const at = this.#statAt(path);
     return at === undefined ? this.#inner.getMutationToken(path, options) : at.mutationToken;
+  }
+
+  digestFile(path: string): Promise<string> {
+    const at = this.#reached(path);
+    if (at === undefined) return this.#inner.digestFile(path);
+    if (at.applet === true) {
+      throw new VfsError("ENOTSUP", "an applet has no file content to read", at.path);
+    }
+    if (at.device === undefined) throw new VfsError("EISDIR", "is a directory", at.path);
+    if (at.device !== "null") {
+      throw new VfsError("EINVAL", "device is not readable", at.path);
+    }
+    return Promise.resolve(EMPTY_SHA256);
   }
 
   readFile(path: string, options?: ReadFileOptions): InlineReadResult {

@@ -57,6 +57,11 @@ describe("virtual devices", () => {
     { name: "reads nothing from /dev/null", script: "wc -c < /dev/null", stdout: "0\n" },
     { name: "reads /dev/null as an operand", script: "cat /dev/null; echo ok", stdout: "ok\n" },
     {
+      name: "digests /dev/null as an empty byte source",
+      script: "sha256sum /dev/null",
+      stdout: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  /dev/null\n",
+    },
+    {
       name: "writes to /dev/null named as an operand",
       script: "echo hi | tee /dev/null | wc -c",
       stdout: "3\n",

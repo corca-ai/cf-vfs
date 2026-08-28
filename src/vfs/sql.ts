@@ -28,6 +28,7 @@ import {
   SYMLINK_MODE,
   validatePositiveInteger,
 } from "./config.js";
+import { sha256Hex } from "./digest.js";
 import {
   emitVfsEvent,
   type VfsEventSink,
@@ -302,32 +303,6 @@ const DROP_ENTRY_TRIGGERS = `
         DROP TRIGGER IF EXISTS vfs_inline_entry_update_guard;
         DROP TRIGGER IF EXISTS vfs_opaque_object_delete_guard;
         DROP TRIGGER IF EXISTS vfs_inline_chunk_insert_guard;`;
-
-/**
- * Lowercase hex SHA-256 over a buffered body.
- *
- * A single slab is hashed in place; only a multi-slab body is joined, so the
- * common case of a document below `chunkBytes` copies nothing.
- */
-async function digestHex(chunks: readonly Uint8Array[], sizeBytes: number): Promise<string> {
-  let source: Uint8Array;
-  if (chunks.length === 1 && chunks[0] !== undefined) {
-    source = chunks[0];
-  } else {
-    source = new Uint8Array(sizeBytes);
-    let offset = 0;
-    for (const chunk of chunks) {
-      source.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-  }
-  const digest = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", source as unknown as ArrayBuffer),
-  );
-  let hex = "";
-  for (const byte of digest) hex += byte.toString(16).padStart(2, "0");
-  return hex;
-}
 
 const ENTRY_COLUMNS = `
   e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,
@@ -2285,7 +2260,7 @@ ${ENTRY_TRIGGERS}
     buffered: { chunks: readonly Uint8Array[]; sizeBytes: number },
   ): Promise<string | undefined> {
     if (options.skipIfUnchanged !== true) return undefined;
-    return digestHex(buffered.chunks, buffered.sizeBytes);
+    return sha256Hex(buffered.chunks, buffered.sizeBytes);
   }
 
   /**
@@ -2767,6 +2742,92 @@ ${ENTRY_TRIGGERS}
       cursor: last === undefined ? since : integerColumn(last, "seq"),
       more: last === undefined ? false : integerColumn(last, "more") === 1,
     };
+  }
+
+  async digestFile(path: string, posix?: PosixAccessContext): Promise<string> {
+    const access = this.resolveAccess(path);
+    const normalized = access.path;
+    this.assertTraverse(normalized, access.followed, posix);
+
+    let entry: EntryRow;
+    let cachedDigest: string | null;
+    if (access.row === null) {
+      // In the no-symlink common case `resolveAccess()` deliberately performs
+      // no lookup. Read the entry and its private cache together so a warm
+      // digest costs one point query rather than a stat followed by a cache
+      // query. Other metadata operations never select these two columns.
+      const row = firstRow(
+        this.sql.exec<SqlRow>(
+          `SELECT ${ENTRY_COLUMNS}, e.body_digest AS body_digest,
+                  e.body_digest_revision AS body_digest_revision
+           FROM vfs_entries e WHERE e.path = ?`,
+          normalized,
+        ),
+      );
+      if (row === undefined) {
+        throw new VfsError("ENOENT", "no such file or directory", normalized);
+      }
+      entry = parseEntry(row, this.mutationEpoch);
+      const digestRevision = nullableIntegerColumn(row, "body_digest_revision");
+      cachedDigest =
+        digestRevision === entry.revision ? nullableStringColumn(row, "body_digest") : null;
+    } else {
+      entry = access.row;
+      cachedDigest = entry.contentClass === "inline" ? this.storedDigest(entry.id) : null;
+    }
+
+    if (entry.kind === "directory") {
+      throw new VfsError("EISDIR", "is a directory", normalized);
+    }
+    this.assertPermission(entry, posix, READ_PERMISSION, normalized);
+    if (entry.contentClass === "opaque") {
+      if (entry.opaqueObjectId === null) {
+        throw new VfsError("EIO", "opaque object metadata is missing", normalized);
+      }
+      const object = this.opaqueObject(entry.opaqueObjectId);
+      if (object === null) {
+        throw new VfsError("EIO", "opaque object metadata is missing", normalized);
+      }
+      if (object.verifiedSha256 === null) {
+        throw new VfsError("ENOTSUP", "opaque digest is not verified", normalized);
+      }
+      return object.verifiedSha256;
+    }
+    if (entry.contentClass !== "inline") {
+      throw new VfsError("EIO", "invalid SQLite entry state", normalized);
+    }
+    if (cachedDigest !== null) return cachedDigest;
+
+    const rows = this.sql
+      .exec<SqlRow>(
+        `SELECT body FROM vfs_inline_chunks
+         WHERE entry_id = ? ORDER BY chunk_index`,
+        entry.id,
+      )
+      .toArray();
+    const chunks = rows.map((row) => new Uint8Array(blobColumn(row, "body")));
+    const materializedBytes = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+    if (materializedBytes !== entry.sizeBytes) {
+      throw new VfsError("EIO", "inline file size does not match stored chunks", normalized);
+    }
+    this.inFlightBytes.acquire(materializedBytes);
+    let digest: string;
+    try {
+      digest = await sha256Hex(chunks, materializedBytes);
+    } finally {
+      this.inFlightBytes.release(materializedBytes);
+    }
+    // Hashing yields to the event loop. Cache only if the same entry revision
+    // is still current; the returned digest remains the snapshot read above.
+    this.sql.exec(
+      `UPDATE vfs_entries
+       SET body_digest = ?, body_digest_revision = revision
+       WHERE id = ? AND revision = ? AND content_class = 'inline'`,
+      digest,
+      entry.id,
+      entry.revision,
+    );
+    return digest;
   }
 
   readFile(
@@ -5018,6 +5079,10 @@ class PosixFileSystemView implements VirtualFileSystem {
 
   mutationSubtreeCount(path: string, operation: PosixMutationOperation): number {
     return this.inner.countPosixMutationSubtree(path, operation, this.access);
+  }
+
+  digestFile(path: string): Promise<string> {
+    return this.inner.digestFile(path, this.access);
   }
 
   readFile(path: string, options?: ReadFileOptions): InlineReadResult {

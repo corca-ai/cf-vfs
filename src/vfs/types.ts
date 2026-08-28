@@ -517,6 +517,15 @@ export interface VirtualFileSystem {
    * regard to what a user can see.
    */
   changesSince(since: number, options?: ChangesSinceOptions): ChangePage;
+  /**
+   * Returns the lowercase SHA-256 digest of one file's current byte snapshot.
+   *
+   * Inline bodies are hashed once per revision and the result is reused.
+   * Opaque bodies report only a digest verified by their backing store; an
+   * unverified opaque body is refused rather than downloaded through the
+   * metadata filesystem.
+   */
+  digestFile(path: string): Promise<string>;
   readFile(path: string, options?: ReadFileOptions): InlineReadResult;
   writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult>;
   /**

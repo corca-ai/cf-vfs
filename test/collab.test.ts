@@ -422,6 +422,21 @@ describe("collaborative filesystem", () => {
     });
   });
 
+  it("digests unpublished document bytes rather than the stored revision", async () => {
+    const inner = createTestFileSystem();
+    await inner.writeFile("/doc.txt", "stored");
+    const registry = new DocumentRegistry();
+    const document = new TextDocument("pending");
+    registry.open("/doc.txt", document, inner.stat("/doc.txt").mutationToken);
+    registry.markDirty("/doc.txt");
+    const fileSystem = new CollaborativeFileSystem(inner, registry);
+
+    expect(await fileSystem.digestFile("/doc.txt")).toBe(
+      "62a2fed3d6e08c44835fce71f02210b1ddabfb066e39edf1e6c261988f824dd3",
+    );
+    expect(await fileSystem.digestFile("/doc.txt")).not.toBe(await inner.digestFile("/doc.txt"));
+  });
+
   it("keeps open documents current across metadata mutations", async () => {
     const { inner, registry, fileSystem } = open("");
     const paths = ["/touched.txt", "/moded.txt", "/owned.txt"] as const;

@@ -63,6 +63,19 @@ describe("byte-oriented in-memory SQLite filesystem", () => {
     await reader.cancel();
   });
 
+  it("does not attach a completed digest to a newer file revision", async () => {
+    const fileSystem = createTestFileSystem();
+    await fileSystem.writeFile("/raced", "old".repeat(1024));
+
+    const digestingOldSnapshot = fileSystem.digestFile("/raced");
+    await fileSystem.writeFile("/raced", "new".repeat(1024));
+    const oldDigest = await digestingOldSnapshot;
+    const newDigest = await fileSystem.digestFile("/raced");
+
+    expect(newDigest).not.toBe(oldDigest);
+    expect(await fileSystem.digestFile("/raced")).toBe(newDigest);
+  });
+
   describe("shared VFS conformance", () => {
     runVfsConformance(() => createTestFileSystem());
   });

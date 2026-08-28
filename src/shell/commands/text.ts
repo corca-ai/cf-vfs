@@ -1085,26 +1085,8 @@ export const sha256sumCommand = /* @__PURE__ */ defineApplet(
   async (context, argv, fds) => {
     if (argv.length === 0) throw appletUsageError(SHA256SUM, "missing operand");
     for (const path of argv) {
-      const stat = context.fileSystem.stat(commandPath(context, path));
-      if (stat.kind !== "file") throw new VfsError("EISDIR", "is a directory", stat.path);
-      if (stat.contentClass === "opaque") {
-        if (stat.verifiedSha256 === undefined) {
-          throw new VfsError("ENOTSUP", "opaque digest is not verified", stat.path);
-        }
-        await writeText(fds[1], `${stat.verifiedSha256}  ${path}\n`);
-        continue;
-      }
-      const input = await readFileBytes(context, path);
-      try {
-        const digestInput = Uint8Array.from(input.value).buffer;
-        const digest = await crypto.subtle.digest("SHA-256", digestInput);
-        const hex = [...new Uint8Array(digest)]
-          .map((byte) => byte.toString(16).padStart(2, "0"))
-          .join("");
-        await writeText(fds[1], `${hex}  ${path}\n`);
-      } finally {
-        input.release();
-      }
+      const digest = await context.fileSystem.digestFile(commandPath(context, path));
+      await writeText(fds[1], `${digest}  ${path}\n`);
     }
     return 0;
   },

@@ -245,6 +245,11 @@ export class ScopedFileSystem implements ShellFileSystem {
     return this.#inner.subtreeSummary(path);
   }
 
+  digestFile(path: string): Promise<string> {
+    this.read(path);
+    return this.#inner.digestFile(path);
+  }
+
   readFile(path: string, options?: ReadFileOptions): InlineReadResult {
     this.read(path);
     return this.#inner.readFile(path, options);

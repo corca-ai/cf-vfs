@@ -14,6 +14,7 @@ export type ShellFileSystem = Pick<
   | "find"
   | "findPage"
   | "subtreeSummary"
+  | "digestFile"
   | "readFile"
   | "writeFile"
   | "appendFile"

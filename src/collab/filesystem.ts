@@ -1,5 +1,6 @@
 import { VfsError } from "../core/errors.js";
 import { isDescendant, normalizePath } from "../core/path.js";
+import { sha256Hex } from "../vfs/digest.js";
 import { byteRangeBounds } from "../vfs/range.js";
 import { readAllBytes } from "../vfs/streams.js";
 import type {
@@ -270,6 +271,14 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
       stat: { ...result.stat, sizeBytes: bytes.byteLength },
       stream: streamOf(bytes.subarray(selected.offset, selected.offset + selected.length)),
     };
+  }
+
+  async digestFile(path: string): Promise<string> {
+    const resolved = this.#resolved(path);
+    if (this.#pending(resolved) === undefined) return this.#inner.digestFile(path);
+    const read = this.readFile(path);
+    const bytes = await readAllBytes(read.stream, MAX_DOCUMENT_BYTES);
+    return sha256Hex([bytes], bytes.byteLength);
   }
 
   async writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult> {

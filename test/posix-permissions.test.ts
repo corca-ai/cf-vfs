@@ -116,14 +116,17 @@ describe("POSIX VFS views", () => {
 
     fileSystem.setMetadata("/home/new", { mode: 0o100004 });
     await expect(text(user, "/home/new")).rejects.toMatchObject({ code: "EACCES" });
+    await expect(user.digestFile("/home/new")).rejects.toMatchObject({ code: "EACCES" });
 
     await fileSystem.writeFile("/group-readable", "group");
     fileSystem.setOwnership("/group-readable", { uid: OTHER.uid, gid: 20 });
     fileSystem.setMetadata("/group-readable", { mode: 0o100040 });
     await expect(text(user, "/group-readable")).resolves.toBe("group");
+    await expect(user.digestFile("/group-readable")).resolves.toHaveLength(64);
 
     fileSystem.setMetadata("/group-readable", { mode: 0o100004 });
     await expect(text(user, "/group-readable")).rejects.toMatchObject({ code: "EACCES" });
+    await expect(user.digestFile("/group-readable")).rejects.toMatchObject({ code: "EACCES" });
   });
 
   it("applies ownership, umask, and a permission refusal to every entry of a batch", async () => {

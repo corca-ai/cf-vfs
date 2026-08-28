@@ -18,6 +18,10 @@ included.
 
 ### Changed
 
+- `digestFile(path)` now exposes one revision-stamped SHA-256 primitive shared
+  by inline bodies, verified opaque objects, `skipIfUnchanged`, and
+  `sha256sum`. A cold inline digest populates the private cache without
+  changing observable metadata; later calls read one row and no body.
 - **Breaking: `countSubtree(path)` is now `subtreeSummary(path)`.** The same
   unbounded indexed aggregate now returns entry count, inline logical bytes,
   and all regular-file logical bytes, allowing `du` and recursive mutation

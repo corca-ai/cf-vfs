@@ -147,6 +147,31 @@ export function runVfsConformance(
     }
   });
 
+  it("conforms: digests the current byte snapshot and follows symbolic links", async () => {
+    const fileSystem = await factory();
+    await fileSystem.writeFile("/body", "body");
+    await fileSystem.symlink("/link", "/body");
+
+    const initial = "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5";
+    expect(await fileSystem.digestFile("/body")).toBe(initial);
+    expect(await fileSystem.digestFile("/link")).toBe(initial);
+    expect(await fileSystem.digestFile("/body")).toBe(initial);
+
+    await fileSystem.writeFile("/body", "BODY");
+    const replaced = await fileSystem.digestFile("/body");
+    expect(replaced).not.toBe(initial);
+    expect(await fileSystem.digestFile("/body")).toBe(replaced);
+
+    await fileSystem.writeFile("/empty", "");
+    expect(await fileSystem.digestFile("/empty")).toBe(
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    );
+    await fileSystem.mkdir("/directory");
+    expect(await refusal(() => fileSystem.digestFile("/directory"))).toMatchObject({
+      code: "EISDIR",
+    });
+  });
+
   it("conforms: keeps a streamed create absent until the complete body is published", async () => {
     const fileSystem = await factory();
     const body = gatedBody("complete");
