@@ -320,3 +320,29 @@ For 100,000 encodes of an 8 KiB string across seven interleaved groups, fresh
 and shared encoders had effectively identical medians (423.68 and 423.57 ms).
 It would retain global mutable-looking state without a demonstrated benefit, so
 no production code was changed for that candidate.
+
+## Follow-up: decode the public UTF-8 reader in one pass
+
+The public `readUtf8()` helper still routed its stream through `readAllBytes()`.
+For one 8 KiB VFS chunk this first snapshotted the delivered bytes, then copied
+them into a contiguous output array, and only then decoded the second array.
+The replacement feeds a fatal `TextDecoder` directly as chunks arrive and
+joins decoded strings. It retains the byte-based maximum, `EFBIG` wording,
+path-bearing `EIO` for malformed UTF-8, reader cancellation on failure, and
+correct decoding when a multi-byte scalar crosses chunk boundaries.
+
+Each one-chunk call removes two body-sized byte allocations and copies: 16 KiB
+for the representative 8 KiB file, or 81.92 MB across 5,000 reads. In seven
+Node groups of 5,000 SQLite-backed reads, the median moved from 115.270 to
+105.529 ms (−8.5%). The production workerd point benchmark now includes 5,000
+bounded UTF-8 reads. Three isolated process averages were 0.0254, 0.0244, and
+0.0252 ms before versus 0.0236, 0.0322, and 0.0238 ms after; the process medians
+are 0.0252 and 0.0238 ms (−5.6%). The candidate outlier again makes eliminated
+allocation the primary evidence and elapsed time supporting evidence.
+
+Tests cover a four-byte result whose euro sign is split across two stream
+chunks, an incomplete terminal sequence, and a source that records its
+cancellation when the byte limit is exceeded. This is an internal execution
+change to an existing API; callers neither opt in nor change how they consume
+the returned string. Tree shaking removes the helper from presets that do not
+use it, so all eight deployed bundle measurements are unchanged.

@@ -209,10 +209,36 @@ export async function readUtf8(
   maximumBytes: number,
   path?: string,
 ): Promise<string> {
-  const bytes = await readAllBytes(stream, maximumBytes);
+  const reader = stream.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const chunks: string[] = [];
+  let sizeBytes = 0;
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    throw new VfsError("EIO", "input is not valid UTF-8", path);
+    while (true) {
+      const read = await reader.read();
+      if (read.done) break;
+      sizeBytes += read.value.byteLength;
+      if (sizeBytes > maximumBytes) {
+        throw new VfsError("EFBIG", `stream exceeds the ${maximumBytes}-byte limit`);
+      }
+      try {
+        const decoded = decoder.decode(read.value, { stream: true });
+        if (decoded.length > 0) chunks.push(decoded);
+      } catch {
+        throw new VfsError("EIO", "input is not valid UTF-8", path);
+      }
+    }
+    try {
+      const final = decoder.decode();
+      if (final.length > 0) chunks.push(final);
+    } catch {
+      throw new VfsError("EIO", "input is not valid UTF-8", path);
+    }
+    return chunks.join("");
+  } catch (error) {
+    await reader.cancel(error).catch(() => undefined);
+    throw error;
+  } finally {
+    reader.releaseLock();
   }
 }

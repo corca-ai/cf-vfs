@@ -3,7 +3,7 @@ import type { VfsError } from "../src/core/errors.js";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import type { VfsEvent } from "../src/vfs/events.js";
 import { putOpaque, readOpaque } from "../src/vfs/opaque.js";
-import { readAllBytes, streamFromChunks } from "../src/vfs/streams.js";
+import { readAllBytes, readUtf8, streamFromChunks } from "../src/vfs/streams.js";
 import type { OpaqueObjectMetadata, OpaqueStore } from "../src/vfs/types.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 import { runVfsConformance } from "./helpers/vfs-conformance.js";
@@ -13,6 +13,34 @@ async function bytes(stream: ReadableStream<Uint8Array>): Promise<number[]> {
 }
 
 describe("byte-oriented in-memory SQLite filesystem", () => {
+  it("decodes bounded UTF-8 directly across stream chunk boundaries", async () => {
+    const text = await readUtf8(
+      streamFromChunks([Uint8Array.of(0xe2), Uint8Array.of(0x82, 0xac, 0x78)]),
+      4,
+      "/text",
+    );
+    expect(text).toBe("€x");
+
+    await expect(
+      readUtf8(streamFromChunks([Uint8Array.of(0xe2, 0x82)]), 2, "/invalid"),
+    ).rejects.toMatchObject({ code: "EIO", path: "/invalid" });
+  });
+
+  it("cancels a UTF-8 source that exceeds its byte bound", async () => {
+    let canceled = false;
+    const source = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(Uint8Array.of(1, 2, 3));
+      },
+      cancel() {
+        canceled = true;
+      },
+    });
+
+    await expect(readUtf8(source, 2)).rejects.toMatchObject({ code: "EFBIG" });
+    expect(canceled).toBe(true);
+  });
+
   it("creates byte streams that support BYOB readers", async () => {
     const reader = streamFromChunks([Uint8Array.of(1, 2, 3)]).getReader({ mode: "byob" });
     const first = await reader.read(new Uint8Array(3));

@@ -2,7 +2,7 @@ import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
-import { readAllBytes } from "../src/vfs/streams.js";
+import { readAllBytes, readUtf8 } from "../src/vfs/streams.js";
 import type { TestWorkspaceVfs } from "../test/worker.js";
 import { meterSqlStorage } from "./metered-sql.js";
 
@@ -553,6 +553,10 @@ describe("Durable Object storage benchmark metrics", () => {
         cached: median(cachedSamples),
         uncached: median(uncachedSamples),
       };
+      const utf8ReadMs = await averageDuration(100, 5_000, async () => {
+        const text = await readUtf8(timedFileSystem.readFile("/point").stream, pointBytes);
+        if (text.length !== pointBytes) throw new Error("UTF-8 read returned the wrong size");
+      });
 
       const globFindMs = await averageDuration(2, 50, () => {
         timedFileSystem.findPage({
@@ -589,6 +593,7 @@ describe("Durable Object storage benchmark metrics", () => {
         statMs,
         overwriteMs,
         writeAfterReadMs,
+        utf8ReadMs,
         globFindMs,
       };
     });
@@ -617,6 +622,7 @@ describe("Durable Object storage benchmark metrics", () => {
     measured(metrics.overwriteMs);
     measured(metrics.writeAfterReadMs.cached);
     measured(metrics.writeAfterReadMs.uncached);
+    measured(metrics.utf8ReadMs);
     measured(metrics.globFindMs);
   });
 });
