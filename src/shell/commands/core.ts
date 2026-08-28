@@ -13,7 +13,7 @@ import { type PosixPermission, shellModeAllows } from "../access.js";
 import { optindGeneration, setOptindFromGetopts } from "../environment.js";
 import { identityLabel, resolveIdentityNames } from "../identity.js";
 import { readInputRecord } from "../input.js";
-import type { ShellCommandContext } from "../types.js";
+import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import {
   type AppletSpec,
   type AppletSpecWithOptions,
@@ -94,7 +94,7 @@ const UNSET = {
 
 const READ = {
   name: "read",
-  usage: "-r [NAME...]",
+  usage: "[-r] [--] [NAME...]",
   summary: "reads one record from standard input",
   kind: "session-builtin",
 } as const satisfies AppletSpec;
@@ -150,8 +150,8 @@ const EXIT = {
 
 const SET = {
   name: "set",
-  usage: "[-eu|+eu] [-o|+o OPTION]",
-  summary: "sets supported shell options",
+  usage: "[-eu|+eu] [-o|+o OPTION] [-- ARGUMENT...]",
+  summary: "sets shell options or positional parameters",
   kind: "session-builtin",
 } as const satisfies AppletSpec;
 
@@ -632,22 +632,83 @@ export const unsetCommand = /* @__PURE__ */ defineApplet(UNSET, (context, argv) 
 
 const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const READ_IFS = /[ \t\n]/u;
+const READ_ENCODER = new TextEncoder();
 
-function readVariableNames(argv: readonly string[]): { names: string[]; reply: boolean } {
-  if (argv[0] !== "-r") {
-    throw appletUsageError(READ, "only read -r [name ...] is supported");
-  }
-  const operands = argv[1] === "--" ? argv.slice(2) : argv.slice(1);
+function readVariableNames(argv: readonly string[]): {
+  names: string[];
+  reply: boolean;
+  raw: boolean;
+} {
+  let offset = 0;
+  const raw = argv[offset] === "-r";
+  if (raw) offset += 1;
+  if (argv[offset] === "--") offset += 1;
+  const unsupported = argv[offset]?.startsWith("-") === true ? argv[offset] : undefined;
+  if (unsupported !== undefined) throw appletUsageError(READ, `unsupported option ${unsupported}`);
+  const operands = argv.slice(offset);
   const names = operands.length === 0 ? ["REPLY"] : [...operands];
   for (const name of names) {
     if (!VARIABLE_NAME.test(name)) {
       throw appletUsageError(READ, `invalid variable name: ${name}`);
     }
   }
-  return { names, reply: operands.length === 0 };
+  return { names, reply: operands.length === 0, raw };
 }
 
-function readAssignments(
+interface EscapedReadValue {
+  value: string;
+  escapedIfs: ReadonlySet<number>;
+  continued: boolean;
+}
+
+function decodeReadRecord(value: string): EscapedReadValue {
+  let output = "";
+  const escapedIfs = new Set<number>();
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index] ?? "";
+    if (character !== "\\") {
+      output += character;
+      continue;
+    }
+    const escaped = value[++index];
+    if (escaped === undefined) return { value: output, escapedIfs, continued: true };
+    if (READ_IFS.test(escaped)) escapedIfs.add(output.length);
+    output += escaped;
+  }
+  return { value: output, escapedIfs, continued: false };
+}
+
+async function readEscapedRecord(
+  fds: ShellFileDescriptors,
+  context: ShellCommandContext,
+): Promise<{ value: string; escapedIfs: ReadonlySet<number>; terminated: boolean }> {
+  let value = "";
+  const escapedIfs = new Set<number>();
+  let retainedBytes = 0;
+  let release: () => void = () => undefined;
+  try {
+    while (true) {
+      const record = await readInputRecord(fds[0], context.budget, context.signal);
+      const decoded = decodeReadRecord(record.value);
+      retainedBytes += READ_ENCODER.encode(decoded.value).byteLength;
+      if (retainedBytes > context.budget.limits.maxLineBytes) {
+        throw new VfsError("E2BIG", "read: logical line byte limit exceeded");
+      }
+      release();
+      release = context.budget.buffered(retainedBytes);
+      const base = value.length;
+      value += decoded.value;
+      for (const offset of decoded.escapedIfs) escapedIfs.add(base + offset);
+      if (!decoded.continued || !record.terminated) {
+        return { value, escapedIfs, terminated: record.terminated };
+      }
+    }
+  } finally {
+    release();
+  }
+}
+
+function readRawAssignments(
   value: string,
   names: readonly string[],
   reply: boolean,
@@ -672,13 +733,51 @@ function readAssignments(
   return assignments;
 }
 
+function readEscapedAssignments(
+  value: string,
+  escapedIfs: ReadonlySet<number>,
+  names: readonly string[],
+  reply: boolean,
+): Array<{ name: string; value: string }> {
+  const delimiter = (offset: number): boolean =>
+    !escapedIfs.has(offset) && READ_IFS.test(value[offset] ?? "");
+  if (reply) return [{ name: "REPLY", value }];
+  const assignments: Array<{ name: string; value: string }> = [];
+  let offset = 0;
+  while (offset < value.length && delimiter(offset)) offset += 1;
+  for (const [index, name] of names.entries()) {
+    if (index === names.length - 1) {
+      let end = value.length;
+      while (end > offset && delimiter(end - 1)) end -= 1;
+      assignments.push({ name, value: value.slice(offset, end) });
+      break;
+    }
+    let end = offset;
+    while (end < value.length && !delimiter(end)) end += 1;
+    assignments.push({ name, value: value.slice(offset, end) });
+    offset = end;
+    while (offset < value.length && delimiter(offset)) offset += 1;
+  }
+  return assignments;
+}
+
 export const readCommand = /* @__PURE__ */ defineApplet(READ, async (context, argv, fds) => {
-  const { names, reply } = readVariableNames(argv);
-  const record = await readInputRecord(fds[0], context.budget, context.signal);
-  for (const value of readAssignments(record.value, names, reply)) {
+  const { names, reply, raw } = readVariableNames(argv);
+  let assignments: Array<{ name: string; value: string }>;
+  let terminated: boolean;
+  if (raw) {
+    const record = await readInputRecord(fds[0], context.budget, context.signal);
+    assignments = readRawAssignments(record.value, names, reply);
+    terminated = record.terminated;
+  } else {
+    const record = await readEscapedRecord(fds, context);
+    assignments = readEscapedAssignments(record.value, record.escapedIfs, names, reply);
+    terminated = record.terminated;
+  }
+  for (const value of assignments) {
     context.session.env.set(value.name, value.value);
   }
-  return record.terminated ? 0 : 1;
+  return terminated ? 0 : 1;
 });
 
 export const shiftCommand = /* @__PURE__ */ defineApplet(SHIFT, (context, argv) => {
@@ -946,8 +1045,13 @@ export const setCommand = /* @__PURE__ */ defineApplet(SET, (context, argv) => {
   // so a typo in `set -euo pipefail` is a survivable usage error rather than a
   // half-applied state that then enables errexit and aborts the script.
   const pending: Array<{ option: (typeof SET_OPTIONS)[number]; enabled: boolean }> = [];
+  let positional: readonly string[] | undefined;
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index] ?? "";
+    if (value === "--") {
+      positional = argv.slice(index + 1);
+      break;
+    }
     const enabled = value.startsWith("-");
     if ((!enabled && !value.startsWith("+")) || value.length < 2) {
       throw appletUsageError(SET, `unsupported form: ${value}`);
@@ -969,6 +1073,8 @@ export const setCommand = /* @__PURE__ */ defineApplet(SET, (context, argv) => {
     }
   }
   for (const { option, enabled } of pending) applyShellOption(context.session, option, enabled);
+  if (positional !== undefined)
+    context.session.args.splice(0, context.session.args.length, ...positional);
   return 0;
 });
 

@@ -1451,7 +1451,6 @@ describe("Bash v3 bounded double-bracket conditionals", () => {
 
   const rejectedConditionals: ReadonlyArray<readonly [string, string, string]> = [
     ["regex matching", "[[ x =~ x ]]", "unsupported [[ operator =~"],
-    ["single-equals matching", "[[ x = x ]]", "unsupported [[ operator ="],
     ["unsupported metadata predicates", "[[ -O /side ]]", "unsupported [[ unary operator -O"],
     ["timestamp comparisons", "[[ /left -nt /right ]]", "unsupported [[ operator -nt"],
     ["a missing expression", "[[ ]]", "[[ expression is missing"],
@@ -1873,7 +1872,7 @@ describe("Bash v3 input and positional built-ins", () => {
       stdin: "kept\n",
       exitCode: 0,
       stdout: "<kept>",
-      stderrIncludes: "only read -r",
+      stderrIncludes: "unsupported option -p",
     },
     {
       name: "keeps read assignments inside a pipeline stage",
@@ -2154,7 +2153,6 @@ const rejectedSyntax: ReadonlyArray<readonly [name: string, syntax: string, diag
   ["function keyword", "function f { :; }", "reserved syntax function"],
   ["C-style for loop", "for ((N=0; N<1; N++)); do :; done", "unexpected character"],
   ["ANSI-C quoting", "printf $'x'", "ANSI-C quotes"],
-  ["unsupported $*", "printf $*", "special parameter"],
   ["unsupported $$", "printf $$", "special parameter"],
 ];
 
@@ -2193,6 +2191,87 @@ describe("Bash v4 brace expansion and backtick substitution", () => {
       stderrIncludes: ["unterminated backtick"],
     },
   ]);
+});
+
+describe("Bash v5 scalar ergonomics and redirection", () => {
+  bashCases([
+    {
+      name: "replaces and clears positional parameters with set double dash",
+      script:
+        'set -e -- alpha \'two words\'; printf \'%s:<%s>:%s|\' "$#" "$*" "$2"; set -u --; printf \'%s:<%s>\' "$#" "$*"',
+      args: ["original"],
+      stdout: "2:<alpha two words>:two words|0:<>",
+    },
+    {
+      name: "expands star as one quoted field and split unquoted fields",
+      script: "printf '<%s>|' \"$*\"; printf '[%s]|' $*; printf '%s' \"${#*}\"",
+      args: ["one", "two words", ""],
+      stdout: "<one two words >|[one]|[two]|[words]|3",
+    },
+    {
+      name: "resolves a scalar indirect parameter and follows nounset",
+      script:
+        "value=answer; reference=value; printf '%s|' \"${!reference}\"; set -u; missing=absent; (printf '%s' \"${!missing}\") || printf '%s' $?",
+      stdout: "answer|1",
+      stderrIncludes: "absent: unbound variable",
+    },
+    {
+      name: "accepts Bash single equals patterns and variable existence tests",
+      script:
+        "empty=; name=empty; [[ abc = a* ]] && printf match; [[ -v $name ]] && printf ':set'; unset empty; [[ -v $name ]] || printf ':unset'",
+      stdout: "match:set:unset",
+    },
+    {
+      name: "plain read removes escapes before fixed-IFS field assignment",
+      script: 'read left right; printf \'%s:<%s>\' "$left" "$right"',
+      stdin: "a\\ b c\n",
+      stdout: "a b:<c>",
+    },
+    {
+      name: "plain read joins a backslash-continued physical line",
+      script: "read value; printf '<%s>' \"$value\"",
+      stdin: "a\\\nb\n",
+      stdout: "<ab>",
+    },
+    {
+      name: "redirects and appends both output descriptors to one atomic target",
+      script:
+        "{ printf out; printf err >&2; } &>/combined; { printf more; printf error >&2; } &>> /combined; cat /combined",
+      stdout: "outerrmoreerror",
+      expectedFiles: { "/combined": "outerrmoreerror" },
+    },
+    {
+      name: "scopes positional replacement and applies later redirections left to right",
+      script:
+        'set -- outer; f() { set -- inner words; printf \'<%s:%s>|\' "$#" "$*"; }; f; printf \'<%s:%s>\' "$#" "$*"; { printf out; printf err >&2; } &>/first 2>/second',
+      stdout: "<2:inner words>|<1:outer>",
+      expectedFiles: { "/first": "out", "/second": "err" },
+    },
+  ]);
+
+  bashCases([
+    {
+      name: "continues to reject locale-translated quotes",
+      script: 'printf $"translated"',
+      exitCode: 2,
+      stderrIncludes: "locale and ANSI-C quotes are not supported",
+    },
+  ]);
+
+  it("bounds a continued logical read across individually bounded physical lines", async () => {
+    const harness = createBashHarness({ limits: { maxLineBytes: 3 } });
+    await expect(harness.run("read VALUE", { stdin: "a\\\nb\\\ncd\n" })).resolves.toMatchObject({
+      exitCode: 1,
+      stderr: "read: logical line byte limit exceeded\n",
+    });
+  });
+
+  it("removes a final backslash and assigns the partial record before EOF", async () => {
+    const harness = createBashHarness();
+    await expect(
+      harness.run('read VALUE || printf \'%s:<%s>\' "$?" "$VALUE"', { stdin: "a\\" }),
+    ).resolves.toMatchObject({ exitCode: 0, stdout: "1:<a>", stderr: "" });
+  });
 });
 
 const malformedCompoundSyntax: ReadonlyArray<

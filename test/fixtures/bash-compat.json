@@ -694,6 +694,64 @@
       "args": [],
       "stdout": "a b\n",
       "exitCode": 0
+    },
+    {
+      "name": "v5-set-positional-and-star",
+      "script": "set -- alpha 'two words'; printf '%s:<%s>:%s|' \"$#\" \"$*\" \"$2\"; set -u --; printf '%s:<%s>' \"$#\" \"${*}\"",
+      "env": {},
+      "args": [
+        "original"
+      ],
+      "stdout": "2:<alpha two words>:two words|0:<>",
+      "exitCode": 0
+    },
+    {
+      "name": "v5-indirect-scalar-parameter",
+      "script": "value=answer; reference=value; printf '%s' \"${!reference}\"",
+      "env": {},
+      "args": [],
+      "stdout": "answer",
+      "exitCode": 0
+    },
+    {
+      "name": "v5-conditional-equals-and-variable-exists",
+      "script": "empty=; name=empty; [[ abc = a* ]] && printf match; [[ -v $name ]] && printf ':set'; unset empty; [[ -v $name ]] || printf ':unset'",
+      "env": {},
+      "args": [],
+      "stdout": "match:set:unset",
+      "exitCode": 0
+    },
+    {
+      "name": "v5-plain-read-escaping",
+      "script": "read left right <<< 'a\\ b c'; printf '%s:<%s>' \"$left\" \"$right\"",
+      "env": {},
+      "args": [],
+      "stdout": "a b:<c>",
+      "exitCode": 0
+    },
+    {
+      "name": "v5-plain-read-continuation",
+      "script": "read value <<'EOF'\na\\\nb\nEOF\nprintf '<%s>' \"$value\"",
+      "env": {},
+      "args": [],
+      "stdout": "<ab>",
+      "exitCode": 0
+    },
+    {
+      "name": "v5-combined-output-redirection",
+      "script": "{ printf out; printf err >&2; } &>/combined; { printf more; printf error >&2; } &>> /combined; cat /combined",
+      "env": {},
+      "args": [],
+      "stdout": "outerrmoreerror",
+      "exitCode": 0
+    },
+    {
+      "name": "v5-positional-scope-and-redirection-order",
+      "script": "set -- outer; f() { set -- inner words; printf '<%s:%s>|' \"$#\" \"$*\"; }; f; printf '<%s:%s>|' \"$#\" \"$*\"; { printf out; printf err >&2; } &>/first 2>/second; printf '<'; cat /first; printf '><'; cat /second; printf '>'",
+      "env": {},
+      "args": [],
+      "stdout": "<2:inner words>|<1:outer>|<out><err>",
+      "exitCode": 0
     }
   ]
 }

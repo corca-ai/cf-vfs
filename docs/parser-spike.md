@@ -3,16 +3,18 @@
 Initial decision: 2026-07-20. Repeated for Bash Version 2: 2026-07-21. Reviewed
 for sourced units, positional built-ins, bounded scalar parameter operators,
 and the bounded double-bracket conditional: 2026-07-21.
-Version 4 keeps the repository's handwritten lexer/parser after adding command
+Version 4 kept the repository's handwritten lexer/parser after adding command
 substitution, here-documents, nested control structures, functions, and
 arithmetic. This is a decision for the declared finite execution grammar, not
 a claim that handwritten parsing is preferable for full Bash.
+Reviewed again for Version 5's scalar, quoting, and descriptor additions on
+2026-08-28; none crosses the reconsideration triggers below.
 
 ## Candidates
 
-| Candidate | Evidence | Fit for Version 4 |
+| Candidate | Evidence | Fit for Version 5 |
 | --- | --- | --- |
-| handwritten finite-subset parser | built `dist/shell/parser.js` is 57,730 raw bytes before minification; produces the exact execution AST, byte offsets, queued here-document bodies, and explicit unsupported-syntax errors | selected, but its maintenance advantage has narrowed |
+| handwritten finite-subset parser | built `dist/shell/parser.js` is 64,488 raw bytes before minification; produces the exact execution AST, byte offsets, queued here-document bodies, and explicit unsupported-syntax errors | selected, but its maintenance advantage has narrowed |
 | [`sh-syntax` 0.6.0](https://www.npmjs.com/package/sh-syntax/v/0.6.0) | mvdan/sh-based Bash parser distributed through Wasm; approximately 794 KB npm unpacked | best mature candidate; still adds Wasm initialization and requires a strict capability-validation/AST conversion pass |
 | [`bash-parser` 0.5.0](https://www.npmjs.com/package/bash-parser/v/0.5.0) | version published in 2017; broad dependency graph and a full-language-shaped AST | larger legacy dependency surface; unsupported constructs still need validation |
 | [`tree-sitter-bash` 0.25.1](https://www.npmjs.com/package/tree-sitter-bash/v/0.25.1) | current error-recovering editor grammar; approximately 20.3 MB npm unpacked with native/Wasm integration concerns | strong syntax-tooling choice, disproportionate for this strict Worker execution grammar |
@@ -38,7 +40,7 @@ negative fixtures plus pinned Bash differential cases.
 The `source` / `.` addition does not add grammar: it reads a bounded inline VFS
 file and invokes the same complete-unit parser under cumulative byte, node, and
 nesting budgets. That reuse does not change the parser selection.
-Likewise, `read -r`, `shift`, and `getopts` are ordinary argv-based built-ins;
+Likewise, `read [-r]`, `shift`, and `getopts` are ordinary argv-based built-ins;
 their stream cursor and session state do not expand the grammar.
 
 Pattern removal, replacement, and substring operators add a small
@@ -56,6 +58,12 @@ Errexit also adds no grammar. Its four exact `set` forms are ordinary argv, and
 suppression is execution context derived from already parsed list, pipeline,
 condition, inversion, and compound-command nodes. It therefore does not change
 the parser decision or add a parser dependency.
+
+Version 5 adds two output-redirection tokens, one scalar parameter node, and
+aliases inside the existing `[[ ... ]]` parser. `set --`
+and plain `read` remain argv-based built-ins. These are bounded additions to
+existing lexical or AST categories rather than a new command grammar, so they
+do not justify a general Bash parser and conversion layer.
 
 The Version 3 `[[ ... ]]` subset does add command grammar, but it is a closed
 precedence parser over the existing quote-preserving word tokens. Its dedicated

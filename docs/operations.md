@@ -229,12 +229,12 @@ a clock it trusts more, and lower the count-based limits when a workload needs
 a tighter guarantee than a timer can express. Local workerd does not reproduce
 the production freeze, so tests cannot detect a dependence on it.
 
-`read -r` consumes fd 0 with a fatal streaming UTF-8 decoder. It retains at
-most the unread suffix of one upstream chunk plus one decoded line under the
-shared buffered-byte budget, applies the one-line and total-I/O limits, and
-cancels promptly with the execution. The root input is also cancelled when the
-execution finishes, releasing an unread suffix and its producer. This preserves
-the next record without draining the rest of a backpressured stream. Repeated
+`read` and `read -r` consume fd 0 with a fatal streaming UTF-8 decoder. They
+retain at most the unread suffix of one upstream chunk plus one decoded logical
+line under the shared buffered-byte budget, apply the line and total-I/O
+limits, and cancel promptly with the execution. The root input is also cancelled
+when the execution finishes, releasing an unread suffix and its producer. This
+preserves the next record without draining the rest of a backpressured stream. Repeated
 `getopts` calls and all three positional built-ins consume the ordinary command
 and step budgets rather than creating a separate loop budget.
 

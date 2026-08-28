@@ -16,6 +16,14 @@ included.
 
 ## [Unreleased]
 
+### Added
+
+- Bash compatibility Version 5 adds `set --`, `$*`, scalar `${!name}`
+  indirection, plain `read` backslash processing, the
+  single-equals and variable-existence double-bracket tests, and atomic combined
+  `&>`/`&>>` redirection without adding OS
+  process semantics.
+
 ## [0.3.0] — 2026-08-28
 
 ### Changed

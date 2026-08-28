@@ -49,7 +49,7 @@ second and offers the first from a subpath.
 
 - [Getting started](getting-started.md) — install, configure a Durable Object
   and R2, execute source, and transfer opaque bodies outside the metadata DO.
-- [Shell, commands, and direct API](commands.md) — Bash Version 4, streams,
+- [Shell, commands, and direct API](commands.md) — Bash Version 5, streams,
   statuses, utilities, opaque behavior, and direct VFS primitives.
 - [Architecture](architecture.md) — SQLite inline bytes, immutable R2 objects,
   mutation tokens, upload verification, read leases, and GC alarms.
@@ -59,7 +59,7 @@ second and offers the first from a subpath.
   upload trust, monitoring, recovery, and workspace routing.
 - [Performance and benchmarks](performance.md) — synchronous snapshots,
   backpressure, output slabs, benchmark scenarios, and measurement caveats.
-- [Parser technology spike](parser-spike.md) — why Version 4 uses a
+- [Parser technology spike](parser-spike.md) — why Version 5 uses a
   handwritten parser and what would trigger reconsideration.
 - [Development](development.md) — repository layout, complete verification,
   package boundaries, and extending the runtime.

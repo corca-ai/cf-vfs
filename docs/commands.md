@@ -1,7 +1,7 @@
 # Shell, commands, and direct API
 
 The primary command interface is Bash-compatible source, not a JSON dispatcher.
-`BASH_COMPATIBILITY_VERSION` is currently `4`.
+`BASH_COMPATIBILITY_VERSION` is currently `5`.
 
 ## Execution APIs
 
@@ -137,13 +137,13 @@ unavailable. VFS data is disposable in both modes; cwd, variables, functions,
 and options remain runtime session state and reset if the process, local
 Durable Object, or dev server restarts.
 
-## Bash Version 4
+## Bash Version 5
 
 Supported syntax:
 
 - simple commands, assignment-only commands, and command-prefix assignments;
 - single quotes, double quotes, and backslash escapes;
-- `$VAR`, `${VAR}`, `$?`, `$0`, `$1...`, `$@`, and `$#`;
+- `$VAR`, `${VAR}`, `$?`, `$0`, `$1...`, `$@`, `$*`, and `$#`;
 - newlines, `;`, `&&`, `||`, and prefix `!`;
 - concurrent pipelines;
 - ordinary groups `{ list; }` and isolated subshells `(list)`;
@@ -158,19 +158,19 @@ Supported syntax:
 - signed 64-bit `$((expression))` expansion and `((expression))` commands,
   including integer variables, assignment/update, arithmetic, comparison,
   bitwise, logical, conditional, and comma operators;
-- `<`, `>`, `>>`, `2>`, `2>>`, left-to-right `2>&1` and `>&2` (also spelled
-  `1>&2`), `<<`, `<<-`, and `<<<`;
+- `<`, `>`, `>>`, `2>`, `2>>`, combined `&>`/`&>>`, left-to-right `2>&1` and
+  `>&2` (also spelled `1>&2`), `<<`, `<<-`, and `<<<`;
 - pathname expansion with `*`, `?`, and bracket/range expressions;
 - comments beginning with `#` at a word boundary.
 
 The complete submitted script is parsed before any command runs. Unsupported
-backticks, process substitution, C-style `for`, arrays, extended-test operators
-outside the documented `[[ ... ]]` profile, brace expansion, arbitrary
-descriptors, background jobs, `select`, the
-`function` keyword, `time`, `coproc`, and malformed syntax produce status 2
-before a partial mutation. `eval`, traps, job control, shell options outside
-the documented `errexit`, `nounset`, and `pipefail` profile, and OS process
-features are unavailable commands or usage errors.
+ANSI-C and locale-translated quotes, process substitution, C-style `for`,
+arrays, extended-test operators outside the documented `[[ ... ]]` profile,
+arbitrary descriptors, background jobs, `select`, the `function` keyword,
+`time`, `coproc`, and malformed syntax produce status 2 before a partial
+mutation. `eval`, traps, job control, shell options outside the documented
+`errexit`, `nounset`, and `pipefail` profile, and OS process features are
+unavailable commands or usage errors.
 
 Pipeline stages receive cloned shell state; an ordinary single built-in uses
 parent state. Assignment-only commands persist. Command-prefix assignments are
@@ -219,11 +219,13 @@ deadline, and cancellation budgets with the caller.
 
 The default registry also includes the deliberately non-interactive
 
-- `read -r [--] [name ...]`, which consumes one bounded UTF-8 record from fd 0,
-  assigns `REPLY` without splitting when no name is supplied, and otherwise
-  uses the fixed whitespace `IFS` profile. A final unterminated record is
-  assigned with status 1; empty EOF assigns empty values with status 1. Other
-  `read` options, prompts, timeouts, and backslash processing are unsupported.
+- `read [-r] [--] [name ...]`, which consumes one bounded UTF-8 logical record
+  from fd 0, assigns `REPLY` without splitting when no name is supplied, and
+  otherwise uses the fixed whitespace `IFS` profile. Without `-r`, a backslash
+  quotes the next character and a backslash-newline continues the logical
+  record; `-r` preserves backslashes. A final unterminated record is assigned
+  with status 1; empty EOF assigns empty values with status 1. Other `read`
+  options, prompts, and timeouts are unsupported.
 - `shift [n]`, which atomically removes positional arguments in the current
   argument frame. The default is one, zero is allowed, and a count beyond `$#`
   returns status 1 without mutation.
@@ -263,7 +265,7 @@ nonempty strict-decimal form `-?[0-9]+`; explicit empty operands and a leading
 `+` are rejected rather than interpreted as Bash arithmetic expressions. A
 negative offset counts from the end and clamps to zero; a non-negative offset
 past the end produces an empty value. Length must be non-negative. Negative
-lengths, arrays, indirect expansion, extglob,
+lengths, arrays, nested or prefix-name indirect expansion, extglob,
 locale-dependent ranges, anchored replacement forms such as `${name/#p/r}`,
 and special `&` replacement interpolation are unsupported. Unquoted results
 then undergo the ordinary field-splitting and pathname-expansion phases.
@@ -298,7 +300,8 @@ status/`pipefail`, or command-substitution status in the parent. Option changes
 inside an isolated scope do not escape.
 
 The bounded `[[ ... ]]` compound conditional supports a nonempty word test;
-unary `-n`, `-z`, `-e`, `-f`, and `-d`; string `==`, `!=`, `<`, and `>`;
+unary `-n`, `-z`, `-v`, `-e`, `-f`, and `-d`; string `=`, `==`, `!=`, `<`, and
+`>`;
 strict-decimal integer `-eq`, `-ne`, `-lt`, `-le`, `-gt`, and `-ge`; and
 prefix `!`, `&&`, `||`, plus parenthesized grouping. `&&` binds more tightly
 than `||`, and both short-circuit. The complete conditional grammar is parsed
@@ -306,7 +309,7 @@ before execution, so missing operands, unmatched delimiters, and unsupported
 operators cannot follow an earlier mutation in the same submitted unit.
 
 Conditional operands use scalar expansion without field splitting or pathname
-expansion. For `==` and `!=`, an unquoted right-hand fragment is the bounded
+expansion. For `=`/`==` and `!=`, an unquoted right-hand fragment is the bounded
 shell-pattern language; quoted or escaped fragments are literal. `<` and `>`
 use deterministic UTF-8 byte order. Integer operands must be expanded
 `-?[0-9]+` values; they are compared without a JavaScript-number range limit,
@@ -314,12 +317,16 @@ and invalid text is a status-2 semantic error. Unlike Bash arithmetic
 conditionals, variable names and arithmetic expressions are not accepted as
 integer operands.
 
+Unary `-v` expands its operand as a scalar parameter name and reports whether
+that parameter is set, including an empty value. Array-element spellings remain
+outside the scalar profile.
+
 File predicates resolve canonical absolute or `cwd`-relative VFS paths.
 An empty or missing path is false. Read-policy denial remains status 126 rather
 than being hidden as false. Opaque R2 entries satisfy `-e` and `-f` from their
 namespace metadata without reading their bodies. `-r`, `-w`, and `-x` use the
-execution identity when present, as described below. Regex `=~`, single `=`,
-and inode, ownership, timestamp-order, socket, and unsupported special-file
+execution identity when present, as described below. Regex `=~`, inode,
+ownership, timestamp-order, socket, and unsupported special-file
 tests are rejected as unsupported syntax.
 
 ### Version 4 deterministic errexit
@@ -378,6 +385,22 @@ option listings, `$-`, POSIX mode, `inherit_errexit`, `ERR` traps, and
 See [POSIX and Bash compatibility](posix-compatibility.md) for deterministic
 locale, glob, and redirection details and [the parser spike](parser-spike.md)
 for parser selection.
+
+### Version 5 scalar and descriptor ergonomics
+
+`set -- argument ...` replaces the current positional parameters atomically;
+`set --` clears them. Quoted `$*` joins them with the fixed profile's space
+separator, unquoted `$*` then undergoes ordinary fixed-IFS splitting, and
+`${#*}` reports the argument count. An empty `$*`, like an empty `$@`, remains
+safe under nounset.
+
+`${!name}` performs one bounded level of scalar indirection. The named variable
+must contain an identifier, positional number, or supported scalar special
+parameter; array, prefix-name, and nested indirect forms remain rejected.
+
+`&> target` and `&>> target` connect descriptors 1 and 2 to one shared sink.
+For a VFS path that means one guarded atomic publication, not two competing
+file writes; later redirections still apply left to right.
 
 ### Environment ergonomics
 
@@ -622,7 +645,7 @@ decides which directory is provisioned; pass the same path as the execution
 
 | Registry group | Available commands and principal options |
 | --- | --- |
-| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%b`, `%c`, `%d`, `%i`, `%o`, `%s`, `%u`, `%x`, `%X`), `pwd`, `cd -`, `export`, `env`, `unset`, `read -r`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (clustered `-eu/+eu`, `-o/+o errexit`, `-o/+o nounset`, `-o/+o pipefail`), `test`/`[` (`-e -f -d -s -r -w -x`, string and integer comparison), `id -u -g -G -n`, `groups` |
+| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%b`, `%c`, `%d`, `%i`, `%o`, `%s`, `%u`, `%x`, `%X`), `pwd`, `cd -`, `export`, `env`, `unset`, `read [-r]`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (clustered `-eu/+eu`, `-o/+o errexit`, `-o/+o nounset`, `-o/+o pipefail`, `--` positional replacement), `test`/`[` (`-e -f -d -s -r -w -x`, string and integer comparison), `id -u -g -G -n`, `groups` |
 | discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
 | help | `help -s`, from the dedicated `/shell/commands/help` subpath |
 | shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |

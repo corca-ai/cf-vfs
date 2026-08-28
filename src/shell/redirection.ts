@@ -202,7 +202,6 @@ export async function applyRedirections(
         inputRedirected = true;
         continue;
       }
-      const descriptor = redirection.operator.startsWith("2") ? 2 : 1;
       // The sink is built before the descriptor it replaces is closed, so a
       // constructor that throws leaves the current descriptor intact. A device
       // alias needs the same ordering for its own reason: `> /dev/stdout`
@@ -217,6 +216,21 @@ export async function applyRedirections(
               budget,
             )
           : deviceSink(device, fds, path);
+      if (redirection.operator === "&>" || redirection.operator === "&>>") {
+        const errorReplacement = replacement.clone();
+        try {
+          await Promise.all([fds[1].close(), fds[2].close()]);
+        } catch (error) {
+          await replacement.abort(error).catch(() => undefined);
+          throw error;
+        }
+        fds[1] = replacement;
+        fds[2] = errorReplacement;
+        redirected.add(1);
+        redirected.add(2);
+        continue;
+      }
+      const descriptor = redirection.operator.startsWith("2") ? 2 : 1;
       try {
         await fds[descriptor].close();
       } catch (error) {

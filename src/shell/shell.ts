@@ -29,6 +29,7 @@ import {
   expandCasePattern,
   expandScalarWord,
   expandWords,
+  isShellParameterSet,
   matchesCasePattern,
 } from "./expand.js";
 import type { ShellIdentityResolver, ShellIdentitySource } from "./identity.js";
@@ -1137,6 +1138,7 @@ async function evaluateConditional(
       );
       if (current.operator === "-n") value = operand.length > 0;
       else if (current.operator === "-z") value = operand.length === 0;
+      else if (current.operator === "-v") value = isShellParameterSet(operand, session);
       else if (operand.length === 0) value = false;
       else {
         try {

@@ -95,7 +95,7 @@ try {
     import { MemoryOpaqueStore } from "@corca-ai/cf-vfs/testing";
     import { NodeSqlFileSystem } from "@corca-ai/cf-vfs/testing/node";
     if (MAX_INLINE_FILE_BYTES !== 8 * 1024 * 1024) throw new Error("inline limit");
-    if (BASH_COMPATIBILITY_VERSION !== 4) throw new Error("language version");
+    if (BASH_COMPATIBILITY_VERSION !== 5) throw new Error("language version");
     if (lsCommand.name !== "ls") throw new Error("ls export");
     const applets = createAppletRegistry([
       lsCommand,

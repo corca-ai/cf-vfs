@@ -44,6 +44,7 @@ function variableState(name: string, session: ShellSession): { set: boolean; val
   if (name === "-") return { set: true, value: shellOptionFlags(session) };
   if (name === "#") return { set: true, value: String(session.args.length) };
   if (name === "@") return { set: session.args.length > 0, value: session.args.join(" ") };
+  if (name === "*") return { set: session.args.length > 0, value: session.args.join(" ") };
   if (name === "0") return { set: true, value: session.env.get("0") ?? "cf-vfs" };
   if (/^[1-9][0-9]*$/u.test(name)) {
     const value = session.args[Number(name) - 1];
@@ -51,6 +52,13 @@ function variableState(name: string, session: ShellSession): { set: boolean; val
   }
   const value = session.env.get(name);
   return value === undefined ? { set: false, value: "" } : { set: true, value };
+}
+
+export function isShellParameterSet(name: string, session: ShellSession): boolean {
+  if (!/^(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[?#@*-])$/u.test(name)) {
+    throw new VfsError("EINVAL", `${name}: invalid variable name`);
+  }
+  return variableState(name, session).set;
 }
 
 function assignParameter(name: string, value: string, session: ShellSession): void {
@@ -336,14 +344,14 @@ async function parameterValue(
   const state = variableState(expansion.name, session);
   if (!("kind" in expansion)) {
     if (expansion.length) {
-      if (expansion.name === "@") return String(session.args.length);
+      if (expansion.name === "@" || expansion.name === "*") return String(session.args.length);
       if (!state.set && session.nounset) throw new ShellNounsetError(expansion.name);
       budget.expansionWork(state.value.length);
       return String(codePointLength(state.value));
     }
     const operator = expansion.operator;
     if (operator === undefined) {
-      if (!state.set && session.nounset && expansion.name !== "@") {
+      if (!state.set && session.nounset && expansion.name !== "@" && expansion.name !== "*") {
         throw new ShellNounsetError(expansion.name);
       }
       return state.value;
@@ -373,6 +381,15 @@ async function parameterValue(
     throw new VfsError("EINVAL", message || `${expansion.name}: parameter is unset or empty`);
   }
   if (!state.set && session.nounset) throw new ShellNounsetError(expansion.name);
+  if (expansion.kind === "indirect") {
+    const target = state.value;
+    if (!/^(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[?#-])$/u.test(target)) {
+      throw new VfsError("EINVAL", `${target}: invalid variable name for indirect expansion`);
+    }
+    const referenced = variableState(target, session);
+    if (!referenced.set && session.nounset) throw new ShellNounsetError(target);
+    return referenced.value;
+  }
   if (expansion.kind === "remove") {
     const pattern = await patternParts(expansion.pattern, session, fileSystem, budget, runtime);
     return removeShellPattern(

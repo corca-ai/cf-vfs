@@ -1,7 +1,7 @@
 import { VfsError } from "../core/errors.js";
 import { type ArithmeticNode, ArithmeticSyntaxError, parseArithmetic } from "./arithmetic.js";
 
-export const BASH_COMPATIBILITY_VERSION = 4 as const;
+export const BASH_COMPATIBILITY_VERSION = 5 as const;
 
 class IncompleteShellSyntaxError extends VfsError {
   constructor(message: string) {
@@ -59,6 +59,9 @@ export type ParameterExpansion =
       kind: "substring";
       offset: ShellWord;
       substringLength?: ShellWord;
+    })
+  | (AdvancedParameterExpansionBase & {
+      kind: "indirect";
     });
 
 export interface ParameterWordPart {
@@ -87,7 +90,7 @@ export interface ShellWord {
   assignmentName?: string;
 }
 
-const PATH_REDIRECTION_OPERATORS = ["<", ">", ">>", "2>", "2>>"] as const;
+const PATH_REDIRECTION_OPERATORS = ["<", ">", ">>", "2>", "2>>", "&>", "&>>"] as const;
 
 export type PathRedirectionOperator = (typeof PATH_REDIRECTION_OPERATORS)[number];
 
@@ -166,7 +169,8 @@ export type ConditionalUnaryOperator =
   | "-x"
   | "-L"
   | "-h"
-  | "-c";
+  | "-c"
+  | "-v";
 export type ConditionalBinaryOperator =
   | "=="
   | "!="
@@ -314,7 +318,6 @@ const UNSUPPORTED_CONDITIONAL_UNARY = new Set([
   "-S",
   "-t",
   "-u",
-  "-v",
   "-w",
   "-x",
 ]);
@@ -332,6 +335,7 @@ const CONDITIONAL_UNARY_OPERATORS: readonly ConditionalUnaryOperator[] = [
   "-L",
   "-h",
   "-c",
+  "-v",
 ];
 
 function conditionalUnaryOperator(value: string | undefined): ConditionalUnaryOperator | undefined {
@@ -348,6 +352,7 @@ function conditionalBinaryOperator(
   const value = staticWord(token.word);
   if (
     value === "==" ||
+    value === "=" ||
     value === "!=" ||
     value === "-eq" ||
     value === "-ne" ||
@@ -356,7 +361,7 @@ function conditionalBinaryOperator(
     value === "-gt" ||
     value === "-ge"
   ) {
-    return value;
+    return value === "=" ? "==" : value;
   }
   return undefined;
 }
@@ -540,8 +545,12 @@ function operatorAt(source: string, offset: number, atBoundary: boolean): Operat
     character === "<" ||
     character === "(" ||
     character === ")"
-  )
+  ) {
+    if (character === "&" && source[offset + 1] === ">") {
+      return source[offset + 2] === ">" ? "&>>" : "&>";
+    }
     return character;
+  }
   if ((character === "{" || character === "}") && atBoundary && isBoundary(source[offset + 1]))
     return character;
   if (character === "!" && atBoundary && isBoundary(source[offset + 1])) return character;
@@ -843,7 +852,7 @@ class Lexer {
       const expansion = this.readBracedParameter();
       return { kind: "parameter", expansion, quoted };
     }
-    if (next !== undefined && /[A-Za-z_?#@0-9-]/u.test(next)) {
+    if (next !== undefined && /[A-Za-z_?#@*0-9-]/u.test(next)) {
       this.offset += 2;
       let name = next;
       if (/[A-Za-z_]/u.test(next)) {
@@ -853,7 +862,7 @@ class Lexer {
       }
       return { kind: "parameter", expansion: { name, length: false }, quoted };
     }
-    if (next === "*" || next === "$") {
+    if (next === "$") {
       throw this.error("special parameter is not supported by this language version", start);
     }
     return undefined;
@@ -862,12 +871,23 @@ class Lexer {
   private readBracedParameter(): ParameterExpansion {
     const start = this.offset;
     this.offset += 2;
+    if (this.source[this.offset] === "!") {
+      this.offset += 1;
+      const name = /^[A-Za-z_][A-Za-z0-9_]*/u.exec(this.source.slice(this.offset))?.[0];
+      if (name === undefined) throw this.error("invalid indirect parameter expansion", start);
+      this.offset += name.length;
+      if (this.source[this.offset] !== "}") {
+        throw this.error("unsupported indirect parameter expansion", this.offset);
+      }
+      this.offset += 1;
+      return { kind: "indirect", name, length: false };
+    }
     let length = false;
     if (this.source[this.offset] === "#") {
       length = true;
       this.offset += 1;
     }
-    const name = /^(?:[A-Za-z_][A-Za-z0-9_]*|[?#@-]|[0-9]+)/u.exec(
+    const name = /^(?:[A-Za-z_][A-Za-z0-9_]*|[?#@*-]|[0-9]+)/u.exec(
       this.source.slice(this.offset),
     )?.[0];
     if (name === undefined) throw this.error("invalid parameter expansion", start);

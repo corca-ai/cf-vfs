@@ -35,7 +35,7 @@ and have no shared seek offset.
 
 ## Shell language
 
-Bash Version 4 supports simple commands and assignments; quoting and escapes;
+Bash Version 5 supports simple commands and assignments; quoting and escapes;
 selected parameter, command, and arithmetic expansion; lists and pipelines;
 groups, subshells, control structures, functions, and selected flow built-ins;
 ordinary redirection, here-documents, here-strings, and pathname expansion. See
@@ -91,6 +91,10 @@ Version 4 adds deterministic non-interactive errexit through `set -e`/`+e` and
 `set -o`/`+o errexit`. It uses Bash's structural condition, list, pipeline, and
 inversion suppression rules, including propagation through invoked compound
 commands, functions, sources, and subshells.
+Version 5 adds `set --`, `$*`, one-level scalar `${!name}` indirection, plain
+`read` backslash processing, `[[ = ]]`, `[[ -v ]]`, and combined
+`&>`/`&>>` output redirection. Combined redirection shares one atomic VFS sink
+between descriptors rather than opening the path twice.
 
 Deliberate deterministic choices include:
 
@@ -127,7 +131,7 @@ Deliberate deterministic choices include:
   `**` has no special cross-directory meaning;
 - pipeline stages receive cloned state, while a non-pipeline built-in can
   change the parent session;
-- `read -r` preserves a final partial record but returns status 1, and an
+- `read` and `read -r` preserve a final partial record but return status 1, and an
   excessive `shift` returns status 1 without changing positional arguments;
 - `getopts` exposes `OPTIND` and `OPTARG`, accepts only short options and
   required option arguments, uses leading `:` for silent error results, and
@@ -135,11 +139,11 @@ Deliberate deterministic choices include:
 - parameter-pattern matching is locale-independent and work-bounded; substring
   operands are nonempty expanded `-?[0-9]+` decimal integers after trimming,
   negative offsets clamp from the end, and empty operands, leading `+`, and
-  negative lengths are rejected. Arrays, indirect expansion,
-  extglob, anchored replacement, and Bash's optional `&` replacement behavior
-  remain outside the profile;
-- `[[ == ]]` and `[[ != ]]` use the same bounded pattern language on an
-  unquoted right operand, while lexical comparison uses UTF-8 byte order.
+  negative lengths are rejected. Arrays, nested or prefix-name indirect
+  expansion, extglob, anchored replacement, and Bash's optional `&`
+  replacement behavior remain outside the profile;
+- `[[ = ]]`, `[[ == ]]`, and `[[ != ]]` use the same bounded pattern language
+  on an unquoted right operand, while lexical comparison uses UTF-8 byte order.
   Integer predicates require strict expanded decimal text instead of Bash
   arithmetic expressions; regex, file ordering, permission, and special-file
   operators remain outside the profile;
