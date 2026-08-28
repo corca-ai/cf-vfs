@@ -46,7 +46,7 @@ function atomicFileSink(
       }
       release();
       release = budget.buffered(total);
-      chunks.push(chunk.slice());
+      chunks.push(chunk);
     },
     async close() {
       if (aborted) return;

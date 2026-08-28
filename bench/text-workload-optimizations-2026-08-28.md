@@ -103,3 +103,56 @@ migration and must prove token monotonicity for creation, deletion, recursive
 copy/move/remove, symlink guards, and change-sequence groups on real workerd
 storage. It is kept as the next high-value candidate rather than being mixed
 into the low-risk changes without those proofs.
+
+## Follow-up: allocation, decoding, and one-chunk writes
+
+The follow-up baseline is `9b45f3a`. Each JavaScript result below is the median
+of seven runs in one process, comparing the candidate immediately before and
+after its isolated change. The workload uses one 8 KiB UTF-8 body; collector
+tests run 20,000 operations, text decoding runs 10,000 operations, and the pipe
+test transfers 1,000 chunks. The workerd storage point runs the same guarded
+8 KiB overwrite and read/edit sequence as the durable-object benchmark.
+
+| Area | Before | After | Result |
+| --- | ---: | ---: | ---: |
+| synchronous string collection | 97.627 ms | 86.379 ms | −11.5% |
+| digest-capable string collection | 157.535 ms | 87.077 ms | −44.7% |
+| bounded UTF-8 text collection | 36.889 ms | 30.363 ms | −17.7% |
+| 1,000 pipeline writes | 3.750 ms | 2.670 ms | −28.8% |
+| pipeline `slice()` calls | 2,000 | 1,000 | −50.0% |
+| pipeline bytes copied by `slice()` | 16.384 MB | 8.192 MB | −50.0% |
+| one-chunk overwrite rows read | 9 | 7 | −22.2% |
+| read/edit rows read | 12 | 10 | −16.7% |
+| one-chunk overwrite CPU | 0.030 ms | 0.025 ms | −16.7% |
+
+A materialized body that already fits one storage chunk no longer allocates a
+256 KiB slab and then slices the used prefix. For an 8 KiB string, the
+digest-capable collector's byte-array allocation falls from about 272 KiB
+(encoding, slab, and result) to 8 KiB. Caller-owned arrays and views still take
+one snapshot; only the private `TextEncoder` result is transferred directly.
+
+An existing inline entry now uses a narrow `UPDATE` instead of the generic
+entry upsert, and an existing one-chunk body uses a narrow chunk `UPDATE`.
+Workerd retained four statements and three rows written while reducing rows
+read. Seven post-change point runs all reported exactly 7 overwrite rows and
+10 read/edit rows; the overwrite CPU samples had a 0.025 ms median.
+
+`collectText` now decodes each stream chunk directly with a fatal streaming
+decoder. This removes the byte-chunk snapshots, contiguous byte-array assembly,
+and final whole-array decode. The retained lease still charges the total input
+bytes until the command releases the text; eliminating the transient second
+lease means a 1,800-byte two-file command now fits a 2,000-byte budget, while a
+1,700-byte budget still rejects it.
+
+Finally, `ShellSink` remains the single ownership boundary for pipeline and
+redirection writes. Its snapshot is now passed through instead of being copied
+a second time by each downstream sink. Tests mutate the caller's array before
+the write promise settles and verify that both pipeline and atomic-redirection
+outputs retain the bytes accepted at the call boundary.
+
+The focused VFS preset grew from 157,576 to 159,070 deployed bytes (+1,494,
++0.95%), and the R2 preset grew by the same 1,494 bytes. The one-applet shell
+preset shrank by 16 bytes; the complete default command registry grew from
+453,786 to 454,961 bytes (+1,175, +0.26%). The Linux profile, which contains
+both the filesystem and full shell, grew from 605,166 to 607,835 bytes (+2,669,
++0.44%). Every preset remains within its recorded tree-shaking budget.

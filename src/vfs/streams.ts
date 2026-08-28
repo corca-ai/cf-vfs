@@ -105,6 +105,22 @@ export async function collectRechunkedBytes(
 ): Promise<CollectedBytes> {
   const chunks: Uint8Array[] = [];
   let sizeBytes = 0;
+  const materialized = body instanceof ReadableStream ? undefined : rawBodyBytes(body);
+  if (
+    materialized !== undefined &&
+    (materialized.byteLength <= chunkBytes || materialized.byteLength > maximumBytes)
+  ) {
+    sizeBytes = materialized.byteLength;
+    account?.(sizeBytes);
+    if (sizeBytes > maximumBytes) {
+      throw new VfsError("EFBIG", `stream exceeds the ${maximumBytes}-byte limit`);
+    }
+    return {
+      chunks:
+        sizeBytes === 0 ? [] : [typeof body === "string" ? materialized : materialized.slice()],
+      sizeBytes,
+    };
+  }
   let current = new Uint8Array(chunkBytes);
   let used = 0;
 
@@ -129,7 +145,8 @@ export async function collectRechunkedBytes(
   };
 
   if (!(body instanceof ReadableStream)) {
-    append(rawBodyBytes(body));
+    if (materialized === undefined) throw new TypeError("materialized body is missing");
+    append(materialized);
     if (used > 0) chunks.push(current.slice(0, used));
     return { chunks, sizeBytes };
   }

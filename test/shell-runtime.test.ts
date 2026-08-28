@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { writeText } from "../src/shell/commands/helpers.js";
 import type { ShellEvent } from "../src/shell/events.js";
+import { createBytePipe } from "../src/shell/pipe.js";
 import { Shell } from "../src/shell/shell.js";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import { putOpaque } from "../src/vfs/opaque.js";
@@ -11,6 +12,32 @@ import { createBashHarness } from "./helpers/bash.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 
 describe("stream-first shell runtime", () => {
+  it("snapshots bytes once before a pipeline or redirection accepts them", async () => {
+    const abort = new AbortController();
+    const pipe = createBytePipe({ maximumBytes: 1024, signal: abort.signal, name: "test pipe" });
+    const piped = Uint8Array.of(1, 2, 3);
+    const write = pipe.sink.write(piped);
+    piped.fill(9);
+    await write;
+    await pipe.sink.close();
+    expect([...(await readAllBytes(pipe.readable, 1024))]).toEqual([1, 2, 3]);
+
+    const snapshot = defineTestApplet("snapshot", async (_context, _argv, fds) => {
+      const redirected = Uint8Array.of(4, 5, 6);
+      const pending = fds[1].write(redirected);
+      redirected.fill(9);
+      await pending;
+      return 0;
+    });
+    const { fileSystem, shell } = createBashHarness({ extraCommands: [snapshot] });
+    await expect(shell.executeText({ script: "snapshot > /output" })).resolves.toMatchObject({
+      exitCode: 0,
+    });
+    expect([...(await readAllBytes(fileSystem.readFile("/output").stream, 1024))]).toEqual([
+      4, 5, 6,
+    ]);
+  });
+
   it("keeps the per-edge pipeline limit at or below 8 MiB", () => {
     expect(
       () =>
@@ -1401,7 +1428,7 @@ describe("stream-first shell runtime", () => {
     const shell = new Shell({
       fileSystem,
       commands: defaultShellCommands,
-      limits: { maxBufferedBytes: 2_000 },
+      limits: { maxBufferedBytes: 1_700 },
     });
     await expect(
       shell.executeText({ script: "diff /left-large /right-large" }),

@@ -164,7 +164,7 @@ export function createBytePipe(options: BytePipeOptions): BytePipe {
             `${options.name} exceeds the ${options.maximumBytes}-byte limit`,
           );
         }
-        controller?.enqueue(chunk.slice());
+        controller?.enqueue(chunk);
         if ((controller?.desiredSize ?? 1) <= 0) {
           let idleTimer: ReturnType<typeof setTimeout> | undefined;
           if (options.idleTimeoutMs !== undefined && options.onIdle !== undefined) {

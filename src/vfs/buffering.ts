@@ -120,6 +120,6 @@ export function collectInlineBytesSync(
     throw new VfsError("EFBIG", `stream exceeds the ${maximumBytes}-byte limit`);
   }
   const chunks =
-    sizeBytes === 0 ? [] : sizeBytes <= chunkBytes ? [input.slice()] : rechunk([input], chunkBytes);
+    sizeBytes === 0 ? [] : sizeBytes <= chunkBytes ? [input] : rechunk([input], chunkBytes);
   return leasedChunks(chunks, sizeBytes, budget, sizeBytes);
 }

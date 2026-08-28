@@ -2251,7 +2251,26 @@ ${ENTRY_TRIGGERS}
    * Uses at most 99 of Cloudflare's 100 bound parameters per statement:
    * three values for each of 33 chunk rows.
    */
-  private writeChunks(entryId: number, firstIndex: number, chunks: readonly Uint8Array[]): void {
+  private writeChunks(
+    entryId: number,
+    firstIndex: number,
+    chunks: readonly Uint8Array[],
+    updateSingle = false,
+  ): void {
+    const single = chunks[0];
+    if (updateSingle && chunks.length === 1 && single !== undefined) {
+      const updated = firstRow(
+        this.sql.exec<SqlRow>(
+          `UPDATE vfs_inline_chunks SET body = ?
+           WHERE entry_id = ? AND chunk_index = ? RETURNING entry_id`,
+          single,
+          entryId,
+          firstIndex,
+        ),
+      );
+      if (updated === undefined) throw new VfsError("EIO", "inline file is missing a stored chunk");
+      return;
+    }
     for (let offset = 0; offset < chunks.length; offset += 33) {
       const batch = chunks.slice(offset, offset + 33);
       this.sql.exec(
@@ -2943,9 +2962,24 @@ ${ENTRY_TRIGGERS}
         chunks.length,
       );
     }
-    const written = this.sql
-      .exec<SqlRow>(
-        `INSERT INTO vfs_entries (
+    const written =
+      current?.contentClass === "inline"
+        ? this.sql
+            .exec<SqlRow>(
+              `UPDATE vfs_entries SET
+                 size_bytes = ?, mode = ?, modified_at_ms = ?, revision = revision + 1,
+                 body_digest = ?, body_digest_revision = revision + 1
+               WHERE id = ? RETURNING id, revision`,
+              sizeBytes,
+              mode,
+              now,
+              digest ?? null,
+              current.id,
+            )
+            .one()
+        : this.sql
+            .exec<SqlRow>(
+              `INSERT INTO vfs_entries (
            id, path, parent_path, name, kind, content_class, opaque_object_id,
            size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
            body_digest, body_digest_revision
@@ -2958,24 +2992,31 @@ ${ENTRY_TRIGGERS}
            body_digest = excluded.body_digest,
            body_digest_revision = vfs_entries.revision + 1
          RETURNING id, revision`,
-        current?.id ?? this.allocateIno(),
-        normalized,
-        dirname(normalized),
-        basename(normalized),
-        sizeBytes,
-        mode,
-        owner.uid,
-        owner.gid,
-        current?.createdAtMs ?? now,
-        now,
-        // Null whenever one was not taken, which also clears whatever an
-        // earlier revision left behind rather than relying on the stamp
-        // alone to retire it.
-        digest ?? null,
-      )
-      .one();
+              current?.id ?? this.allocateIno(),
+              normalized,
+              dirname(normalized),
+              basename(normalized),
+              sizeBytes,
+              mode,
+              owner.uid,
+              owner.gid,
+              current?.createdAtMs ?? now,
+              now,
+              // Null whenever one was not taken, which also clears whatever an
+              // earlier revision left behind rather than relying on the stamp
+              // alone to retire it.
+              digest ?? null,
+            )
+            .one();
     const entryId = integerColumn(written, "id");
-    this.writeChunks(entryId, 0, chunks);
+    this.writeChunks(
+      entryId,
+      0,
+      chunks,
+      current?.contentClass === "inline" &&
+        current.sizeBytes > 0 &&
+        current.sizeBytes <= this.chunkBytes,
+    );
     this.updateUsage(inlineDelta, entryDelta);
     const queuedGarbage =
       current?.contentClass === "opaque" &&

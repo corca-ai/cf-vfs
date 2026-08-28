@@ -363,17 +363,50 @@ export async function collectText(
   context: ShellCommandContext,
   stream: ReadableStream<Uint8Array>,
   path?: string,
-  maximumBytes?: number,
+  maximumBytes = context.budget.limits.maxBufferedBytes,
 ): Promise<BufferLease<string>> {
-  const bytes = await collectStream(context, stream, maximumBytes);
+  const reader = stream.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const chunks: string[] = [];
+  let total = 0;
+  let release: () => void = () => undefined;
+  let retained = false;
   try {
-    return {
-      value: new TextDecoder("utf-8", { fatal: true }).decode(bytes.value),
-      release: bytes.release,
-    };
-  } catch {
-    bytes.release();
-    throw new VfsError("EIO", "input is not valid UTF-8", path);
+    while (true) {
+      if (context.signal.aborted) {
+        throw context.signal.reason ?? new VfsError("ECANCELED", "execution was cancelled");
+      }
+      const result = await readWithAbort(reader, context.signal);
+      if (result.done) break;
+      total += result.value.byteLength;
+      context.budget.io(result.value.byteLength);
+      if (total > maximumBytes) {
+        throw new VfsError("E2BIG", "buffered command input limit exceeded");
+      }
+      release();
+      release = context.budget.buffered(total);
+      let decoded: string;
+      try {
+        decoded = decoder.decode(result.value, { stream: true });
+      } catch {
+        throw new VfsError("EIO", "input is not valid UTF-8", path);
+      }
+      if (decoded.length > 0) chunks.push(decoded);
+    }
+    try {
+      const final = decoder.decode();
+      if (final.length > 0) chunks.push(final);
+    } catch {
+      throw new VfsError("EIO", "input is not valid UTF-8", path);
+    }
+    retained = true;
+    return { value: chunks.join(""), release };
+  } catch (error) {
+    await reader.cancel(error).catch(() => undefined);
+    throw error;
+  } finally {
+    reader.releaseLock();
+    if (!retained) release();
   }
 }
 
