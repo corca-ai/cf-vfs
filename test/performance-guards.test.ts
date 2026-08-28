@@ -496,7 +496,7 @@ describe("common-path SQL cost", () => {
 
     meter.reset();
     expect((await shell.executeText({ script: "sed -i s/gamma/delta/ /target" })).exitCode).toBe(0);
-    expect(meter.statements).toBe(7);
+    expect(meter.statements).toBe(6);
 
     await fileSystem.writeFile(
       "/change.patch",

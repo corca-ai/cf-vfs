@@ -380,11 +380,14 @@ interface InlineWritePlan {
   readonly path: string;
   readonly followed: readonly string[];
   readonly createParents: boolean;
+  readonly disposition: "upsert" | "create" | "replace";
   readonly skipIfUnchanged: boolean;
   readonly mode: number | undefined;
   readonly guard: { readonly ifMutationToken?: string };
   readonly capturedToken: string;
   readonly capturedEntry: EntryRow | null;
+  /** A read snapshot whose version must still match in the publishing UPDATE. */
+  readonly conditionalMutationVersion?: number;
 }
 
 interface InlineWriteOutcome {
@@ -744,6 +747,8 @@ export class SqlFileSystem implements PosixVirtualFileSystem {
   private lastChangeSeq: number | undefined;
   /** The next entry identity, read once per instance from `vfs_usage`. */
   private nextIno: number;
+  /** Metadata from the last direct inline read; never file-body bytes. */
+  private lastInlineRead: EntryRow | undefined;
 
   constructor(storage: SqlFileSystemStorage, options: SqlFileSystemOptions = {}) {
     const limits = resolveFileSystemLimits(options);
@@ -2757,6 +2762,7 @@ ${ENTRY_TRIGGERS}
       .map((row) => new Uint8Array(blobColumn(row, "body")).slice());
     const sizeBytes = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
     this.inFlightBytes.acquire(sizeBytes);
+    if (access.followed.length === 0) this.lastInlineRead = entry;
     return {
       stat: rowToStat(entry) as InlineFileStat,
       stream: streamFromOwnedChunks(chunks, () => {
@@ -2916,8 +2922,12 @@ ${ENTRY_TRIGGERS}
     entry: { ifMutationToken?: string; mode?: number },
     options: WriteFilesOptions,
     posix: PosixAccessContext | undefined,
+    snapshot?: EntryRow,
   ): InlineWritePlan {
-    const access = this.resolveAccess(path, true);
+    const access =
+      snapshot === undefined
+        ? this.resolveAccess(path, true)
+        : { path: snapshot.path, row: snapshot, followed: [] };
     const normalized = access.path;
     const state =
       access.row === null
@@ -2940,11 +2950,13 @@ ${ENTRY_TRIGGERS}
       path: normalized,
       followed: access.followed,
       createParents,
+      disposition,
       skipIfUnchanged: options.skipIfUnchanged === true,
       mode: entry.mode,
       guard: entry,
       capturedToken: state.mutationToken,
       capturedEntry: before,
+      ...(snapshot === undefined ? {} : { conditionalMutationVersion: snapshot.mutationVersion }),
     };
   }
 
@@ -3067,21 +3079,23 @@ ${ENTRY_TRIGGERS}
     }
     const written =
       current?.contentClass === "inline"
-        ? this.sql
-            .exec<SqlRow>(
+        ? firstRow(
+            this.sql.exec<SqlRow>(
               `UPDATE vfs_entries SET
                  size_bytes = ?, mode = ?, modified_at_ms = ?, revision = revision + 1,
                  body_digest = ?, body_digest_revision = revision + 1,
                  mutation_version = ?
-               WHERE id = ? RETURNING id, revision`,
+               WHERE id = ? AND mutation_version = ?
+               RETURNING id, revision`,
               sizeBytes,
               mode,
               now,
               digest ?? null,
               mutationVersion,
               current.id,
-            )
-            .one()
+              plan.conditionalMutationVersion ?? current.mutationVersion,
+            ),
+          )
         : this.sql
             .exec<SqlRow>(
               `INSERT INTO vfs_entries (
@@ -3115,6 +3129,22 @@ ${ENTRY_TRIGGERS}
               mutationVersion,
             )
             .one();
+    if (written === undefined) {
+      // The read snapshot was only a hint. Re-run the ordinary lookup on a
+      // failed conditional UPDATE so disposition, permission, and guard error
+      // precedence remains exactly what an uncached write reports.
+      this.planInlineWrite(
+        plan.written,
+        plan.guard,
+        {
+          createParents: plan.createParents,
+          disposition: plan.disposition,
+          skipIfUnchanged: plan.skipIfUnchanged,
+        },
+        posix,
+      );
+      throw new VfsError("EREVISION", "path changed after it was read", normalized);
+    }
     const token = this.publishToken(
       normalized,
       mutationVersion,
@@ -3191,7 +3221,17 @@ ${ENTRY_TRIGGERS}
     posix?: PosixAccessContext,
   ): Promise<WriteResult> {
     const materialized = options.skipIfUnchanged !== true && typeof body === "string";
-    const plan = this.planInlineWrite(path, options, options, posix);
+    const snapshot =
+      materialized &&
+      posix === undefined &&
+      options.disposition !== "create" &&
+      !pathRequiresDirectory(path) &&
+      options.ifMutationToken !== undefined &&
+      options.ifMutationToken === this.lastInlineRead?.mutationToken &&
+      normalizePath(path) === this.lastInlineRead.path
+        ? this.lastInlineRead
+        : undefined;
+    const plan = this.planInlineWrite(path, options, options, posix, snapshot);
     const buffered = materialized ? this.collectInlineSync(body) : await this.collectInline(body);
     const digest = materialized ? undefined : await this.incomingDigest(options, buffered);
     let queued = false;

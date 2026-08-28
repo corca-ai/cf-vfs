@@ -515,6 +515,44 @@ describe("Durable Object storage benchmark metrics", () => {
           })
         ).mutationToken;
       });
+      const writeAfterRead = async (reuseSnapshot: boolean): Promise<number> => {
+        let elapsed = 0;
+        const repeats = 1_000;
+        for (let index = -50; index < repeats; index += 1) {
+          const snapshot = timedFileSystem.readFile("/point");
+          await readAllBytes(snapshot.stream, pointBytes);
+          if (!reuseSnapshot) {
+            const evict = timedFileSystem.readFile("/search/file-0");
+            await readAllBytes(evict.stream, 1);
+          }
+          pointBodyFlip = !pointBodyFlip;
+          const body = pointBodyFlip ? pointBodyA : pointBodyB;
+          const started = performance.now();
+          pointToken = (
+            await timedFileSystem.writeFile("/point", body, {
+              ifMutationToken: snapshot.stat.mutationToken,
+            })
+          ).mutationToken;
+          if (index >= 0) elapsed += performance.now() - started;
+        }
+        return elapsed / repeats;
+      };
+      const cachedSamples: number[] = [];
+      const uncachedSamples: number[] = [];
+      for (let group = 0; group < 5; group += 1) {
+        const order = group % 2 === 0 ? [true, false] : [false, true];
+        for (const cached of order) {
+          const duration = await writeAfterRead(cached);
+          (cached ? cachedSamples : uncachedSamples).push(duration);
+        }
+      }
+      const median = (samples: number[]): number =>
+        [...samples].sort((left, right) => left - right)[Math.floor(samples.length / 2)] ??
+        Number.NaN;
+      const writeAfterReadMs = {
+        cached: median(cachedSamples),
+        uncached: median(uncachedSamples),
+      };
 
       const globFindMs = await averageDuration(2, 50, () => {
         timedFileSystem.findPage({
@@ -550,6 +588,7 @@ describe("Durable Object storage benchmark metrics", () => {
         warmInitializeMs,
         statMs,
         overwriteMs,
+        writeAfterReadMs,
         globFindMs,
       };
     });
@@ -568,14 +607,16 @@ describe("Durable Object storage benchmark metrics", () => {
       rowsWritten: 2,
     });
     expect(metrics.readEditCost).toMatchObject({
-      statements: 5,
-      rowsRead: 7,
+      statements: 4,
+      rowsRead: 6,
       rowsWritten: 2,
     });
     expect(metrics.statQueryPlan.every((detail) => detail.includes("SEARCH"))).toBe(true);
     measured(metrics.warmInitializeMs);
     measured(metrics.statMs);
     measured(metrics.overwriteMs);
+    measured(metrics.writeAfterReadMs.cached);
+    measured(metrics.writeAfterReadMs.uncached);
     measured(metrics.globFindMs);
   });
 });

@@ -250,3 +250,37 @@ unchanged by this schema work; the Linux profile is 613,065 bytes. All eight
 tree-shaking presets remain inside their recorded budgets. The roughly 3.2%
 VFS bundle increase is the principal retained cost of removing the permanent
 second namespace index and its per-operation storage work.
+
+## Follow-up: conditional reuse of a read snapshot
+
+After the live token moved onto the entry, a direct inline read already held
+all metadata needed to plan a guarded small-text replacement. The filesystem
+now retains only that one `EntryRow` as a hint — never its body — and folds
+validation into the publishing `UPDATE ... WHERE mutation_version = ?`. A
+concurrent mutation makes the UPDATE return no row; the ordinary lookup path is
+then rerun so the existing disposition, permission, and guard error precedence
+is preserved.
+
+The fast path is intentionally narrow: a materialized string body, an explicit
+matching mutation token, a direct non-directory path, no `create` disposition,
+and no credential-bound view. Symlink chains, streamed/caller-controlled
+bodies, create semantics, and POSIX credential checks continue through the
+ordinary preflight. This removes a successful lookup without trusting cached
+state across an `await` or across two filesystem wrappers over one database.
+
+On actual workerd, an 8 KiB read followed by a guarded edit moved from 5
+statements / 7 rows read / 2 rows written to 4 / 6 / 2 (−20.0% statements,
+−14.3% reads). An isolated write-after-read comparison ran five interleaved
+1,000-operation cached/uncached groups per process. Across three processes, the
+median process result was 0.017 ms cached versus 0.023 ms uncached (−26.1%);
+structural counts remained the primary evidence because individual samples are
+near the workerd clock resolution. `sed -i` correspondingly falls from 7 to 6
+local SQL statements.
+
+Tests hold a snapshot in one filesystem wrapper, mutate or remove the file
+through a second wrapper over the same SQLite database, and verify `EREVISION`
+or the existing `ENOENT` precedence with the concurrent body left intact. A
+trailing-slash assertion also proves the hint cannot bypass pathname semantics.
+The metadata hint adds 1,111 deployed bytes and one bounded `EntryRow` per
+instance: VFS is 165,328 bytes, R2 is 167,939 bytes, and Linux is 614,176 bytes.
+All bundle budgets pass; the Node suite now contains 1,393 tests.

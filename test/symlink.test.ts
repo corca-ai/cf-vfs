@@ -495,6 +495,42 @@ describe("symlink schema", () => {
     database.close();
   });
 
+  it("treats a recent read as a conditional hint rather than trusted state", async () => {
+    const database = new DatabaseSync(":memory:");
+    const reader = openOver(database);
+    const concurrent = openOver(database);
+    await reader.writeFile("/file", "one");
+
+    const stale = reader.readFile("/file");
+    await stale.stream.cancel();
+    await expect(
+      reader.writeFile("/file/", "caller", {
+        ifMutationToken: stale.stat.mutationToken,
+      }),
+    ).rejects.toMatchObject({ code: "ENOTDIR" });
+    await concurrent.writeFile("/file", "two", {
+      ifMutationToken: stale.stat.mutationToken,
+    });
+    await expect(
+      reader.writeFile("/file", "caller", {
+        disposition: "replace",
+        ifMutationToken: stale.stat.mutationToken,
+      }),
+    ).rejects.toMatchObject({ code: "EREVISION" });
+    expect(await readAll(reader, "/file")).toBe("two");
+
+    const removed = reader.readFile("/file");
+    await removed.stream.cancel();
+    await concurrent.remove("/file");
+    await expect(
+      reader.writeFile("/file", "caller", {
+        disposition: "replace",
+        ifMutationToken: removed.stat.mutationToken,
+      }),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    database.close();
+  });
+
   it("describes the change cursor identically whether fresh or migrated", () => {
     // Versions 4 and 7 run unconditionally, so both paths reach the same
     // `sqlite_master` text even though the live versions are moved onto entries
