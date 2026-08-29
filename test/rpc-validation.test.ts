@@ -194,20 +194,10 @@ const VFS_OPTION_BOUNDARIES: readonly {
   },
 ];
 
-describe("shell RPC option parsing", () => {
-  it("normalizes every supported text-execution field", () => {
-    const stdin = Uint8Array.of(1, 2, 3);
-    expect(
-      parseRemoteTextOptions({
-        script: "printf input",
-        cwd: "/work",
-        env: { HOME: "/work", EMPTY: "" },
-        args: ["first", "second"],
-        credentials: { uid: 1000, gid: 100, supplementaryGids: [200] },
-        umask: 0o027,
-        stdin,
-      }),
-    ).toEqual({
+it("normalizes every supported text-execution field", () => {
+  const stdin = Uint8Array.of(1, 2, 3);
+  expect(
+    parseRemoteTextOptions({
       script: "printf input",
       cwd: "/work",
       env: { HOME: "/work", EMPTY: "" },
@@ -215,75 +205,79 @@ describe("shell RPC option parsing", () => {
       credentials: { uid: 1000, gid: 100, supplementaryGids: [200] },
       umask: 0o027,
       stdin,
-    });
+    }),
+  ).toEqual({
+    script: "printf input",
+    cwd: "/work",
+    env: { HOME: "/work", EMPTY: "" },
+    args: ["first", "second"],
+    credentials: { uid: 1000, gid: 100, supplementaryGids: [200] },
+    umask: 0o027,
+    stdin,
+  });
+});
+
+it.each([
+  ["script", { script: 1 }, "options.script must be a string"],
+  ["working directory", { script: "true", cwd: 1 }, "options.cwd must be a string"],
+  [
+    "environment",
+    { script: "true", env: { VALID: "yes", INVALID: 1 } },
+    "options.env values must be strings",
+  ],
+  [
+    "environment record",
+    { script: "true", env: new Map([["HOME", "/work"]]) },
+    "options.env must be a string record",
+  ],
+  ["arguments", { script: "true", args: ["valid", 1] }, "options.args must be an array of strings"],
+  [
+    "standard input",
+    { script: "true", stdin: { not: "bytes" } },
+    "options.stdin must be bytes, text, or a byte stream",
+  ],
+  [
+    "credentials",
+    { script: "true", credentials: { uid: 1000 } },
+    "options.credentials requires uid and gid",
+  ],
+  ["umask", { script: "true", umask: -1 }, "options.umask must be a safe integer >= 0"],
+  [
+    "umask upper bound",
+    { script: "true", umask: 0o1000 },
+    "options.umask must be an integer between 000 and 777",
+  ],
+  ["stream-only field", { script: "true", stdout: {} }, "options.stdout is not supported"],
+])("rejects an invalid %s with a field-specific diagnostic", (_field, value, message) => {
+  expect(() => parseRemoteTextOptions(value)).toThrowError(
+    expect.objectContaining({ code: "EINVAL", message }),
+  );
+});
+
+it("requires real byte streams and sinks for streaming execution", () => {
+  const stdin = new ReadableStream<Uint8Array>();
+  const stdout = new WritableStream<Uint8Array>();
+  const stderr = new WritableStream<Uint8Array>();
+  expect(parseRemoteExecuteToOptions({ script: "cat", stdin, stdout, stderr })).toEqual({
+    script: "cat",
+    stdin,
+    stdout,
+    stderr,
   });
 
-  it.each([
-    ["script", { script: 1 }, "options.script must be a string"],
-    ["working directory", { script: "true", cwd: 1 }, "options.cwd must be a string"],
-    [
-      "environment",
-      { script: "true", env: { VALID: "yes", INVALID: 1 } },
-      "options.env values must be strings",
-    ],
-    [
-      "environment record",
-      { script: "true", env: new Map([["HOME", "/work"]]) },
-      "options.env must be a string record",
-    ],
-    [
-      "arguments",
-      { script: "true", args: ["valid", 1] },
-      "options.args must be an array of strings",
-    ],
-    [
-      "standard input",
-      { script: "true", stdin: { not: "bytes" } },
-      "options.stdin must be bytes, text, or a byte stream",
-    ],
-    [
-      "credentials",
-      { script: "true", credentials: { uid: 1000 } },
-      "options.credentials requires uid and gid",
-    ],
-    ["umask", { script: "true", umask: -1 }, "options.umask must be a safe integer >= 0"],
-    [
-      "umask upper bound",
-      { script: "true", umask: 0o1000 },
-      "options.umask must be an integer between 000 and 777",
-    ],
-    ["stream-only field", { script: "true", stdout: {} }, "options.stdout is not supported"],
-  ])("rejects an invalid %s with a field-specific diagnostic", (_field, value, message) => {
-    expect(() => parseRemoteTextOptions(value)).toThrowError(
-      expect.objectContaining({ code: "EINVAL", message }),
-    );
-  });
-
-  it("requires real byte streams and sinks for streaming execution", () => {
-    const stdin = new ReadableStream<Uint8Array>();
-    const stdout = new WritableStream<Uint8Array>();
-    const stderr = new WritableStream<Uint8Array>();
-    expect(parseRemoteExecuteToOptions({ script: "cat", stdin, stdout, stderr })).toEqual({
-      script: "cat",
-      stdin,
-      stdout,
-      stderr,
-    });
-
-    expect(() =>
-      parseRemoteExecuteToOptions({ script: "cat", stdin: "text", stdout, stderr }),
-    ).toThrowError(
-      expect.objectContaining({ code: "EINVAL", message: "options.stdin must be a byte stream" }),
-    );
-    expect(() =>
-      parseRemoteExecuteToOptions({ script: "cat", stdin, stdout: {}, stderr }),
-    ).toThrowError(
-      expect.objectContaining({
-        code: "EINVAL",
-        message: "options.stdout and options.stderr must be byte sinks",
-      }),
-    );
-  });
+  expect(() =>
+    parseRemoteExecuteToOptions({ script: "cat", stdin: "text", stdout, stderr }),
+  ).toThrowError(
+    expect.objectContaining({ code: "EINVAL", message: "options.stdin must be a byte stream" }),
+  );
+  expect(() =>
+    parseRemoteExecuteToOptions({ script: "cat", stdin, stdout: {}, stderr }),
+  ).toThrowError(
+    expect.objectContaining({
+      code: "EINVAL",
+      message: "options.stdout and options.stderr must be byte sinks",
+    }),
+  );
 });
 
 describe("VFS RPC option parsing", () => {

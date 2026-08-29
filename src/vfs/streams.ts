@@ -97,6 +97,46 @@ export async function collectBytes(
   }
 }
 
+function collectMaterialized(
+  body: Exclude<ByteBody, ReadableStream<Uint8Array>>,
+  materialized: Uint8Array,
+  maximumBytes: number,
+  chunkBytes: number,
+  account?: (delta: number) => void,
+): CollectedBytes | undefined {
+  if (materialized.byteLength > chunkBytes && materialized.byteLength <= maximumBytes) {
+    return undefined;
+  }
+  const sizeBytes = materialized.byteLength;
+  account?.(sizeBytes);
+  if (sizeBytes > maximumBytes) {
+    throw new VfsError("EFBIG", `stream exceeds the ${maximumBytes}-byte limit`);
+  }
+  return {
+    chunks: sizeBytes === 0 ? [] : [typeof body === "string" ? materialized : materialized.slice()],
+    sizeBytes,
+  };
+}
+
+async function consumeByteStream(
+  stream: ReadableStream<Uint8Array>,
+  append: (chunk: Uint8Array) => void,
+): Promise<void> {
+  const reader = stream.getReader();
+  try {
+    for (;;) {
+      const read = await reader.read();
+      if (read.done) return;
+      append(read.value);
+    }
+  } catch (error) {
+    await reader.cancel(error).catch(() => undefined);
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 /** Collects directly into fixed-size slabs, avoiding an intermediate copy before rechunking. */
 export async function collectRechunkedBytes(
   body: ByteBody,
@@ -106,21 +146,11 @@ export async function collectRechunkedBytes(
 ): Promise<CollectedBytes> {
   const chunks: Uint8Array[] = [];
   let sizeBytes = 0;
-  const materialized = body instanceof ReadableStream ? undefined : rawBodyBytes(body);
-  if (
-    materialized !== undefined &&
-    (materialized.byteLength <= chunkBytes || materialized.byteLength > maximumBytes)
-  ) {
-    sizeBytes = materialized.byteLength;
-    account?.(sizeBytes);
-    if (sizeBytes > maximumBytes) {
-      throw new VfsError("EFBIG", `stream exceeds the ${maximumBytes}-byte limit`);
-    }
-    return {
-      chunks:
-        sizeBytes === 0 ? [] : [typeof body === "string" ? materialized : materialized.slice()],
-      sizeBytes,
-    };
+  let materialized: Uint8Array | undefined;
+  if (!(body instanceof ReadableStream)) {
+    materialized = rawBodyBytes(body);
+    const collected = collectMaterialized(body, materialized, maximumBytes, chunkBytes, account);
+    if (collected !== undefined) return collected;
   }
   let current = new Uint8Array(chunkBytes);
   let used = 0;
@@ -152,19 +182,7 @@ export async function collectRechunkedBytes(
     return { chunks, sizeBytes };
   }
 
-  const reader = body.getReader();
-  try {
-    while (true) {
-      const read = await reader.read();
-      if (read.done) break;
-      append(read.value);
-    }
-  } catch (error) {
-    await reader.cancel(error).catch(() => undefined);
-    throw error;
-  } finally {
-    reader.releaseLock();
-  }
+  await consumeByteStream(body, append);
   if (used > 0) chunks.push(current.slice(0, used));
   return { chunks, sizeBytes };
 }

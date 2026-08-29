@@ -1,6 +1,15 @@
 import { VfsError } from "../core/errors.js";
-import { utf8ByteLength } from "../core/unicode.js";
+import {
+  type ArithmeticOperator,
+  type ArithmeticSyntaxError,
+  decimalOrOctalInteger,
+  arithmeticSyntax as syntax,
+  type ArithmeticToken as Token,
+  tokenizeArithmetic,
+} from "./arithmetic-lexer.js";
 import { ShellNounsetError } from "./errors.js";
+
+export { ArithmeticSyntaxError } from "./arithmetic-lexer.js";
 
 type UnaryOperator = "+" | "-" | "!" | "~";
 type UpdateOperator = "++" | "--";
@@ -65,149 +74,12 @@ export interface ParsedArithmetic {
   nodeCount: number;
 }
 
-const OPERATORS = [
-  "<<=",
-  ">>=",
-  "++",
-  "--",
-  "**",
-  "||",
-  "&&",
-  "==",
-  "!=",
-  "<=",
-  ">=",
-  "<<",
-  ">>",
-  "+=",
-  "-=",
-  "*=",
-  "/=",
-  "%=",
-  "&=",
-  "^=",
-  "|=",
-  "=",
-  "?",
-  ":",
-  ",",
-  "(",
-  ")",
-  "+",
-  "-",
-  "*",
-  "/",
-  "%",
-  "!",
-  "~",
-  "<",
-  ">",
-  "&",
-  "^",
-  "|",
-] as const;
-
-type ArithmeticOperator = (typeof OPERATORS)[number];
-
-type Token =
-  | { type: "integer"; value: bigint; offset: number }
-  | { type: "identifier"; value: string; offset: number }
-  | { type: "operator"; value: ArithmeticOperator; offset: number }
-  | { type: "end"; offset: number };
-
 function isAssignmentOperator(value: ArithmeticOperator): value is AssignmentOperator {
   return Object.hasOwn(ASSIGNMENT_BINARY, value);
 }
 
 function isBinaryOperator(value: ArithmeticOperator): value is BinaryOperator {
   return Object.hasOwn(BINARY_PRECEDENCE, value);
-}
-
-export class ArithmeticSyntaxError extends VfsError {
-  readonly detail: string;
-  readonly byteOffset: number;
-
-  constructor(detail: string, source: string, offset: number) {
-    const byteOffset = utf8ByteLength(source.slice(0, offset));
-    super("EINVAL", `${detail} in arithmetic expression at byte ${byteOffset}`);
-    this.detail = detail;
-    this.byteOffset = byteOffset;
-  }
-}
-
-function syntax(message: string, source: string, offset: number): ArithmeticSyntaxError {
-  return new ArithmeticSyntaxError(message, source, offset);
-}
-
-function decimalOrOctalInteger(digits: string): bigint | undefined {
-  if (digits.length > 1 && digits.startsWith("0")) {
-    if (!/^[0-7]+$/u.test(digits)) return undefined;
-    return BigInt(`0o${digits}`);
-  }
-  return BigInt(digits);
-}
-
-function tokenize(source: string): Token[] {
-  const tokens: Token[] = [];
-  let offset = 0;
-  while (offset < source.length) {
-    const character = source[offset];
-    if (character === undefined) break;
-    if (/\s/u.test(character)) {
-      offset += 1;
-      continue;
-    }
-    if (/[0-9]/u.test(character)) {
-      const start = offset;
-      if (source.startsWith("0x", offset) || source.startsWith("0X", offset)) {
-        offset += 2;
-        const digits = /^[0-9a-f]+/iu.exec(source.slice(offset))?.[0] ?? "";
-        if (digits.length === 0) throw syntax("invalid hexadecimal literal", source, start);
-        offset += digits.length;
-        tokens.push({ type: "integer", value: BigInt(`0x${digits}`), offset: start });
-      } else {
-        const digits = /^[0-9]+/u.exec(source.slice(offset))?.[0] ?? "";
-        offset += digits.length;
-        const value = decimalOrOctalInteger(digits);
-        if (value === undefined) throw syntax("invalid octal literal", source, start);
-        tokens.push({ type: "integer", value, offset: start });
-      }
-      continue;
-    }
-    if (/[A-Za-z_]/u.test(character)) {
-      const start = offset;
-      const value = /^[A-Za-z_][A-Za-z0-9_]*/u.exec(source.slice(offset))?.[0] ?? "";
-      offset += value.length;
-      tokens.push({ type: "identifier", value, offset: start });
-      continue;
-    }
-    if (character === "$") {
-      const start = offset;
-      if (source[offset + 1] === "{") {
-        const close = source.indexOf("}", offset + 2);
-        if (close < 0) throw syntax("unterminated variable reference", source, start);
-        const value = source.slice(offset + 2, close);
-        if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(value)) {
-          throw syntax("invalid arithmetic variable", source, start);
-        }
-        tokens.push({ type: "identifier", value, offset: start });
-        offset = close + 1;
-      } else {
-        const value = /^[A-Za-z_][A-Za-z0-9_]*/u.exec(source.slice(offset + 1))?.[0];
-        if (value === undefined) throw syntax("invalid arithmetic variable", source, start);
-        tokens.push({ type: "identifier", value, offset: start });
-        offset += value.length + 1;
-      }
-      continue;
-    }
-    const operator = OPERATORS.find((candidate) => source.startsWith(candidate, offset));
-    if (operator === undefined)
-      throw syntax(`unexpected character ${JSON.stringify(character)}`, source, offset);
-    tokens.push({ type: "operator", value: operator, offset });
-    offset += operator.length;
-  }
-  tokens.push({ type: "end", offset: source.length });
-  return tokens;
 }
 
 class ArithmeticParser {
@@ -221,7 +93,7 @@ class ArithmeticParser {
 
   constructor(source: string, maximumNodes: number, maximumDepth: number) {
     this.source = source;
-    this.tokens = tokenize(source);
+    this.tokens = tokenizeArithmetic(source);
     this.maximumNodes = maximumNodes;
     this.maximumDepth = maximumDepth;
   }
@@ -453,54 +325,93 @@ function divide(left: bigint, right: bigint, remainder: boolean): bigint {
   return remainder ? left % right : left / right;
 }
 
+function power(left: bigint, right: bigint): bigint {
+  if (right < 0n) throw new VfsError("EINVAL", "negative arithmetic exponent");
+  if (right > 63n) throw new VfsError("E2BIG", "arithmetic exponent is too large");
+  return int64(left ** right);
+}
+
+const BINARY_OPERATIONS: Readonly<
+  Record<Exclude<BinaryOperator, "**">, (left: bigint, right: bigint) => bigint>
+> = {
+  "+": (left, right) => int64(left + right),
+  "-": (left, right) => int64(left - right),
+  "*": (left, right) => int64(left * right),
+  "/": (left, right) => int64(divide(left, right, false)),
+  "%": (left, right) => int64(divide(left, right, true)),
+  "<<": (left, right) => int64(left << BigInt.asUintN(6, right)),
+  ">>": (left, right) => int64(left >> BigInt.asUintN(6, right)),
+  "<": (left, right) => (left < right ? 1n : 0n),
+  "<=": (left, right) => (left <= right ? 1n : 0n),
+  ">": (left, right) => (left > right ? 1n : 0n),
+  ">=": (left, right) => (left >= right ? 1n : 0n),
+  "==": (left, right) => (left === right ? 1n : 0n),
+  "!=": (left, right) => (left !== right ? 1n : 0n),
+  "&": (left, right) => int64(left & right),
+  "^": (left, right) => int64(left ^ right),
+  "|": (left, right) => int64(left | right),
+  "&&": (left, right) => truth(left) & truth(right),
+  "||": (left, right) => truth(left) | truth(right),
+};
+
 function binary(operator: BinaryOperator, left: bigint, right: bigint): bigint {
-  switch (operator) {
-    case "+":
-      return int64(left + right);
-    case "-":
-      return int64(left - right);
-    case "*":
-      return int64(left * right);
-    case "/":
-      return int64(divide(left, right, false));
-    case "%":
-      return int64(divide(left, right, true));
-    case "**": {
-      if (right < 0n) throw new VfsError("EINVAL", "negative arithmetic exponent");
-      if (right > 63n) throw new VfsError("E2BIG", "arithmetic exponent is too large");
-      return int64(left ** right);
-    }
-    case "<<":
-      return int64(left << BigInt.asUintN(6, right));
-    case ">>":
-      return int64(left >> BigInt.asUintN(6, right));
-    case "<":
-      return left < right ? 1n : 0n;
-    case "<=":
-      return left <= right ? 1n : 0n;
-    case ">":
-      return left > right ? 1n : 0n;
-    case ">=":
-      return left >= right ? 1n : 0n;
-    case "==":
-      return left === right ? 1n : 0n;
-    case "!=":
-      return left !== right ? 1n : 0n;
-    case "&":
-      return int64(left & right);
-    case "^":
-      return int64(left ^ right);
-    case "|":
-      return int64(left | right);
-    case "&&":
-      return truth(left) & truth(right);
-    case "||":
-      return truth(left) | truth(right);
-  }
+  return operator === "**" ? power(left, right) : BINARY_OPERATIONS[operator](left, right);
 }
 
 function assignmentBinary(operator: AssignmentOperator): BinaryOperator | undefined {
   return ASSIGNMENT_BINARY[operator];
+}
+
+function unaryValue(node: Extract<ArithmeticNode, { type: "unary" }>, value: bigint): bigint {
+  if (node.operator === "+") return value;
+  if (node.operator === "-") return int64(-value);
+  if (node.operator === "!") return value === 0n ? 1n : 0n;
+  return int64(~value);
+}
+
+function updateValue(
+  node: Extract<ArithmeticNode, { type: "update" }>,
+  env: Map<string, string>,
+  nounset: boolean,
+): bigint {
+  const previous = readVariable(node.name, env, nounset);
+  const value = int64(previous + (node.operator === "++" ? 1n : -1n));
+  env.set(node.name, String(value));
+  return node.prefix ? value : previous;
+}
+
+function binaryValue(
+  node: Extract<ArithmeticNode, { type: "binary" }>,
+  env: Map<string, string>,
+  nounset: boolean,
+): bigint {
+  const left = evaluateArithmetic(node.left, env, nounset);
+  if (node.operator === "&&" && left === 0n) return 0n;
+  if (node.operator === "||" && left !== 0n) return 1n;
+  return binary(node.operator, left, evaluateArithmetic(node.right, env, nounset));
+}
+
+function assignmentValue(
+  node: Extract<ArithmeticNode, { type: "assignment" }>,
+  env: Map<string, string>,
+  nounset: boolean,
+): bigint {
+  const operation = assignmentBinary(node.operator);
+  const left = operation === undefined ? undefined : readVariable(node.name, env, nounset);
+  const right = evaluateArithmetic(node.value, env, nounset);
+  const value = operation === undefined ? right : binary(operation, left ?? 0n, right);
+  env.set(node.name, String(value));
+  return value;
+}
+
+function commaValue(
+  expressions: readonly ArithmeticNode[],
+  env: Map<string, string>,
+  nounset: boolean,
+): bigint {
+  let value = 0n;
+  for (const expression of expressions) value = evaluateArithmetic(expression, env, nounset);
+  return value;
 }
 
 export function evaluateArithmetic(
@@ -513,45 +424,22 @@ export function evaluateArithmetic(
       return int64(node.value);
     case "variable":
       return readVariable(node.name, env, nounset);
-    case "unary": {
-      const operand = evaluateArithmetic(node.operand, env, nounset);
-      if (node.operator === "+") return operand;
-      if (node.operator === "-") return int64(-operand);
-      if (node.operator === "!") return operand === 0n ? 1n : 0n;
-      return int64(~operand);
-    }
-    case "update": {
-      const previous = readVariable(node.name, env, nounset);
-      const value = int64(previous + (node.operator === "++" ? 1n : -1n));
-      env.set(node.name, String(value));
-      return node.prefix ? value : previous;
-    }
-    case "binary": {
-      const left = evaluateArithmetic(node.left, env, nounset);
-      if (node.operator === "&&" && left === 0n) return 0n;
-      if (node.operator === "||" && left !== 0n) return 1n;
-      return binary(node.operator, left, evaluateArithmetic(node.right, env, nounset));
-    }
+    case "unary":
+      return unaryValue(node, evaluateArithmetic(node.operand, env, nounset));
+    case "update":
+      return updateValue(node, env, nounset);
+    case "binary":
+      return binaryValue(node, env, nounset);
     case "conditional":
       return evaluateArithmetic(
         evaluateArithmetic(node.condition, env, nounset) === 0n ? node.alternate : node.consequent,
         env,
         nounset,
       );
-    case "assignment": {
-      const operation = assignmentBinary(node.operator);
-      const left = operation === undefined ? undefined : readVariable(node.name, env, nounset);
-      const right = evaluateArithmetic(node.value, env, nounset);
-      const value = operation === undefined ? right : binary(operation, left ?? 0n, right);
-      env.set(node.name, String(value));
-      return value;
-    }
-    case "comma": {
-      let value = 0n;
-      for (const expression of node.expressions)
-        value = evaluateArithmetic(expression, env, nounset);
-      return value;
-    }
+    case "assignment":
+      return assignmentValue(node, env, nounset);
+    case "comma":
+      return commaValue(node.expressions, env, nounset);
   }
 }
 

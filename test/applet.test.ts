@@ -116,6 +116,26 @@ const DEFAULT_REGISTRY = [
   "xargs",
 ] as const;
 
+function expectAppletSpecification(
+  command: (typeof defaultShellCommands)[number],
+  seen: Set<string>,
+): void {
+  const spec = hasAppletSpec(command) ? command.spec : undefined;
+  expect(spec, command.name).toBeDefined();
+  if (spec === undefined) throw new Error(`missing applet specification: ${command.name}`);
+  expect(spec.name).toBe(command.name);
+  expect(spec.summary.length).toBeGreaterThan(0);
+  // A summary is a fragment inside a help table, not a sentence.
+  expect(spec.summary).toBe(spec.summary.trim());
+  expect(spec.summary.endsWith(".")).toBe(false);
+  expect(spec.summary[0]).toBe(spec.summary[0]?.toLowerCase());
+  expect(spec.usage).toBe(spec.usage.trim());
+  for (const name of [spec.name, ...(spec.aliases ?? [])]) {
+    expect(seen.has(name), name).toBe(false);
+    seen.add(name);
+  }
+}
+
 describe("applet specifications", () => {
   it("registers exactly the documented convenience preset", () => {
     expect(defaultShellCommands.map((command) => command.name).sort()).toEqual([
@@ -125,22 +145,7 @@ describe("applet specifications", () => {
 
   it("publishes a unique, non-empty specification for every default applet", () => {
     const seen = new Set<string>();
-    for (const command of defaultShellCommands) {
-      const spec = hasAppletSpec(command) ? command.spec : undefined;
-      expect(spec, command.name).toBeDefined();
-      if (spec === undefined) continue;
-      expect(spec.name).toBe(command.name);
-      expect(spec.summary.length).toBeGreaterThan(0);
-      // A summary is a fragment inside a help table, not a sentence.
-      expect(spec.summary).toBe(spec.summary.trim());
-      expect(spec.summary.endsWith(".")).toBe(false);
-      expect(spec.summary[0]).toBe(spec.summary[0]?.toLowerCase());
-      expect(spec.usage).toBe(spec.usage.trim());
-      for (const name of [spec.name, ...(spec.aliases ?? [])]) {
-        expect(seen.has(name), name).toBe(false);
-        seen.add(name);
-      }
-    }
+    for (const command of defaultShellCommands) expectAppletSpecification(command, seen);
   });
 
   it("renders a usage synopsis with and without operands", () => {

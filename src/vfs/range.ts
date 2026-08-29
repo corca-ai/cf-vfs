@@ -5,6 +5,11 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function validRange(name: string, value: unknown): boolean {
+  const minimum = name === "offset" ? 0 : 1;
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= minimum;
+}
+
 /** Validates the byte-range shape shared by inline SQLite and opaque R2 reads. */
 export function validateByteRange(
   range: unknown,
@@ -13,26 +18,20 @@ export function validateByteRange(
   if (range === undefined) return;
   if (!isRecord(range)) throw new VfsError("EINVAL", "byte range must be an object", path);
   for (const [name, value] of Object.entries(range)) {
-    if (name !== "offset" && name !== "length" && name !== "suffix") {
-      throw new VfsError("EINVAL", `unknown byte range field: ${name}`, path);
-    }
-    if (
-      typeof value !== "number" ||
-      !Number.isSafeInteger(value) ||
-      value < 0 ||
-      (name !== "offset" && value === 0)
-    ) {
-      throw new VfsError(
-        "EINVAL",
-        `${name} must be ${name === "offset" ? "a non-negative" : "a positive"} integer`,
-        path,
-      );
+    const known = ["offset", "length", "suffix"].includes(name);
+    if (!known) throw new VfsError("EINVAL", `unknown byte range field: ${name}`, path);
+    if (!validRange(name, value)) {
+      const constraint = name === "offset" ? "a non-negative" : "a positive";
+      throw new VfsError("EINVAL", `${name} must be ${constraint} integer`, path);
     }
   }
   const hasOffset = Object.hasOwn(range, "offset");
   const hasLength = Object.hasOwn(range, "length");
   const hasSuffix = Object.hasOwn(range, "suffix");
-  if ((!hasOffset && !hasLength && !hasSuffix) || (hasSuffix && (hasOffset || hasLength))) {
+  if (!hasOffset && !hasLength && !hasSuffix) {
+    throw new VfsError("EINVAL", "byte range must use offset/length or suffix", path);
+  }
+  if (hasSuffix && (hasOffset || hasLength)) {
     throw new VfsError("EINVAL", "byte range must use offset/length or suffix", path);
   }
 }

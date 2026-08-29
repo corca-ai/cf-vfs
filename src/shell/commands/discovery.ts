@@ -1,5 +1,5 @@
 import { compareUtf8 } from "../../core/path.js";
-import type { ShellCommandResolution } from "../types.js";
+import type { ShellCommandContext, ShellCommandResolution } from "../types.js";
 import {
   type AppletSpec,
   type AppletSpecWithOptions,
@@ -35,6 +35,41 @@ const PRINTENV = {
   usage: "[NAME...]",
   summary: "prints the environment, or the value of each named variable",
 } as const satisfies AppletSpec;
+
+function printenvNames(argv: readonly string[]): readonly string[] {
+  const names = argv[0] === "--" ? argv.slice(1) : argv;
+  for (const value of names) {
+    if (value.startsWith("-") && value !== "-") {
+      throw appletUsageError(PRINTENV, `unsupported option ${value}`);
+    }
+  }
+  return names;
+}
+
+async function writeEnvironment(
+  context: ShellCommandContext,
+  output: BufferedTextWriter,
+): Promise<number> {
+  const names = [...context.session.env.keys()]
+    .filter((name) => /^[A-Za-z_][A-Za-z0-9_]*$/u.test(name))
+    .sort(compareUtf8);
+  for (const name of names) await output.write(`${name}=${context.session.env.get(name) ?? ""}\n`);
+  return 0;
+}
+
+async function writeEnvironmentValues(
+  context: ShellCommandContext,
+  output: BufferedTextWriter,
+  names: readonly string[],
+): Promise<number> {
+  let status = 0;
+  for (const name of names) {
+    const value = context.session.env.get(name);
+    if (value === undefined) status = 1;
+    else await output.write(`${value}\n`);
+  }
+  return status;
+}
 
 /**
  * Renders the resolution of `name` the way `type` reports it.
@@ -140,37 +175,18 @@ export const whichCommand = /* @__PURE__ */ defineApplet(WHICH, async (context, 
 export const printenvCommand = /* @__PURE__ */ defineApplet(
   PRINTENV,
   async (context, argv, fds) => {
-    const names = argv[0] === "--" ? argv.slice(1) : argv;
-    for (const value of names) {
-      if (value.startsWith("-") && value !== "-") {
-        throw appletUsageError(PRINTENV, `unsupported option ${value}`);
-      }
-    }
+    const names = printenvNames(argv);
     const output = new BufferedTextWriter(context, fds[1]);
-    let status = 0;
     try {
-      if (names.length === 0) {
-        const names = [...context.session.env.keys()]
-          .filter((name) => /^[A-Za-z_][A-Za-z0-9_]*$/u.test(name))
-          .sort(compareUtf8);
-        for (const name of names) {
-          await output.write(`${name}=${context.session.env.get(name) ?? ""}\n`);
-        }
-      } else {
-        for (const name of names) {
-          const value = context.session.env.get(name);
-          if (value === undefined) {
-            status = 1;
-            continue;
-          }
-          await output.write(`${value}\n`);
-        }
-      }
+      const status =
+        names.length === 0
+          ? await writeEnvironment(context, output)
+          : await writeEnvironmentValues(context, output, names);
       await output.flush();
+      return status;
     } finally {
       output.abort();
     }
-    return status;
   },
 );
 

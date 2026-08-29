@@ -85,128 +85,152 @@ export function sinkFromWritable(writable: WritableStream<Uint8Array>): ShellSin
   return new SharedSink({ writer: writable.getWriter(), references: 1, terminal: false });
 }
 
-export function createBytePipe(options: BytePipeOptions): BytePipe {
-  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
-  let bytesWritten = 0;
-  let cancelled: unknown;
-  let pullWaiters: Array<() => void> = [];
+class BytePipeState {
+  #controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+  #bytesWritten = 0;
+  #cancelled: unknown;
+  #pullWaiters: Array<() => void> = [];
+  readonly options: BytePipeOptions;
+  readonly readable: ReadableStream<Uint8Array>;
+  readonly writable: WritableStream<Uint8Array>;
 
-  const cancellationError = (): unknown =>
-    options.signal.reason ?? new VfsError("ECANCELED", "execution was cancelled");
+  constructor(options: BytePipeOptions) {
+    this.options = options;
+    this.readable = this.#createReadable();
+    this.writable = this.#createWritable();
+  }
 
-  function wakeWriters(): void {
-    if (cancelled === undefined && (controller?.desiredSize ?? 0) <= 0) return;
-    const waiters = pullWaiters;
-    pullWaiters = [];
+  #cancellationError(): unknown {
+    return this.options.signal.reason ?? new VfsError("ECANCELED", "execution was cancelled");
+  }
+
+  #closedError(): Error {
+    return this.#cancelled instanceof Error
+      ? this.#cancelled
+      : new VfsError("EPIPE", `${this.options.name} consumer closed early`);
+  }
+
+  #wakeWriters(): void {
+    if (this.#cancelled === undefined && (this.#controller?.desiredSize ?? 0) <= 0) return;
+    const waiters = this.#pullWaiters;
+    this.#pullWaiters = [];
     for (const resolve of waiters) resolve();
   }
 
-  const readable = new ReadableStream<Uint8Array>(
-    {
-      start(value) {
-        controller = value;
-      },
-      pull() {
-        wakeWriters();
-      },
-      cancel(reason) {
-        cancelled =
-          options.onConsumerCancel === undefined
-            ? new DownstreamClosedError(`${options.name} consumer closed early`)
-            : (reason ?? new VfsError("ECANCELED", `${options.name} consumer cancelled execution`));
-        if (options.onConsumerCancel !== undefined) {
-          const cancelExecution = options.onConsumerCancel;
-          const cancellation = cancelled;
-          void Promise.resolve().then(() => cancelExecution(cancellation));
-        }
-        wakeWriters();
-      },
-    },
-    {
-      highWaterMark: Math.min(options.maximumBytes, 64 * 1024),
-      size: (chunk) => chunk.byteLength,
-    },
-  );
+  #consumerCancelled(reason: unknown): void {
+    this.#cancelled =
+      this.options.onConsumerCancel === undefined
+        ? new DownstreamClosedError(`${this.options.name} consumer closed early`)
+        : (reason ??
+          new VfsError("ECANCELED", `${this.options.name} consumer cancelled execution`));
+    if (this.options.onConsumerCancel !== undefined) {
+      const cancelExecution = this.options.onConsumerCancel;
+      const cancellation = this.#cancelled;
+      void Promise.resolve().then(() => cancelExecution(cancellation));
+    }
+    this.#wakeWriters();
+  }
 
-  const onAbort = (): void => {
-    if (cancelled !== undefined) return;
-    cancelled = cancellationError();
+  #createReadable(): ReadableStream<Uint8Array> {
+    return new ReadableStream<Uint8Array>(
+      {
+        start: (controller) => {
+          this.#controller = controller;
+        },
+        pull: () => this.#wakeWriters(),
+        cancel: (reason) => this.#consumerCancelled(reason),
+      },
+      {
+        highWaterMark: Math.min(this.options.maximumBytes, 64 * 1024),
+        size: (chunk) => chunk.byteLength,
+      },
+    );
+  }
+
+  abortFromSignal = (): void => {
+    if (this.#cancelled !== undefined) return;
+    this.#cancelled = this.#cancellationError();
     try {
-      controller?.error(cancelled);
+      this.#controller?.error(this.#cancelled);
     } catch {
       // The consumer may already have closed the stream.
     }
-    wakeWriters();
+    this.#wakeWriters();
   };
-  if (options.signal.aborted) onAbort();
-  else options.signal.addEventListener("abort", onAbort, { once: true });
 
-  function removeAbortListener(): void {
-    options.signal.removeEventListener("abort", onAbort);
+  #removeAbortListener(): void {
+    this.options.signal.removeEventListener("abort", this.abortFromSignal);
   }
 
-  const writable = new WritableStream<Uint8Array>({
-    async write(chunk) {
-      try {
-        if (options.signal.aborted) {
-          throw cancellationError();
-        }
-        if (cancelled !== undefined) {
-          throw cancelled instanceof Error
-            ? cancelled
-            : new VfsError("EPIPE", `${options.name} consumer closed early`);
-        }
-        bytesWritten += chunk.byteLength;
-        options.account?.(chunk.byteLength);
-        if (bytesWritten > options.maximumBytes) {
-          throw new VfsError(
-            "E2BIG",
-            `${options.name} exceeds the ${options.maximumBytes}-byte limit`,
-          );
-        }
-        controller?.enqueue(chunk);
-        if ((controller?.desiredSize ?? 1) <= 0) {
-          let idleTimer: ReturnType<typeof setTimeout> | undefined;
-          if (options.idleTimeoutMs !== undefined && options.onIdle !== undefined) {
-            idleTimer = setTimeout(options.onIdle, options.idleTimeoutMs);
-          }
-          try {
-            await new Promise<void>((resolve) => pullWaiters.push(resolve));
-          } finally {
-            if (idleTimer !== undefined) clearTimeout(idleTimer);
-          }
-          if (options.signal.aborted) throw cancellationError();
-          const reason: unknown = cancelled;
-          if (reason !== undefined) {
-            throw reason instanceof Error
-              ? reason
-              : new VfsError("EPIPE", `${options.name} consumer closed early`);
-          }
-        }
-      } catch (error) {
-        if (cancelled === undefined) {
-          cancelled = error;
-          try {
-            controller?.error(error);
-          } catch {
-            // The reader may have been cancelled concurrently.
-          }
-        }
-        wakeWriters();
-        throw error;
-      }
-    },
-    close() {
-      removeAbortListener();
-      if (cancelled === undefined) controller?.close();
-      wakeWriters();
-    },
-    abort(reason) {
-      removeAbortListener();
-      if (cancelled === undefined) controller?.error(reason);
-      wakeWriters();
-    },
-  });
+  #accept(chunk: Uint8Array): void {
+    if (this.options.signal.aborted) throw this.#cancellationError();
+    if (this.#cancelled !== undefined) throw this.#closedError();
+    this.#bytesWritten += chunk.byteLength;
+    this.options.account?.(chunk.byteLength);
+    if (this.#bytesWritten > this.options.maximumBytes) {
+      throw new VfsError(
+        "E2BIG",
+        `${this.options.name} exceeds the ${this.options.maximumBytes}-byte limit`,
+      );
+    }
+    this.#controller?.enqueue(chunk);
+  }
 
-  return { readable, sink: sinkFromWritable(writable) };
+  async #waitForCapacity(): Promise<void> {
+    if ((this.#controller?.desiredSize ?? 1) > 0) return;
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+    if (this.options.idleTimeoutMs !== undefined && this.options.onIdle !== undefined) {
+      idleTimer = setTimeout(this.options.onIdle, this.options.idleTimeoutMs);
+    }
+    try {
+      await new Promise<void>((resolve) => this.#pullWaiters.push(resolve));
+    } finally {
+      if (idleTimer !== undefined) clearTimeout(idleTimer);
+    }
+    if (this.options.signal.aborted) throw this.#cancellationError();
+    if (this.#cancelled !== undefined) throw this.#closedError();
+  }
+
+  #fail(error: unknown): void {
+    if (this.#cancelled === undefined) {
+      this.#cancelled = error;
+      try {
+        this.#controller?.error(error);
+      } catch {
+        // The reader may have been cancelled concurrently.
+      }
+    }
+    this.#wakeWriters();
+  }
+
+  #createWritable(): WritableStream<Uint8Array> {
+    return new WritableStream<Uint8Array>({
+      write: async (chunk) => {
+        try {
+          this.#accept(chunk);
+          await this.#waitForCapacity();
+        } catch (error) {
+          this.#fail(error);
+          throw error;
+        }
+      },
+      close: () => {
+        this.#removeAbortListener();
+        if (this.#cancelled === undefined) this.#controller?.close();
+        this.#wakeWriters();
+      },
+      abort: (reason) => {
+        this.#removeAbortListener();
+        if (this.#cancelled === undefined) this.#controller?.error(reason);
+        this.#wakeWriters();
+      },
+    });
+  }
+}
+
+export function createBytePipe(options: BytePipeOptions): BytePipe {
+  const state = new BytePipeState(options);
+  if (options.signal.aborted) state.abortFromSignal();
+  else options.signal.addEventListener("abort", state.abortFromSignal, { once: true });
+  return { readable: state.readable, sink: sinkFromWritable(state.writable) };
 }

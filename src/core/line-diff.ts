@@ -31,12 +31,7 @@ function cellAt(cells: Uint32Array, index: number): number {
   return cell;
 }
 
-function lineOperations(
-  before: readonly string[],
-  after: readonly string[],
-  oldOffset = 0,
-  newOffset = 0,
-): LineDiffOperation[] {
+function lcsLengths(before: readonly string[], after: readonly string[]): Uint32Array {
   const columns = after.length + 1;
   const cells = (before.length + 1) * columns;
   if (cells > MAX_LCS_CELLS) {
@@ -55,6 +50,30 @@ function lineOperations(
           : Math.max(cellAt(lengths, (left + 1) * columns + right), cellAt(lengths, index + 1));
     }
   }
+  return lengths;
+}
+
+function shouldDelete(
+  lengths: Uint32Array,
+  columns: number,
+  left: number,
+  right: number,
+  afterLength: number,
+): boolean {
+  return (
+    right >= afterLength ||
+    cellAt(lengths, (left + 1) * columns + right) >= cellAt(lengths, left * columns + right + 1)
+  );
+}
+
+function lineOperations(
+  before: readonly string[],
+  after: readonly string[],
+  oldOffset = 0,
+  newOffset = 0,
+): LineDiffOperation[] {
+  const columns = after.length + 1;
+  const lengths = lcsLengths(before, after);
 
   const operations: LineDiffOperation[] = [];
   let left = 0;
@@ -66,12 +85,7 @@ function lineOperations(
       );
       left += 1;
       right += 1;
-    } else if (
-      left < before.length &&
-      (right >= after.length ||
-        cellAt(lengths, (left + 1) * columns + right) >=
-          cellAt(lengths, left * columns + right + 1))
-    ) {
+    } else if (left < before.length && shouldDelete(lengths, columns, left, right, after.length)) {
       operations.push({
         kind: "delete",
         text: lineAt(before, left),
@@ -96,6 +110,25 @@ function prefixedLine(prefix: "-" | "+", text: string): string {
   return text.endsWith("\n")
     ? `${prefix}${text}`
     : `${prefix}${text}\n\\ No newline at end of file\n`;
+}
+
+function changedHunk(
+  operations: readonly LineDiffOperation[],
+  start: number,
+): { readonly lines: string[]; readonly next: number } {
+  let next = start;
+  while (operations[next] !== undefined && operations[next]?.kind !== "equal") next += 1;
+  const changed = operations.slice(start, next);
+  const first = changed.at(0);
+  if (!first) throw new Error("diff hunk cannot be empty");
+  const deleted = changed.filter((operation) => operation.kind === "delete").length;
+  const inserted = changed.filter((operation) => operation.kind === "insert").length;
+  const lines = [`@@ -${first.oldLine},${deleted} +${first.newLine},${inserted} @@\n`];
+  for (const operation of changed) {
+    if (operation.kind === "delete") lines.push(prefixedLine("-", operation.text));
+    if (operation.kind === "insert") lines.push(prefixedLine("+", operation.text));
+  }
+  return { lines, next };
 }
 
 export function createLineDiff(before: string, after: string): LineDiff {
@@ -146,22 +179,9 @@ export function renderLineDiff(from: string, to: string, diff: LineDiff): string
   while (index < diff.operations.length) {
     while (diff.operations[index]?.kind === "equal") index += 1;
     if (index >= diff.operations.length) break;
-    const start = index;
-    for (;;) {
-      const operation = diff.operations[index];
-      if (!operation || operation.kind === "equal") break;
-      index += 1;
-    }
-    const changed = diff.operations.slice(start, index);
-    const first = changed.at(0);
-    if (!first) throw new Error("diff hunk cannot be empty");
-    const deleted = changed.filter((operation) => operation.kind === "delete");
-    const inserted = changed.filter((operation) => operation.kind === "insert");
-    output.push(`@@ -${first.oldLine},${deleted.length} +${first.newLine},${inserted.length} @@\n`);
-    for (const operation of changed) {
-      if (operation.kind === "delete") output.push(prefixedLine("-", operation.text));
-      if (operation.kind === "insert") output.push(prefixedLine("+", operation.text));
-    }
+    const hunk = changedHunk(diff.operations, index);
+    output.push(...hunk.lines);
+    index = hunk.next;
   }
   return output.join("");
 }

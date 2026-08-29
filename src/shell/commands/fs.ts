@@ -1,8 +1,5 @@
 import { VfsError } from "../../core/errors.js";
-import { matchesGlob } from "../../core/glob.js";
-import { depthFrom, normalizePath } from "../../core/path.js";
-import type { EntryKind, FindOptions, VfsStat } from "../../vfs/types.js";
-import { openContent } from "../content.js";
+import type { VfsStat } from "../../vfs/types.js";
 import {
   identityLabel,
   type ResolvedIdentityIds,
@@ -11,7 +8,6 @@ import {
   resolveIdentityNames,
   type ShellIdentitySource,
 } from "../identity.js";
-import type { ShellCommandContext } from "../types.js";
 import {
   type AppletSpec,
   type AppletSpecWithOptions,
@@ -19,24 +15,13 @@ import {
   defineApplet,
   parseAppletOptions,
 } from "./applet.js";
-import { CHARACTER_DEVICE_TYPE, FILE_TYPE_MASK, isRegularFile, modeString } from "./format.js";
-import {
-  BufferedTextWriter,
-  commandPath,
-  destinationPath,
-  displayPath,
-  pipeToSink,
-  writeText,
-} from "./helpers.js";
+import { isRegularFile, modeString } from "./format.js";
+import { describeKind } from "./fs-content.js";
+import { commandPath, destinationPath, writeText } from "./helpers.js";
 
-/** Paths one `-exec ... +` invocation may carry. */
-const FIND_EXEC_BATCH = 256;
-
-const CAT = {
-  name: "cat",
-  usage: "[FILE...]",
-  summary: "concatenates files, or standard input, to standard output",
-} as const satisfies AppletSpec;
+export { catCommand, fileCommand } from "./fs-content.js";
+export { duCommand, findCommand, treeCommand } from "./fs-find.js";
+export { basenameCommand, dirnameCommand, mktempCommand, realpathCommand } from "./fs-path.js";
 
 const MKDIR = {
   name: "mkdir",
@@ -118,12 +103,6 @@ const CP = {
   },
 } as const satisfies AppletSpecWithOptions<"force" | "recursive" | "preserve" | "no-dereference">;
 
-const FIND = {
-  name: "find",
-  usage: "[PATH...] [-name PATTERN] [-type f|d|l] [-maxdepth N] [-print|-print0|-exec ... ;|+]",
-  summary: "walks a subtree and prints or runs a command on matching paths",
-} as const satisfies AppletSpec;
-
 const STAT = {
   name: "stat",
   usage: "[-L] [-c FORMAT] PATH...",
@@ -147,6 +126,36 @@ const CHOWN = {
 } as const satisfies AppletSpec;
 
 const SYMBOLIC_MODE = /^([ugoa]*)([-+=])([rwx]*)$/u;
+const MODE_CLASSES = [
+  ["u", 6],
+  ["g", 3],
+  ["o", 0],
+] as const;
+
+function requestedPermissionBits(permissions: string): number {
+  let bits = 0;
+  if (permissions.includes("r")) bits |= 0o4;
+  if (permissions.includes("w")) bits |= 0o2;
+  if (permissions.includes("x")) bits |= 0o1;
+  return bits;
+}
+
+function selectedModeBits(who: string, permissions: string): number {
+  const requested = requestedPermissionBits(permissions);
+  let bits = 0;
+  for (const [name, shift] of MODE_CLASSES) {
+    if (who.includes(name)) bits |= requested << shift;
+  }
+  return bits;
+}
+
+function clearSelectedModeBits(permission: number, who: string): number {
+  let cleared = permission;
+  for (const [name, shift] of MODE_CLASSES) {
+    if (who.includes(name)) cleared &= ~(0o7 << shift);
+  }
+  return cleared;
+}
 
 /**
  * Applies one symbolic mode clause to existing permission bits.
@@ -162,92 +171,12 @@ function applySymbolicMode(permission: number, clause: string, spec: AppletSpec)
   const [, whoValue = "", operator = "", permissions = ""] = match;
   // A bare operator means every class, exactly as `chmod +x` does.
   const who = whoValue === "" || whoValue.includes("a") ? "ugo" : whoValue;
-  let bits = 0;
-  for (const shift of [
-    ["u", 6],
-    ["g", 3],
-    ["o", 0],
-  ] as const) {
-    if (!who.includes(shift[0])) continue;
-    if (permissions.includes("r")) bits |= 0o4 << shift[1];
-    if (permissions.includes("w")) bits |= 0o2 << shift[1];
-    if (permissions.includes("x")) bits |= 0o1 << shift[1];
-  }
+  const bits = selectedModeBits(who, permissions);
   if (operator === "+") return permission | bits;
   if (operator === "-") return permission & ~bits;
   // `=` replaces only the classes the clause names.
-  let cleared = permission;
-  for (const shift of [
-    ["u", 6],
-    ["g", 3],
-    ["o", 0],
-  ] as const) {
-    if (who.includes(shift[0])) cleared &= ~(0o7 << shift[1]);
-  }
-  return cleared | bits;
+  return clearSelectedModeBits(permission, who) | bits;
 }
-
-const DU = {
-  name: "du",
-  usage: "[PATH...]",
-  summary: "reports subtree size in kibibytes",
-} as const satisfies AppletSpec;
-
-const TREE = {
-  name: "tree",
-  usage: "[PATH]",
-  summary: "prints an indented subtree listing",
-} as const satisfies AppletSpec;
-
-const BASENAME = {
-  name: "basename",
-  usage: "PATH",
-  summary: "prints the final component of a path",
-} as const satisfies AppletSpec;
-
-const DIRNAME = {
-  name: "dirname",
-  usage: "PATH",
-  summary: "prints the directory component of a path",
-} as const satisfies AppletSpec;
-
-const REALPATH = {
-  name: "realpath",
-  usage: "PATH...",
-  summary: "prints the normalized absolute path of an existing entry",
-} as const satisfies AppletSpec;
-
-const MKTEMP = {
-  name: "mktemp",
-  usage: "[TEMPLATE]",
-  summary: "creates a uniquely named empty file",
-} as const satisfies AppletSpec;
-
-const FILE = {
-  name: "file",
-  usage: "PATH...",
-  summary: "classifies a path as directory, inline data, or opaque content",
-} as const satisfies AppletSpec;
-
-export const catCommand = /* @__PURE__ */ defineApplet(CAT, async (context, argv, fds) => {
-  if (argv.length === 0) {
-    await pipeToSink(context, fds[0], fds[1]);
-    return 0;
-  }
-  for (const path of argv) {
-    if (path === "-") {
-      await pipeToSink(context, fds[0], fds[1]);
-      continue;
-    }
-    const body = await openContent(context.fileSystem, commandPath(context, path), {
-      reader: context.content,
-      access: context.policy.opaqueContent,
-      signal: context.signal,
-    });
-    await pipeToSink(context, body.stream, fds[1]);
-  }
-  return 0;
-});
 
 export const mkdirCommand = /* @__PURE__ */ defineApplet(MKDIR, async (context, argv) => {
   const parsed = parseAppletOptions(MKDIR, argv);
@@ -359,154 +288,6 @@ export const cpCommand = /* @__PURE__ */ defineApplet(CP, async (context, argv) 
   return 0;
 });
 
-function boundedFind(
-  context: ShellCommandContext,
-  options: Pick<FindOptions, "path" | "includeRoot">,
-): VfsStat[] {
-  // Ask for one sentinel entry beyond the budget. `find()` keeps one scan
-  // context across its internal pages, so a credential view pays its set-based
-  // subtree permission preflight once rather than once per page.
-  const maximum = context.budget.limits.maxGlobMatches;
-  const entries = context.fileSystem.find({
-    ...options,
-    limit: maximum === Number.MAX_SAFE_INTEGER ? maximum : maximum + 1,
-  });
-  // Charge before retaining or printing the result, so crossing the limit can
-  // never return a plausible truncated traversal.
-  context.budget.glob(entries.length);
-  return entries;
-}
-
-/**
- * Walks a subtree and prints or runs a command on matching paths.
- *
- * `-print0` separates with NUL so a path containing a newline survives the
- * hand-off to `xargs -0`. `-exec` dispatches an already-expanded argv through
- * the same registry, policy, and budget as any other command, so a matched path
- * can never become shell syntax; `;` runs once per path and `+` batches, both
- * charging the command budget per invocation.
- */
-export const findCommand = /* @__PURE__ */ defineApplet(FIND, async (context, argv, fds) => {
-  const roots: string[] = [];
-  let name: string | undefined;
-  let type: EntryKind | undefined;
-  let maxDepth: number | undefined;
-  let separator: string | undefined;
-  let exec: { argv: string[]; batch: boolean } | undefined;
-  let index = 0;
-  while (index < argv.length && !(argv[index] ?? "").startsWith("-"))
-    roots.push(argv[index++] ?? ".");
-  if (roots.length === 0) roots.push(".");
-  while (index < argv.length) {
-    const option = argv[index++];
-    if (option === "-name") {
-      name = argv[index++];
-      if (name === undefined) throw appletUsageError(FIND, "-name requires a pattern");
-    } else if (option === "-type") {
-      const value = argv[index++];
-      if (value === "f") type = "file";
-      else if (value === "d") type = "directory";
-      else if (value === "l") type = "symlink";
-      else throw appletUsageError(FIND, "-type must be f, d, or l");
-    } else if (option === "-maxdepth") {
-      const value = argv[index++];
-      if (value === undefined || !/^[0-9]+$/u.test(value)) {
-        throw appletUsageError(FIND, "-maxdepth requires a non-negative integer");
-      }
-      maxDepth = Number(value);
-    } else if (option === "-print") separator = "\n";
-    else if (option === "-print0") separator = "\0";
-    else if (option === "-exec") {
-      const command: string[] = [];
-      let terminator: string | undefined;
-      while (index < argv.length) {
-        const word = argv[index++];
-        if (word === ";" || word === "+") {
-          terminator = word;
-          break;
-        }
-        command.push(word ?? "");
-      }
-      if (terminator === undefined) throw appletUsageError(FIND, "-exec requires ; or +");
-      if (command.length === 0) throw appletUsageError(FIND, "-exec requires a command");
-      const batch = terminator === "+";
-      if (batch && command.at(-1) !== "{}") {
-        throw appletUsageError(FIND, "-exec ... + requires {} as the last argument");
-      }
-      exec = { argv: command, batch };
-    } else throw appletUsageError(FIND, `unsupported expression ${option ?? ""}`);
-  }
-  if (exec !== undefined && separator !== undefined) {
-    throw appletUsageError(FIND, "specify either -exec or a print action");
-  }
-
-  const matched: string[] = [];
-  for (const root of roots) {
-    const normalized = commandPath(context, root);
-    // A link named on the command line is not descended into, as POSIX has it:
-    // `find dirlink` reports the link and stops. Following it would let one
-    // operand walk a tree that is not below where the caller pointed.
-    const operand = context.fileSystem.lstat(normalized);
-    if (operand.kind === "symlink") {
-      context.budget.glob(1);
-      const selected =
-        (type === undefined || type === "symlink") &&
-        (name === undefined || matchesGlob(operand.name, name));
-      // Named the way the operand was written, like every other match.
-      if (selected) matched.push(displayPath(root, normalized, normalized));
-      continue;
-    }
-    const traversalRoot = context.fileSystem.realpath(normalized);
-    const entries = boundedFind(context, {
-      path: normalized,
-      includeRoot: true,
-    });
-    // Report each match the way the operand was written, as `find` does.
-    for (const entry of entries) {
-      if (type !== undefined && entry.kind !== type) continue;
-      if (name !== undefined && !matchesGlob(entry.name, name)) continue;
-      if (maxDepth !== undefined && depthFrom(traversalRoot, entry.path) > maxDepth) continue;
-      matched.push(displayPath(root, traversalRoot, entry.path));
-    }
-  }
-
-  if (exec === undefined) {
-    const end = separator ?? "\n";
-    const output = new BufferedTextWriter(context, fds[1]);
-    try {
-      for (const path of matched) await output.write(`${path}${end}`);
-      await output.flush();
-    } finally {
-      output.abort();
-    }
-    return 0;
-  }
-
-  // A failing invocation does not stop the walk; the status reports that one
-  // of them failed, which is what `find` promises.
-  let failed = false;
-  const run = async (paths: readonly string[]): Promise<void> => {
-    const expanded = exec.batch
-      ? [...exec.argv.slice(0, -1), ...paths]
-      : // Every occurrence, not only a word that is exactly `{}`: the idiom
-        // `-exec mv {} {}.bak ;` otherwise renames onto a literal `{}.bak`.
-        exec.argv.map((word) => word.split("{}").join(paths[0] ?? ""));
-    const status = await context.executeCommand(expanded, fds);
-    // Only the `+` form propagates a failing invocation. With `;` the status of
-    // each command is `find`'s business and not its result, as POSIX has it.
-    if (status !== 0 && exec.batch) failed = true;
-  };
-  if (exec.batch) {
-    // Batches are bounded so one invocation cannot carry an unbounded argv.
-    for (let start = 0; start < matched.length; start += FIND_EXEC_BATCH) {
-      await run(matched.slice(start, start + FIND_EXEC_BATCH));
-    }
-  } else {
-    for (const path of matched) await run([path]);
-  }
-  return failed ? 1 : 0;
-});
-
 function statIdentity(values: ReadonlyMap<number, string> | undefined, id: number): string {
   const name = values?.get(id);
   return name === undefined ? String(id) : `${id} (${name})`;
@@ -580,15 +361,6 @@ export const statCommand = /* @__PURE__ */ defineApplet(STAT, async (context, ar
 });
 
 /** What `stat -c %F` and `file` call an entry, from the mode's type field. */
-function describeKind(stat: VfsStat): string {
-  if (stat.kind === "directory") return "directory";
-  if (stat.kind === "symlink") return "symbolic link";
-  return (stat.mode & FILE_TYPE_MASK) === CHARACTER_DEVICE_TYPE
-    ? "character special file"
-    : "regular file";
-}
-
-/** Expands the `-c` conversions this namespace can answer. */
 function statIdentityFields(format: string): { users: boolean; groups: boolean } {
   let users = false;
   let groups = false;
@@ -616,7 +388,7 @@ function statFormat(
     const character = format[index] ?? "";
     if (character === "\\") {
       const next = format[++index];
-      output += next === "n" ? "\n" : next === "t" ? "\t" : (next ?? "\\");
+      output += statEscape(next);
       continue;
     }
     if (character !== "%") {
@@ -624,26 +396,55 @@ function statFormat(
       continue;
     }
     const conversion = format[++index];
-    if (conversion === "n") output += operand;
-    else if (conversion === "s") output += String(stat.sizeBytes);
-    // `%i` is the entry's identity, in the position `st_ino` holds. It is
-    // stable across a move and never handed out again after a removal, which
-    // is a strengthening of what POSIX guarantees rather than a divergence.
-    else if (conversion === "i") output += String(stat.ino);
-    // `%f` is the raw mode in hex, which is what GNU prints; `%a` is the
-    // permission bits in octal.
-    else if (conversion === "f") output += stat.mode.toString(16);
-    else if (conversion === "a") output += (stat.mode & 0o7777).toString(8);
-    else if (conversion === "A") output += modeString(stat.mode);
-    else if (conversion === "F") output += describeKind(stat);
-    else if (conversion === "u") output += String(stat.uid);
-    else if (conversion === "g") output += String(stat.gid);
-    else if (conversion === "U") output += identityLabel(identities?.users, stat.uid);
-    else if (conversion === "G") output += identityLabel(identities?.groups, stat.gid);
-    else if (conversion === "%") output += "%";
-    else throw appletUsageError(STAT, `unsupported conversion %${conversion ?? ""}`);
+    const value = statConversion(conversion, stat, operand, identities);
+    if (value === undefined) {
+      throw appletUsageError(STAT, `unsupported conversion %${conversion ?? ""}`);
+    }
+    output += value;
   }
   return output;
+}
+
+function statEscape(value: string | undefined): string {
+  if (value === "n") return "\n";
+  if (value === "t") return "\t";
+  return value ?? "\\";
+}
+
+function statConversion(
+  conversion: string | undefined,
+  stat: VfsStat,
+  operand: string,
+  identities: ResolvedIdentityNames | undefined,
+): string | undefined {
+  switch (conversion) {
+    case "n":
+      return operand;
+    case "s":
+      return String(stat.sizeBytes);
+    case "i":
+      return String(stat.ino);
+    case "f":
+      return stat.mode.toString(16);
+    case "a":
+      return (stat.mode & 0o7777).toString(8);
+    case "A":
+      return modeString(stat.mode);
+    case "F":
+      return describeKind(stat);
+    case "u":
+      return String(stat.uid);
+    case "g":
+      return String(stat.gid);
+    case "U":
+      return identityLabel(identities?.users, stat.uid);
+    case "G":
+      return identityLabel(identities?.groups, stat.gid);
+    case "%":
+      return "%";
+    default:
+      return undefined;
+  }
 }
 
 export const chmodCommand = /* @__PURE__ */ defineApplet(CHMOD, async (context, argv) => {
@@ -679,6 +480,36 @@ async function parseOwnership(
   value: string,
   identities: ShellIdentitySource | undefined,
 ): Promise<{ uid?: number; gid?: number }> {
+  const parts = ownershipParts(value);
+  const resolved = await resolveOwnershipParts(parts, identities);
+  const uid = parts.numericUid ?? resolved.uid;
+  const gid = parts.numericGid ?? resolved.gid;
+  return {
+    ...(uid === undefined ? {} : { uid }),
+    ...(gid === undefined ? {} : { gid }),
+  };
+}
+
+interface OwnershipParts {
+  readonly numericUid?: number;
+  readonly numericGid?: number;
+  readonly userName?: string;
+  readonly groupName?: string;
+}
+
+function ownershipParts(value: string): OwnershipParts {
+  const { owner, group } = splitOwnership(value);
+  const ownerPart = identityPart(owner, "owner");
+  const groupPart = identityPart(group, "group");
+  return {
+    ...(ownerPart.numeric === undefined ? {} : { numericUid: ownerPart.numeric }),
+    ...(groupPart.numeric === undefined ? {} : { numericGid: groupPart.numeric }),
+    ...(ownerPart.name === undefined ? {} : { userName: ownerPart.name }),
+    ...(groupPart.name === undefined ? {} : { groupName: groupPart.name }),
+  };
+}
+
+function splitOwnership(value: string): { owner: string; group?: string } {
   const separator = value.indexOf(":");
   if (separator !== value.lastIndexOf(":")) {
     throw appletUsageError(CHOWN, "owner and group must contain at most one colon");
@@ -688,35 +519,47 @@ async function parseOwnership(
   if (owner.length === 0 && (group === undefined || group.length === 0)) {
     throw appletUsageError(CHOWN, "requires an owner or group");
   }
-  const numericUid = owner.length === 0 ? undefined : numericIdentity(owner, "owner");
-  const numericGid =
-    group === undefined || group.length === 0 ? undefined : numericIdentity(group, "group");
-  const userName = owner.length > 0 && numericUid === undefined ? owner : undefined;
-  const groupName =
-    group !== undefined && group.length > 0 && numericGid === undefined ? group : undefined;
-  let resolved: ResolvedIdentityIds | undefined;
-  if (userName !== undefined || groupName !== undefined) {
-    if (identities === undefined) {
-      throw new VfsError("ENOTSUP", "chown: user and group name lookup is not available");
-    }
-    resolved = await resolveIdentityIds(
-      identities,
-      userName === undefined ? [] : [userName],
-      groupName === undefined ? [] : [groupName],
-    );
+  return { owner, ...(group === undefined ? {} : { group }) };
+}
+
+function identityPart(
+  value: string | undefined,
+  kind: "owner" | "group",
+): { numeric?: number; name?: string } {
+  if (value === undefined || value === "") return {};
+  const numeric = numericIdentity(value, kind);
+  return numeric === undefined ? { name: value } : { numeric };
+}
+
+async function resolveOwnershipParts(
+  parts: OwnershipParts,
+  identities: ShellIdentitySource | undefined,
+): Promise<{ uid?: number; gid?: number }> {
+  if (parts.userName === undefined && parts.groupName === undefined) return {};
+  if (identities === undefined) {
+    throw new VfsError("ENOTSUP", "chown: user and group name lookup is not available");
   }
-  const uid = numericUid ?? (userName === undefined ? undefined : resolved?.users.get(userName));
-  const gid = numericGid ?? (groupName === undefined ? undefined : resolved?.groups.get(groupName));
-  if (userName !== undefined && uid === undefined) {
-    throw new VfsError("ENOENT", `chown: unknown user: ${userName}`);
+  const resolved = await resolveIdentityIds(
+    identities,
+    parts.userName === undefined ? [] : [parts.userName],
+    parts.groupName === undefined ? [] : [parts.groupName],
+  );
+  return resolvedOwnership(parts, resolved);
+}
+
+function resolvedOwnership(
+  parts: OwnershipParts,
+  resolved: ResolvedIdentityIds,
+): { uid?: number; gid?: number } {
+  const uid = parts.userName === undefined ? undefined : resolved.users.get(parts.userName);
+  const gid = parts.groupName === undefined ? undefined : resolved.groups.get(parts.groupName);
+  if (parts.userName !== undefined && uid === undefined) {
+    throw new VfsError("ENOENT", `chown: unknown user: ${parts.userName}`);
   }
-  if (groupName !== undefined && gid === undefined) {
-    throw new VfsError("ENOENT", `chown: unknown group: ${groupName}`);
+  if (parts.groupName !== undefined && gid === undefined) {
+    throw new VfsError("ENOENT", `chown: unknown group: ${parts.groupName}`);
   }
-  return {
-    ...(uid === undefined ? {} : { uid }),
-    ...(gid === undefined ? {} : { gid }),
-  };
+  return { ...(uid === undefined ? {} : { uid }), ...(gid === undefined ? {} : { gid }) };
 }
 
 export const chownCommand = /* @__PURE__ */ defineApplet(CHOWN, async (context, argv) => {
@@ -727,119 +570,6 @@ export const chownCommand = /* @__PURE__ */ defineApplet(CHOWN, async (context, 
   const ownership = await parseOwnership(owner, context.identities);
   for (const path of paths) {
     context.fileSystem.setOwnership(commandPath(context, path), ownership);
-  }
-  return 0;
-});
-
-export const duCommand = /* @__PURE__ */ defineApplet(DU, async (context, argv, fds) => {
-  const paths = argv.length === 0 ? ["."] : [...argv];
-  for (const path of paths) {
-    const normalized = commandPath(context, path);
-    const size = context.fileSystem.subtreeSummary(normalized).logicalFileBytes;
-    await writeText(fds[1], `${Math.ceil(size / 1024)}\t${path}\n`);
-  }
-  return 0;
-});
-
-export const treeCommand = /* @__PURE__ */ defineApplet(TREE, async (context, argv, fds) => {
-  const rootValue = argv[0] ?? ".";
-  const root = commandPath(context, rootValue);
-  const entries = boundedFind(context, { path: root, includeRoot: true });
-  const output = new BufferedTextWriter(context, fds[1]);
-  try {
-    for (const entry of entries) {
-      const relative =
-        entry.path === root ? "." : entry.path.slice(root === "/" ? 1 : root.length + 1);
-      const depth = relative === "." ? 0 : relative.split("/").length;
-      await output.write(`${"  ".repeat(Math.max(0, depth - 1))}${entry.name}\n`);
-    }
-    await output.flush();
-  } finally {
-    output.abort();
-  }
-  return 0;
-});
-
-function lexicalBasename(path: string): string {
-  const withoutTrailingSlashes = path.replace(/\/+$/u, "");
-  if (withoutTrailingSlashes === "") return path === "" ? "" : "/";
-  return withoutTrailingSlashes.slice(withoutTrailingSlashes.lastIndexOf("/") + 1);
-}
-
-function lexicalDirname(path: string): string {
-  if (path === "") return ".";
-  const withoutTrailingSlashes = path.replace(/\/+$/u, "");
-  if (withoutTrailingSlashes === "") return "/";
-  const separator = withoutTrailingSlashes.lastIndexOf("/");
-  if (separator < 0) return ".";
-  const parent = withoutTrailingSlashes.slice(0, separator).replace(/\/+$/u, "");
-  return parent === "" ? "/" : parent;
-}
-
-export const basenameCommand = /* @__PURE__ */ defineApplet(
-  BASENAME,
-  async (_context, argv, fds) => {
-    if (argv.length !== 1) throw appletUsageError(BASENAME, "requires one path");
-    await writeText(fds[1], `${lexicalBasename(argv[0] ?? "")}\n`);
-    return 0;
-  },
-);
-
-export const dirnameCommand = /* @__PURE__ */ defineApplet(DIRNAME, async (_context, argv, fds) => {
-  if (argv.length !== 1) throw appletUsageError(DIRNAME, "requires one path");
-  await writeText(fds[1], `${lexicalDirname(argv[0] ?? "")}\n`);
-  return 0;
-});
-
-export const realpathCommand = /* @__PURE__ */ defineApplet(
-  REALPATH,
-  async (context, argv, fds) => {
-    if (argv.length === 0) throw appletUsageError(REALPATH, "missing operand");
-    for (const path of argv) {
-      const normalized = normalizePath(path, context.session.cwd);
-      // Resolve first, then confirm: a link is only canonical once it has been
-      // followed, and `stat` on the written path would follow it anyway.
-      const canonical = context.fileSystem.realpath(normalized);
-      context.fileSystem.stat(canonical);
-      await writeText(fds[1], `${canonical}\n`);
-    }
-    return 0;
-  },
-);
-
-export const mktempCommand = /* @__PURE__ */ defineApplet(MKTEMP, async (context, argv, fds) => {
-  if (argv.length > 1) throw appletUsageError(MKTEMP, "accepts at most one template");
-  const template = argv[0] ?? "tmp.XXXXXX";
-  if (template.startsWith("-")) throw appletUsageError(MKTEMP, `unsupported option ${template}`);
-  if (!template.includes("XXXXXX")) throw appletUsageError(MKTEMP, "template must contain XXXXXX");
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const suffix = crypto.randomUUID().replaceAll("-", "").slice(0, 6);
-    const path = commandPath(context, template.replace("XXXXXX", suffix));
-    try {
-      await context.fileSystem.writeFile(path, new Uint8Array(), { disposition: "create" });
-      await writeText(fds[1], `${path}\n`);
-      return 0;
-    } catch (error) {
-      if (!(error instanceof VfsError && error.code === "EEXIST")) throw error;
-    }
-  }
-  throw new VfsError("EEXIST", "mktemp: could not create a unique file");
-});
-
-export const fileCommand = /* @__PURE__ */ defineApplet(FILE, async (context, argv, fds) => {
-  if (argv.length === 0) throw appletUsageError(FILE, "missing operand");
-  for (const path of argv) {
-    // `lstat`, so a link is described as a link rather than as its target.
-    const stat = context.fileSystem.lstat(commandPath(context, path));
-    const description =
-      stat.kind === "symlink"
-        ? `symbolic link to ${stat.linkTarget}`
-        : stat.kind === "file" && stat.contentClass === "opaque"
-          ? "opaque R2 content"
-          : stat.kind === "file" && isRegularFile(stat)
-            ? "inline data"
-            : describeKind(stat);
-    await writeText(fds[1], `${path}: ${description}\n`);
   }
   return 0;
 });

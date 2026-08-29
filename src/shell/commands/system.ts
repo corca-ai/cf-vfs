@@ -156,6 +156,15 @@ export const sleepCommand = /* @__PURE__ */ defineApplet(SLEEP, async (context, 
 
 const COMPARISONS = ["=", "!=", "<", "<=", ">", ">="] as const;
 const ARITHMETIC = ["+", "-", "*", "/", "%"] as const;
+const COMPARISON_TESTS: Readonly<Record<(typeof COMPARISONS)[number], (order: number) => boolean>> =
+  {
+    "=": (order) => order === 0,
+    "!=": (order) => order !== 0,
+    "<": (order) => order < 0,
+    "<=": (order) => order <= 0,
+    ">": (order) => order > 0,
+    ">=": (order) => order >= 0,
+  };
 
 /**
  * Evaluates one bounded expression.
@@ -178,54 +187,46 @@ function integer(value: string): bigint {
   return BigInt(`${normalized.negative ? "-" : ""}${normalized.digits}`);
 }
 
+function arithmeticExpression(
+  left: string,
+  operator: (typeof ARITHMETIC)[number],
+  right: string,
+): string {
+  const a = integer(left);
+  const b = integer(right);
+  if ((operator === "/" || operator === "%") && b === 0n) {
+    throw appletUsageError(EXPR, "division by zero");
+  }
+  if (operator === "+") return String(a + b);
+  if (operator === "-") return String(a - b);
+  if (operator === "*") return String(a * b);
+  if (operator === "/") return String(a / b);
+  return String(a % b);
+}
+
+function expressionOrder(left: string, right: string): number {
+  const numericLeft = normalizeDecimalInteger(left);
+  const numericRight = normalizeDecimalInteger(right);
+  if (numericLeft !== undefined && numericRight !== undefined) {
+    return compareDecimalIntegers(numericLeft, numericRight);
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function comparisonExpression(
+  left: string,
+  operator: (typeof COMPARISONS)[number],
+  right: string,
+): string {
+  const order = expressionOrder(left, right);
+  return COMPARISON_TESTS[operator](order) ? "1" : "0";
+}
+
 function evaluateExpr(argv: readonly string[]): string {
   if (argv.length === 2 && argv[0] === "length") return String([...(argv[1] ?? "")].length);
   const [left = "", operator = "", right = ""] = argv;
   if (argv.length !== 3) throw appletUsageError(EXPR, "expected a single infix expression");
-  if (isOneOf(operator, ARITHMETIC)) {
-    const a = integer(left);
-    const b = integer(right);
-    if ((operator === "/" || operator === "%") && b === 0n) {
-      throw appletUsageError(EXPR, "division by zero");
-    }
-    const result =
-      operator === "+"
-        ? a + b
-        : operator === "-"
-          ? a - b
-          : operator === "*"
-            ? a * b
-            : operator === "/"
-              ? a / b
-              : a % b;
-    return result.toString();
-  }
-  if (isOneOf(operator, COMPARISONS)) {
-    const numericLeft = normalizeDecimalInteger(left);
-    const numericRight = normalizeDecimalInteger(right);
-    // POSIX compares numerically when both sides are integers and by byte order
-    // otherwise, which is the only comparison this runtime has anywhere else.
-    const order =
-      numericLeft !== undefined && numericRight !== undefined
-        ? compareDecimalIntegers(numericLeft, numericRight)
-        : left < right
-          ? -1
-          : left > right
-            ? 1
-            : 0;
-    const truth =
-      operator === "="
-        ? order === 0
-        : operator === "!="
-          ? order !== 0
-          : operator === "<"
-            ? order < 0
-            : operator === "<="
-              ? order <= 0
-              : operator === ">"
-                ? order > 0
-                : order >= 0;
-    return truth ? "1" : "0";
-  }
+  if (isOneOf(operator, ARITHMETIC)) return arithmeticExpression(left, operator, right);
+  if (isOneOf(operator, COMPARISONS)) return comparisonExpression(left, operator, right);
   throw appletUsageError(EXPR, `unsupported operator ${operator}`);
 }

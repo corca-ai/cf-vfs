@@ -1,6 +1,6 @@
 import { firstCodePoint } from "./unicode.js";
 
-export type BracketRange = readonly [start: number, end: number];
+type BracketRange = readonly [start: number, end: number];
 
 export interface BracketExpression {
   close: number;
@@ -13,6 +13,26 @@ interface BracketElement {
   escaped: boolean;
 }
 
+function bracketRanges(elements: readonly BracketElement[]): BracketRange[] {
+  const ranges: BracketRange[] = [];
+  for (let offset = 0; offset < elements.length; offset += 1) {
+    const start = elements[offset];
+    if (start === undefined) continue;
+    const separator = elements[offset + 1];
+    const end = elements[offset + 2];
+    if (separator?.value === "-" && !separator.escaped && end !== undefined) {
+      const left = firstCodePoint(start.value);
+      const right = firstCodePoint(end.value);
+      if (left <= right) ranges.push([left, right]);
+      offset += 2;
+      continue;
+    }
+    const point = firstCodePoint(start.value);
+    ranges.push([point, point]);
+  }
+  return ranges;
+}
+
 export function parseBracketExpression(
   characters: readonly string[],
   open: number,
@@ -23,51 +43,25 @@ export function parseBracketExpression(
     negated = true;
     index += 1;
   }
-
   const elements: BracketElement[] = [];
   if (characters[index] === "]") {
     elements.push({ value: "]", escaped: false });
     index += 1;
   }
-
-  let close = -1;
   while (index < characters.length) {
     const value = characters[index] ?? "";
+    if (value === "]") {
+      return elements.length === 0
+        ? undefined
+        : { close: index, negated, ranges: bracketRanges(elements) };
+    }
     if (value === "\\" && characters[index + 1] !== undefined) {
       elements.push({ value: characters[index + 1] ?? "", escaped: true });
       index += 2;
       continue;
     }
-    if (value === "]") {
-      close = index;
-      break;
-    }
     elements.push({ value, escaped: false });
     index += 1;
   }
-  if (close < 0 || elements.length === 0) return undefined;
-
-  const ranges: BracketRange[] = [];
-  for (let offset = 0; offset < elements.length; offset += 1) {
-    const start = elements[offset];
-    const separator = elements[offset + 1];
-    const end = elements[offset + 2];
-    if (
-      start !== undefined &&
-      separator?.value === "-" &&
-      !separator.escaped &&
-      end !== undefined
-    ) {
-      const left = firstCodePoint(start.value);
-      const right = firstCodePoint(end.value);
-      if (left <= right) ranges.push([left, right]);
-      offset += 2;
-      continue;
-    }
-    if (start !== undefined) {
-      const point = firstCodePoint(start.value);
-      ranges.push([point, point]);
-    }
-  }
-  return { close, negated, ranges };
+  return undefined;
 }

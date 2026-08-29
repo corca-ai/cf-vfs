@@ -31,7 +31,7 @@ const DEFAULT_MAX_IN_FLIGHT_BYTES = 32 * 1024 * 1024;
  * leaving the workspace unbounded. Only the quotas that are pure comparisons
  * against live usage take this shape; see docs/operations.md.
  */
-export type FileSystemLimit = number | (() => number);
+type FileSystemLimit = number | (() => number);
 
 export interface CommonFileSystemOptions {
   chunkBytes?: number;

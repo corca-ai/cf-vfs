@@ -1,3 +1,4 @@
+import type { ShellCommandDescription, ShellFileDescriptors } from "../types.js";
 import { type AppletSpecWithOptions, defineApplet, parseAppletOptions } from "./applet.js";
 import { BufferedTextWriter, writeText } from "./helpers.js";
 
@@ -8,6 +9,44 @@ const HELP = {
   kind: "session-builtin",
   options: { short: { s: { name: "synopsis" } } },
 } as const satisfies AppletSpecWithOptions<"synopsis">;
+
+async function writeHelpIndex(
+  commands: readonly ShellCommandDescription[],
+  synopsisOnly: boolean,
+  output: BufferedTextWriter,
+): Promise<number> {
+  for (const command of commands) {
+    await output.write(
+      synopsisOnly
+        ? `${synopsis(command.name, command.usage)}\n`
+        : `${command.name.padEnd(12)}${command.summary}\n`,
+    );
+  }
+  return 0;
+}
+
+async function writeHelpTopics(
+  commands: readonly ShellCommandDescription[],
+  names: readonly string[],
+  synopsisOnly: boolean,
+  output: BufferedTextWriter,
+  fds: ShellFileDescriptors,
+): Promise<number> {
+  const index = new Map(commands.map((command) => [command.name, command]));
+  let status = 0;
+  for (const name of names) {
+    const command = index.get(name);
+    if (command === undefined) {
+      await output.flush();
+      await writeText(fds[2], `help: no help topics match \`${name}'\n`);
+      status = 1;
+      continue;
+    }
+    await output.write(`${synopsis(command.name, command.usage)}\n`);
+    if (!synopsisOnly) await output.write(`    ${command.summary}\n`);
+  }
+  return status;
+}
 
 /**
  * Describes the commands the active registry provides.
@@ -26,35 +65,16 @@ export const helpCommand = /* @__PURE__ */ defineApplet(HELP, async (context, ar
   const synopsisOnly = parsed.options.some((option) => option.name === "synopsis");
   const described = context.listCommands();
   const output = new BufferedTextWriter(context, fds[1]);
-  let status = 0;
   try {
-    if (parsed.operands.length === 0) {
-      for (const command of described) {
-        await output.write(
-          synopsisOnly
-            ? `${synopsis(command.name, command.usage)}\n`
-            : `${command.name.padEnd(12)}${command.summary}\n`,
-        );
-      }
-    } else {
-      const index = new Map(described.map((command) => [command.name, command]));
-      for (const name of parsed.operands) {
-        const command = index.get(name);
-        if (command === undefined) {
-          await output.flush();
-          await writeText(fds[2], `help: no help topics match \`${name}'\n`);
-          status = 1;
-          continue;
-        }
-        await output.write(`${synopsis(command.name, command.usage)}\n`);
-        if (!synopsisOnly) await output.write(`    ${command.summary}\n`);
-      }
-    }
+    const status =
+      parsed.operands.length === 0
+        ? await writeHelpIndex(described, synopsisOnly, output)
+        : await writeHelpTopics(described, parsed.operands, synopsisOnly, output, fds);
     await output.flush();
+    return status;
   } finally {
     output.abort();
   }
-  return status;
 });
 
 function synopsis(name: string, usage: string): string {

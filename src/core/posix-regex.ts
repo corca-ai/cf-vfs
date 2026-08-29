@@ -1,4 +1,10 @@
 import { VfsError } from "./errors.js";
+import {
+  type PosixCharSet as CharSet,
+  foldPosixRanges as foldRanges,
+  POSIX_CLASSES,
+} from "./posix-regex-charset.js";
+import { type PosixRegexInstruction as Instruction, runPosixRegex } from "./posix-regex-matcher.js";
 
 /**
  * The two POSIX regular-expression dialects this project declares.
@@ -18,7 +24,6 @@ export type PosixRegexDialect = "basic" | "extended";
  * diagnosable error rather than a runtime kill.
  */
 const MAX_PROGRAM = 2048;
-const MAX_STEPS = 20_000_000;
 const MAX_GROUPS = 20;
 
 function unsupported(command: string, detail: string): never {
@@ -32,91 +37,6 @@ function unsupported(command: string, detail: string): never {
  * classes, so `[[:alpha:]]` cannot quietly become Unicode-aware and disagree
  * with the pinned oracle in the `LC_ALL=C` locale this runtime declares.
  */
-interface CharSet {
-  readonly negated: boolean;
-  readonly ranges: readonly (readonly [number, number])[];
-}
-
-const POSIX_CLASSES: Readonly<Record<string, readonly (readonly [number, number])[]>> = {
-  alpha: [
-    [0x41, 0x5a],
-    [0x61, 0x7a],
-  ],
-  digit: [[0x30, 0x39]],
-  alnum: [
-    [0x30, 0x39],
-    [0x41, 0x5a],
-    [0x61, 0x7a],
-  ],
-  upper: [[0x41, 0x5a]],
-  lower: [[0x61, 0x7a]],
-  space: [
-    [0x09, 0x0d],
-    [0x20, 0x20],
-  ],
-  blank: [
-    [0x09, 0x09],
-    [0x20, 0x20],
-  ],
-  punct: [
-    [0x21, 0x2f],
-    [0x3a, 0x40],
-    [0x5b, 0x60],
-    [0x7b, 0x7e],
-  ],
-  print: [[0x20, 0x7e]],
-  graph: [[0x21, 0x7e]],
-  cntrl: [
-    [0x00, 0x1f],
-    [0x7f, 0x7f],
-  ],
-  xdigit: [
-    [0x30, 0x39],
-    [0x41, 0x46],
-    [0x61, 0x66],
-  ],
-};
-
-const UPPER_A = 0x41;
-const UPPER_Z = 0x5a;
-const LOWER_A = 0x61;
-const LOWER_Z = 0x7a;
-const CASE_GAP = 0x20;
-
-/**
- * Adds the opposite-case counterpart of every ASCII letter in a range list.
- *
- * Folding happens while the set is built rather than by rewriting a finished
- * pattern, so every member is folded exactly once and by the same rule: a bare
- * letter, a letter inside a bracket, and either end of a range all take this
- * path. The fold is the twenty-six ASCII pairs and nothing else, because the
- * runtime declares `LC_ALL=C` — Unicode case folding would put the Kelvin sign
- * in `[k]`.
- */
-function foldRanges(ranges: readonly (readonly [number, number])[]): (readonly [number, number])[] {
-  const folded: (readonly [number, number])[] = [...ranges];
-  for (const [low, high] of ranges) {
-    const upperLow = Math.max(low, UPPER_A);
-    const upperHigh = Math.min(high, UPPER_Z);
-    if (upperLow <= upperHigh) folded.push([upperLow + CASE_GAP, upperHigh + CASE_GAP]);
-    const lowerLow = Math.max(low, LOWER_A);
-    const lowerHigh = Math.min(high, LOWER_Z);
-    if (lowerLow <= lowerHigh) folded.push([lowerLow - CASE_GAP, lowerHigh - CASE_GAP]);
-  }
-  return folded;
-}
-
-function inSet(set: CharSet, point: number): boolean {
-  let present = false;
-  for (const [low, high] of set.ranges) {
-    if (point >= low && point <= high) {
-      present = true;
-      break;
-    }
-  }
-  return set.negated ? !present : present;
-}
-
 type Node =
   | { readonly kind: "empty" }
   | { readonly kind: "set"; readonly set: CharSet }
@@ -133,18 +53,8 @@ type Node =
       readonly max: number | undefined;
     };
 
-type Split = { op: "split"; x: number; y: number };
-type Jump = { op: "jmp"; to: number };
-
-type Instruction =
-  | { readonly op: "set"; readonly set: CharSet }
-  | { readonly op: "any" }
-  | Split
-  | Jump
-  | { readonly op: "save"; readonly slot: number }
-  | { readonly op: "bol" }
-  | { readonly op: "eol" }
-  | { readonly op: "match" };
+type Split = Extract<Instruction, { readonly op: "split" }>;
+type Jump = Extract<Instruction, { readonly op: "jmp" }>;
 
 /**
  * Parses one POSIX pattern into a syntax tree.
@@ -273,25 +183,33 @@ class Parser {
     };
   }
 
+  private escapedAtom(): { node: Node; repeatable: boolean } {
+    const next = this.at(1);
+    if (next === undefined) unsupported(this.command, "trailing backslash");
+    if (!this.extended && next === "(") {
+      this.index += 2;
+      return { node: this.group(2), repeatable: true };
+    }
+    if (/[A-Za-z0-9<>`']/u.test(next)) unsupported(this.command, `unsupported escape \\${next}`);
+    this.index += 2;
+    return { node: this.literal(next), repeatable: true };
+  }
+
+  private anchorAtom(character: "^" | "$", first: boolean): { node: Node; repeatable: boolean } {
+    const anchor =
+      character === "^"
+        ? this.extended || (first && this.index === 0)
+        : this.extended || this.index === this.points.length - 1;
+    this.index += 1;
+    return anchor
+      ? { node: { kind: character === "^" ? "bol" : "eol" }, repeatable: false }
+      : { node: this.literal(character), repeatable: true };
+  }
+
   private atom(first: boolean): { node: Node; repeatable: boolean } {
     const character = this.at() ?? "";
 
-    if (character === "\\") {
-      const next = this.at(1);
-      if (next === undefined) unsupported(this.command, "trailing backslash");
-      if (!this.extended && next === "(") {
-        this.index += 2;
-        return { node: this.group(2), repeatable: true };
-      }
-      // Alphanumerics are where JavaScript keeps its classes, and `<`, `>`, and
-      // `` ` `` are GNU word-boundary extensions. Refusing all of them keeps
-      // the declared subset honest rather than silently borrowing a dialect.
-      if (/[A-Za-z0-9<>`']/u.test(next)) {
-        unsupported(this.command, `unsupported escape \\${next}`);
-      }
-      this.index += 2;
-      return { node: this.literal(next), repeatable: true };
-    }
+    if (character === "\\") return this.escapedAtom();
 
     if (this.extended && character === "(") {
       this.index += 1;
@@ -305,24 +223,7 @@ class Parser {
       return { node: { kind: "any" }, repeatable: true };
     }
 
-    if (character === "^") {
-      // Anchored at the start of a branch; elsewhere `basic` makes it a literal
-      // caret, as GNU does. An anchor has nothing to repeat, so a `*` after one
-      // is a literal asterisk.
-      const anchor = this.extended ? first : this.index === 0;
-      this.index += 1;
-      return anchor
-        ? { node: { kind: "bol" }, repeatable: false }
-        : { node: this.literal("^"), repeatable: true };
-    }
-
-    if (character === "$") {
-      const anchor = this.extended || this.index === this.points.length - 1;
-      this.index += 1;
-      return anchor
-        ? { node: { kind: "eol" }, repeatable: false }
-        : { node: this.literal("$"), repeatable: true };
-    }
+    if (character === "^" || character === "$") return this.anchorAtom(character, first);
 
     // A repetition operator with nothing before it is a literal in both
     // dialects, which is how `grep '^*'` finds an asterisk.
@@ -342,6 +243,36 @@ class Parser {
     return { kind: "group", body, index };
   }
 
+  private bracketClass(index: number, ranges: (readonly [number, number])[]): number {
+    const close = this.points.indexOf(":", index + 2);
+    if (close < 0 || this.points[close + 1] !== "]") unsupported(this.command, "unmatched [:");
+    const name = this.points.slice(index + 2, close).join("");
+    const known = Object.hasOwn(POSIX_CLASSES, name) ? POSIX_CLASSES[name] : undefined;
+    if (known === undefined) unsupported(this.command, `unsupported character class [:${name}:]`);
+    ranges.push(...known);
+    return close + 1;
+  }
+
+  private bracketMember(index: number, ranges: (readonly [number, number])[]): number {
+    const character = this.points[index] ?? "";
+    const following = this.points[index + 1];
+    if (character === "[" && following === ":") return this.bracketClass(index, ranges);
+    if (character === "[" && (following === "=" || following === ".")) {
+      unsupported(this.command, `unsupported bracket construct [${following}`);
+    }
+    const point = (value: string): number => value.codePointAt(0) ?? 0;
+    const after = this.points[index + 2];
+    if (following === "-" && after !== undefined && after !== "]") {
+      const low = point(character);
+      const high = point(after);
+      if (low > high) unsupported(this.command, "invalid range in bracket expression");
+      ranges.push([low, high]);
+      return index + 2;
+    }
+    ranges.push([point(character), point(character)]);
+    return index;
+  }
+
   private bracket(): Node {
     let index = this.index + 1;
     let negated = false;
@@ -350,7 +281,6 @@ class Parser {
       index += 1;
     }
     const ranges: (readonly [number, number])[] = [];
-    const point = (value: string): number => value.codePointAt(0) ?? 0;
     let first = true;
     for (; index < this.points.length; index += 1, first = false) {
       const character = this.points[index] ?? "";
@@ -363,35 +293,7 @@ class Parser {
           set: { negated, ranges: this.ignoreCase ? foldRanges(ranges) : ranges },
         };
       }
-      const following = this.points[index + 1];
-      if (character === "[" && following === ":") {
-        const close = this.points.indexOf(":", index + 2);
-        if (close < 0 || this.points[close + 1] !== "]") unsupported(this.command, "unmatched [:");
-        const name = this.points.slice(index + 2, close).join("");
-        const known = Object.hasOwn(POSIX_CLASSES, name) ? POSIX_CLASSES[name] : undefined;
-        if (known === undefined) {
-          unsupported(this.command, `unsupported character class [:${name}:]`);
-        }
-        ranges.push(...known);
-        index = close + 1;
-        continue;
-      }
-      // Equivalence classes and collating symbols have no meaning without a
-      // locale table, and treating their punctuation as ordinary members would
-      // silently match the wrong thing rather than say so.
-      if (character === "[" && (following === "=" || following === ".")) {
-        unsupported(this.command, `unsupported bracket construct [${following}`);
-      }
-      const after = this.points[index + 2];
-      if (following === "-" && after !== undefined && after !== "]") {
-        const low = point(character);
-        const high = point(after);
-        if (low > high) unsupported(this.command, "invalid range in bracket expression");
-        ranges.push([low, high]);
-        index += 2;
-        continue;
-      }
-      ranges.push([point(character), point(character)]);
+      index = this.bracketMember(index, ranges);
     }
     unsupported(this.command, "unmatched [");
   }
@@ -491,9 +393,30 @@ export interface PosixMatch {
   readonly groups: readonly (string | undefined)[];
 }
 
-interface Thread {
-  readonly pc: number;
-  readonly caps: readonly number[];
+function codePointOffsets(points: readonly string[], textLength: number): readonly number[] {
+  const offsets: number[] = [];
+  let offset = 0;
+  for (const character of points) {
+    offsets.push(offset);
+    offset += character.length;
+  }
+  offsets.push(textLength);
+  return offsets;
+}
+
+function capturedGroups(
+  text: string,
+  offsets: readonly number[],
+  captures: readonly number[],
+  slots: number,
+): readonly (string | undefined)[] {
+  const groups: (string | undefined)[] = [];
+  for (let group = 0; group * 2 < slots; group += 1) {
+    const open = captures[group * 2] ?? -1;
+    const close = captures[group * 2 + 1] ?? -1;
+    groups.push(open < 0 || close < 0 ? undefined : text.slice(offsets[open], offsets[close]));
+  }
+  return groups;
 }
 
 /**
@@ -531,122 +454,15 @@ export class PosixRegex {
     const points = [...text];
     // String offset of each code point, so a match can be reported in the units
     // every caller slices with.
-    const offsets: number[] = [];
-    let offset = 0;
-    for (const character of points) {
-      offsets.push(offset);
-      offset += character.length;
-    }
-    offsets.push(text.length);
+    const offsets = codePointOffsets(points, text.length);
     let start = 0;
     while (start < offsets.length && (offsets[start] ?? 0) < from) start += 1;
 
     const codes = points.map((character) => character.codePointAt(0) ?? 0);
-    const found = this.run(codes, start);
+    const found = runPosixRegex(this.program, codes, start, this.slots, this.command);
     if (found === undefined) return undefined;
-    const groups: (string | undefined)[] = [];
-    for (let group = 0; group * 2 < this.slots; group += 1) {
-      const open = found[group * 2] ?? -1;
-      const close = found[group * 2 + 1] ?? -1;
-      groups.push(
-        open < 0 || close < 0 ? undefined : text.slice(offsets[open] ?? 0, offsets[close] ?? 0),
-      );
-    }
+    const groups = capturedGroups(text, offsets, found, this.slots);
     return { index: offsets[found[0] ?? 0] ?? 0, end: offsets[found[1] ?? 0] ?? 0, groups };
-  }
-
-  private run(codes: readonly number[], from: number): readonly number[] | undefined {
-    const seen = new Int32Array(this.program.length).fill(-1);
-    let clist: Thread[] = [];
-    let nlist: Thread[] = [];
-    let generation = 0;
-    let matched: readonly number[] | undefined;
-    let steps = 0;
-
-    const charge = (): void => {
-      steps += 1;
-      if (steps > MAX_STEPS) unsupported(this.command, "pattern is too expensive for this input");
-    };
-
-    const add = (
-      list: Thread[],
-      mark: number,
-      pc: number,
-      caps: readonly number[],
-      at: number,
-    ): void => {
-      charge();
-      if (seen[pc] === mark) return;
-      seen[pc] = mark;
-      const instruction = this.program[pc];
-      if (instruction === undefined) return;
-      switch (instruction.op) {
-        case "jmp":
-          add(list, mark, instruction.to, caps, at);
-          return;
-        case "split":
-          add(list, mark, instruction.x, caps, at);
-          add(list, mark, instruction.y, caps, at);
-          return;
-        case "save": {
-          const next = [...caps];
-          next[instruction.slot] = at;
-          add(list, mark, pc + 1, next, at);
-          return;
-        }
-        case "bol":
-          if (at === 0) add(list, mark, pc + 1, caps, at);
-          return;
-        case "eol":
-          if (at === codes.length) add(list, mark, pc + 1, caps, at);
-          return;
-        default:
-          list.push({ pc, caps });
-      }
-    };
-
-    const empty = new Array<number>(this.slots).fill(-1);
-    let currentMark = 0;
-    for (let position = from; ; position += 1) {
-      // A new start position is only worth trying while nothing has matched:
-      // once one has, any later start is not the leftmost.
-      if (matched === undefined) {
-        if (clist.length === 0) {
-          generation += 1;
-          currentMark = generation;
-        }
-        add(clist, currentMark, 0, empty, position);
-      }
-      if (clist.length === 0 && matched !== undefined) break;
-      generation += 1;
-      const nextMark = generation;
-      const code = position < codes.length ? (codes[position] ?? -1) : -1;
-      for (const thread of clist) {
-        charge();
-        const instruction = this.program[thread.pc];
-        if (instruction === undefined) continue;
-        if (instruction.op === "match") {
-          matched = thread.caps;
-          // Every thread after this one is lower priority, so the
-          // leftmost-first match is already decided and they can be dropped.
-          break;
-        }
-        if (code < 0) continue;
-        if (
-          instruction.op === "any" ||
-          (instruction.op === "set" && inSet(instruction.set, code))
-        ) {
-          add(nlist, nextMark, thread.pc + 1, thread.caps, position + 1);
-        }
-      }
-      const swap = clist;
-      clist = nlist;
-      nlist = swap;
-      nlist.length = 0;
-      currentMark = nextMark;
-      if (position >= codes.length) break;
-    }
-    return matched;
   }
 }
 

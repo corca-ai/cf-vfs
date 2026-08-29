@@ -215,100 +215,96 @@ describe("command discovery", () => {
   ]);
 });
 
-describe("Linux filesystem profile", () => {
-  it("declares the shell profile as a name that resolves and runs", async () => {
-    const harness = pathHarness();
-    const named = await harness.run(`PATH=${PATH}; command -v sh; type bash`);
-    expect(named.exitCode).toBe(0);
-    // An alias reports the spelling that was asked for, as Linux would.
-    expect(named.stdout).toBe("/bin/sh\nbash is /bin/bash\n");
-    const run = await harness.run(`PATH=${PATH}; /bin/sh -c 'printf %s ran'`);
-    expect(run.exitCode).toBe(0);
-    expect(run.stdout).toBe("ran");
-  });
+it("declares the shell profile as a name that resolves and runs", async () => {
+  const harness = pathHarness();
+  const named = await harness.run(`PATH=${PATH}; command -v sh; type bash`);
+  expect(named.exitCode).toBe(0);
+  // An alias reports the spelling that was asked for, as Linux would.
+  expect(named.stdout).toBe("/bin/sh\nbash is /bin/bash\n");
+  const run = await harness.run(`PATH=${PATH}; /bin/sh -c 'printf %s ran'`);
+  expect(run.exitCode).toBe(0);
+  expect(run.stdout).toBe("ran");
+});
 
-  it("publishes environment defaults naming the applet directories", () => {
-    const environment = linuxShellEnvironment();
-    expect(environment).toEqual({
-      PATH: "/bin:/usr/bin",
-      HOME: "/home/cf",
-      USER: "cf",
-      LOGNAME: "cf",
-      SHELL: LINUX_SHELL_PATH,
-      TMPDIR: "/tmp",
-      LANG: "C",
-      LC_ALL: "C",
-      TZ: "UTC",
-    });
-    expect(linuxShellEnvironment({ user: "agent" })).toMatchObject({
-      USER: "agent",
-      LOGNAME: "agent",
-      HOME: "/home/agent",
-    });
-    expect(linuxShellEnvironment({ home: "/srv/app", tmp: "/var/tmp" })).toMatchObject({
-      HOME: "/srv/app",
-      TMPDIR: "/var/tmp",
-    });
+it("publishes environment defaults naming the applet directories", () => {
+  const environment = linuxShellEnvironment();
+  expect(environment).toEqual({
+    PATH: "/bin:/usr/bin",
+    HOME: "/home/cf",
+    USER: "cf",
+    LOGNAME: "cf",
+    SHELL: LINUX_SHELL_PATH,
+    TMPDIR: "/tmp",
+    LANG: "C",
+    LC_ALL: "C",
+    TZ: "UTC",
   });
+  expect(linuxShellEnvironment({ user: "agent" })).toMatchObject({
+    USER: "agent",
+    LOGNAME: "agent",
+    HOME: "/home/agent",
+  });
+  expect(linuxShellEnvironment({ home: "/srv/app", tmp: "/var/tmp" })).toMatchObject({
+    HOME: "/srv/app",
+    TMPDIR: "/var/tmp",
+  });
+});
 
-  it("names exactly the variables it controls", () => {
-    expect([...LINUX_PROFILE_VARIABLES].sort()).toEqual(
-      Object.keys(linuxShellEnvironment()).sort(),
+it("names exactly the variables it controls", () => {
+  expect([...LINUX_PROFILE_VARIABLES].sort()).toEqual(Object.keys(linuxShellEnvironment()).sort());
+});
+
+it("lets a caller override a profile value", async () => {
+  const harness = pathHarness();
+  const result = await harness.run('printf \'%s|%s\' "$USER" "$HOME"', {
+    env: { ...linuxShellEnvironment(), USER: "agent" },
+  });
+  expect(result.stdout).toBe("agent|/home/cf");
+});
+
+it("creates only data directories, never an applet directory", async () => {
+  const harness = createBashHarness();
+  const created = provisionLinuxFilesystem(harness.fileSystem);
+  expect(created.map((stat) => stat.path)).toEqual([...LINUX_DATA_DIRECTORIES, "/home/cf"]);
+  for (const path of LINUX_DATA_DIRECTORIES) {
+    expect(harness.fileSystem.stat(path).kind, path).toBe("directory");
+  }
+  for (const path of LINUX_APPLET_DIRECTORIES) {
+    expect(() => harness.fileSystem.stat(path), path).toThrowError(
+      expect.objectContaining({ code: "ENOENT" }),
     );
-  });
+  }
+});
 
-  it("lets a caller override a profile value", async () => {
-    const harness = pathHarness();
-    const result = await harness.run('printf \'%s|%s\' "$USER" "$HOME"', {
-      env: { ...linuxShellEnvironment(), USER: "agent" },
-    });
-    expect(result.stdout).toBe("agent|/home/cf");
-  });
+it("is idempotent and creates each directory once", () => {
+  const harness = createBashHarness();
+  const created = provisionLinuxFilesystem(harness.fileSystem);
+  expect(new Set(created.map((stat) => stat.path)).size).toBe(created.length);
+  expect(() => provisionLinuxFilesystem(harness.fileSystem)).not.toThrow();
+});
 
-  it("creates only data directories, never an applet directory", async () => {
-    const harness = createBashHarness();
-    const created = provisionLinuxFilesystem(harness.fileSystem);
-    expect(created.map((stat) => stat.path)).toEqual([...LINUX_DATA_DIRECTORIES, "/home/cf"]);
-    for (const path of LINUX_DATA_DIRECTORIES) {
-      expect(harness.fileSystem.stat(path).kind, path).toBe("directory");
-    }
-    for (const path of LINUX_APPLET_DIRECTORIES) {
-      expect(() => harness.fileSystem.stat(path), path).toThrowError(
-        expect.objectContaining({ code: "ENOENT" }),
-      );
-    }
-  });
-
-  it("is idempotent and creates each directory once", () => {
-    const harness = createBashHarness();
-    const created = provisionLinuxFilesystem(harness.fileSystem);
-    expect(new Set(created.map((stat) => stat.path)).size).toBe(created.length);
-    expect(() => provisionLinuxFilesystem(harness.fileSystem)).not.toThrow();
-  });
-
-  it("refuses to create a namespace row inside a virtual applet directory", () => {
-    const harness = createBashHarness();
-    for (const options of [{ cwd: "/bin" }, { home: "/usr/bin/agent" }]) {
-      expect(() => provisionLinuxFilesystem(harness.fileSystem, options)).toThrowError(
-        /virtual applet directory/u,
-      );
-    }
-  });
-
-  it("runs a familiar script end to end", async () => {
-    const harness = pathHarness();
-    provisionLinuxFilesystem(harness.fileSystem);
-    const result = await harness.run(
-      [
-        "cd $HOME",
-        "printf 'one\\ntwo\\n' > notes.txt",
-        "grep two notes.txt",
-        'printf \'%s %s\\n\' "$(pwd)" "$(command -v grep)"',
-      ],
-      { env: linuxShellEnvironment(), cwd: LINUX_WORKSPACE },
+it("refuses to create a namespace row inside a virtual applet directory", () => {
+  const harness = createBashHarness();
+  for (const options of [{ cwd: "/bin" }, { home: "/usr/bin/agent" }]) {
+    expect(() => provisionLinuxFilesystem(harness.fileSystem, options)).toThrowError(
+      /virtual applet directory/u,
     );
-    expect(result.stderr).toBe("");
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toBe("two\n/home/cf /bin/grep\n");
-  });
+  }
+});
+
+it("runs a familiar script end to end", async () => {
+  const harness = pathHarness();
+  provisionLinuxFilesystem(harness.fileSystem);
+  const result = await harness.run(
+    [
+      "cd $HOME",
+      "printf 'one\\ntwo\\n' > notes.txt",
+      "grep two notes.txt",
+      'printf \'%s %s\\n\' "$(pwd)" "$(command -v grep)"',
+    ],
+    { env: linuxShellEnvironment(), cwd: LINUX_WORKSPACE },
+  );
+  expect(result.stderr).toBe("");
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toBe("two\n/home/cf /bin/grep\n");
 });

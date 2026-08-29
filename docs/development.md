@@ -45,6 +45,7 @@ npm run knip
 npm test
 npm run test:docs
 npm run test:package
+npm run test:quality
 npm run test:changelog origin/main
 npm run test:commit-message -- --text "feat(vfs): ..."
 npm run hooks:install
@@ -60,6 +61,18 @@ npm run test:bash-fixtures:regenerate
 npm run test:utility-fixtures:regenerate
 npm run test:bundle-budgets:record
 ```
+
+Source quality has explicit end-state limits measured on nonblank lines:
+
+| Scope | Cognitive complexity | Function lines | File lines |
+| --- | ---: | ---: | ---: |
+| `src/` | 15 | 80 | 500 |
+| `test/` | 10 | 60 | 500 |
+
+Tests deliberately have the stricter cognitive-complexity ceiling: a test
+should explain behavior, not implement another program to decide whether the
+behavior passed. `test:quality` applies this dedicated profile directly to all
+source and test TypeScript; any violation fails the complete check.
 
 Performance runs are deliberately separate from `npm test` and `npm run
 check`. `bench:do` runs the workerd/SQLite operation benchmarks, while

@@ -20,142 +20,140 @@ function createInteractiveShell(): {
   };
 }
 
-describe("InteractiveShell", () => {
-  it("keeps constructor credentials immutable across execution units", async () => {
-    const fileSystem = createTestFileSystem();
-    const shell = new InteractiveShell({
-      fileSystem,
-      commands: defaultShellCommands,
-      credentials: { uid: 1_000, gid: 10, supplementaryGids: [20] },
-      umask: 0o027,
-    });
-
-    await expect(shell.runText({ script: "id -G" })).resolves.toMatchObject({
-      exitCode: 0,
-      stdout: "10 20\n",
-    });
-    await expect(shell.runText({ script: "id -u" })).resolves.toMatchObject({
-      exitCode: 0,
-      stdout: "1000\n",
-    });
-    await expect(
-      shell.executeText({
-        script: "true",
-        credentials: { uid: 0, gid: 0 },
-      }),
-    ).rejects.toMatchObject({ code: "EINVAL" });
+it("keeps constructor credentials immutable across execution units", async () => {
+  const fileSystem = createTestFileSystem();
+  const shell = new InteractiveShell({
+    fileSystem,
+    commands: defaultShellCommands,
+    credentials: { uid: 1_000, gid: 10, supplementaryGids: [20] },
+    umask: 0o027,
   });
 
-  it("preserves cwd, variables, functions, options, and status between source units", async () => {
-    const { shell } = createInteractiveShell();
+  await expect(shell.runText({ script: "id -G" })).resolves.toMatchObject({
+    exitCode: 0,
+    stdout: "10 20\n",
+  });
+  await expect(shell.runText({ script: "id -u" })).resolves.toMatchObject({
+    exitCode: 0,
+    stdout: "1000\n",
+  });
+  await expect(
+    shell.executeText({
+      script: "true",
+      credentials: { uid: 0, gid: 0 },
+    }),
+  ).rejects.toMatchObject({ code: "EINVAL" });
+});
 
-    await expect(
-      shell.runText({
-        script: "mkdir -p /repo; cd /repo; NAME=world; greet() { printf 'hello %s' \"$NAME\"; }",
-      }),
-    ).resolves.toMatchObject({ exitCode: 0, stderr: "" });
-    await expect(shell.runText({ script: "greet > greeting.txt; false" })).resolves.toMatchObject({
-      exitCode: 1,
-      stderr: "",
-    });
-    await expect(
-      shell.runText({
-        script: 'printf \'%s:%s:%s:\' "$PWD" "$NAME" "$?"; cat greeting.txt',
-      }),
-    ).resolves.toEqual({
-      exitCode: 0,
-      stdout: "/repo:world:1:hello world",
-      stderr: "",
-    });
+it("preserves cwd, variables, functions, options, and status between source units", async () => {
+  const { shell } = createInteractiveShell();
 
-    expect(shell.cwd).toBe("/repo");
-    expect(shell.snapshot()).toMatchObject({
-      cwd: "/repo",
-      env: { NAME: "world", PWD: "/repo" },
-      lastExitCode: 0,
-    });
+  await expect(
+    shell.runText({
+      script: "mkdir -p /repo; cd /repo; NAME=world; greet() { printf 'hello %s' \"$NAME\"; }",
+    }),
+  ).resolves.toMatchObject({ exitCode: 0, stderr: "" });
+  await expect(shell.runText({ script: "greet > greeting.txt; false" })).resolves.toMatchObject({
+    exitCode: 1,
+    stderr: "",
+  });
+  await expect(
+    shell.runText({
+      script: 'printf \'%s:%s:%s:\' "$PWD" "$NAME" "$?"; cat greeting.txt',
+    }),
+  ).resolves.toEqual({
+    exitCode: 0,
+    stdout: "/repo:world:1:hello world",
+    stderr: "",
   });
 
-  it("keeps inherited execution methods session-aware and rejects per-unit context", async () => {
-    const { shell } = createInteractiveShell();
-
-    await shell.executeText({ script: "VALUE=kept" });
-    await expect(shell.executeText({ script: "printf '%s' \"$VALUE\"" })).resolves.toMatchObject({
-      exitCode: 0,
-      stdout: "kept",
-    });
-    await expect(shell.executeText({ script: "true", cwd: "/elsewhere" })).rejects.toMatchObject({
-      code: "EINVAL",
-      message: "interactive execution context belongs in the InteractiveShell constructor",
-    });
+  expect(shell.cwd).toBe("/repo");
+  expect(shell.snapshot()).toMatchObject({
+    cwd: "/repo",
+    env: { NAME: "world", PWD: "/repo" },
+    lastExitCode: 0,
   });
+});
 
-  it("clears unit-local flow while preserving shell options", async () => {
-    const { fileSystem, shell } = createInteractiveShell();
+it("keeps inherited execution methods session-aware and rejects per-unit context", async () => {
+  const { shell } = createInteractiveShell();
 
-    await expect(
-      shell.runText({
-        script: "set -e; false; touch /not-created",
-      }),
-    ).resolves.toMatchObject({ exitCode: 1 });
-    await expect(shell.runText({ script: "printf resumed" })).resolves.toMatchObject({
-      exitCode: 0,
-      stdout: "resumed",
-    });
-    await expect(
-      shell.runText({
-        script: "false; touch /still-not-created",
-      }),
-    ).resolves.toMatchObject({ exitCode: 1 });
-
-    expect(() => fileSystem.stat("/not-created")).toThrowError(VfsError);
-    expect(() => fileSystem.stat("/still-not-created")).toThrowError(VfsError);
-    expect(shell.snapshot().errexit).toBe(true);
+  await shell.executeText({ script: "VALUE=kept" });
+  await expect(shell.executeText({ script: "printf '%s' \"$VALUE\"" })).resolves.toMatchObject({
+    exitCode: 0,
+    stdout: "kept",
   });
-
-  it("records a syntax status and remains usable", async () => {
-    const { shell } = createInteractiveShell();
-
-    await expect(shell.runText({ script: "if" })).resolves.toMatchObject({
-      exitCode: 2,
-      stderr: expect.stringContaining("requires a non-empty command list"),
-    });
-    await expect(shell.runText({ script: "printf '%s' \"$?\"" })).resolves.toEqual({
-      exitCode: 0,
-      stdout: "2",
-      stderr: "",
-    });
+  await expect(shell.executeText({ script: "true", cwd: "/elsewhere" })).rejects.toMatchObject({
+    code: "EINVAL",
+    message: "interactive execution context belongs in the InteractiveShell constructor",
   });
+});
 
-  it("rejects overlapping executions without closing the session", async () => {
-    const { shell } = createInteractiveShell();
-    const input = new ReadableStream<Uint8Array>({ start() {} });
-    const execution = shell.runStream({ script: "cat", stdin: input });
+it("clears unit-local flow while preserving shell options", async () => {
+  const { fileSystem, shell } = createInteractiveShell();
 
-    expect(() => shell.runStream({ script: "true" })).toThrowError(
-      expect.objectContaining({
-        code: "EAGAIN",
-        message: "interactive shell already has an active execution",
-      }),
-    );
-
-    execution.cancel();
-    await execution.completed;
-    await expect(shell.runText({ script: "printf reused" })).resolves.toMatchObject({
-      exitCode: 0,
-      stdout: "reused",
-    });
+  await expect(
+    shell.runText({
+      script: "set -e; false; touch /not-created",
+    }),
+  ).resolves.toMatchObject({ exitCode: 1 });
+  await expect(shell.runText({ script: "printf resumed" })).resolves.toMatchObject({
+    exitCode: 0,
+    stdout: "resumed",
   });
+  await expect(
+    shell.runText({
+      script: "false; touch /still-not-created",
+    }),
+  ).resolves.toMatchObject({ exitCode: 1 });
 
-  it("closes after exit", async () => {
-    const { shell } = createInteractiveShell();
+  expect(() => fileSystem.stat("/not-created")).toThrowError(VfsError);
+  expect(() => fileSystem.stat("/still-not-created")).toThrowError(VfsError);
+  expect(shell.snapshot().errexit).toBe(true);
+});
 
-    await expect(shell.runText({ script: "exit 7" })).resolves.toMatchObject({ exitCode: 7 });
-    expect(shell.isClosed).toBe(true);
-    await expect(shell.runText({ script: "true" })).rejects.toMatchObject({
-      code: "EINVAL",
-      message: "interactive shell is closed",
-    });
+it("records a syntax status and remains usable", async () => {
+  const { shell } = createInteractiveShell();
+
+  await expect(shell.runText({ script: "if" })).resolves.toMatchObject({
+    exitCode: 2,
+    stderr: expect.stringContaining("requires a non-empty command list"),
+  });
+  await expect(shell.runText({ script: "printf '%s' \"$?\"" })).resolves.toEqual({
+    exitCode: 0,
+    stdout: "2",
+    stderr: "",
+  });
+});
+
+it("rejects overlapping executions without closing the session", async () => {
+  const { shell } = createInteractiveShell();
+  const input = new ReadableStream<Uint8Array>({ start() {} });
+  const execution = shell.runStream({ script: "cat", stdin: input });
+
+  expect(() => shell.runStream({ script: "true" })).toThrowError(
+    expect.objectContaining({
+      code: "EAGAIN",
+      message: "interactive shell already has an active execution",
+    }),
+  );
+
+  execution.cancel();
+  await execution.completed;
+  await expect(shell.runText({ script: "printf reused" })).resolves.toMatchObject({
+    exitCode: 0,
+    stdout: "reused",
+  });
+});
+
+it("closes after exit", async () => {
+  const { shell } = createInteractiveShell();
+
+  await expect(shell.runText({ script: "exit 7" })).resolves.toMatchObject({ exitCode: 7 });
+  expect(shell.isClosed).toBe(true);
+  await expect(shell.runText({ script: "true" })).rejects.toMatchObject({
+    code: "EINVAL",
+    message: "interactive shell is closed",
   });
 });
 

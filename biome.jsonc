@@ -53,9 +53,9 @@
         "noTemplateCurlyInString": "off"
       },
       "complexity": {
-        // The parser, expander, and SQL core are deliberately large state
-        // machines; cognitive-complexity ceilings would only invite splitting
-        // them into less readable pieces.
+        // The stricter source/test-specific ceilings live in
+        // biome.quality.jsonc and run through test:quality. Keeping that profile
+        // separate avoids applying test-only limits to scripts and benchmarks.
         "noExcessiveCognitiveComplexity": "off",
         // tsconfig sets noPropertyAccessFromIndexSignature, so bracket access
         // on an index signature is required rather than stylistic.

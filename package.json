@@ -183,6 +183,7 @@
     "test": "vitest run --config vitest.node.config.ts && vitest run",
     "test:docs": "node test/check-docs.mjs",
     "test:package": "node test/check-package.mjs",
+    "test:quality": "biome lint --config-path biome.quality.jsonc --max-diagnostics=none src test",
     "test:changelog": "node test/check-changelog.mjs",
     "test:commit-message": "node test/check-commit-message.mjs",
     "test:tree-shaking": "npm run build && node test/check-tree-shaking.mjs",
@@ -198,7 +199,7 @@
     "test:awk-fixtures:regenerate": "node scripts/regenerate-awk-fixtures.mjs",
     "test:utility-fixtures:regenerate": "node scripts/regenerate-utility-fixtures.mjs",
     "test:bundle-budgets:record": "npm run build && node test/check-tree-shaking.mjs --record",
-    "check": "npm run typegen && npm run build && npm run typecheck && npm run lint && npm run knip && npm test && npm run test:docs && npm run test:package && npm run test:tree-shaking"
+    "check": "npm run typegen && npm run build && npm run typecheck && npm run lint && npm run knip && npm test && npm run test:quality && npm run test:docs && npm run test:package && npm run test:tree-shaking"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.5",

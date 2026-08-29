@@ -21,21 +21,24 @@ export function globToRegExp(pattern: string): RegExp {
   let source = "^";
   for (let index = 0; index < characters.length; index += 1) {
     const character = characters[index] ?? "";
-    if (character === "\\" && characters[index + 1] !== undefined) {
-      source += escapeRegex(characters[++index] ?? "");
-    } else if (character === "*") {
-      source += "[^/]*";
-    } else if (character === "?") {
-      source += "[^/]";
-    } else if (character === "[") {
-      const expression = parseBracketExpression(characters, index);
-      if (expression === undefined) source += "\\[";
-      else {
-        source += bracketRegex(expression);
-        index = expression.close;
+    switch (character) {
+      case "\\":
+        source += escapeRegex(characters[++index] ?? "\\");
+        break;
+      case "*":
+        source += "[^/]*";
+        break;
+      case "?":
+        source += "[^/]";
+        break;
+      case "[": {
+        const expression = parseBracketExpression(characters, index);
+        source += expression === undefined ? "\\[" : bracketRegex(expression);
+        if (expression !== undefined) index = expression.close;
+        break;
       }
-    } else {
-      source += escapeRegex(character);
+      default:
+        source += escapeRegex(character);
     }
   }
   return new RegExp(`${source}$`, "u");

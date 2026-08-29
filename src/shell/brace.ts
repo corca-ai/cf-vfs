@@ -152,6 +152,27 @@ function rangeAlternatives(content: readonly Atom[], budget: ShellBudget): Atom[
   return undefined;
 }
 
+function groupBounds(
+  atoms: readonly Atom[],
+  start: number,
+  budget: ShellBudget,
+): { readonly end: number; readonly separators: readonly number[] } | undefined {
+  const separators: number[] = [];
+  let depth = 0;
+  for (let index = start; index < atoms.length; index += 1) {
+    const atom = atoms[index];
+    if (atom?.kind !== "char") continue;
+    budget.expansionWork();
+    if (atom.value === "{") depth += 1;
+    else if (atom.value === "," && depth === 1) separators.push(index);
+    else if (atom.value === "}") {
+      depth -= 1;
+      if (depth === 0) return { end: index, separators };
+    }
+  }
+  return undefined;
+}
+
 /**
  * Reads the group opening at `start`, or `undefined` when those braces are not
  * one.
@@ -165,25 +186,9 @@ function readGroup(
   start: number,
   budget: ShellBudget,
 ): BraceGroup | undefined {
-  const separators: number[] = [];
-  let depth = 0;
-  let end = -1;
-  for (let index = start; index < atoms.length; index += 1) {
-    const atom = atoms[index];
-    if (atom?.kind !== "char") continue;
-    budget.expansionWork();
-    if (atom.value === "{") depth += 1;
-    else if (atom.value === ",") {
-      if (depth === 1) separators.push(index);
-    } else if (atom.value === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        end = index;
-        break;
-      }
-    }
-  }
-  if (end === -1) return undefined;
+  const bounds = groupBounds(atoms, start, budget);
+  if (bounds === undefined) return undefined;
+  const { end, separators } = bounds;
   const content = atoms.slice(start + 1, end);
   if (separators.length === 0) {
     const alternatives = rangeAlternatives(content, budget);

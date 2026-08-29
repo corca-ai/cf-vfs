@@ -159,6 +159,66 @@ async function drain(body: ByteBody): Promise<void> {
   }
 }
 
+function localEntryPage(entries: readonly VfsStat[], options?: PageOptions): EntryPage {
+  if (
+    options?.limit !== undefined &&
+    (!Number.isSafeInteger(options.limit) || options.limit <= 0)
+  ) {
+    throw new VfsError("EINVAL", "limit must be a positive safe integer");
+  }
+  const cursor = options?.cursor ?? "";
+  const remaining = entries.filter((entry) => entry.path > cursor);
+  const limit = options?.limit ?? remaining.length;
+  const kept = remaining.slice(0, limit);
+  return {
+    entries: kept,
+    nextCursor: remaining.length > limit ? (kept.at(-1)?.path ?? null) : null,
+    scanned: kept.length,
+  };
+}
+
+interface ReservedIndex {
+  readonly directories: ReadonlyMap<string, readonly string[]>;
+  readonly applets: ReadonlySet<string>;
+  readonly rootNames: readonly string[];
+}
+
+function addReservedName(directories: Map<string, string[]>, parent: string, name: string): void {
+  const existing = directories.get(parent);
+  if (existing === undefined) directories.set(parent, [name]);
+  else if (!existing.includes(name)) existing.push(name);
+}
+
+function addAppletDirectory(
+  directories: Map<string, string[]>,
+  applets: Set<string>,
+  directory: string,
+  names: readonly string[],
+): void {
+  const segments = directory.split("/").filter((segment) => segment.length > 0);
+  for (let depth = 0; depth < segments.length; depth += 1) {
+    const parent = depth === 0 ? "/" : `/${segments.slice(0, depth).join("/")}`;
+    addReservedName(directories, parent, segments[depth] ?? "");
+    if (!directories.has(parent) && parent !== "/") directories.set(parent, []);
+  }
+  directories.set(directory, [...names]);
+  for (const name of names) applets.add(`${directory}/${name}`);
+}
+
+function reservedIndex(options: ReservedPathOptions): ReservedIndex {
+  const directories = new Map<string, string[]>();
+  for (const [path, names] of Object.entries(DEVICE_DIRECTORIES)) directories.set(path, [...names]);
+  const applets = new Set<string>();
+  for (const directory of options.applets?.directories ?? []) {
+    addAppletDirectory(directories, applets, directory, options.applets?.names ?? []);
+  }
+  addReservedName(directories, "/", "dev");
+  const rootNames = directories.get("/") ?? ["dev"];
+  directories.delete("/");
+  for (const names of directories.values()) names.sort();
+  return { directories, applets, rootNames };
+}
+
 /**
  * The filesystem view a shell sees, with the reserved paths answered in front.
  *
@@ -187,36 +247,10 @@ export class ReservedPathFileSystem implements ShellFileSystem {
 
   constructor(inner: ShellFileSystem, options: ReservedPathOptions = {}) {
     this.#inner = inner;
-    const directories = new Map<string, string[]>();
-    const add = (parent: string, name: string): void => {
-      const existing = directories.get(parent);
-      if (existing === undefined) directories.set(parent, [name]);
-      else if (!existing.includes(name)) existing.push(name);
-    };
-    for (const [path, names] of Object.entries(DEVICE_DIRECTORIES)) {
-      directories.set(path, [...names]);
-    }
-    const applets = new Set<string>();
-    for (const directory of options.applets?.directories ?? []) {
-      // A nested applet directory implies its parents: `/usr/bin` cannot be
-      // listable while `/usr` reports nothing.
-      const segments = directory.split("/").filter((segment) => segment.length > 0);
-      for (let depth = 0; depth < segments.length; depth += 1) {
-        const parent = depth === 0 ? "/" : `/${segments.slice(0, depth).join("/")}`;
-        add(parent, segments[depth] ?? "");
-        if (!directories.has(parent) && parent !== "/") directories.set(parent, []);
-      }
-      directories.set(directory, [...(options.applets?.names ?? [])]);
-      for (const name of options.applets?.names ?? []) applets.add(`${directory}/${name}`);
-    }
-    // The root's own children are implied, never stored: `/` is a real
-    // directory and its rows come from the namespace.
-    add("/", "dev");
-    this.#rootNames = directories.get("/") ?? ["dev"];
-    directories.delete("/");
-    for (const names of directories.values()) names.sort();
-    this.#directories = directories;
-    this.#applets = applets;
+    const index = reservedIndex(options);
+    this.#rootNames = index.rootNames;
+    this.#directories = index.directories;
+    this.#applets = index.applets;
   }
 
   /** Reserved names that are children of the root. */
@@ -428,23 +462,7 @@ export class ReservedPathFileSystem implements ShellFileSystem {
 
   listPage(path: string, options?: PageOptions): EntryPage {
     const at = this.#at(path);
-    if (at !== undefined) {
-      if (
-        options?.limit !== undefined &&
-        (!Number.isSafeInteger(options.limit) || options.limit <= 0)
-      ) {
-        throw new VfsError("EINVAL", "limit must be a positive safe integer");
-      }
-      const cursor = options?.cursor ?? "";
-      const remaining = this.list(path).filter((entry) => entry.path > cursor);
-      const limit = options?.limit ?? remaining.length;
-      const entries = remaining.slice(0, limit);
-      return {
-        entries,
-        nextCursor: remaining.length > limit ? (entries.at(-1)?.path ?? null) : null,
-        scanned: entries.length,
-      };
-    }
+    if (at !== undefined) return localEntryPage(this.list(path), options);
     const page = this.#inner.listPage(path, options);
     const cursor = options?.cursor ?? "";
     // The cursor is the last path returned and the order is by path, so each
@@ -480,23 +498,8 @@ export class ReservedPathFileSystem implements ShellFileSystem {
   }
 
   findPage(options: FindOptions): EntryPage {
-    if (this.#at(options.path) !== undefined) {
-      if (
-        options.limit !== undefined &&
-        (!Number.isSafeInteger(options.limit) || options.limit <= 0)
-      ) {
-        throw new VfsError("EINVAL", "limit must be a positive safe integer");
-      }
-      const cursor = options.cursor ?? "";
-      const remaining = this.#findHere(options).filter((entry) => entry.path > cursor);
-      const limit = options.limit ?? remaining.length;
-      const entries = remaining.slice(0, limit);
-      return {
-        entries,
-        nextCursor: remaining.length > limit ? (entries.at(-1)?.path ?? null) : null,
-        scanned: entries.length,
-      };
-    }
+    if (this.#at(options.path) !== undefined)
+      return localEntryPage(this.#findHere(options), options);
     const page = this.#inner.findPage(options);
     const cursor = options.cursor ?? "";
     const pending = this.#reservedRootsFor(options).filter((entry) => entry.path > cursor);

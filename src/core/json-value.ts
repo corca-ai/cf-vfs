@@ -58,6 +58,47 @@ function invalidJsonValue(): never {
   throw new TypeError("invalid JsonValue");
 }
 
+const JSON_KIND_ORDER: Readonly<Record<JsonKind, number>> = {
+  null: 0,
+  boolean: 1,
+  number: 2,
+  string: 3,
+  array: 4,
+  object: 5,
+};
+
+function compareArrays(left: readonly JsonValue[], right: readonly JsonValue[]): number {
+  for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
+    const a = left[index];
+    const b = right[index];
+    if (a === undefined || b === undefined) return invalidJsonValue();
+    const order = compareJson(a, b);
+    if (order !== 0) return order;
+  }
+  return Math.sign(left.length - right.length);
+}
+
+function compareObjects(left: JsonObject, right: JsonObject): number {
+  const leftKeys = [...left.keys()].sort(compareStrings);
+  const rightKeys = [...right.keys()].sort(compareStrings);
+  const keyOrder = compareArrays(leftKeys, rightKeys);
+  if (keyOrder !== 0) return keyOrder;
+  for (const key of leftKeys) {
+    const a = left.get(key);
+    const b = right.get(key);
+    if (a === undefined || b === undefined) return invalidJsonValue();
+    const order = compareJson(a, b);
+    if (order !== 0) return order;
+  }
+  return 0;
+}
+
+function compareNumbers(left: number | JsonNumber, right: number | JsonNumber): number {
+  const a = numberOf(left);
+  const b = numberOf(right);
+  return a === b ? 0 : a < b ? -1 : 1;
+}
+
 /**
  * `jq`'s total order: null < false < true < numbers < strings < arrays <
  * objects.
@@ -67,47 +108,17 @@ function invalidJsonValue(): never {
  * only in member order compare equal.
  */
 export function compareJson(left: JsonValue, right: JsonValue): number {
-  if (left === null) return right === null ? 0 : -1;
-  if (right === null) return 1;
-  if (typeof left === "boolean") {
-    return typeof right !== "boolean" ? -1 : left === right ? 0 : left === false ? -1 : 1;
-  }
-  if (typeof right === "boolean") return 1;
-  if (isJsonNumber(left)) {
-    if (!isJsonNumber(right)) return -1;
-    const a = numberOf(left);
-    const b = numberOf(right);
-    return a === b ? 0 : a < b ? -1 : 1;
-  }
-  if (isJsonNumber(right)) return 1;
-  if (typeof left === "string") {
-    return typeof right !== "string" ? -1 : compareStrings(left, right);
-  }
-  if (typeof right === "string") return 1;
-  if (Array.isArray(left)) {
-    if (!Array.isArray(right)) return -1;
-    for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
-      const a = left[index];
-      const b = right[index];
-      if (a === undefined || b === undefined) return invalidJsonValue();
-      const order = compareJson(a, b);
-      if (order !== 0) return order;
-    }
-    return left.length === right.length ? 0 : left.length < right.length ? -1 : 1;
-  }
-  if (Array.isArray(right)) return 1;
-  const aKeys = [...left.keys()].sort(compareStrings);
-  const bKeys = [...right.keys()].sort(compareStrings);
-  const keyOrder = compareJson(aKeys, bKeys);
-  if (keyOrder !== 0) return keyOrder;
-  for (const key of aKeys) {
-    const a = left.get(key);
-    const b = right.get(key);
-    if (a === undefined || b === undefined) return invalidJsonValue();
-    const order = compareJson(a, b);
-    if (order !== 0) return order;
-  }
-  return 0;
+  const leftKind = jsonKind(left);
+  const rightKind = jsonKind(right);
+  if (leftKind !== rightKind)
+    return Math.sign(JSON_KIND_ORDER[leftKind] - JSON_KIND_ORDER[rightKind]);
+  if (left === null && right === null) return 0;
+  if (typeof left === "boolean" && typeof right === "boolean") return Number(left) - Number(right);
+  if (isJsonNumber(left) && isJsonNumber(right)) return compareNumbers(left, right);
+  if (typeof left === "string" && typeof right === "string") return compareStrings(left, right);
+  if (Array.isArray(left) && Array.isArray(right)) return compareArrays(left, right);
+  if (left instanceof Map && right instanceof Map) return compareObjects(left, right);
+  return invalidJsonValue();
 }
 
 function compareStrings(left: string, right: string): number {
@@ -216,6 +227,21 @@ class JsonReader {
     return new JsonNumber(value, /[eE]/u.test(literal) ? renderJsonNumber(value) : literal);
   }
 
+  private escape(): string {
+    const marker = this.text[this.offset + 1];
+    if (marker === undefined) this.fail("unterminated escape");
+    if (marker !== "u") {
+      const replacement = ESCAPES[marker];
+      if (replacement === undefined) this.fail("invalid escape");
+      this.offset += 2;
+      return replacement;
+    }
+    const code = this.text.slice(this.offset + 2, this.offset + 6);
+    if (!/^[0-9a-fA-F]{4}$/u.test(code)) this.fail("invalid unicode escape");
+    this.offset += 6;
+    return String.fromCharCode(Number.parseInt(code, 16));
+  }
+
   private string(): string {
     this.expect('"');
     let value = "";
@@ -232,19 +258,7 @@ class JsonReader {
         this.offset += 1;
         continue;
       }
-      const marker = this.text[this.offset + 1];
-      if (marker === undefined) this.fail("unterminated escape");
-      if (marker === "u") {
-        const code = this.text.slice(this.offset + 2, this.offset + 6);
-        if (!/^[0-9a-fA-F]{4}$/u.test(code)) this.fail("invalid unicode escape");
-        value += String.fromCharCode(Number.parseInt(code, 16));
-        this.offset += 6;
-        continue;
-      }
-      const replacement = ESCAPES[marker];
-      if (replacement === undefined) this.fail("invalid escape");
-      value += replacement;
-      this.offset += 2;
+      value += this.escape();
     }
   }
 
@@ -259,16 +273,7 @@ class JsonReader {
     for (;;) {
       items.push(this.value());
       this.skipSpace();
-      const character = this.text[this.offset];
-      if (character === ",") {
-        this.offset += 1;
-        continue;
-      }
-      if (character === "]") {
-        this.offset += 1;
-        return items;
-      }
-      this.fail("expected , or ]");
+      if (!this.nextItem("]")) return items;
     }
   }
 
@@ -290,17 +295,19 @@ class JsonReader {
       const value = this.value();
       entries.set(key, value);
       this.skipSpace();
-      const character = this.text[this.offset];
-      if (character === ",") {
-        this.offset += 1;
-        continue;
-      }
-      if (character === "}") {
-        this.offset += 1;
-        return entries;
-      }
-      this.fail("expected , or }");
+      if (!this.nextItem("}")) return entries;
     }
+  }
+
+  private nextItem(close: "]" | "}"): boolean {
+    const character = this.text[this.offset];
+    if (character === ",") {
+      this.offset += 1;
+      return true;
+    }
+    if (character !== close) this.fail(`expected , or ${close}`);
+    this.offset += 1;
+    return false;
   }
 }
 
@@ -320,21 +327,22 @@ function needsEscaping(value: string): boolean {
   return false;
 }
 
+function escapedJsonCharacter(character: string): string {
+  if (character === '"') return '\\"';
+  if (character === "\\") return "\\\\";
+  if (character === "\n") return "\\n";
+  if (character === "\t") return "\\t";
+  if (character === "\r") return "\\r";
+  if (character === "\b") return "\\b";
+  if (character === "\f") return "\\f";
+  const code = character.codePointAt(0) ?? 0;
+  return code < 0x20 || code === 0x7f ? `\\u${code.toString(16).padStart(4, "0")}` : character;
+}
+
 function renderJsonString(value: string): string {
   if (!needsEscaping(value)) return `"${value}"`;
   let out = '"';
-  for (const character of value) {
-    const code = character.codePointAt(0) ?? 0;
-    if (character === '"') out += '\\"';
-    else if (character === "\\") out += "\\\\";
-    else if (character === "\n") out += "\\n";
-    else if (character === "\t") out += "\\t";
-    else if (character === "\r") out += "\\r";
-    else if (character === "\b") out += "\\b";
-    else if (character === "\f") out += "\\f";
-    else if (code < 0x20 || code === 0x7f) out += `\\u${code.toString(16).padStart(4, "0")}`;
-    else out += character;
-  }
+  for (const character of value) out += escapedJsonCharacter(character);
   return `${out}"`;
 }
 
@@ -356,6 +364,46 @@ export function renderJson(value: JsonValue, options: RenderOptions = {}): strin
   return write(value, indent, "", options.sortKeys === true);
 }
 
+function writeArray(
+  value: readonly JsonValue[],
+  indent: string | undefined,
+  current: string,
+  sortKeys: boolean,
+): string {
+  if (value.length === 0) return "[]";
+  const inner = indent === undefined ? "" : current + indent;
+  const items: string[] = [];
+  for (const item of value) {
+    items.push(item === undefined ? invalidJsonValue() : write(item, indent, inner, sortKeys));
+  }
+  const open = indent === undefined ? "" : `\n${inner}`;
+  const separator = indent === undefined ? "," : `,\n${inner}`;
+  const close = indent === undefined ? "" : `\n${current}`;
+  return `[${open}${items.join(separator)}${close}]`;
+}
+
+function writeObject(
+  value: JsonObject,
+  indent: string | undefined,
+  current: string,
+  sortKeys: boolean,
+): string {
+  const keys = [...value.keys()];
+  if (keys.length === 0) return "{}";
+  if (sortKeys) keys.sort(compareStrings);
+  const inner = indent === undefined ? "" : current + indent;
+  const space = indent === undefined ? "" : " ";
+  const members = keys.map((key) => {
+    const member = value.get(key);
+    if (member === undefined) return invalidJsonValue();
+    return `${renderJsonString(key)}:${space}${write(member, indent, inner, sortKeys)}`;
+  });
+  const open = indent === undefined ? "" : `\n${inner}`;
+  const separator = indent === undefined ? "," : `,\n${inner}`;
+  const close = indent === undefined ? "" : `\n${current}`;
+  return `{${open}${members.join(separator)}${close}}`;
+}
+
 function write(
   value: JsonValue,
   indent: string | undefined,
@@ -367,27 +415,7 @@ function write(
   if (value instanceof JsonNumber) return value.literal;
   if (typeof value === "number") return renderJsonNumber(value);
   if (typeof value === "string") return renderJsonString(value);
-  const inner = indent === undefined ? "" : current + indent;
-  const open = indent === undefined ? "" : `\n${inner}`;
-  const separator = indent === undefined ? "," : `,\n${inner}`;
-  const close = indent === undefined ? "" : `\n${current}`;
-  if (Array.isArray(value)) {
-    if (value.length === 0) return "[]";
-    const items: string[] = [];
-    for (let index = 0; index < value.length; index += 1) {
-      const item = value[index];
-      items.push(item === undefined ? invalidJsonValue() : write(item, indent, inner, sortKeys));
-    }
-    return `[${open}${items.join(separator)}${close}]`;
-  }
-  const keys = [...value.keys()];
-  if (keys.length === 0) return "{}";
-  if (sortKeys) keys.sort(compareStrings);
-  const space = indent === undefined ? "" : " ";
-  const members = keys.map((key) => {
-    const member = value.get(key);
-    if (member === undefined) return invalidJsonValue();
-    return `${renderJsonString(key)}:${space}${write(member, indent, inner, sortKeys)}`;
-  });
-  return `{${open}${members.join(separator)}${close}}`;
+  return Array.isArray(value)
+    ? writeArray(value, indent, current, sortKeys)
+    : writeObject(value, indent, current, sortKeys);
 }

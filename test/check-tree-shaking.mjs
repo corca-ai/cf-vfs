@@ -83,6 +83,19 @@ function moduleId(path) {
   return match === null ? undefined : match[1];
 }
 
+/**
+ * A public entry point may compile away after it re-exports independently
+ * tree-shaken implementation modules. Treat `foo`, `foo-*`, and `foo/*` as one
+ * family so splitting a barrel strengthens exclusions instead of silently
+ * making them stop observing anything.
+ */
+function familyMembers(modules, family) {
+  return modules.filter(
+    (module) =>
+      module === family || module.startsWith(`${family}-`) || module.startsWith(`${family}/`),
+  );
+}
+
 const PRESETS = [
   {
     name: "ls",
@@ -434,12 +447,12 @@ const measured = [];
 const failures = [];
 for (const preset of PRESETS) {
   const { source, modules } = await bundle(preset.config);
-  const reachable = new Set(modules);
-  for (const module of preset.include) {
-    assert(reachable.has(module), `${preset.name} bundle is missing ${module}`);
+  for (const family of preset.include) {
+    assert(familyMembers(modules, family).length > 0, `${preset.name} bundle is missing ${family}`);
   }
-  for (const module of [...preset.exclude, ...NEVER_BUNDLED]) {
-    assert(!reachable.has(module), `${preset.name} bundle reaches ${module}`);
+  for (const family of [...preset.exclude, ...NEVER_BUNDLED]) {
+    const reached = familyMembers(modules, family);
+    assert(reached.length === 0, `${preset.name} bundle reaches ${reached.join(", ")}`);
   }
   for (const text of FORBIDDEN_TEXT) {
     assert(!source.includes(text), `${preset.name} bundle contains ${text}`);

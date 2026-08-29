@@ -8,7 +8,7 @@ const MIB = 1024 * 1024;
 
 export type RemoteBenchmarkProfile = "quick" | "full";
 
-export interface DurationSummary {
+interface DurationSummary {
   samples: number;
   meanMs: number;
   medianMs: number;
@@ -17,7 +17,7 @@ export interface DurationSummary {
   maxMs: number;
 }
 
-export interface SqlCost {
+interface SqlCost {
   statements: number;
   rowsRead: number;
   rowsWritten: number;

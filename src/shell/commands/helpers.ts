@@ -161,6 +161,35 @@ export type CommandInput =
     }
   | { readonly name: string; readonly stream?: undefined; readonly error: VfsError };
 
+async function* recursiveDirectoryInputs(
+  context: ShellCommandContext,
+  operand: string,
+  root: string,
+): AsyncGenerator<CommandInput> {
+  let cursor: string | null = null;
+  do {
+    context.budget.step();
+    const page: EntryPage = context.fileSystem.findPage({
+      path: root,
+      type: "file",
+      ...(cursor === null ? {} : { cursor }),
+    });
+    context.budget.glob(page.scanned);
+    for (const entry of page.entries) {
+      const name = displayPath(operand, root, entry.path);
+      try {
+        yield { name, stream: await openInput(context, entry.path) };
+      } catch (error) {
+        yield {
+          name,
+          error: error instanceof VfsError ? error : new VfsError("EIO", "read failed", entry.path),
+        };
+      }
+    }
+    cursor = page.nextCursor;
+  } while (cursor !== null);
+}
+
 export async function* recursiveInputs(
   context: ShellCommandContext,
   paths: readonly string[],
@@ -174,40 +203,8 @@ export async function* recursiveInputs(
       yield { name: path, stream: await openInput(context, normalized) };
       continue;
     }
-    // The walk returns canonical paths, so the prefix being replaced has to be
-    // the canonical root: slicing by the written one eats a separator when a
-    // link's name is longer than what it points at.
     const root = context.fileSystem.realpath(normalized);
-    const display = (entry: string): string => displayPath(path, root, entry);
-    let cursor: string | null = null;
-    do {
-      context.budget.step();
-      const page: EntryPage = context.fileSystem.findPage({
-        path: root,
-        type: "file",
-        ...(cursor === null ? {} : { cursor }),
-      });
-      context.budget.glob(page.scanned);
-      for (const entry of page.entries) {
-        const name = display(entry.path);
-        // One unreadable entry in a subtree is that entry's failure, not the
-        // walk's: reporting it and carrying on keeps the matches already found
-        // and matches what `grep -r` does with a file it cannot open.
-        let stream: ReadableStream<Uint8Array>;
-        try {
-          stream = await openInput(context, entry.path);
-        } catch (error) {
-          yield {
-            name,
-            error:
-              error instanceof VfsError ? error : new VfsError("EIO", "read failed", entry.path),
-          };
-          continue;
-        }
-        yield { name, stream };
-      }
-      cursor = page.nextCursor;
-    } while (cursor !== null);
+    yield* recursiveDirectoryInputs(context, path, root);
   }
 }
 
@@ -243,6 +240,43 @@ export function displayPath(operand: string, resolved: string, entry: string): s
   return `${operand.replace(/\/$/u, "")}${suffix}`;
 }
 
+function decodeUtf8(decoder: TextDecoder, chunk: Uint8Array | undefined, path?: string): string {
+  try {
+    return chunk === undefined ? decoder.decode() : decoder.decode(chunk, { stream: true });
+  } catch {
+    throw new VfsError("EIO", "input is not valid UTF-8", path);
+  }
+}
+
+interface TextLineState {
+  pending: string;
+  records: number;
+}
+
+function accountRecord(state: TextLineState, context: ShellCommandContext, path?: string): void {
+  context.budget.step();
+  state.records += 1;
+  if (state.records > context.budget.limits.maxBufferedRecords) {
+    throw new VfsError("E2BIG", "input record limit exceeded", path);
+  }
+}
+
+function takeTextLine(
+  state: TextLineState,
+  context: ShellCommandContext,
+  path?: string,
+): string | undefined {
+  const newline = state.pending.indexOf("\n");
+  if (newline < 0) return undefined;
+  const line = state.pending.slice(0, newline + 1);
+  state.pending = state.pending.slice(newline + 1);
+  if (utf8ByteLength(line) > context.budget.limits.maxLineBytes) {
+    throw new VfsError("E2BIG", "line byte limit exceeded", path);
+  }
+  accountRecord(state, context, path);
+  return line;
+}
+
 export async function* readTextLines(
   context: ShellCommandContext,
   stream: ReadableStream<Uint8Array>,
@@ -250,56 +284,30 @@ export async function* readTextLines(
 ): AsyncGenerator<string> {
   const reader = stream.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
-  let pending = "";
+  const state: TextLineState = { pending: "", records: 0 };
   let finished = false;
-  let records = 0;
   try {
-    while (true) {
-      if (context.signal.aborted) {
-        throw context.signal.reason ?? new VfsError("ECANCELED", "execution was cancelled");
-      }
+    for (;;) {
       const read = await readWithAbort(reader, context.signal);
       if (read.done) {
-        try {
-          pending += decoder.decode();
-        } catch {
-          throw new VfsError("EIO", "input is not valid UTF-8", path);
-        }
+        state.pending += decodeUtf8(decoder, undefined, path);
         finished = true;
         break;
       }
       context.budget.io(read.value.byteLength);
-      try {
-        pending += decoder.decode(read.value, { stream: true });
-      } catch {
-        throw new VfsError("EIO", "input is not valid UTF-8", path);
-      }
+      state.pending += decodeUtf8(decoder, read.value, path);
       for (;;) {
-        const newline = pending.indexOf("\n");
-        if (newline < 0) break;
-        const line = pending.slice(0, newline + 1);
-        pending = pending.slice(newline + 1);
-        if (utf8ByteLength(line) > context.budget.limits.maxLineBytes) {
-          throw new VfsError("E2BIG", "line byte limit exceeded", path);
-        }
-        context.budget.step();
-        records += 1;
-        if (records > context.budget.limits.maxBufferedRecords) {
-          throw new VfsError("E2BIG", "input record limit exceeded", path);
-        }
+        const line = takeTextLine(state, context, path);
+        if (line === undefined) break;
         yield line;
       }
-      if (utf8ByteLength(pending) > context.budget.limits.maxLineBytes) {
+      if (utf8ByteLength(state.pending) > context.budget.limits.maxLineBytes) {
         throw new VfsError("E2BIG", "line byte limit exceeded", path);
       }
     }
-    if (pending.length > 0) {
-      context.budget.step();
-      records += 1;
-      if (records > context.budget.limits.maxBufferedRecords) {
-        throw new VfsError("E2BIG", "input record limit exceeded", path);
-      }
-      yield pending;
+    if (state.pending.length > 0) {
+      accountRecord(state, context, path);
+      yield state.pending;
     }
   } catch (error) {
     await reader.cancel(error).catch(() => undefined);
@@ -324,10 +332,7 @@ export async function collectStream(
   let release: () => void = () => undefined;
   let retained = false;
   try {
-    while (true) {
-      if (context.signal.aborted) {
-        throw context.signal.reason ?? new VfsError("ECANCELED", "execution was cancelled");
-      }
+    for (;;) {
       const result = await readWithAbort(reader, context.signal);
       if (result.done) break;
       total += result.value.byteLength;
@@ -385,20 +390,11 @@ export async function collectText(
       }
       release();
       release = context.budget.buffered(total);
-      let decoded: string;
-      try {
-        decoded = decoder.decode(result.value, { stream: true });
-      } catch {
-        throw new VfsError("EIO", "input is not valid UTF-8", path);
-      }
+      const decoded = decodeUtf8(decoder, result.value, path);
       if (decoded.length > 0) chunks.push(decoded);
     }
-    try {
-      const final = decoder.decode();
-      if (final.length > 0) chunks.push(final);
-    } catch {
-      throw new VfsError("EIO", "input is not valid UTF-8", path);
-    }
+    const final = decodeUtf8(decoder, undefined, path);
+    if (final.length > 0) chunks.push(final);
     retained = true;
     return { value: chunks.join(""), release };
   } catch (error) {

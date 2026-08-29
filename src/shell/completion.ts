@@ -200,6 +200,55 @@ function commandCandidates(word: string, context: CompletionContext): Completion
   return [...names].sort().map((value) => ({ value, kind: "command" as const }));
 }
 
+class PathCandidateScan {
+  readonly candidates: CompletionCandidate[] = [];
+  matched = 0;
+  commonPrefix: string | undefined;
+  scanned = 0;
+  truncated = false;
+  cursor: string | undefined;
+
+  constructor(
+    readonly typedDirectory: string,
+    readonly prefix: string,
+    readonly limits: CompletionLimits,
+  ) {}
+
+  add(entries: readonly VfsStat[]): void {
+    for (const entry of entries) {
+      if (!entry.name.startsWith(this.prefix)) continue;
+      const directory = entry.kind === "directory";
+      const value = `${this.typedDirectory}${entry.name}${directory ? "/" : ""}`;
+      this.matched += 1;
+      this.commonPrefix =
+        this.commonPrefix === undefined ? value : longestCommonPrefix([this.commonPrefix, value]);
+      if (this.candidates.length >= this.limits.maxCandidates) this.truncated = true;
+      else this.candidates.push({ value, kind: directory ? "directory" : "path" });
+    }
+  }
+
+  get done(): boolean {
+    return this.cursor === undefined || this.truncated || this.scanned >= this.limits.maxScanned;
+  }
+}
+
+function scanPathCandidates(
+  listed: string,
+  scan: PathCandidateScan,
+  context: CompletionContext,
+): void {
+  do {
+    const page = context.fileSystem.listPage(listed, {
+      limit: Math.min(256, scan.limits.maxScanned - scan.scanned),
+      ...(scan.cursor === undefined ? {} : { cursor: scan.cursor }),
+    });
+    scan.scanned += page.scanned;
+    scan.add(page.entries);
+    scan.cursor = page.nextCursor ?? undefined;
+    if (scan.scanned >= scan.limits.maxScanned && scan.cursor !== undefined) scan.truncated = true;
+  } while (!scan.done);
+}
+
 function pathCompletion(
   word: string,
   start: number,
@@ -213,51 +262,30 @@ function pathCompletion(
   const separator = word.lastIndexOf("/");
   const typedDirectory = separator < 0 ? "" : word.slice(0, separator + 1);
   const prefix = separator < 0 ? word : word.slice(separator + 1);
-  const candidates: CompletionCandidate[] = [];
-  let matched = 0;
-  let prefixOfAll: string | undefined;
-  let scanned = 0;
-  let truncated = false;
-  let cursor: string | undefined;
+  const scan = new PathCandidateScan(typedDirectory, prefix, limits);
   try {
     const listed = typedDirectory === "" ? context.cwd : normalizePath(typedDirectory, context.cwd);
-    do {
-      const page = context.fileSystem.listPage(listed, {
-        limit: Math.min(256, limits.maxScanned - scanned),
-        ...(cursor === undefined ? {} : { cursor }),
-      });
-      scanned += page.scanned;
-      for (const entry of page.entries) {
-        if (!entry.name.startsWith(prefix)) continue;
-        const directory = entry.kind === "directory";
-        const value = `${typedDirectory}${entry.name}${directory ? "/" : ""}`;
-        // Counted and folded into the prefix even past the cap, so the prefix
-        // stays true for the matches that are not returned. Offering one that
-        // excluded them would make a client type text it has to delete.
-        matched += 1;
-        prefixOfAll = prefixOfAll === undefined ? value : longestCommonPrefix([prefixOfAll, value]);
-        if (candidates.length >= limits.maxCandidates) {
-          truncated = true;
-          continue;
-        }
-        candidates.push({ value, kind: directory ? "directory" : "path" });
-      }
-      cursor = page.nextCursor ?? undefined;
-      if (scanned >= limits.maxScanned && cursor !== undefined) truncated = true;
-    } while (cursor !== undefined && !truncated && scanned < limits.maxScanned);
+    scanPathCandidates(listed, scan, context);
   } catch {
     // A half-typed path is the ordinary case here: it may not exist yet, or
     // may not even be a legal path. Neither is an error to report — there is
     // simply nothing to offer.
-    return { start, end, candidates: [], commonPrefix: "", truncated: false, scanned };
+    return {
+      start,
+      end,
+      candidates: [],
+      commonPrefix: "",
+      truncated: false,
+      scanned: scan.scanned,
+    };
   }
   return {
     start,
     end,
-    candidates,
-    commonPrefix: prefixOfAll ?? "",
-    truncated: truncated || candidates.length < matched,
-    scanned,
+    candidates: scan.candidates,
+    commonPrefix: scan.commonPrefix ?? "",
+    truncated: scan.truncated || scan.candidates.length < scan.matched,
+    scanned: scan.scanned,
   };
 }
 

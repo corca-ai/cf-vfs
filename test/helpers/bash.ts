@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { defaultShellCommands } from "../../src/shell/commands/default.js";
 import { Shell } from "../../src/shell/shell.js";
 import type {
@@ -12,7 +12,7 @@ import { readAllBytes } from "../../src/vfs/streams.js";
 import { type ByteBody, MAX_INLINE_FILE_BYTES } from "../../src/vfs/types.js";
 import { createTestFileSystem } from "./node-sql.js";
 
-export type BashSource = string | readonly string[];
+type BashSource = string | readonly string[];
 
 export interface BashHarnessOptions extends Omit<ShellOptions, "fileSystem" | "commands"> {
   fileSystem?: NodeSqlFileSystem;
@@ -85,38 +85,61 @@ async function arrangeFiles(
   }
 }
 
+function caseRunOptions(specification: BashCase): Omit<ExecuteTextOptions, "script"> {
+  return {
+    ...(specification.stdin === undefined ? {} : { stdin: specification.stdin }),
+    ...(specification.cwd === undefined ? {} : { cwd: specification.cwd }),
+    ...(specification.env === undefined ? {} : { env: specification.env }),
+    ...(specification.args === undefined ? {} : { args: specification.args }),
+    ...(specification.signal === undefined ? {} : { signal: specification.signal }),
+  };
+}
+
+function expectStderr(result: ExecuteTextResult, specification: BashCase): void {
+  if (specification.stderrIncludes === undefined) {
+    expect(result.stderr).toBe(specification.stderr ?? "");
+    return;
+  }
+  const fragments =
+    typeof specification.stderrIncludes === "string"
+      ? [specification.stderrIncludes]
+      : specification.stderrIncludes;
+  for (const fragment of fragments) expect(result.stderr).toContain(fragment);
+}
+
+async function expectFiles(harness: BashHarness, specification: BashCase): Promise<void> {
+  for (const [path, expected] of Object.entries(specification.expectedFiles ?? {})) {
+    expect(await harness.readText(path), path).toBe(expected);
+  }
+  for (const path of specification.missingFiles ?? []) {
+    expect(() => harness.fileSystem.stat(path), path).toThrowError(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
+  }
+}
+
+async function runBashCase(specification: BashCase, options: BashHarnessOptions): Promise<void> {
+  const harness = createBashHarness(options);
+  await arrangeFiles(harness.fileSystem, specification.files ?? {});
+  const result = await harness.run(specification.script, caseRunOptions(specification));
+
+  expect(result.exitCode).toBe(specification.exitCode ?? 0);
+  expect(result.stdout).toBe(specification.stdout ?? "");
+  expectStderr(result, specification);
+  await expectFiles(harness, specification);
+}
+
 export function bashCases(cases: readonly BashCase[], options: BashHarnessOptions = {}): void {
   for (const specification of cases) {
-    it(specification.name, async () => {
-      const harness = createBashHarness(options);
-      await arrangeFiles(harness.fileSystem, specification.files ?? {});
-      const result = await harness.run(specification.script, {
-        ...(specification.stdin === undefined ? {} : { stdin: specification.stdin }),
-        ...(specification.cwd === undefined ? {} : { cwd: specification.cwd }),
-        ...(specification.env === undefined ? {} : { env: specification.env }),
-        ...(specification.args === undefined ? {} : { args: specification.args }),
-        ...(specification.signal === undefined ? {} : { signal: specification.signal }),
-      });
-
-      expect(result.exitCode).toBe(specification.exitCode ?? 0);
-      expect(result.stdout).toBe(specification.stdout ?? "");
-      if (specification.stderrIncludes === undefined) {
-        expect(result.stderr).toBe(specification.stderr ?? "");
-      } else {
-        const fragments =
-          typeof specification.stderrIncludes === "string"
-            ? [specification.stderrIncludes]
-            : specification.stderrIncludes;
-        for (const fragment of fragments) expect(result.stderr).toContain(fragment);
-      }
-      for (const [path, expected] of Object.entries(specification.expectedFiles ?? {})) {
-        expect(await harness.readText(path), path).toBe(expected);
-      }
-      for (const path of specification.missingFiles ?? []) {
-        expect(() => harness.fileSystem.stat(path), path).toThrowError(
-          expect.objectContaining({ code: "ENOENT" }),
-        );
-      }
-    });
+    it(specification.name, () => runBashCase(specification, options));
   }
+}
+
+/** Registers a data-driven Bash suite without hiding its case table in one giant callback. */
+export function bashSuite(
+  name: string,
+  cases: readonly BashCase[],
+  options: BashHarnessOptions = {},
+): void {
+  describe(name, () => bashCases(cases, options));
 }

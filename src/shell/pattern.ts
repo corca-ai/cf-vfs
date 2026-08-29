@@ -30,37 +30,34 @@ function boundedCharacters(value: string, budget: PatternBudget): string[] {
   return [...value];
 }
 
+function patternToken(
+  characters: readonly string[],
+  index: number,
+): { readonly token: PatternToken; readonly consumed: number } {
+  const character = characters[index] ?? "";
+  if (character === "\\" && characters[index + 1] !== undefined) {
+    return { token: { kind: "literal", value: characters[index + 1] ?? "" }, consumed: 2 };
+  }
+  if (character === "*") return { token: { kind: "star" }, consumed: 1 };
+  if (character === "?") return { token: { kind: "any" }, consumed: 1 };
+  if (character !== "[") return { token: { kind: "literal", value: character }, consumed: 1 };
+  const expression = parseBracketExpression(characters, index);
+  return expression === undefined
+    ? { token: { kind: "literal", value: character }, consumed: 1 }
+    : {
+        token: { kind: "class", negated: expression.negated, ranges: expression.ranges },
+        consumed: expression.close - index + 1,
+      };
+}
+
 function compilePattern(pattern: string, budget: PatternBudget): CompiledPattern {
   const characters = [...pattern];
   budget.expansionWork(characters.length);
   const tokens: PatternToken[] = [];
-  for (let index = 0; index < characters.length; index += 1) {
-    const character = characters[index] ?? "";
-    if (character === "\\" && characters[index + 1] !== undefined) {
-      tokens.push({ kind: "literal", value: characters[++index] ?? "" });
-      continue;
-    }
-    if (character === "*") {
-      if (tokens.at(-1)?.kind !== "star") tokens.push({ kind: "star" });
-      continue;
-    }
-    if (character === "?") {
-      tokens.push({ kind: "any" });
-      continue;
-    }
-    if (character === "[") {
-      const expression = parseBracketExpression(characters, index);
-      if (expression !== undefined) {
-        tokens.push({
-          kind: "class",
-          negated: expression.negated,
-          ranges: expression.ranges,
-        });
-        index = expression.close;
-        continue;
-      }
-    }
-    tokens.push({ kind: "literal", value: character });
+  for (let index = 0; index < characters.length; ) {
+    const parsed = patternToken(characters, index);
+    if (parsed.token.kind !== "star" || tokens.at(-1)?.kind !== "star") tokens.push(parsed.token);
+    index += parsed.consumed;
   }
   return {
     tokens,
@@ -102,6 +99,57 @@ function matchesWithoutStar(
   return true;
 }
 
+function advanceMatches(
+  previous: Uint8Array,
+  token: PatternToken,
+  characters: readonly string[],
+  start: number,
+  budget: PatternBudget,
+): Uint8Array {
+  const remaining = previous.length - 1;
+  const current = new Uint8Array(previous.length);
+  if (token.kind === "star") {
+    return advanceStar(previous, current);
+  }
+  for (let offset = 1; offset <= remaining; offset += 1) {
+    if (
+      (previous[offset - 1] ?? 0) !== 0 &&
+      tokenMatches(token, characters[start + offset - 1] ?? "", budget)
+    ) {
+      current[offset] = 1;
+    }
+  }
+  return current;
+}
+
+function advanceStar(previous: Uint8Array, current: Uint8Array): Uint8Array {
+  current[0] = previous[0] ?? 0;
+  for (let offset = 1; offset < previous.length; offset += 1) {
+    current[offset] = (previous[offset] ?? 0) || (current[offset - 1] ?? 0) ? 1 : 0;
+  }
+  return current;
+}
+
+function selectedMatchEnd(
+  matches: Uint8Array,
+  start: number,
+  selection: "exact" | "shortest" | "longest" | "longest-nonempty",
+): number | undefined {
+  const remaining = matches.length - 1;
+  if (selection === "exact") return matches[remaining] === 0 ? undefined : start + remaining;
+  const minimum = selection === "longest-nonempty" ? 1 : 0;
+  if (selection === "shortest") {
+    for (let offset = minimum; offset <= remaining; offset += 1) {
+      if ((matches[offset] ?? 0) !== 0) return start + offset;
+    }
+    return undefined;
+  }
+  for (let offset = remaining; offset >= minimum; offset -= 1) {
+    if ((matches[offset] ?? 0) !== 0) return start + offset;
+  }
+  return undefined;
+}
+
 function matchingEnd(
   characters: readonly string[],
   start: number,
@@ -119,42 +167,13 @@ function matchingEnd(
     return selection === "longest-nonempty" && end === start ? undefined : end;
   }
   budget.expansionWork(remaining + 1);
-  let previous = new Uint8Array(remaining + 1);
+  let previous: Uint8Array = new Uint8Array(remaining + 1);
   previous[0] = 1;
   for (const token of pattern.tokens) {
     budget.expansionWork(remaining + 1);
-    const current = new Uint8Array(remaining + 1);
-    if (token.kind === "star") {
-      current[0] = previous[0] ?? 0;
-      for (let offset = 1; offset <= remaining; offset += 1) {
-        current[offset] = (previous[offset] ?? 0) || (current[offset - 1] ?? 0) ? 1 : 0;
-      }
-    } else {
-      for (let offset = 1; offset <= remaining; offset += 1) {
-        if (
-          (previous[offset - 1] ?? 0) !== 0 &&
-          tokenMatches(token, characters[start + offset - 1] ?? "", budget)
-        ) {
-          current[offset] = 1;
-        }
-      }
-    }
-    previous = current;
+    previous = advanceMatches(previous, token, characters, start, budget);
   }
-  if (selection === "exact") {
-    return (previous[remaining] ?? 0) === 0 ? undefined : characters.length;
-  }
-  const minimum = selection === "longest-nonempty" ? 1 : 0;
-  if (selection === "shortest") {
-    for (let offset = minimum; offset <= remaining; offset += 1) {
-      if ((previous[offset] ?? 0) !== 0) return start + offset;
-    }
-    return undefined;
-  }
-  for (let offset = remaining; offset >= minimum; offset -= 1) {
-    if ((previous[offset] ?? 0) !== 0) return start + offset;
-  }
-  return undefined;
+  return selectedMatchEnd(previous, start, selection);
 }
 
 export function matchesShellPattern(

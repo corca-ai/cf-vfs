@@ -7,7 +7,7 @@ import { openContent } from "./content.js";
 import { deviceInput, deviceSink, shellDevice } from "./devices.js";
 import { type ExpansionRuntime, expandScalarWord, expandWord } from "./expand.js";
 import { shellInput } from "./input.js";
-import type { Redirection } from "./parser.js";
+import type { Redirection, ShellWord } from "./parser.js";
 import { sinkFromWritable } from "./pipe.js";
 import type {
   ShellBudget,
@@ -103,6 +103,141 @@ export interface AppliedRedirections {
   inputRedirected: boolean;
 }
 
+interface RedirectionInput {
+  readonly content?: ShellContentReader | undefined;
+  readonly access?: OpaqueContentAccess | undefined;
+  readonly signal?: AbortSignal | undefined;
+}
+
+class RedirectionState {
+  readonly fds: ShellFileDescriptors;
+  readonly redirected = new Set<1 | 2>();
+  #inputRedirected = false;
+
+  constructor(
+    initial: ShellFileDescriptors,
+    readonly session: ShellSession,
+    readonly fileSystem: ShellFileSystem,
+    readonly budget: ShellBudget,
+    readonly cancelReplacedInput: boolean,
+    readonly runtime: ExpansionRuntime,
+    readonly input: RedirectionInput,
+  ) {
+    this.fds = { 0: initial[0], 1: initial[1], 2: initial[2] };
+  }
+
+  get inputRedirected(): boolean {
+    return this.#inputRedirected;
+  }
+
+  async #duplicate(from: 1 | 2, to: 1 | 2): Promise<void> {
+    await this.fds[to].close();
+    this.fds[to] = this.fds[from].clone();
+    if (this.redirected.has(from)) this.redirected.add(to);
+    else this.redirected.delete(to);
+  }
+
+  async #replaceInput(stream: ReadableStream<Uint8Array>): Promise<void> {
+    if (this.cancelReplacedInput || this.#inputRedirected) {
+      await this.fds[0].cancel(new VfsError("EPIPE", "pipeline input was replaced by redirection"));
+    }
+    this.fds[0] = shellInput(stream);
+    this.#inputRedirected = true;
+  }
+
+  async #scalarInput(word: ShellWord, newline: boolean): Promise<void> {
+    const value = await expandScalarWord(
+      word,
+      this.session,
+      this.fileSystem,
+      this.budget,
+      this.runtime,
+    );
+    await this.#replaceInput(bodyToStream(newline ? `${value}\n` : value));
+  }
+
+  async #pathInput(path: string, device: ReturnType<typeof shellDevice>): Promise<void> {
+    if (device === "stdin") return;
+    const replacement =
+      device === undefined
+        ? (
+            await openContent(this.fileSystem, path, {
+              reader: this.input.content,
+              access: this.input.access,
+              signal: this.input.signal,
+            })
+          ).stream
+        : deviceInput(device, this.fds, path);
+    await this.#replaceInput(replacement);
+  }
+
+  async #bothOutputs(replacement: ShellSink): Promise<void> {
+    const errorReplacement = replacement.clone();
+    try {
+      await Promise.all([this.fds[1].close(), this.fds[2].close()]);
+    } catch (error) {
+      await replacement.abort(error).catch(() => undefined);
+      throw error;
+    }
+    this.fds[1] = replacement;
+    this.fds[2] = errorReplacement;
+    this.redirected.add(1);
+    this.redirected.add(2);
+  }
+
+  async #oneOutput(replacement: ShellSink, descriptor: 1 | 2): Promise<void> {
+    try {
+      await this.fds[descriptor].close();
+    } catch (error) {
+      await replacement.abort(error).catch(() => undefined);
+      throw error;
+    }
+    this.fds[descriptor] = replacement;
+    this.redirected.add(descriptor);
+  }
+
+  async #pathOutput(
+    path: string,
+    device: ReturnType<typeof shellDevice>,
+    operator: Redirection["operator"],
+  ): Promise<void> {
+    const replacement =
+      device === undefined
+        ? atomicFileSink(
+            this.fileSystem,
+            path,
+            operator.endsWith(">>"),
+            this.budget.limits.maxPipelineBytes,
+            this.budget,
+          )
+        : deviceSink(device, this.fds, path);
+    if (operator === "&>" || operator === "&>>") return await this.#bothOutputs(replacement);
+    await this.#oneOutput(replacement, operator.startsWith("2") ? 2 : 1);
+  }
+
+  async apply(redirection: Redirection): Promise<void> {
+    if (redirection.operator === "2>&1") return await this.#duplicate(1, 2);
+    if (redirection.operator === ">&2") return await this.#duplicate(2, 1);
+    if (redirection.operator === "<<<") return await this.#scalarInput(redirection.target, true);
+    if ("document" in redirection) return await this.#scalarInput(redirection.document, false);
+    const path = await targetPath(
+      redirection.target,
+      this.session,
+      this.fileSystem,
+      this.budget,
+      this.runtime,
+    );
+    const device = shellDevice(path);
+    if (device !== undefined) {
+      if (redirection.operator === "<") this.fileSystem.assertReadable(path);
+      else this.fileSystem.assertWritable(path);
+    }
+    return redirection.operator === "<"
+      ? await this.#pathInput(path, device)
+      : await this.#pathOutput(path, device, redirection.operator);
+  }
+}
+
 export async function applyRedirections(
   redirections: readonly Redirection[],
   initial: ShellFileDescriptors,
@@ -112,140 +247,29 @@ export async function applyRedirections(
   cancelReplacedInput: boolean,
   runtime: ExpansionRuntime,
   /** What a `<` may open: the same rule a command operand goes through. */
-  input: {
-    readonly content?: ShellContentReader | undefined;
-    readonly access?: OpaqueContentAccess | undefined;
-    readonly signal?: AbortSignal | undefined;
-  } = {},
+  input: RedirectionInput = {},
 ): Promise<AppliedRedirections> {
-  const fds: ShellFileDescriptors = { 0: initial[0], 1: initial[1], 2: initial[2] };
-  const redirected = new Set<1 | 2>();
-  let inputRedirected = false;
+  const state = new RedirectionState(
+    initial,
+    session,
+    fileSystem,
+    budget,
+    cancelReplacedInput,
+    runtime,
+    input,
+  );
   try {
-    for (const redirection of redirections) {
-      if (redirection.operator === "2>&1") {
-        await fds[2].close();
-        fds[2] = fds[1].clone();
-        if (redirected.has(1)) redirected.add(2);
-        else redirected.delete(2);
-        continue;
-      }
-      // The mirror of `2>&1`, and implemented as one: both descriptors exist,
-      // so duplicating either way is the same three lines. The duplicate stays
-      // out of `redirected` for the reason `2>&1`'s does — aborting it would
-      // tear down the stream it was duplicated from.
-      if (redirection.operator === ">&2") {
-        await fds[1].close();
-        fds[1] = fds[2].clone();
-        if (redirected.has(2)) redirected.add(1);
-        else redirected.delete(1);
-        continue;
-      }
-      if (redirection.operator === "<<<") {
-        const value = await expandScalarWord(
-          redirection.target,
-          session,
-          fileSystem,
-          budget,
-          runtime,
-        );
-        if (cancelReplacedInput || inputRedirected) {
-          await fds[0].cancel(new VfsError("EPIPE", "pipeline input was replaced by redirection"));
-        }
-        fds[0] = shellInput(bodyToStream(`${value}\n`));
-        inputRedirected = true;
-        continue;
-      }
-      if ("document" in redirection) {
-        const value = await expandScalarWord(
-          redirection.document,
-          session,
-          fileSystem,
-          budget,
-          runtime,
-        );
-        if (cancelReplacedInput || inputRedirected) {
-          await fds[0].cancel(new VfsError("EPIPE", "pipeline input was replaced by redirection"));
-        }
-        fds[0] = shellInput(bodyToStream(value));
-        inputRedirected = true;
-        continue;
-      }
-      const path = await targetPath(redirection.target, session, fileSystem, budget, runtime);
-      const device = shellDevice(path);
-      // A device is a path like any other as far as the declared roots are
-      // concerned, so the roots are checked before the descriptor layer
-      // answers. Going straight to the device would be the accidental bypass.
-      if (device !== undefined) {
-        if (redirection.operator === "<") fileSystem.assertReadable(path);
-        else fileSystem.assertWritable(path);
-      }
-      if (redirection.operator === "<") {
-        // `< /dev/stdin` names the input it would replace, so it changes
-        // nothing. Going through the motions would cancel the stream first and
-        // then hand back what was just cancelled.
-        if (device === "stdin") continue;
-        const replacement =
-          device === undefined
-            ? (
-                await openContent(fileSystem, path, {
-                  reader: input.content,
-                  access: input.access,
-                  signal: input.signal,
-                })
-              ).stream
-            : deviceInput(device, fds, path);
-        if (cancelReplacedInput || inputRedirected) {
-          await fds[0].cancel(new VfsError("EPIPE", "pipeline input was replaced by redirection"));
-        }
-        fds[0] = shellInput(replacement);
-        inputRedirected = true;
-        continue;
-      }
-      // The sink is built before the descriptor it replaces is closed, so a
-      // constructor that throws leaves the current descriptor intact. A device
-      // alias needs the same ordering for its own reason: `> /dev/stdout`
-      // takes its reference while the original is still open.
-      const replacement =
-        device === undefined
-          ? atomicFileSink(
-              fileSystem,
-              path,
-              redirection.operator.endsWith(">>"),
-              budget.limits.maxPipelineBytes,
-              budget,
-            )
-          : deviceSink(device, fds, path);
-      if (redirection.operator === "&>" || redirection.operator === "&>>") {
-        const errorReplacement = replacement.clone();
-        try {
-          await Promise.all([fds[1].close(), fds[2].close()]);
-        } catch (error) {
-          await replacement.abort(error).catch(() => undefined);
-          throw error;
-        }
-        fds[1] = replacement;
-        fds[2] = errorReplacement;
-        redirected.add(1);
-        redirected.add(2);
-        continue;
-      }
-      const descriptor = redirection.operator.startsWith("2") ? 2 : 1;
-      try {
-        await fds[descriptor].close();
-      } catch (error) {
-        await replacement.abort(error).catch(() => undefined);
-        throw error;
-      }
-      fds[descriptor] = replacement;
-      redirected.add(descriptor);
-    }
-    return { fds, redirected, inputRedirected };
+    for (const redirection of redirections) await state.apply(redirection);
+    return {
+      fds: state.fds,
+      redirected: state.redirected,
+      inputRedirected: state.inputRedirected,
+    };
   } catch (error) {
     await Promise.allSettled([
-      fds[0] === initial[0] ? Promise.resolve() : fds[0].cancel(error),
-      redirected.has(1) ? fds[1].abort(error) : fds[1].close(),
-      redirected.has(2) ? fds[2].abort(error) : fds[2].close(),
+      state.fds[0] === initial[0] ? Promise.resolve() : state.fds[0].cancel(error),
+      state.redirected.has(1) ? state.fds[1].abort(error) : state.fds[1].close(),
+      state.redirected.has(2) ? state.fds[2].abort(error) : state.fds[2].close(),
     ]);
     throw error;
   }

@@ -203,38 +203,58 @@ export type InteractiveInputResult =
   | { readonly status: "incomplete" }
   | { readonly status: "ready"; readonly source: string };
 
-function hasTrailingLineContinuation(line: string): boolean {
-  let quote: "'" | '"' | undefined;
-  let boundary = true;
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    if (quote === "'") {
-      if (character === "'") quote = undefined;
-      continue;
+class LineContinuationScanner {
+  private index = 0;
+  private quote: "'" | '"' | undefined;
+  private boundary = true;
+
+  constructor(private readonly line: string) {}
+
+  scan(): boolean {
+    for (; this.index < this.line.length; this.index += 1) {
+      const character = this.line[this.index] ?? "";
+      if (this.quote === "'") {
+        this.consumeQuoted(character, "'");
+        continue;
+      }
+      if (character === "\\") {
+        if (this.consumeEscape()) return true;
+        continue;
+      }
+      if (this.quote === '"') {
+        this.consumeQuoted(character, '"');
+        continue;
+      }
+      if (this.consumeUnquoted(character)) return false;
     }
-    if (character === "\\") {
-      if (index === line.length - 1) return true;
-      index += 1;
-      boundary = false;
-      continue;
-    }
-    if (quote === '"') {
-      if (character === '"') quote = undefined;
-      continue;
-    }
-    if (character === "'" || character === '"') {
-      quote = character;
-      boundary = false;
-      continue;
-    }
-    if (character === "#" && boundary) return false;
-    boundary =
-      character === " " ||
-      character === "\t" ||
-      character === "\r" ||
-      ";\n|&<>(){}".includes(character ?? "");
+    return false;
   }
-  return false;
+
+  private consumeQuoted(character: string, quote: "'" | '"'): void {
+    if (character === quote) this.quote = undefined;
+  }
+
+  private consumeEscape(): boolean {
+    if (this.index === this.line.length - 1) return true;
+    this.index += 1;
+    this.boundary = false;
+    return false;
+  }
+
+  private consumeUnquoted(character: string): boolean {
+    if (character === "'" || character === '"') {
+      this.quote = character;
+      this.boundary = false;
+      return false;
+    }
+    if (character === "#" && this.boundary) return true;
+    this.boundary = " \t\r;\n|&<>(){}".includes(character);
+    return false;
+  }
+}
+
+function hasTrailingLineContinuation(line: string): boolean {
+  return new LineContinuationScanner(line).scan();
 }
 
 export class InteractiveInputBuffer {

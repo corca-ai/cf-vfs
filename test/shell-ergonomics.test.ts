@@ -4,187 +4,185 @@ import { bashCases, createBashHarness } from "./helpers/bash.js";
 
 const HOME = { HOME: "/home/cf" };
 
-describe("tilde expansion", () => {
-  bashCases([
-    {
-      name: "expands a bare tilde to HOME",
-      script: "printf %s ~",
-      env: HOME,
-      stdout: "/home/cf",
-    },
-    {
-      name: "expands a tilde prefix",
-      script: "printf %s ~/notes/today.txt",
-      env: HOME,
-      stdout: "/home/cf/notes/today.txt",
-    },
-    {
-      name: "reads a file through a tilde path",
-      files: { "/home/cf/note.txt": "body" },
-      script: "cat ~/note.txt",
-      env: HOME,
-      stdout: "body",
-    },
-    {
-      name: "leaves a quoted tilde literal",
-      script: "printf '%s|%s|%s' '~' \"~\" \\~",
-      env: HOME,
-      stdout: "~|~|~",
-    },
-    {
-      name: "leaves a named-user form literal",
-      script: "printf '%s|%s' ~alice ~alice/notes",
-      env: HOME,
-      stdout: "~alice|~alice/notes",
-    },
-    {
-      name: "leaves the directory-stack forms literal",
-      script: "printf '%s|%s|%s' ~+ ~- ~2",
-      env: HOME,
-      stdout: "~+|~-|~2",
-    },
-    {
-      name: "leaves a tilde that is not at the start literal",
-      script: "printf '%s|%s' a~ /x/~/y",
-      env: HOME,
-      stdout: "a~|/x/~/y",
-    },
-    {
-      name: "leaves a tilde literal when HOME is unset",
-      script: ["unset HOME", "printf '%s|%s' ~ ~/notes"],
-      env: HOME,
-      stdout: "~|~/notes",
-    },
-    {
-      name: "leaves a tilde literal when HOME is empty",
-      script: "printf %s ~",
-      env: { HOME: "" },
-      stdout: "~",
-    },
-    {
-      name: "does not expand a tilde produced by an expansion",
-      script: ["VALUE='~/notes'", 'printf %s "$VALUE"'],
-      env: HOME,
-      stdout: "~/notes",
-    },
-    {
-      name: "expands a tilde after = and after each colon in an assignment",
-      script: ["TOOLS=~/bin:~/tools", 'printf %s "$TOOLS"'],
-      env: HOME,
-      stdout: "/home/cf/bin:/home/cf/tools",
-    },
-    {
-      name: "leaves a tilde whose prefix is continued by a quoted part",
-      script: "printf '%s|%s' ~\"x\" ~'/y'",
-      env: HOME,
-      stdout: "~x|~/y",
-    },
-    {
-      name: "leaves a tilde whose prefix is continued by an expansion",
-      script: ["printf '%s|' ~$MISSING", "SUFFIX=q", "printf %s ~$SUFFIX"],
-      env: HOME,
-      stdout: "~|~q",
-    },
-    {
-      name: "expands a tilde in a case word and a conditional operand",
-      files: { "/home/cf/keep": "x" },
-      script: [
-        "case ~ in /home/cf) printf match;; *) printf no;; esac",
-        "[[ -d ~ ]] && printf '|dir'",
-      ],
-      env: HOME,
-      stdout: "match|dir",
-    },
-    {
-      name: "expands a tilde in an export or local assignment",
-      script: [
-        "export SHARED=~/bin:~/tools",
-        "wrap() { local INNER=~/inner; printf '%s|' \"$INNER\"; }",
-        "wrap",
-        'printf %s "$SHARED"',
-      ],
-      env: HOME,
-      stdout: "/home/cf/inner|/home/cf/bin:/home/cf/tools",
-    },
-    {
-      name: "expands an assignment-shaped operand and nothing else",
-      script: "printf '%s|%s|%s' X=~/y --opt=~/y 9X=~/y",
-      env: HOME,
-      // The name before `=` must be an identifier, exactly as in Bash.
-      stdout: "X=/home/cf/y|--opt=~/y|9X=~/y",
-    },
-    {
-      name: "expands a tilde in a redirection target",
-      files: { "/home/cf/keep": "x" },
-      script: ["printf body > ~/out.txt", "cat /home/cf/out.txt"],
-      env: HOME,
-      stdout: "body",
-    },
-    {
-      name: "expands a tilde before pathname expansion",
-      files: { "/home/cf/one.txt": "1", "/home/cf/two.txt": "2" },
-      script: "printf '%s ' ~/*.txt",
-      env: HOME,
-      stdout: "/home/cf/one.txt /home/cf/two.txt ",
-    },
-    {
-      name: "applies a prefix assignment after the command word expands",
-      script: "HOME=/other printf %s ~",
-      env: HOME,
-      stdout: "/home/cf",
-    },
-    {
-      name: "leaves a quoted assignment value literal",
-      script: ["TOOLS='~/bin'", 'printf %s "$TOOLS"'],
-      env: HOME,
-      stdout: "~/bin",
-    },
-  ]);
+bashCases([
+  {
+    name: "expands a bare tilde to HOME",
+    script: "printf %s ~",
+    env: HOME,
+    stdout: "/home/cf",
+  },
+  {
+    name: "expands a tilde prefix",
+    script: "printf %s ~/notes/today.txt",
+    env: HOME,
+    stdout: "/home/cf/notes/today.txt",
+  },
+  {
+    name: "reads a file through a tilde path",
+    files: { "/home/cf/note.txt": "body" },
+    script: "cat ~/note.txt",
+    env: HOME,
+    stdout: "body",
+  },
+  {
+    name: "leaves a quoted tilde literal",
+    script: "printf '%s|%s|%s' '~' \"~\" \\~",
+    env: HOME,
+    stdout: "~|~|~",
+  },
+  {
+    name: "leaves a named-user form literal",
+    script: "printf '%s|%s' ~alice ~alice/notes",
+    env: HOME,
+    stdout: "~alice|~alice/notes",
+  },
+  {
+    name: "leaves the directory-stack forms literal",
+    script: "printf '%s|%s|%s' ~+ ~- ~2",
+    env: HOME,
+    stdout: "~+|~-|~2",
+  },
+  {
+    name: "leaves a tilde that is not at the start literal",
+    script: "printf '%s|%s' a~ /x/~/y",
+    env: HOME,
+    stdout: "a~|/x/~/y",
+  },
+  {
+    name: "leaves a tilde literal when HOME is unset",
+    script: ["unset HOME", "printf '%s|%s' ~ ~/notes"],
+    env: HOME,
+    stdout: "~|~/notes",
+  },
+  {
+    name: "leaves a tilde literal when HOME is empty",
+    script: "printf %s ~",
+    env: { HOME: "" },
+    stdout: "~",
+  },
+  {
+    name: "does not expand a tilde produced by an expansion",
+    script: ["VALUE='~/notes'", 'printf %s "$VALUE"'],
+    env: HOME,
+    stdout: "~/notes",
+  },
+  {
+    name: "expands a tilde after = and after each colon in an assignment",
+    script: ["TOOLS=~/bin:~/tools", 'printf %s "$TOOLS"'],
+    env: HOME,
+    stdout: "/home/cf/bin:/home/cf/tools",
+  },
+  {
+    name: "leaves a tilde whose prefix is continued by a quoted part",
+    script: "printf '%s|%s' ~\"x\" ~'/y'",
+    env: HOME,
+    stdout: "~x|~/y",
+  },
+  {
+    name: "leaves a tilde whose prefix is continued by an expansion",
+    script: ["printf '%s|' ~$MISSING", "SUFFIX=q", "printf %s ~$SUFFIX"],
+    env: HOME,
+    stdout: "~|~q",
+  },
+  {
+    name: "expands a tilde in a case word and a conditional operand",
+    files: { "/home/cf/keep": "x" },
+    script: [
+      "case ~ in /home/cf) printf match;; *) printf no;; esac",
+      "[[ -d ~ ]] && printf '|dir'",
+    ],
+    env: HOME,
+    stdout: "match|dir",
+  },
+  {
+    name: "expands a tilde in an export or local assignment",
+    script: [
+      "export SHARED=~/bin:~/tools",
+      "wrap() { local INNER=~/inner; printf '%s|' \"$INNER\"; }",
+      "wrap",
+      'printf %s "$SHARED"',
+    ],
+    env: HOME,
+    stdout: "/home/cf/inner|/home/cf/bin:/home/cf/tools",
+  },
+  {
+    name: "expands an assignment-shaped operand and nothing else",
+    script: "printf '%s|%s|%s' X=~/y --opt=~/y 9X=~/y",
+    env: HOME,
+    // The name before `=` must be an identifier, exactly as in Bash.
+    stdout: "X=/home/cf/y|--opt=~/y|9X=~/y",
+  },
+  {
+    name: "expands a tilde in a redirection target",
+    files: { "/home/cf/keep": "x" },
+    script: ["printf body > ~/out.txt", "cat /home/cf/out.txt"],
+    env: HOME,
+    stdout: "body",
+  },
+  {
+    name: "expands a tilde before pathname expansion",
+    files: { "/home/cf/one.txt": "1", "/home/cf/two.txt": "2" },
+    script: "printf '%s ' ~/*.txt",
+    env: HOME,
+    stdout: "/home/cf/one.txt /home/cf/two.txt ",
+  },
+  {
+    name: "applies a prefix assignment after the command word expands",
+    script: "HOME=/other printf %s ~",
+    env: HOME,
+    stdout: "/home/cf",
+  },
+  {
+    name: "leaves a quoted assignment value literal",
+    script: ["TOOLS='~/bin'", 'printf %s "$TOOLS"'],
+    env: HOME,
+    stdout: "~/bin",
+  },
+]);
 
-  it("charges the substituted home to the expansion budget", async () => {
-    const harness = createBashHarness({ limits: { maxExpansionChars: 32 } });
-    // The written word is short; only the substitution can exceed the limit.
-    const result = await harness.run("printf %s ~/x", { env: { HOME: `/${"h".repeat(40)}` } });
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("expansion");
-    const short = await harness.run("printf %s ~/x", { env: { HOME: "/home/cf" } });
-    expect(short.exitCode).toBe(0);
+it("charges the substituted home to the expansion budget", async () => {
+  const harness = createBashHarness({ limits: { maxExpansionChars: 32 } });
+  // The written word is short; only the substitution can exceed the limit.
+  const result = await harness.run("printf %s ~/x", { env: { HOME: `/${"h".repeat(40)}` } });
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr).toContain("expansion");
+  const short = await harness.run("printf %s ~/x", { env: { HOME: "/home/cf" } });
+  expect(short.exitCode).toBe(0);
+});
+
+it("bounds an assignment that names many tilde boundaries", async () => {
+  const harness = createBashHarness();
+  const home = `/${"h".repeat(20_000)}`;
+  const result = await harness.run(`X=${":~".repeat(30_000)}; printf done`, {
+    env: { HOME: home },
   });
+  // Every boundary copies HOME. Charging before materializing keeps this a
+  // budget diagnostic instead of a RangeError escaping the runtime.
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr).toContain("expansion work limit exceeded");
+});
 
-  it("bounds an assignment that names many tilde boundaries", async () => {
-    const harness = createBashHarness();
-    const home = `/${"h".repeat(20_000)}`;
-    const result = await harness.run(`X=${":~".repeat(30_000)}; printf done`, {
-      env: { HOME: home },
-    });
-    // Every boundary copies HOME. Charging before materializing keeps this a
-    // budget diagnostic instead of a RangeError escaping the runtime.
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("expansion work limit exceeded");
+it("keeps a substituted home out of pathname expansion", async () => {
+  const harness = createBashHarness();
+  await harness.fileSystem.writeFile("/home-a/secret", "TENANT-A", { createParents: true });
+  await harness.fileSystem.writeFile("/home-b/secret", "TENANT-B", { createParents: true });
+  // A glob character in HOME must not turn a home-relative path into a
+  // wildcard that reaches paths the caller never named.
+  const result = await harness.run("cat ~/secret", { env: { HOME: "/home-*" } });
+  expect(result.exitCode).toBe(1);
+  expect(result.stdout).toBe("");
+  expect(result.stderr).toContain("no such file or directory");
+
+  const literal = await harness.run("printf %s ~", { env: { HOME: "/home-*" } });
+  expect(literal.stdout).toBe("/home-*");
+});
+
+it("expands a tilde after a colon that a later part opens", async () => {
+  const harness = createBashHarness();
+  const result = await harness.run(["P=/bin", "PATH=$P:~/bin", 'printf %s "$PATH"'], {
+    env: { HOME: "/home/cf" },
   });
-
-  it("keeps a substituted home out of pathname expansion", async () => {
-    const harness = createBashHarness();
-    await harness.fileSystem.writeFile("/home-a/secret", "TENANT-A", { createParents: true });
-    await harness.fileSystem.writeFile("/home-b/secret", "TENANT-B", { createParents: true });
-    // A glob character in HOME must not turn a home-relative path into a
-    // wildcard that reaches paths the caller never named.
-    const result = await harness.run("cat ~/secret", { env: { HOME: "/home-*" } });
-    expect(result.exitCode).toBe(1);
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("no such file or directory");
-
-    const literal = await harness.run("printf %s ~", { env: { HOME: "/home-*" } });
-    expect(literal.stdout).toBe("/home-*");
-  });
-
-  it("expands a tilde after a colon that a later part opens", async () => {
-    const harness = createBashHarness();
-    const result = await harness.run(["P=/bin", "PATH=$P:~/bin", 'printf %s "$PATH"'], {
-      env: { HOME: "/home/cf" },
-    });
-    expect(result.stdout).toBe("/bin:/home/cf/bin");
-  });
+  expect(result.stdout).toBe("/bin:/home/cf/bin");
 });
 
 describe("working-directory tracking", () => {

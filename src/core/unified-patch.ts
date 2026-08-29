@@ -41,6 +41,40 @@ function decimalValue(value: string | undefined, fallback?: number): number {
   return parsed;
 }
 
+function patchLineKind(prefix: string | undefined, lineNumber: number): PatchLineKind {
+  if (prefix === " ") return "context";
+  if (prefix === "-") return "delete";
+  if (prefix === "+") return "insert";
+  throw new VfsError("EINVAL", `invalid patch line at line ${lineNumber}`);
+}
+
+function consumeHunkLines(lines: readonly string[], start: number, hunk: PatchHunk): number {
+  let index = start;
+  while (index < lines.length && !lines[index]?.startsWith("@@ ")) {
+    const line = lines[index];
+    if (line === undefined) break;
+    if (line === "\\ No newline at end of file\n") {
+      const previous = hunk.lines.at(-1);
+      if (!previous?.text.endsWith("\n")) {
+        throw new VfsError("EINVAL", `misplaced no-newline marker at line ${index + 1}`);
+      }
+      previous.text = previous.text.slice(0, -1);
+    } else {
+      hunk.lines.push({ kind: patchLineKind(line[0], index + 1), text: line.slice(1) });
+    }
+    index += 1;
+  }
+  return index;
+}
+
+function validateHunkCounts(hunk: PatchHunk): void {
+  const oldCount = hunk.lines.filter((line) => line.kind !== "insert").length;
+  const newCount = hunk.lines.filter((line) => line.kind !== "delete").length;
+  if (oldCount !== hunk.oldCount || newCount !== hunk.newCount) {
+    throw new VfsError("EINVAL", "patch hunk line counts do not match its header");
+  }
+}
+
 function parseHunks(patch: string): PatchHunk[] {
   const lines = patchLines(patch);
   if (!lines[0]?.startsWith("--- ") || !lines[1]?.startsWith("+++ ")) {
@@ -61,37 +95,8 @@ function parseHunks(patch: string): PatchHunk[] {
       lines: [],
     };
     index += 1;
-    while (index < lines.length && !lines[index]?.startsWith("@@ ")) {
-      const line = lines[index];
-      if (line === undefined) break;
-      if (line === "\\ No newline at end of file\n") {
-        const previous = hunk.lines.at(-1);
-        if (!previous?.text.endsWith("\n")) {
-          throw new VfsError("EINVAL", `misplaced no-newline marker at line ${index + 1}`);
-        }
-        previous.text = previous.text.slice(0, -1);
-        index += 1;
-        continue;
-      }
-      const prefix = line[0];
-      const kind: PatchLineKind =
-        prefix === " "
-          ? "context"
-          : prefix === "-"
-            ? "delete"
-            : prefix === "+"
-              ? "insert"
-              : (() => {
-                  throw new VfsError("EINVAL", `invalid patch line at line ${index + 1}`);
-                })();
-      hunk.lines.push({ kind, text: line.slice(1) });
-      index += 1;
-    }
-    const oldCount = hunk.lines.filter((line) => line.kind !== "insert").length;
-    const newCount = hunk.lines.filter((line) => line.kind !== "delete").length;
-    if (oldCount !== hunk.oldCount || newCount !== hunk.newCount) {
-      throw new VfsError("EINVAL", "patch hunk line counts do not match its header");
-    }
+    index = consumeHunkLines(lines, index, hunk);
+    validateHunkCounts(hunk);
     hunks.push(hunk);
   }
   if (hunks.length === 0) throw new VfsError("EINVAL", "patch contains no hunks");
@@ -104,6 +109,39 @@ function hunkIndex(start: number, count: number): number {
   return start - 1;
 }
 
+function applyHunk(
+  source: readonly string[],
+  hunk: PatchHunk,
+  sourceIndex: number,
+  output: string[],
+): { readonly sourceIndex: number; readonly additions: number; readonly deletions: number } {
+  const start = hunkIndex(hunk.oldStart, hunk.oldCount);
+  if (start < sourceIndex || start > source.length) {
+    throw new VfsError("EINVAL", "patch hunks are overlapping or outside the file");
+  }
+  output.push(...source.slice(sourceIndex, start));
+  let nextSource = start;
+  if (hunkIndex(hunk.newStart, hunk.newCount) !== output.length) {
+    throw new VfsError("EINVAL", "patch hunk new-file position is inconsistent");
+  }
+  let additions = 0;
+  let deletions = 0;
+  for (const line of hunk.lines) {
+    if (line.kind === "insert") {
+      output.push(line.text);
+      additions += 1;
+      continue;
+    }
+    if (source[nextSource] !== line.text) {
+      throw new VfsError("EREVISION", "patch context does not match the current file");
+    }
+    if (line.kind === "context") output.push(line.text);
+    else deletions += 1;
+    nextSource += 1;
+  }
+  return { sourceIndex: nextSource, additions, deletions };
+}
+
 export function applyUnifiedPatch(source: string, patch: string): ApplyUnifiedPatchResult {
   const sourceContent = splitLinesPreservingEndings(source);
   const output: string[] = [];
@@ -113,29 +151,10 @@ export function applyUnifiedPatch(source: string, patch: string): ApplyUnifiedPa
   let deletions = 0;
 
   for (const hunk of hunks) {
-    const start = hunkIndex(hunk.oldStart, hunk.oldCount);
-    if (start < sourceIndex || start > sourceContent.length) {
-      throw new VfsError("EINVAL", "patch hunks are overlapping or outside the file");
-    }
-    output.push(...sourceContent.slice(sourceIndex, start));
-    sourceIndex = start;
-    if (hunkIndex(hunk.newStart, hunk.newCount) !== output.length) {
-      throw new VfsError("EINVAL", "patch hunk new-file position is inconsistent");
-    }
-
-    for (const line of hunk.lines) {
-      if (line.kind === "insert") {
-        output.push(line.text);
-        additions += 1;
-        continue;
-      }
-      if (sourceContent[sourceIndex] !== line.text) {
-        throw new VfsError("EREVISION", "patch context does not match the current file");
-      }
-      if (line.kind === "context") output.push(line.text);
-      else deletions += 1;
-      sourceIndex += 1;
-    }
+    const applied = applyHunk(sourceContent, hunk, sourceIndex, output);
+    sourceIndex = applied.sourceIndex;
+    additions += applied.additions;
+    deletions += applied.deletions;
   }
   output.push(...sourceContent.slice(sourceIndex));
   return { text: output.join(""), hunks: hunks.length, additions, deletions };
