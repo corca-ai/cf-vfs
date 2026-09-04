@@ -104,7 +104,7 @@ function parseHunks(patch: string): PatchHunk[] {
 }
 
 function hunkIndex(start: number, count: number): number {
-  if (start === 0 && count === 0) return 0;
+  if (count === 0) return start;
   if (start < 1) throw new VfsError("EINVAL", "patch hunk line numbers are invalid");
   return start - 1;
 }
@@ -119,7 +119,7 @@ function applyHunk(
   if (start < sourceIndex || start > source.length) {
     throw new VfsError("EINVAL", "patch hunks are overlapping or outside the file");
   }
-  output.push(...source.slice(sourceIndex, start));
+  for (let index = sourceIndex; index < start; index += 1) output.push(source[index] ?? "");
   let nextSource = start;
   if (hunkIndex(hunk.newStart, hunk.newCount) !== output.length) {
     throw new VfsError("EINVAL", "patch hunk new-file position is inconsistent");
@@ -156,6 +156,7 @@ export function applyUnifiedPatch(source: string, patch: string): ApplyUnifiedPa
     additions += applied.additions;
     deletions += applied.deletions;
   }
-  output.push(...sourceContent.slice(sourceIndex));
+  for (let index = sourceIndex; index < sourceContent.length; index += 1)
+    output.push(sourceContent[index] ?? "");
   return { text: output.join(""), hunks: hunks.length, additions, deletions };
 }

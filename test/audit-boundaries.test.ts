@@ -85,3 +85,37 @@ it("accounts for multiple retained AWK scalar strings", async () => {
   expect(result.exitCode).not.toBe(0);
   expect(result.stderr).toMatch(/limit/);
 });
+
+it("bounds sed pattern-space expansion even when the result is discarded", async () => {
+  const { shell } = createBashHarness({ limits: { maxExpansionChars: 1024 } });
+  const result = await shell.executeText({
+    script: `sed -n 's/.*/${"&".repeat(20)}/;d'`,
+    stdin: "x".repeat(100),
+  });
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toMatch(/limit/);
+});
+
+it("bounds AWK record rebuilding against the byte limit", async () => {
+  const { shell } = createBashHarness({
+    commands: [awkCommand],
+    limits: { maxExpansionChars: 10000, maxBufferedBytes: 1024 },
+  });
+  const result = await shell.executeText({
+    script: 'awk \'BEGIN { OFS=sprintf("%0600d",1); $5="x"; print "done" }\'',
+  });
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toMatch(/limit/);
+});
+
+it("retains the current AWK record alongside scalar strings", async () => {
+  const { shell } = createBashHarness({
+    commands: [awkCommand],
+    limits: { maxBufferedBytes: 1024 },
+  });
+  const result = await shell.executeText({
+    script: 'awk \'BEGIN { $0=sprintf("%0600d",1); x=sprintf("%0600d",2); print "done" }\'',
+  });
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toMatch(/limit/);
+});

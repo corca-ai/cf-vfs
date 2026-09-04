@@ -96,13 +96,13 @@ async function abortable(
   url: string,
 ): Promise<Response> {
   if (signal === undefined) return pending;
-  if (signal.aborted) throw new VfsError("ECANCELED", "execution was cancelled", url);
   let onAbort: () => void = () => undefined;
   const cancelled = new Promise<never>((_resolve, reject) => {
     onAbort = () => reject(new VfsError("ECANCELED", "execution was cancelled", url));
     signal.addEventListener("abort", onAbort, { once: true });
   });
   try {
+    if (signal.aborted) throw new VfsError("ECANCELED", "execution was cancelled", url);
     return await Promise.race([pending, cancelled]);
   } finally {
     signal.removeEventListener("abort", onAbort);
@@ -199,6 +199,8 @@ export async function fetchThrough(
   let current = request;
   for (let hop = 0; ; hop += 1) {
     options.account?.();
+    if (options.signal?.aborted)
+      throw new VfsError("ECANCELED", "execution was cancelled", current.url);
     const response = await abortable(
       network.fetch(build(current, options.signal), options.signal),
       options.signal,

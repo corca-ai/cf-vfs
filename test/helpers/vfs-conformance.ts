@@ -1,5 +1,6 @@
 import { BATCH_CONFORMANCE } from "./vfs-conformance-batches.js";
 import { CORE_CONFORMANCE } from "./vfs-conformance-core.js";
+import { GUARD_CONFORMANCE } from "./vfs-conformance-guards.js";
 import { MUTATION_CONFORMANCE } from "./vfs-conformance-mutations.js";
 import type {
   VfsConformanceCase,
@@ -12,6 +13,7 @@ export { streamThatFailsAfter } from "./vfs-conformance-support.js";
 
 const CONFORMANCE_CASES: readonly VfsConformanceCase[] = [
   ...CORE_CONFORMANCE,
+  ...GUARD_CONFORMANCE,
   ...MUTATION_CONFORMANCE,
   ...BATCH_CONFORMANCE,
 ];

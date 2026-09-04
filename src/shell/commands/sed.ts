@@ -1,5 +1,4 @@
-import type { PosixMatch } from "../../core/posix-regex.js";
-import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
+import type { ShellBudget, ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import { appletUsageError, defineApplet, parseAppletOptions } from "./applet.js";
 import {
   BufferedTextWriter,
@@ -15,8 +14,10 @@ import {
   SED,
   type SedCommand,
   type SedSelector as Selector,
-  type SedSubstitute as Substitute,
 } from "./sed-parser.js";
+
+import { substitute } from "./sed-substitute.js";
+import { SedText } from "./sed-text.js";
 
 /** Mutable per-record state for a range selector. */
 interface RangeState {
@@ -72,93 +73,6 @@ function continueRange(
   return true;
 }
 
-/**
- * Applies the replacement literally.
- *
- * `&` is the whole match and `\1`…`\9` are capture groups, as in sed. Every
- * other character is written as-is, and JavaScript's `$` substitution syntax is
- * escaped away so replacement text taken from data can never splice another
- * part of the record into the output.
- */
-function expandReplacement(replacement: string, match: PosixMatch): string {
-  let output = "";
-  for (let index = 0; index < replacement.length; index += 1) {
-    const character = replacement[index] ?? "";
-    if (character === "&") {
-      output += match.groups[0] ?? "";
-      continue;
-    }
-    if (character === "\\") {
-      index += 1;
-      const escaped = replacement[index];
-      if (escaped === undefined) break;
-      output += expandReplacementEscape(escaped, match);
-      continue;
-    }
-    output += character;
-  }
-  return output;
-}
-
-function expandReplacementEscape(escaped: string, match: PosixMatch): string {
-  if (/[1-9]/u.test(escaped)) return match.groups[Number(escaped)] ?? "";
-  if (escaped === "n") return "\n";
-  if (escaped === "t") return "\t";
-  return escaped;
-}
-
-function substitute(command: Substitute, record: string): { value: string; changed: boolean } {
-  if (!command.global && command.occurrence === 0) {
-    return substituteOnce(command, record);
-  }
-  return substituteSelectedMatches(command, record);
-}
-
-function substituteOnce(command: Substitute, record: string): { value: string; changed: boolean } {
-  const match = command.pattern.exec(record);
-  if (match === undefined) return { value: record, changed: false };
-  return {
-    value:
-      record.slice(0, match.index) +
-      expandReplacement(command.replacement, match) +
-      record.slice(match.end),
-    changed: true,
-  };
-}
-
-function substituteSelectedMatches(
-  command: Substitute,
-  record: string,
-): { value: string; changed: boolean } {
-  let output = "";
-  let last = 0;
-  let seen = 0;
-  let changed = false;
-  let previousEnd = -1;
-  for (let from = 0; from <= record.length; ) {
-    const match = command.pattern.exec(record, from);
-    if (match === undefined) break;
-    // An empty match touching the end of the previous one is not a separate
-    // occurrence: `s/a*/-/g` on `baaac` gives `-b-c-`, not `-b--c-`.
-    if (match.index === match.end && match.index === previousEnd) {
-      from = match.end + 1;
-      continue;
-    }
-    seen += 1;
-    const replace = command.occurrence === 0 || seen >= command.occurrence;
-    if (replace) {
-      output += record.slice(last, match.index) + expandReplacement(command.replacement, match);
-      last = match.end;
-      changed = true;
-      if (command.occurrence > 0 && !command.global) break;
-    }
-    previousEnd = match.end;
-    // A zero-width match would otherwise never advance.
-    from = match.end === match.index ? match.end + 1 : match.end;
-  }
-  return { value: output + record.slice(last), changed };
-}
-
 interface RecordResult {
   readonly output: string;
   readonly quit: boolean;
@@ -166,25 +80,27 @@ interface RecordResult {
 
 interface PatternSpace {
   value: string;
-  printed: string;
+  printed: SedText;
 }
 
 function applySelectedCommand(
   command: SedCommand,
   space: PatternSpace,
   quiet: boolean,
+  budget: ShellBudget,
 ): RecordResult | undefined {
-  if (command.kind === "d") return { output: space.printed, quit: false };
+  if (command.kind === "d") return { output: space.printed.result(), quit: false };
   if (command.kind === "p") {
-    space.printed += `${space.value}\n`;
+    space.printed.append(`${space.value}\n`);
     return undefined;
   }
   if (command.kind === "q") {
-    return { output: quiet ? space.printed : `${space.printed}${space.value}\n`, quit: true };
+    if (!quiet) space.printed.append(`${space.value}\n`);
+    return { output: space.printed.result(), quit: true };
   }
-  const result = substitute(command, space.value);
+  const result = substitute(command, space.value, budget);
   space.value = result.value;
-  if (command.print && result.changed) space.printed += `${space.value}\n`;
+  if (command.print && result.changed) space.printed.append(`${space.value}\n`);
   return undefined;
 }
 
@@ -195,18 +111,18 @@ function applyRecord(
   line: number,
   last: boolean,
   quiet: boolean,
+  budget: ShellBudget,
 ): RecordResult {
-  const space: PatternSpace = { value: record, printed: "" };
+  const space: PatternSpace = { value: record, printed: new SedText(budget) };
   for (const [index, command] of commands.entries()) {
+    budget.step();
     const state = states[index] ?? { active: false };
     if (!selects(command, state, space.value, line, last)) continue;
-    const completed = applySelectedCommand(command, space, quiet);
+    const completed = applySelectedCommand(command, space, quiet, budget);
     if (completed !== undefined) return completed;
   }
-  return {
-    output: quiet ? space.printed : `${space.printed}${space.value}\n`,
-    quit: false,
-  };
+  if (!quiet) space.printed.append(`${space.value}\n`);
+  return { output: space.printed.result(), quit: false };
 }
 
 function needsLastRecord(commands: readonly SedCommand[]): boolean {
@@ -220,9 +136,10 @@ interface SedInvocation {
   readonly operands: readonly string[];
   readonly quiet: boolean;
   readonly inPlace: boolean;
+  readonly budget: ShellBudget;
 }
 
-function parseInvocation(argv: readonly string[]): SedInvocation {
+function parseInvocation(argv: readonly string[], budget: ShellBudget): SedInvocation {
   const parsed = parseAppletOptions(SED, argv);
   const quiet = parsed.options.some((option) => option.name === "quiet");
   const dialect = parsed.options.some((option) => option.name === "extended")
@@ -239,7 +156,13 @@ function parseInvocation(argv: readonly string[]): SedInvocation {
     expressions.push(script);
   }
   if (inPlace && operands.length === 0) throw appletUsageError(SED, "-i requires a file operand");
-  return { commands: parseSedScript(expressions.join("\n"), dialect), operands, quiet, inPlace };
+  return {
+    commands: parseSedScript(expressions.join("\n"), dialect),
+    operands,
+    quiet,
+    inPlace,
+    budget,
+  };
 }
 
 async function editOperands(
@@ -281,7 +204,15 @@ async function streamRecords(
       const terminated = record.endsWith("\n");
       const value = terminated ? record.slice(0, -1) : record;
       line += 1;
-      const result = applyRecord(invocation.commands, states, value, line, false, invocation.quiet);
+      const result = applyRecord(
+        invocation.commands,
+        states,
+        value,
+        line,
+        false,
+        invocation.quiet,
+        invocation.budget,
+      );
       // `q` terminates the pattern space even when the input did not. Ordinary
       // end-of-input retains the source's missing newline.
       const preserveEnding = terminated || result.quit || !lastInput;
@@ -326,7 +257,15 @@ async function writePendingRecord(
   line: number,
   output: BufferedTextWriter,
 ): Promise<boolean> {
-  const result = applyRecord(invocation.commands, states, pending, line, false, invocation.quiet);
+  const result = applyRecord(
+    invocation.commands,
+    states,
+    pending,
+    line,
+    false,
+    invocation.quiet,
+    invocation.budget,
+  );
   await output.write(result.output);
   return result.quit;
 }
@@ -340,7 +279,15 @@ async function writeFinalRecord(
   output: BufferedTextWriter,
 ): Promise<void> {
   if (pending === undefined) return;
-  const result = applyRecord(invocation.commands, states, pending, line, true, invocation.quiet);
+  const result = applyRecord(
+    invocation.commands,
+    states,
+    pending,
+    line,
+    true,
+    invocation.quiet,
+    invocation.budget,
+  );
   // An unterminated final record stays unterminated.
   await output.write(terminated ? result.output : result.output.replace(/\n$/u, ""));
 }
@@ -355,7 +302,7 @@ async function writeFinalRecord(
  * concurrent change loses rather than interleaves.
  */
 export const sedCommand = /* @__PURE__ */ defineApplet(SED, async (context, argv, fds) => {
-  const invocation = parseInvocation(argv);
+  const invocation = parseInvocation(argv, context.budget);
   if (invocation.inPlace) return editOperands(context, invocation, fds);
   const output = new BufferedTextWriter(context, fds[1]);
   try {
@@ -387,7 +334,7 @@ async function editInPlace(
   const source = await collectText(context, current.stream, normalized);
   let edited: { output: string; quit: boolean };
   try {
-    edited = applyToText(commands, source.value, quiet);
+    edited = applyToText(commands, source.value, quiet, context.budget);
   } finally {
     source.release();
   }
@@ -406,25 +353,28 @@ function applyToText(
   commands: readonly SedCommand[],
   text: string,
   quiet: boolean,
+  budget: ShellBudget,
 ): { output: string; quit: boolean } {
   const states: RangeState[] = commands.map(() => ({ active: false }));
   const records = text.split("\n");
   // A trailing newline produces a final empty element that is not a record.
   const trailing = records.at(-1) === "";
   if (trailing) records.pop();
-  let output = "";
+  const output = new SedText(budget, budget.limits.maxBufferedBytes);
   let quit = false;
   for (const [index, record] of records.entries()) {
     const last = index === records.length - 1;
-    const result = applyRecord(commands, states, record, index + 1, last, quiet);
+    const result = applyRecord(commands, states, record, index + 1, last, quiet, budget);
     // An unterminated final record stays unterminated, and only that record's
     // own output loses a newline: a `d` on the last line must not strip the
     // newline that belonged to the line before it.
-    output += last && !trailing && !result.quit ? result.output.replace(/\n$/u, "") : result.output;
+    output.append(
+      last && !trailing && !result.quit ? result.output.replace(/\n$/u, "") : result.output,
+    );
     if (result.quit) {
       quit = true;
       break;
     }
   }
-  return { output, quit };
+  return { output: output.result(), quit };
 }

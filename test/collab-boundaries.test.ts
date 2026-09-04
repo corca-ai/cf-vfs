@@ -143,3 +143,21 @@ it("uses original-text offsets for separated edits", () => {
   expect(result).toBe(after);
   expect(applyTextEdits(before, edits)).toBe(after);
 });
+
+it.each(["mode", "owner", "time", "write-mode"])(
+  "does not acknowledge unseen stored text when changing %s",
+  async (operation) => {
+    const { fs, view, registry, doc } = await setup();
+    doc.value = "local a\nb\n";
+    registry.markDirty("/doc");
+    await fs.writeFile("/doc", "a\nremote b\n");
+    if (operation === "mode") view.setMetadata("/doc", { mode: 0o600 });
+    else if (operation === "owner") view.setOwnership("/doc", { uid: 1000 });
+    else if (operation === "time") view.touch("/doc");
+    else await view.writeFile("/doc", "new local a\nb\n", { mode: 0o600 });
+    await expect(view.publish("/doc")).rejects.toMatchObject({ code: "EREVISION" });
+    await view.reconcile("/doc");
+    expect(doc.text()).toBe(`${operation === "write-mode" ? "new " : ""}local a\nremote b\n`);
+    await expect(view.publish("/doc")).resolves.toBe(true);
+  },
+);

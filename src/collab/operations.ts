@@ -151,11 +151,12 @@ export class DocumentOperations {
     }
     let stat = this.inner.stat(path);
     if (mode !== stat.mode) {
+      const knownBase = stat.mutationToken === open.token;
       stat = this.inner.setMetadata(path, {
         mode,
         ifMutationToken: this.inner.getMutationToken(path),
       });
-      this.registry.recordMetadata(resolved, open, stat.mutationToken);
+      if (knownBase) this.registry.recordMetadata(resolved, open, stat.mutationToken);
     }
     if (edits.length > 0) {
       open.document.applyExternal(edits);

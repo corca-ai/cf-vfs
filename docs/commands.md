@@ -705,6 +705,12 @@ abort signal or the execution deadline, so one short pattern from a caller would
 burn the whole CPU limit. Patterns that would still be large after expansion
 (`(x{50}){50}`) are refused with status 2 rather than compiled.
 
+`sed` checks replacement text and pattern-space growth before concatenation,
+including text later discarded by `-n` or `d`. Intermediate text respects
+`maxExpansionChars` and `maxBufferedBytes`; matching loops and concatenation
+spend the shared step and expansion-work budgets. `-i` also bounds accumulated
+output before publishing, so a failed edit preserves the original file.
+
 ### Opaque R2 content
 
 `cat`, `head`, `grep`, and `wc` can stream an opaque R2 body when the host
@@ -990,8 +996,9 @@ when a record is read is retained for that record, matching AWK when `FS`
 changes inside an action. Program bytes, AST nodes, nesting, records, regex
 work, loop iterations, execution steps, associative-array entries and bytes,
 buffered output, and total I/O all use existing shell limits. Scalar variables
-also hold buffered-byte reservations. String concatenation and composite keys
-check expansion sizes before joining, including results that are never printed. The complete
+and the current record also hold buffered-byte reservations. String concatenation,
+field rebuilding, and composite keys check expansion sizes before joining,
+including results that are never printed. The complete
 program, including every `-f` source, is compiled before stdin or a data-file
 operand is opened.
 

@@ -7,6 +7,16 @@ export interface CollectedBytes {
   sizeBytes: number;
 }
 
+function validateChunkBytes(chunkBytes: number): void {
+  if (!Number.isSafeInteger(chunkBytes) || chunkBytes < 1)
+    throw new VfsError("EINVAL", "chunkBytes must be a positive safe integer");
+}
+
+function validateMaximumBytes(maximumBytes: number): void {
+  if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 0)
+    throw new VfsError("EINVAL", "maximumBytes must be a non-negative safe integer");
+}
+
 function rawBodyBytes(body: Exclude<ByteBody, ReadableStream<Uint8Array>>): Uint8Array {
   if (typeof body === "string") return encodeUtf8(body);
   if (body instanceof ArrayBuffer) return new Uint8Array(body);
@@ -73,6 +83,7 @@ export async function collectBytes(
   maximumBytes: number,
   account?: (delta: number) => void,
 ): Promise<CollectedBytes> {
+  validateMaximumBytes(maximumBytes);
   const reader = bodyToStream(body).getReader();
   const chunks: Uint8Array[] = [];
   let sizeBytes = 0;
@@ -144,6 +155,8 @@ export async function collectRechunkedBytes(
   chunkBytes: number,
   account?: (delta: number) => void,
 ): Promise<CollectedBytes> {
+  validateMaximumBytes(maximumBytes);
+  validateChunkBytes(chunkBytes);
   const chunks: Uint8Array[] = [];
   let sizeBytes = 0;
   let materialized: Uint8Array | undefined;
@@ -188,6 +201,7 @@ export async function collectRechunkedBytes(
 }
 
 export function rechunk(chunks: readonly Uint8Array[], chunkBytes: number): Uint8Array[] {
+  validateChunkBytes(chunkBytes);
   const output: Uint8Array[] = [];
   let current = new Uint8Array(chunkBytes);
   let used = 0;
@@ -230,6 +244,7 @@ export async function readUtf8(
   maximumBytes: number,
   path?: string,
 ): Promise<string> {
+  validateMaximumBytes(maximumBytes);
   const reader = stream.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const chunks: string[] = [];

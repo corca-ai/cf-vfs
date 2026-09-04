@@ -13,6 +13,17 @@ const fs = new NodeSqlFileSystem();
 `;
 const cases = [
   {
+    name: "sed discarded pattern-space amplification",
+    script: `sed -n 's/.*/${"&".repeat(20)}/;d' /input`,
+    prepare: "await fs.writeFile('/input', 'x'.repeat(100));",
+    limits: { maxExpansionChars: 1024 },
+  },
+  {
+    name: "awk rebuilt record bytes",
+    script: 'awk \'BEGIN { OFS=sprintf("%0600d",1); $5="x"; print "done" }\'',
+    limits: { maxExpansionChars: 10000, maxBufferedBytes: 1024 },
+  },
+  {
     name: "awk scalar growth",
     script: "awk 'BEGIN { x=\"x\"; for(i=0;i<20;i++) x=x x; print length(x) }'",
     limits: { maxExpansionChars: 1024, maxBufferedBytes: 1024 },
@@ -83,4 +94,22 @@ finally { fs.close(); }
     assert.match(result.stderr, /limit|deadline/, test.name);
   }
 }
-console.log(`execution limits verified in ${cases.length} isolated processes`);
+// Invalid chunk sizes used to loop synchronously. Keep that regression outside
+// the test runner so its event loop cannot prevent the watchdog from firing.
+await run(
+  process.execPath,
+  [
+    "--input-type=module",
+    "-e",
+    `
+import assert from 'node:assert/strict';
+import { rechunk, collectRechunkedBytes } from ${JSON.stringify(new URL("vfs/index.js", root).href)};
+for (const size of [0, -1, 0.5, NaN, Infinity]) {
+  assert.throws(() => rechunk([new Uint8Array([1])], size), { code: 'EINVAL' });
+  await assert.rejects(collectRechunkedBytes(new Uint8Array([1]), 10, size), { code: 'EINVAL' });
+}
+`,
+  ],
+  { timeout: 5000 },
+);
+console.log(`execution limits verified in ${cases.length + 1} isolated processes`);

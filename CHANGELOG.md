@@ -41,6 +41,14 @@ included.
 
 ### Fixed
 
+- Preserve unseen stored document changes across metadata updates; accept
+  link-chain guards for permission, ownership, and timestamp mutations.
+- Correct unified-patch empty-range positions and avoid argument-stack overflows
+  when diffing or patching large files. Reject invalid public stream limits
+  before collection, including chunk sizes that previously looped forever.
+- Bound discarded sed substitutions, in-place output, and rebuilt AWK records.
+  Stop cancelled network requests before dispatch and release responses from
+  hosts that cancel while starting a request.
 - Correct non-BMP subtree path translation, final R2 verification expiry checks,
   jq binding order, and the documented original-text `TextEdit` offsets.
 - Bound glob backtracking, jq synchronous work and intermediate allocations,

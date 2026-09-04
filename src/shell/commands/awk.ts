@@ -21,6 +21,7 @@ import {
   inputValue,
   type AwkRuntimeState as RuntimeState,
   removeArrayEntry,
+  setField,
   setVariable,
   stringValue,
   truth,
@@ -375,7 +376,7 @@ async function executeInput(
     state.filename = source.name;
     state.fnr = 0;
     for await (const line of readTextLines(state.context, source.stream, source.name)) {
-      state.record = line.endsWith("\n") ? line.slice(0, -1) : line;
+      setField(state, 0, inputValue(line.endsWith("\n") ? line.slice(0, -1) : line));
       state.fields = [];
       state.fieldsValid = false;
       state.fieldSeparator = asString(getVariable(state, "FS"));

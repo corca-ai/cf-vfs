@@ -123,7 +123,9 @@ function changedHunk(
   if (!first) throw new Error("diff hunk cannot be empty");
   const deleted = changed.filter((operation) => operation.kind === "delete").length;
   const inserted = changed.filter((operation) => operation.kind === "insert").length;
-  const lines = [`@@ -${first.oldLine},${deleted} +${first.newLine},${inserted} @@\n`];
+  const oldStart = first.oldLine - (deleted === 0 ? 1 : 0);
+  const newStart = first.newLine - (inserted === 0 ? 1 : 0);
+  const lines = [`@@ -${oldStart},${deleted} +${newStart},${inserted} @@\n`];
   for (const operation of changed) {
     if (operation.kind === "delete") lines.push(prefixedLine("-", operation.text));
     if (operation.kind === "insert") lines.push(prefixedLine("+", operation.text));
@@ -149,14 +151,13 @@ export function createLineDiff(before: string, after: string): LineDiff {
   for (let index = 0; index < prefix; index += 1) {
     operations.push(equalOperation(lineAt(beforeLines, index), index + 1, index + 1));
   }
-  operations.push(
-    ...lineOperations(
-      beforeLines.slice(prefix, beforeLines.length - suffix),
-      afterLines.slice(prefix, afterLines.length - suffix),
-      prefix,
-      prefix,
-    ),
-  );
+  for (const operation of lineOperations(
+    beforeLines.slice(prefix, beforeLines.length - suffix),
+    afterLines.slice(prefix, afterLines.length - suffix),
+    prefix,
+    prefix,
+  ))
+    operations.push(operation);
   for (let index = 0; index < suffix; index += 1) {
     operations.push(
       equalOperation(
@@ -180,7 +181,7 @@ export function renderLineDiff(from: string, to: string, diff: LineDiff): string
     while (diff.operations[index]?.kind === "equal") index += 1;
     if (index >= diff.operations.length) break;
     const hunk = changedHunk(diff.operations, index);
-    output.push(...hunk.lines);
+    for (const line of hunk.lines) output.push(line);
     index = hunk.next;
   }
   return output.join("");

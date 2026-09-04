@@ -25,6 +25,7 @@ export abstract class SqlMetadata extends SqlWrite {
     options: MetadataUpdateOptions,
     posix?: PosixAccessContext,
     writtenFollowed: readonly string[] = [],
+    written = path,
   ): VfsStat {
     const access = this.resolveAccess(path);
     const normalized = access.path;
@@ -38,7 +39,7 @@ export abstract class SqlMetadata extends SqlWrite {
       else if (posix !== undefined && posix.credentials.uid !== entry.uid) {
         this.assertPermission(entry, posix, WRITE_PERMISSION, normalized);
       }
-      this.validateGuard(normalized, entry, options);
+      this.validateGuard(normalized, entry, options, written);
       const mutationVersion = entry.mutationVersion + 1;
       const modifiedAtMs = options.modifiedAtMs ?? this.now();
       this.sql.exec(
@@ -72,7 +73,7 @@ export abstract class SqlMetadata extends SqlWrite {
     const uid = options.uid === undefined ? undefined : posixId(options.uid, "options.uid");
     const gid = options.gid === undefined ? undefined : posixId(options.gid, "options.gid");
     return this.transaction(() =>
-      this.commitOwnership(normalized, access.followed, options, uid, gid, posix),
+      this.commitOwnership(normalized, access.followed, options, uid, gid, posix, path),
     );
   }
 
@@ -83,6 +84,7 @@ export abstract class SqlMetadata extends SqlWrite {
     uid: number | undefined,
     gid: number | undefined,
     posix: PosixAccessContext | undefined,
+    written: string,
   ): VfsStat {
     const entry = this.requireEntry(path);
     this.assertTraverse(path, followed, posix);
@@ -95,7 +97,7 @@ export abstract class SqlMetadata extends SqlWrite {
         throw new VfsError("EPERM", "group is not in the current user's groups", path);
       }
     }
-    this.validateGuard(path, entry, options);
+    this.validateGuard(path, entry, options, written);
     const mutationVersion = entry.mutationVersion + 1;
     const modifiedAtMs = this.now();
     const mode =
@@ -135,13 +137,13 @@ export abstract class SqlMetadata extends SqlWrite {
       // written side of any followed link here. Both sides need search
       // permission; otherwise `touch hidden/link` could reach an accessible
       // target through a directory the caller cannot traverse.
-      return this.setMetadata(normalized, options, posix, access.followed);
+      return this.setMetadata(normalized, options, posix, access.followed, path);
     }
     if (options.create === false) {
       throw new VfsError("ENOENT", "no such file or directory", normalized);
     }
     return this.transaction(() =>
-      this.createTouchedFile(normalized, access.followed, options, posix),
+      this.createTouchedFile(normalized, access.followed, options, posix, path),
     );
   }
 
@@ -150,11 +152,12 @@ export abstract class SqlMetadata extends SqlWrite {
     followed: readonly string[],
     options: TouchOptions,
     posix: PosixAccessContext | undefined,
+    written: string,
   ): VfsStat {
     const parents =
       posix === undefined ? undefined : this.creationParents(path, options.createParents ?? false);
     if (parents !== undefined) this.assertCreationAccess(path, followed, posix, parents.existing);
-    this.validateGuard(path, null, options);
+    this.validateGuard(path, null, options, written);
     const now = this.now();
     const parent =
       parents === undefined

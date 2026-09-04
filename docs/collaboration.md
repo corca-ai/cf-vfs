@@ -30,6 +30,14 @@ reservation: publication still validates the actual storage state. A mode
 option follows the backend's write rules, including preserving an existing
 file's mode for credential-bound writes.
 
+Changing metadata advances a document's stored-base token only when its base
+was current before that change. An unseen external content update still requires
+reconciliation before publication, even after changing mode, owner, or timestamp.
+
+Stats and read results name their canonical `path`; their tokens guard that
+path. To guard an operation through a symlink, take `getMutationToken()` on
+the original pathname before yielding so the guard includes the link chain.
+
 `publish(path)` captures text and a storage guard. Edits arriving while it waits
 remain dirty and visible for a later publication. Closed or reopened entries
 cannot be marked saved by an older operation. Wire committed mutation events

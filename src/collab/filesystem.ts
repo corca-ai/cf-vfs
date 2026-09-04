@@ -146,6 +146,15 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     return this.#withPendingSize(stat);
   }
 
+  #metadataSnapshot(path: string): OpenDocument | undefined {
+    const open = this.#registry.get(path);
+    // A metadata update acknowledges only a base this document already knows.
+    // Otherwise advancing its guard would authorize overwriting unseen content.
+    return open !== undefined && open.token === this.#inner.getMutationToken(path)
+      ? open
+      : undefined;
+  }
+
   #withPendingSize<Stat extends VfsStat>(stat: Stat): Stat {
     const pending = this.#pending(stat.path);
     return {
@@ -329,7 +338,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
 
   touch(path: string, options?: TouchOptions): VfsStat {
     const resolved = this.#resolved(path);
-    const open = this.#registry.get(resolved);
+    const open = this.#metadataSnapshot(resolved);
     return this.#metadataResult(
       resolved,
       open,
@@ -339,7 +348,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
 
   setMetadata(path: string, options: MetadataUpdateOptions): VfsStat {
     const resolved = this.#resolved(path);
-    const open = this.#registry.get(resolved);
+    const open = this.#metadataSnapshot(resolved);
     return this.#metadataResult(
       resolved,
       open,
@@ -349,7 +358,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
 
   setOwnership(path: string, options: OwnershipUpdateOptions): VfsStat {
     const resolved = this.#resolved(path);
-    const open = this.#registry.get(resolved);
+    const open = this.#metadataSnapshot(resolved);
     return this.#metadataResult(
       resolved,
       open,

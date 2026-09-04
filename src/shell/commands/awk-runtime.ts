@@ -4,7 +4,7 @@ import { compilePosixRegex, type PosixRegex } from "../../core/posix-regex.js";
 import { utf8ByteLength } from "../../core/unicode.js";
 import type { ShellCommandContext } from "../types.js";
 import type { AwkRule } from "./awk-ast.js";
-import { retainAwkVariable } from "./awk-strings.js";
+import { joinAwkStrings, retainAwkVariable } from "./awk-strings.js";
 
 export interface AwkString {
   readonly kind: "string";
@@ -198,19 +198,18 @@ export function getField(state: AwkRuntimeState, index: number): AwkValue {
 }
 
 function rebuiltRecord(state: AwkRuntimeState, separator: string): string {
-  let characters = Math.max(0, state.fields.length - 1) * separator.length;
-  for (const field of state.fields) {
-    characters += field.value.length;
-    if (characters > state.context.budget.limits.maxExpansionChars) {
-      throw new VfsError("E2BIG", "awk: rebuilt record exceeds the expansion limit");
-    }
-  }
-  return state.fields.map((field) => field.value).join(separator);
+  return joinAwkStrings(
+    state,
+    state.fields.map((field) => field.value),
+    separator,
+  );
 }
 
 export function setField(state: AwkRuntimeState, index: number, value: AwkValue): void {
   if (index === 0) {
-    state.record = asString(value);
+    const record = asString(value);
+    retainAwkVariable(state, "$0", stringValue(record));
+    state.record = record;
     state.fieldSeparator = asString(getVariable(state, "FS"));
     state.fieldsValid = false;
     return;
@@ -221,7 +220,9 @@ export function setField(state: AwkRuntimeState, index: number, value: AwkValue)
   ensureFields(state);
   while (state.fields.length < index) state.fields.push(inputValue(""));
   state.fields[index - 1] = stringValue(asString(value), numericComparable(value));
-  state.record = rebuiltRecord(state, asString(getVariable(state, "OFS")));
+  const record = rebuiltRecord(state, asString(getVariable(state, "OFS")));
+  retainAwkVariable(state, "$0", stringValue(record));
+  state.record = record;
 }
 
 export function compiledRegex(state: AwkRuntimeState, source: string): PosixRegex {

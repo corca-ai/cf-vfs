@@ -468,13 +468,15 @@ generated tarballs.
 
 ## Boundary regression checks
 
-`npm run test:limits` executes adversarial glob, jq, and AWK inputs in isolated
+`npm run test:limits` executes adversarial glob, jq, sed, AWK, and stream inputs in isolated
 Node processes with an external watchdog. An in-process timer cannot stop a
 synchronous loop that blocks its own event loop. Build first; `check` already
 does so and includes this gate. Unit tests cover metadata/token round trips,
 credential wrapping order, pending quotas, publication interleavings, and
 conflict preservation. Shared Node/workerd conformance tests cover non-BMP
-subtree names and guarded writes after movement and copying.
+subtree names, guarded writes after movement and copying, and metadata updates
+through symlink chains. Diff/patch tests include standard empty-range headers
+and 150,000-line insertions and unchanged spans.
 
 The September 2026 boundary corrections re-recorded all nine bundle presets
 using the existing measurement-derived headroom rule. The VFS grew from
@@ -486,3 +488,8 @@ for scalar/concatenation limits and allocation-free character slicing, and the L
 to 667,064 bytes. The small `ls` and two-command presets stayed at 15,390 and
 16,897 bytes. Module reachability assertions and SQL statement/row-count
 ceilings remain unchanged; Node and workerd performance checks pass.
+
+A follow-up bug hunt keeps those budgets unchanged. Its metadata and stream
+validation changes add 565 bytes to the VFS preset; bounded sed processing,
+standard diff positions, and cancellation handling add 1,846 bytes to the
+default registry. Reusing the bounded string join reduces AWK by 116 bytes.
