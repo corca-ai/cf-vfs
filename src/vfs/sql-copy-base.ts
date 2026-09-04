@@ -1,5 +1,6 @@
 import { VfsError } from "../core/errors.js";
 import { basename, descendantRange, dirname, isDescendant } from "../core/path.js";
+import { codePointLength } from "../core/unicode.js";
 import type { CreationParents, EntryRow } from "./sql-model.js";
 import { SqlMove } from "./sql-move-base.js";
 import {
@@ -246,11 +247,11 @@ export abstract class SqlCopy extends SqlMove {
        WHERE e.path = ? OR (e.path >= ? AND e.path < ?)`,
       plan.inoBase,
       target,
-      source.length + 1,
+      codePointLength(source) + 1,
       source,
       dirname(target),
       target,
-      source.length + 1,
+      codePointLength(source) + 1,
       source,
       basename(target),
       plan.now,
@@ -258,7 +259,7 @@ export abstract class SqlCopy extends SqlMove {
       source,
       plan.rootRevision,
       target,
-      source.length + 1,
+      codePointLength(source) + 1,
       source,
       plan.sourceRange.lower,
       plan.sourceRange.upper,
@@ -344,11 +345,11 @@ export abstract class SqlCopy extends SqlMove {
       posix.credentials.gid,
       plan.inoBase,
       target,
-      source.length + 1,
+      codePointLength(source) + 1,
       source,
       dirname(target),
       target,
-      source.length + 1,
+      codePointLength(source) + 1,
       source,
       basename(target),
       plan.now,
@@ -356,7 +357,7 @@ export abstract class SqlCopy extends SqlMove {
       source,
       plan.rootRevision,
       target,
-      source.length + 1,
+      codePointLength(source) + 1,
     );
   }
 
@@ -373,7 +374,7 @@ export abstract class SqlCopy extends SqlMove {
        WHERE source_entry.path = ?
           OR (source_entry.path >= ? AND source_entry.path < ?)`,
       target,
-      source.length + 1,
+      codePointLength(source) + 1,
       source,
       plan.sourceRange.lower,
       plan.sourceRange.upper,

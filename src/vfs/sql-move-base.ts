@@ -1,5 +1,6 @@
 import { VfsError } from "../core/errors.js";
 import { basename, descendantRange, dirname, isDescendant } from "../core/path.js";
+import { codePointLength } from "../core/unicode.js";
 import { SqlMetadata } from "./sql-metadata-base.js";
 import { type EntryRow, firstRow, integerColumn, type SqlRow } from "./sql-model.js";
 import { EXECUTE_PERMISSION, type PosixAccessContext, WRITE_PERMISSION } from "./sql-posix.js";
@@ -257,13 +258,13 @@ export abstract class SqlMove extends SqlMetadata {
          revision = CASE WHEN path = ? THEN MAX(revision, ?) + 1 ELSE revision + 1 END
        WHERE path = ? OR (path >= ? AND path < ?)`,
       target,
-      source.length + 1,
+      codePointLength(source) + 1,
       target,
-      source.length + 1,
+      codePointLength(source) + 1,
       source,
       dirname(target),
       target,
-      source.length + 1,
+      codePointLength(source) + 1,
       source,
       basename(target),
       source,

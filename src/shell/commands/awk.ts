@@ -26,6 +26,7 @@ import {
   truth,
   validateFieldSeparator,
 } from "./awk-runtime.js";
+import { joinAwkStrings, retainAwkVariable } from "./awk-strings.js";
 import { BufferedTextWriter, inputStreams, readFileText, readTextLines } from "./helpers.js";
 
 const AWK = {
@@ -62,7 +63,10 @@ async function executePrint(
         : statement.values.map((value) => evaluate(value, state));
     const separator = asString(getVariable(state, "OFS"));
     await output.write(
-      `${values.map(asString).join(separator)}${asString(getVariable(state, "ORS"))}`,
+      joinAwkStrings(state, [
+        joinAwkStrings(state, values.map(asString), separator),
+        asString(getVariable(state, "ORS")),
+      ]),
     );
     return;
   }
@@ -330,6 +334,9 @@ function runtimeState(
     arrays: new Map(),
     regexCache: new Map(),
     activeRanges: new Set(),
+    scalarSizes: new Map(),
+    scalarBytes: 0,
+    scalarRelease: () => undefined,
     arrayEntries: 0,
     arrayBytes: 0,
     arrayRelease: () => undefined,
@@ -406,6 +413,7 @@ export const awkCommand = /* @__PURE__ */ defineApplet(AWK, async (context, argv
   const output = new BufferedTextWriter(context, fds[1]);
   const needsInput = rules.some((rule) => rule.phase !== "begin");
   try {
+    for (const [name, value] of state.variables) retainAwkVariable(state, name, value);
     const begin = await executeRules(rules, "begin", state, output);
     if (begin.kind === "next") throw new VfsError("EINVAL", "awk: next is not valid in BEGIN");
     if (begin.kind !== "exit" && needsInput)
@@ -417,5 +425,6 @@ export const awkCommand = /* @__PURE__ */ defineApplet(AWK, async (context, argv
   } finally {
     output.abort();
     state.arrayRelease();
+    state.scalarRelease();
   }
 });

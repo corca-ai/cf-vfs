@@ -23,6 +23,32 @@ import type {
 } from "./types.js";
 
 export abstract class SqlWrite extends SqlWritePlan {
+  /** Uses the same write planner as publication without changing storage. Returns the effective mode. */
+  validateInlineWrite(
+    path: string,
+    options: WriteFileOptions = {},
+    sizeBytes?: number,
+    additionalInlineBytes = 0,
+    posix?: PosixAccessContext,
+  ): number {
+    const plan = this.planInlineWrite(path, options, options, posix);
+    const before = plan.capturedEntry;
+    if (before?.contentClass !== "inline")
+      throw new VfsError("ENOTSUP", "deferred writes require an existing inline file", path);
+    if (sizeBytes !== undefined) {
+      if (
+        !Number.isSafeInteger(sizeBytes) ||
+        sizeBytes < 0 ||
+        !Number.isSafeInteger(additionalInlineBytes) ||
+        additionalInlineBytes < 0
+      )
+        throw new VfsError("EINVAL", "invalid deferred write size", path);
+      this.assertAppendSize(before, path, sizeBytes);
+      this.assertCapacity(sizeBytes - before.sizeBytes + additionalInlineBytes, 0, path);
+    }
+    return posix === undefined ? (options.mode ?? before.mode) : before.mode;
+  }
+
   async writeFile(
     path: string,
     body: ByteBody,

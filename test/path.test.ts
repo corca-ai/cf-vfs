@@ -42,3 +42,21 @@ describe("glob bracket expressions", () => {
     expect(() => globToRegExp("[z-a]")).not.toThrow();
   });
 });
+
+it.each([
+  ["**", "", true],
+  ["**", "a/b", false],
+  ["*a*a", "aaa", true],
+  ["a**b*c", "abbc", true],
+  ["*?*😀", "x😀", true],
+  ["*\\**", "abc*xyz", true],
+  ["*a*b", "a/b", false],
+  ["*a*b", "ab", true],
+] as const)("preserves star matching for %s against %s", (pattern, value, expected) => {
+  expect(matchesGlob(value, pattern)).toBe(expected);
+});
+it("refuses oversized glob patterns before compiling them", () => {
+  expect(() => globToRegExp("*".repeat(16_385))).toThrowError(
+    expect.objectContaining({ code: "E2BIG" }),
+  );
+});

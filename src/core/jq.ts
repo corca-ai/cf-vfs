@@ -1,3 +1,4 @@
+import { type JqBudget, JqEvaluationBudget } from "./jq-budget.js";
 import { JqRuntimeError, JqSyntaxError } from "./jq-errors.js";
 import {
   type JqNode as Node,
@@ -14,21 +15,22 @@ import {
   requireNumber,
   SKIP,
   scalarText,
+  splitJsonString,
 } from "./jq-values.js";
 import {
   compareJson,
   isJsonNumber,
   isTruthy,
+  type JsonBudget,
   type JsonObject,
   type JsonValue,
   jsonKind,
   numberOf,
   parseJsonText,
 } from "./json-value.js";
+import { codePointLength, sliceCodePoints } from "./unicode.js";
 
 export { JqRuntimeError, JqSyntaxError } from "./jq-errors.js";
-
-const MAX_OUTPUTS = 100_000;
 
 /**
  * A declared subset of the `jq` filter language.
@@ -65,18 +67,33 @@ export class JqFilter {
     private readonly variables: ReadonlyMap<string, JsonValue>,
   ) {}
 
-  /** Every value this filter produces for one input. */
-  run(input: JsonValue): JsonValue[] {
-    const out: JsonValue[] = [];
-    for (const value of this.evaluate(this.node, input)) {
-      out.push(value);
-      if (out.length > MAX_OUTPUTS)
-        throw new JqRuntimeError("jq: filter produced too many results");
+  private budget = new JqEvaluationBudget();
+
+  /** Every result, including intermediates, spends bounded work and storage. */
+  run(input: JsonValue, host?: JqBudget): JsonValue[] {
+    this.budget = new JqEvaluationBudget(host);
+    try {
+      this.budget.retain(input);
+      for (const value of this.variables.values()) this.budget.retain(value);
+      return this.budget.collect(this.evaluate(this.node, input));
+    } finally {
+      this.budget.release();
     }
-    return out;
   }
 
   private *evaluate(node: Node, input: JsonValue): Generator<JsonValue> {
+    this.budget.enter();
+    try {
+      for (const value of this.evaluateNode(node, input)) {
+        this.budget.retain(value);
+        yield value;
+      }
+    } finally {
+      this.budget.leave();
+    }
+  }
+
+  private *evaluateNode(node: Node, input: JsonValue): Generator<JsonValue> {
     switch (node.kind) {
       case "identity":
         yield input;
@@ -113,7 +130,7 @@ export class JqFilter {
         yield* this.iterate(node, input);
         return;
       case "array":
-        yield node.body === undefined ? [] : [...this.evaluate(node.body, input)];
+        yield node.body === undefined ? [] : this.budget.collect(this.evaluate(node.body, input));
         return;
       case "object":
         yield* this.buildObject(node.entries, 0, new Map(), input);
@@ -175,8 +192,10 @@ export class JqFilter {
 
   private *slices(node: Extract<Node, { kind: "slice" }>, input: JsonValue): Generator<JsonValue> {
     for (const target of this.evaluate(node.of, input)) {
-      const froms = node.from === undefined ? [null] : [...this.evaluate(node.from, input)];
-      const tos = node.to === undefined ? [null] : [...this.evaluate(node.to, input)];
+      const froms =
+        node.from === undefined ? [null] : this.budget.collect(this.evaluate(node.from, input));
+      const tos =
+        node.to === undefined ? [null] : this.budget.collect(this.evaluate(node.to, input));
       for (const from of froms) {
         for (const to of tos) {
           const value = this.slice(target, from, to, node.optional);
@@ -204,7 +223,7 @@ export class JqFilter {
     // with each right one in that order.
     for (const right of this.evaluate(node.right, input)) {
       for (const left of this.evaluate(node.left, input)) {
-        yield applyBinary(node.operator, left, right);
+        yield applyBinary(node.operator, left, right, this.budget);
       }
     }
   }
@@ -226,6 +245,7 @@ export class JqFilter {
     built: JsonObject,
     input: JsonValue,
   ): Generator<JsonValue> {
+    this.budget.step();
     const entry = entries[index];
     if (entry === undefined) {
       yield new Map(built);
@@ -236,6 +256,7 @@ export class JqFilter {
         throw new JqRuntimeError(`jq: object keys must be strings, not ${jsonKind(key)}`);
       }
       for (const value of this.evaluate(entry.value, input)) {
+        this.budget.reserve((built.size + 1) * 32, built.size + 1);
         const next = new Map(built);
         next.set(key, value);
         yield* this.buildObject(entries, index + 1, next, input);
@@ -274,10 +295,10 @@ export class JqFilter {
   ): JsonValue | typeof SKIP {
     if (target === null) return null;
     if (typeof target === "string") {
-      const points = [...target];
-      const start = clampIndex(from, 0, points.length);
-      const end = clampIndex(to, points.length, points.length);
-      return points.slice(start, Math.max(start, end)).join("");
+      const length = codePointLength(target);
+      const start = clampIndex(from, 0, length);
+      const end = clampIndex(to, length, length);
+      return sliceCodePoints(target, start, end);
     }
     if (Array.isArray(target)) {
       const start = clampIndex(from, 0, target.length);
@@ -291,7 +312,7 @@ export class JqFilter {
   private *call(node: Extract<Node, { kind: "call" }>, input: JsonValue): Generator<JsonValue> {
     const { name, args } = node;
     if (args.length === 0) {
-      const value = nullaryBuiltin(name, input);
+      const value = nullaryBuiltin(name, input, this.budget);
       if (value !== SKIP) yield value;
       return;
     }
@@ -345,16 +366,26 @@ export class JqFilter {
 
   private *map(argument: Node, input: JsonValue): Generator<JsonValue> {
     const out: JsonValue[] = [];
-    for (const item of requireArray(input, "map")) out.push(...this.evaluate(argument, item));
+    for (const item of requireArray(input, "map")) {
+      for (const value of this.evaluate(argument, item)) {
+        this.budget.reserve(8, 1);
+        out.push(value);
+      }
+    }
     yield out;
   }
 
   private *join(argument: Node, input: JsonValue): Generator<JsonValue> {
     for (const separator of this.evaluate(argument, input)) {
       if (typeof separator !== "string") throw new JqRuntimeError("jq: join needs a string");
-      yield requireArray(input, "join")
-        .map((item) => (item === null ? "" : scalarText(item, "join")))
-        .join(separator);
+      const items = requireArray(input, "join");
+      this.budget.reserve(Math.max(0, items.length - 1) * separator.length * 2);
+      const strings = items.map((item) => {
+        const text = item === null ? "" : scalarText(item, "join");
+        this.budget.reserve(text.length * 2);
+        return text;
+      });
+      yield strings.join(separator);
     }
   }
 
@@ -363,16 +394,16 @@ export class JqFilter {
       if (typeof input !== "string" || typeof separator !== "string") {
         throw new JqRuntimeError("jq: split needs strings");
       }
-      yield separator === "" ? [...input] : input.split(separator);
+      yield this.budget.collect(splitJsonString(input, separator));
     }
   }
 
   private *sortBy(argument: Node, input: JsonValue): Generator<JsonValue> {
     const keyed = requireArray(input, "sort_by").map((item) => ({
       item,
-      key: [...this.evaluate(argument, item)],
+      key: this.budget.collect(this.evaluate(argument, item)),
     }));
-    keyed.sort((left, right) => compareJson(left.key, right.key));
+    keyed.sort((left, right) => compareJson(left.key, right.key, this.budget));
     yield keyed.map((entry) => entry.item);
   }
 
@@ -380,23 +411,30 @@ export class JqFilter {
     const froms =
       fromNode === undefined
         ? [0]
-        : [...this.evaluate(fromNode, input)].map((value) => requireNumber(value, "range"));
-    const tos = [...this.evaluate(toNode, input)].map((value) => requireNumber(value, "range"));
+        : this.budget
+            .collect(this.evaluate(fromNode, input))
+            .map((value) => requireNumber(value, "range"));
+    const tos = this.budget
+      .collect(this.evaluate(toNode, input))
+      .map((value) => requireNumber(value, "range"));
     for (const from of froms) {
       for (const to of tos) {
-        for (let value = from; value < to; value += 1) yield value;
+        for (let value = from; value < to; value += 1) {
+          this.budget.step();
+          yield value;
+        }
       }
     }
   }
 
   private *flatten(argument: Node, input: JsonValue): Generator<JsonValue> {
     for (const value of this.evaluate(argument, input)) {
-      yield flatten(requireArray(input, "flatten"), requireNumber(value, "flatten"));
+      yield flatten(requireArray(input, "flatten"), requireNumber(value, "flatten"), this.budget);
     }
   }
 }
 
 /** Parses one `--argjson` value, which is ordinary JSON. */
-export function parseJqArgument(text: string): JsonValue {
-  return parseJsonText(text, "jq");
+export function parseJqArgument(text: string, budget?: JsonBudget): JsonValue {
+  return parseJsonText(text, "jq", budget);
 }

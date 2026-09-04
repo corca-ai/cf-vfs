@@ -438,5 +438,13 @@ function withOptional(node: JqNode): JqNode {
 }
 
 export function parseJqNode(source: string): JqNode {
-  return new Parser(tokenizeJq(source)).parse();
+  const tokens = tokenizeJq(source);
+  let depth = 0;
+  for (const token of tokens) {
+    if (token.type !== "punct") continue;
+    if (["(", "[", "{"].includes(token.value)) depth += 1;
+    if ([")", "]", "}"].includes(token.value)) depth -= 1;
+    if (depth > 64) throw new JqSyntaxError("jq: syntax nesting limit exceeded");
+  }
+  return new Parser(tokens).parse();
 }

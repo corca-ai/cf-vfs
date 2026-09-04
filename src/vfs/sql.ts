@@ -121,6 +121,21 @@ class PosixFileSystemView implements VirtualFileSystem {
     return this.inner.readFile(path, options, this.access);
   }
 
+  validateInlineWrite(
+    path: string,
+    options?: WriteFileOptions,
+    sizeBytes?: number,
+    additionalInlineBytes?: number,
+  ): number {
+    return this.inner.validateInlineWrite(
+      path,
+      options,
+      sizeBytes,
+      additionalInlineBytes,
+      this.access,
+    );
+  }
+
   writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult> {
     return this.inner.writeFile(path, body, options, this.access);
   }

@@ -2,8 +2,8 @@
  * One replacement inside a document's text, in UTF-16 code units.
  *
  * Offsets are against the text as it was when the edit list was produced, and
- * a list is ordered so that applying it front to back is correct: each edit's
- * offset already accounts for the ones before it.
+ * edits are sorted by original offset and do not overlap. Apply from last to
+ * first when mutating text directly, or use applyTextEdits on the original text.
  */
 export interface TextEdit {
   readonly offset: number;
@@ -47,4 +47,7 @@ export interface OpenDocument {
   readonly token: string;
   /** Whether the document holds text that has not been published. */
   readonly dirty: boolean;
+  readonly version: number;
+  readonly publishedText: string;
+  readonly needsRefresh: boolean;
 }

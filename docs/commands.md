@@ -946,6 +946,16 @@ is exactly `{}`, so `-exec mv {} {}.bak ';'` renames rather than writing to a
 file called `{}.bak`. A failing invocation does not stop the walk; as POSIX has
 it, only the `+` form reports it in `find`'s own status.
 
+jq charges synchronous evaluation work, including results discarded by `empty`,
+and bounds intermediate records and estimated bytes using the shared shell
+limits. Accounting is conservative and cumulative within an evaluation; parsing
+and serialization also use the byte budget. String repetition/joining and
+collection growth are checked before amplified allocations. Standalone filters
+have ceilings of 1,000,000 work units, 100,000 records, and 16 MiB. Syntax nesting
+is limited to 64 and JSON/evaluation nesting to 128. `--arg NAME VALUE` and
+`--argjson NAME JSON` consume their values in occurrence order, including values
+beginning with `-`; bindings must still precede the filter.
+
 ### The AWK profile
 
 `awkCommand` is opt-in so applications that do not need an AWK parser pay zero
@@ -979,7 +989,9 @@ expression against `$0` never allocates a field array. The separator in effect
 when a record is read is retained for that record, matching AWK when `FS`
 changes inside an action. Program bytes, AST nodes, nesting, records, regex
 work, loop iterations, execution steps, associative-array entries and bytes,
-buffered output, and total I/O all use existing shell limits. The complete
+buffered output, and total I/O all use existing shell limits. Scalar variables
+also hold buffered-byte reservations. String concatenation and composite keys
+check expansion sizes before joining, including results that are never printed. The complete
 program, including every `-f` source, is compiled before stdin or a data-file
 operand is opened.
 
@@ -1287,3 +1299,7 @@ limit. When only aggregate subtree facts matter — charging a budget, reporting
 and `logicalFileBytes`, allocates nothing per entry, and has no result ceiling.
 It includes the root and raises `ENOENT` for an absent path; a final symbolic
 link is one zero-byte entry and is not followed.
+
+Glob patterns are capped at 16,384 UTF-16 code units. Non-final stars commit to
+their earliest following fixed fragment, preventing exponential backtracking
+across successive stars while preserving Unicode bracket matching.

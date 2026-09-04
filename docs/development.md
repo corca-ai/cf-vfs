@@ -465,3 +465,24 @@ Before release, verify current Cloudflare APIs and limits, update the version,
 run `npm ci && npm run check`, inspect `npm pack --dry-run`, and publish with
 public access. Do not commit `dist`, `node_modules`, `.wrangler`, coverage, or
 generated tarballs.
+
+## Boundary regression checks
+
+`npm run test:limits` executes adversarial glob, jq, and AWK inputs in isolated
+Node processes with an external watchdog. An in-process timer cannot stop a
+synchronous loop that blocks its own event loop. Build first; `check` already
+does so and includes this gate. Unit tests cover metadata/token round trips,
+credential wrapping order, pending quotas, publication interleavings, and
+conflict preservation. Shared Node/workerd conformance tests cover non-BMP
+subtree names and guarded writes after movement and copying.
+
+The September 2026 boundary corrections re-recorded all nine bundle presets
+using the existing measurement-derived headroom rule. The VFS grew from
+176,638 to 179,078 bytes and the R2 preset from 178,009 to 180,449 bytes for
+shared deferred-write validation, safe glob matching, Unicode translation,
+and final upload-expiry checks. The default command registry grew from
+487,718 to 495,748 bytes for jq accounting; AWK grew from 91,497 to 94,025 bytes
+for scalar/concatenation limits and allocation-free character slicing, and the Linux preset grew from 657,306
+to 667,064 bytes. The small `ls` and two-command presets stayed at 15,390 and
+16,897 bytes. Module reachability assertions and SQL statement/row-count
+ceilings remain unchanged; Node and workerd performance checks pass.

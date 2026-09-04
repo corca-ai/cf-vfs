@@ -197,7 +197,7 @@ it("applies a requested mode alongside an open-document edit", async () => {
   expect(await read(inner, "/doc.txt")).toBe("replacement\n");
 });
 
-it("routes a collected stream to the document that remains open", async () => {
+it("refuses a stream write when the document was closed and reopened", async () => {
   const { inner, registry, document: closedDocument, fileSystem } = open("old\n");
   await inner.writeFile("/doc.txt", "old\n");
   registry.open("/doc.txt", closedDocument, inner.stat("/doc.txt").mutationToken);
@@ -216,11 +216,11 @@ it("routes a collected stream to the document that remains open", async () => {
   const currentDocument = new TextDocument("old\n");
   registry.open("/doc.txt", currentDocument, inner.stat("/doc.txt").mutationToken);
   deliver();
-  await writing;
+  await expect(writing).rejects.toMatchObject({ code: "EREVISION" });
 
   expect(closedDocument.text()).toBe("old\n");
-  expect(currentDocument.text()).toBe("replacement\n");
-  expect(registry.get("/doc.txt")?.dirty).toBe(true);
+  expect(currentDocument.text()).toBe("old\n");
+  expect(registry.get("/doc.txt")?.dirty).toBe(false);
 });
 
 it("reports the size produced by a merging document", async () => {
@@ -296,7 +296,8 @@ it("keeps open documents current across metadata mutations", async () => {
   const pendingSize = new TextEncoder().encode("old\npending\n").byteLength;
   for (const [index, path] of paths.entries()) {
     expect(changed[index]?.sizeBytes).toBe(pendingSize);
-    expect(registry.get(path)?.token).toBe(changed[index]?.mutationToken);
+    expect(registry.get(path)?.token).toBe(inner.getMutationToken(path));
+    expect(changed[index]?.mutationToken).toBe(fileSystem.getMutationToken(path));
     expect(registry.get(path)?.dirty).toBe(true);
     expect(await fileSystem.publish(path)).toBe(true);
     expect(await read(inner, path)).toBe("old\npending\n");

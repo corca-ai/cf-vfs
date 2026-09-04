@@ -1,3 +1,4 @@
+import type { JqEvaluationBudget } from "./jq-budget.js";
 import { JqRuntimeError, JqSyntaxError } from "./jq-errors.js";
 import type { JqBinaryOperator as BinaryOperator } from "./jq-parser.js";
 import {
@@ -11,10 +12,15 @@ import {
   numberOf,
   renderJson,
 } from "./json-value.js";
+import { codePointLength } from "./unicode.js";
 
 export const SKIP = Symbol("skip");
 
-export function nullaryBuiltin(name: string, input: JsonValue): JsonValue | typeof SKIP {
+export function nullaryBuiltin(
+  name: string,
+  input: JsonValue,
+  budget: JqEvaluationBudget,
+): JsonValue | typeof SKIP {
   switch (name) {
     case "empty":
       return SKIP;
@@ -25,24 +31,24 @@ export function nullaryBuiltin(name: string, input: JsonValue): JsonValue | type
     case "length":
       return lengthOf(input);
     case "keys":
-      return [...keysOf(input)].sort(compareJson);
+      return [...keysOf(input)].sort((a, b) => compareJson(a, b, budget));
     case "keys_unsorted":
       return keysOf(input);
     case "values":
       return input === null ? SKIP : input;
     case "add":
-      return sumValues(input);
+      return sumValues(input, budget);
     case "tostring":
-      return typeof input === "string" ? input : renderJson(input);
+      return typeof input === "string" ? input : renderJson(input, { budget });
     case "tonumber":
       return numberValue(input);
     case "sort":
-      return [...requireArray(input, "sort")].sort(compareJson);
+      return [...requireArray(input, "sort")].sort((a, b) => compareJson(a, b, budget));
     case "unique":
-      return uniqueValues(input);
+      return uniqueValues(input, budget);
     case "min":
     case "max":
-      return extremeValue(input, name);
+      return extremeValue(input, name, budget);
     case "reverse":
       return [...requireArray(input, "reverse")].reverse();
     case "first":
@@ -58,15 +64,15 @@ export function nullaryBuiltin(name: string, input: JsonValue): JsonValue | type
     case "from_entries":
       return fromEntries(input);
     case "flatten":
-      return flatten(requireArray(input, "flatten"), 1e9);
+      return flatten(requireArray(input, "flatten"), 1e9, budget);
     default:
       throw new JqSyntaxError(`jq: ${name}/0 is not a function in this profile`);
   }
 }
 
-function sumValues(input: JsonValue): JsonValue {
+function sumValues(input: JsonValue, budget: JqEvaluationBudget): JsonValue {
   let total: JsonValue = null;
-  for (const item of requireArray(input, "add")) total = applyBinary("+", total, item);
+  for (const item of requireArray(input, "add")) total = applyBinary("+", total, item, budget);
   return total;
 }
 
@@ -82,19 +88,23 @@ function numberValue(input: JsonValue): JsonValue {
   return parsed;
 }
 
-function uniqueValues(input: JsonValue): JsonValue[] {
-  const sorted = [...requireArray(input, "unique")].sort(compareJson);
+function uniqueValues(input: JsonValue, budget: JqEvaluationBudget): JsonValue[] {
+  const sorted = [...requireArray(input, "unique")].sort((a, b) => compareJson(a, b, budget));
   return sorted.filter((item, index) => {
     const previous = sorted[index - 1];
-    return previous === undefined || !equalJson(item, previous);
+    return previous === undefined || !equalJson(item, previous, budget);
   });
 }
 
-function extremeValue(input: JsonValue, name: "min" | "max"): JsonValue {
+function extremeValue(
+  input: JsonValue,
+  name: "min" | "max",
+  budget: JqEvaluationBudget,
+): JsonValue {
   const items = requireArray(input, name);
   if (items.length === 0) return null;
   return items.reduce((best, item) => {
-    const order = compareJson(item, best);
+    const order = compareJson(item, best, budget);
     return (name === "min" ? order < 0 : order > 0) ? item : best;
   });
 }
@@ -156,7 +166,7 @@ function lengthOf(value: JsonValue): JsonValue {
   if (value === null) return 0;
   if (typeof value === "boolean") throw new JqRuntimeError("jq: boolean has no length");
   if (isJsonNumber(value)) return Math.abs(numberOf(value));
-  if (typeof value === "string") return [...value].length;
+  if (typeof value === "string") return codePointLength(value);
   return Array.isArray(value) ? value.length : value.size;
 }
 
@@ -179,53 +189,94 @@ export function hasMember(value: JsonValue, key: JsonValue): boolean {
   throw new JqRuntimeError(`jq: cannot check a key on ${jsonKind(value)}`);
 }
 
-export function flatten(items: JsonValue[], depth: number): JsonValue[] {
-  const out: JsonValue[] = [];
-  for (const item of items) {
-    if (Array.isArray(item) && depth > 0) out.push(...flatten(item, depth - 1));
-    else out.push(item);
+export function* splitJsonString(text: string, separator: string): Generator<string> {
+  if (separator === "") {
+    yield* text;
+    return;
   }
-  return out;
+  let offset = 0;
+  for (;;) {
+    const next = text.indexOf(separator, offset);
+    if (next < 0) {
+      yield text.slice(offset);
+      return;
+    }
+    yield text.slice(offset, next);
+    offset = next + separator.length;
+  }
+}
+
+export function flatten(
+  items: JsonValue[],
+  depth: number,
+  budget: JqEvaluationBudget,
+): JsonValue[] {
+  return budget.collect(flattenValues(items, depth, budget));
+}
+function* flattenValues(
+  items: JsonValue[],
+  depth: number,
+  budget: JqEvaluationBudget,
+): Generator<JsonValue> {
+  budget.enter();
+  try {
+    for (const item of items) {
+      budget.step();
+      if (Array.isArray(item) && depth > 0) yield* flattenValues(item, depth - 1, budget);
+      else yield item;
+    }
+  } finally {
+    budget.leave();
+  }
 }
 
 export function applyBinary(
   operator: BinaryOperator,
   left: JsonValue,
   right: JsonValue,
+  budget: JqEvaluationBudget,
 ): JsonValue {
+  budget.step();
   switch (operator) {
     case "==":
-      return equalJson(left, right);
+      return equalJson(left, right, budget);
     case "!=":
-      return !equalJson(left, right);
+      return !equalJson(left, right, budget);
     case "<":
-      return compareJson(left, right) < 0;
+      return compareJson(left, right, budget) < 0;
     case "<=":
-      return compareJson(left, right) <= 0;
+      return compareJson(left, right, budget) <= 0;
     case ">":
-      return compareJson(left, right) > 0;
+      return compareJson(left, right, budget) > 0;
     case ">=":
-      return compareJson(left, right) >= 0;
+      return compareJson(left, right, budget) >= 0;
     case "+":
-      return add(left, right);
+      return add(left, right, budget);
     case "-":
-      return subtract(left, right);
+      return subtract(left, right, budget);
     case "*":
-      return multiply(left, right);
+      return multiply(left, right, budget);
     case "/":
-      return divide(left, right);
+      return divide(left, right, budget);
     default:
       return modulo(left, right);
   }
 }
 
-function add(left: JsonValue, right: JsonValue): JsonValue {
+function add(left: JsonValue, right: JsonValue, budget: JqEvaluationBudget): JsonValue {
   if (left === null) return right;
   if (right === null) return left;
   if (isJsonNumber(left) && isJsonNumber(right)) return numberOf(left) + numberOf(right);
-  if (typeof left === "string" && typeof right === "string") return left + right;
-  if (Array.isArray(left) && Array.isArray(right)) return [...left, ...right];
+  if (typeof left === "string" && typeof right === "string") {
+    budget.reserve((left.length + right.length) * 2);
+    return left + right;
+  }
+  if (Array.isArray(left) && Array.isArray(right)) {
+    budget.reserve((left.length + right.length) * 8, left.length + right.length);
+    return [...left, ...right];
+  }
   if (left instanceof Map && right instanceof Map) {
+    budget.reserve((left.size + right.size) * 32, left.size + right.size);
     const merged = new Map(left);
     for (const [key, value] of right) merged.set(key, value);
     return merged;
@@ -233,47 +284,51 @@ function add(left: JsonValue, right: JsonValue): JsonValue {
   throw new JqRuntimeError(`jq: ${jsonKind(left)} and ${jsonKind(right)} cannot be added`);
 }
 
-function subtract(left: JsonValue, right: JsonValue): JsonValue {
+function subtract(left: JsonValue, right: JsonValue, budget: JqEvaluationBudget): JsonValue {
   if (isJsonNumber(left) && isJsonNumber(right)) return numberOf(left) - numberOf(right);
   if (Array.isArray(left) && Array.isArray(right)) {
-    return left.filter((item) => !right.some((excluded) => equalJson(item, excluded)));
+    return left.filter((item) => !right.some((excluded) => equalJson(item, excluded, budget)));
   }
   throw new JqRuntimeError(`jq: ${jsonKind(left)} and ${jsonKind(right)} cannot be subtracted`);
 }
 
-function multiply(left: JsonValue, right: JsonValue): JsonValue {
+function multiply(left: JsonValue, right: JsonValue, budget: JqEvaluationBudget): JsonValue {
   if (isJsonNumber(left) && isJsonNumber(right)) return numberOf(left) * numberOf(right);
-  if (left instanceof Map && right instanceof Map) return deepMerge(left, right);
+  if (left instanceof Map && right instanceof Map) return deepMerge(left, right, budget);
   const [text, count] =
     typeof left === "string" && isJsonNumber(right)
       ? [left, numberOf(right)]
       : typeof right === "string" && isJsonNumber(left)
         ? [right, numberOf(left)]
         : [undefined, 0];
-  if (text !== undefined) return count <= 0 ? null : text.repeat(Math.trunc(count));
+  if (text !== undefined) {
+    budget.reserve(text.length * Math.max(0, Math.trunc(count)) * 2);
+    return count <= 0 ? null : text.repeat(Math.trunc(count));
+  }
   throw new JqRuntimeError(`jq: ${jsonKind(left)} and ${jsonKind(right)} cannot be multiplied`);
 }
 
-function deepMerge(left: JsonObject, right: JsonObject): JsonObject {
+function deepMerge(left: JsonObject, right: JsonObject, budget: JqEvaluationBudget): JsonObject {
+  budget.reserve((left.size + right.size) * 32, left.size + right.size);
   const merged = new Map(left);
   for (const [key, value] of right) {
     const existing = merged.get(key);
     merged.set(
       key,
-      existing instanceof Map && value instanceof Map ? deepMerge(existing, value) : value,
+      existing instanceof Map && value instanceof Map ? deepMerge(existing, value, budget) : value,
     );
   }
   return merged;
 }
 
-function divide(left: JsonValue, right: JsonValue): JsonValue {
+function divide(left: JsonValue, right: JsonValue, budget: JqEvaluationBudget): JsonValue {
   if (isJsonNumber(left) && isJsonNumber(right)) {
     const divisor = numberOf(right);
     if (divisor === 0) throw new JqRuntimeError("jq: cannot divide by zero");
     return numberOf(left) / divisor;
   }
   if (typeof left === "string" && typeof right === "string") {
-    return right === "" ? [...left] : left.split(right);
+    return budget.collect(splitJsonString(left, right));
   }
   throw new JqRuntimeError(`jq: ${jsonKind(left)} and ${jsonKind(right)} cannot be divided`);
 }

@@ -198,7 +198,8 @@ it("supports bounded associative arrays, composite keys, membership, deletion, a
 
 it("returns array entry and byte budget after deletion and split replacement", async () => {
   const deleted = await awkHarness({
-    limits: { maxBufferedBytes: 6, maxBufferedRecords: 1 },
+    // Account for retained scalar variables as well as one UTF-8 array entry.
+    limits: { maxBufferedBytes: 40, maxBufferedRecords: 1 },
   }).run(
     `/bin/awk 'BEGIN { value["가"]="나"; delete value["가"]; value["다"]="라"; saved=value["다"]; delete value["다"]; print saved }'`,
   );

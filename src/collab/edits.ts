@@ -4,10 +4,9 @@ import type { TextEdit } from "./types.js";
 /**
  * Derives the edits that turn `before` into `after`.
  *
- * This is what makes an external whole-text replacement mergeable. A shell
- * command hands the filesystem a complete file; applying that to a document as
- * a replacement would discard whatever else was being typed, so it is turned
- * back into the changes it represents and applied as those.
+ * A guarded caller supplies text based on the current document. Deriving
+ * edits preserves unchanged spans in the host document; it does not recover
+ * an older caller's intent. Concurrent replacements need a common base.
  *
  * Line-granular by construction, because it reuses the diff the repository
  * already has rather than adding a second one. That is coarser than a

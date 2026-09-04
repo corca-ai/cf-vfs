@@ -179,7 +179,7 @@ it("republishes over a change made outside the document", async () => {
   await reconciled;
   // The publication was refused, the outside change was taken in, and the
   // result holds both rather than either being silently lost.
-  expect(document.text()).toContain("replaced");
+  expect(document.text()).toBe("replaced\nedited\n");
   expect(await stored(storage, "/doc.txt")).toBe(document.text());
 });
 
@@ -204,4 +204,20 @@ it("refuses a base that is not a version it could have issued", () => {
     const message = JSON.stringify({ type: "doc-edit", path: "/a.txt", base, text: "x" });
     expect(() => parseClientMessage(message), String(base)).toThrowError(/version/u);
   }
+});
+
+it("reports a save conflict while retaining local and external versions", async () => {
+  vi.useFakeTimers();
+  const { documents, storage, nextNotice, notices } = room();
+  await storage.writeFile("/doc.txt", "base\n");
+  const document = await documents.open("/doc.txt");
+  documents.applyClientText("/doc.txt", document.version(), "local\n");
+  await storage.writeFile("/doc.txt", "external\n");
+  const notice = nextNotice("/doc.txt");
+  await vi.runOnlyPendingTimersAsync();
+  await notice;
+  expect(notices).toContainEqual(expect.objectContaining({ path: "/doc.txt", kind: "error" }));
+  expect(document.text()).toBe("local\n");
+  expect(await stored(storage, "/doc.txt")).toBe("external\n");
+  expect(documents.registry.get("/doc.txt")?.dirty).toBe(true);
 });

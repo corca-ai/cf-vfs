@@ -9,6 +9,22 @@ import {
 } from "./vfs-conformance-support.js";
 
 export const MUTATION_CONFORMANCE: readonly VfsConformanceCase[] = [
+  ...(["move", "copy"] as const).map((operation) =>
+    conformanceCase(
+      `conforms: preserves non-BMP subtree paths during ${operation}`,
+      async (factory) => {
+        const fs = await factory();
+        await fs.writeFile("/😀/nested/한글", "body", { createParents: true });
+        if (operation === "move") await fs.move("/😀", "/dest");
+        else await fs.copy("/😀", "/dest", { recursive: true });
+        const stat = await fs.stat("/dest/nested/한글");
+        expect(stat.parentPath).toBe("/dest/nested");
+        expect(await readText(fs, stat.path)).toBe("body");
+        await fs.writeFile(stat.path, "guarded", { ifMutationToken: stat.mutationToken });
+        expect((await fs.list("/dest")).map((entry) => entry.path)).toEqual(["/dest/nested"]);
+      },
+    ),
+  ),
   conformanceCase(
     "conforms: advances the revision when a copy replaces a file",
     async (factory) => {

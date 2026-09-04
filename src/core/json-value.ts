@@ -1,3 +1,7 @@
+import { type JsonBudget, reserveJsonOutput } from "./json-budget.js";
+
+export type { JsonBudget } from "./json-budget.js";
+
 import { VfsError } from "./errors.js";
 import { compareUtf8 } from "./path.js";
 import { utf8ByteLength } from "./unicode.js";
@@ -67,27 +71,35 @@ const JSON_KIND_ORDER: Readonly<Record<JsonKind, number>> = {
   object: 5,
 };
 
-function compareArrays(left: readonly JsonValue[], right: readonly JsonValue[]): number {
+function compareArrays(
+  left: readonly JsonValue[],
+  right: readonly JsonValue[],
+  budget?: Pick<JsonBudget, "step">,
+): number {
   for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
     const a = left[index];
     const b = right[index];
     if (a === undefined || b === undefined) return invalidJsonValue();
-    const order = compareJson(a, b);
+    const order = compareJson(a, b, budget);
     if (order !== 0) return order;
   }
   return Math.sign(left.length - right.length);
 }
 
-function compareObjects(left: JsonObject, right: JsonObject): number {
+function compareObjects(
+  left: JsonObject,
+  right: JsonObject,
+  budget?: Pick<JsonBudget, "step">,
+): number {
   const leftKeys = [...left.keys()].sort(compareStrings);
   const rightKeys = [...right.keys()].sort(compareStrings);
-  const keyOrder = compareArrays(leftKeys, rightKeys);
+  const keyOrder = compareArrays(leftKeys, rightKeys, budget);
   if (keyOrder !== 0) return keyOrder;
   for (const key of leftKeys) {
     const a = left.get(key);
     const b = right.get(key);
     if (a === undefined || b === undefined) return invalidJsonValue();
-    const order = compareJson(a, b);
+    const order = compareJson(a, b, budget);
     if (order !== 0) return order;
   }
   return 0;
@@ -107,7 +119,12 @@ function compareNumbers(left: number | JsonNumber, right: number | JsonNumber): 
  * first and then the values in that order, which is why two objects that differ
  * only in member order compare equal.
  */
-export function compareJson(left: JsonValue, right: JsonValue): number {
+export function compareJson(
+  left: JsonValue,
+  right: JsonValue,
+  budget?: Pick<JsonBudget, "step">,
+): number {
+  budget?.step();
   const leftKind = jsonKind(left);
   const rightKind = jsonKind(right);
   if (leftKind !== rightKind)
@@ -116,8 +133,8 @@ export function compareJson(left: JsonValue, right: JsonValue): number {
   if (typeof left === "boolean" && typeof right === "boolean") return Number(left) - Number(right);
   if (isJsonNumber(left) && isJsonNumber(right)) return compareNumbers(left, right);
   if (typeof left === "string" && typeof right === "string") return compareStrings(left, right);
-  if (Array.isArray(left) && Array.isArray(right)) return compareArrays(left, right);
-  if (left instanceof Map && right instanceof Map) return compareObjects(left, right);
+  if (Array.isArray(left) && Array.isArray(right)) return compareArrays(left, right, budget);
+  if (left instanceof Map && right instanceof Map) return compareObjects(left, right, budget);
   return invalidJsonValue();
 }
 
@@ -125,23 +142,30 @@ function compareStrings(left: string, right: string): number {
   return compareUtf8(left, right);
 }
 
-export function equalJson(left: JsonValue, right: JsonValue): boolean {
-  return compareJson(left, right) === 0;
+export function equalJson(
+  left: JsonValue,
+  right: JsonValue,
+  budget?: Pick<JsonBudget, "step">,
+): boolean {
+  return compareJson(left, right, budget) === 0;
 }
 
 /** Reads every value in a stream of concatenated JSON texts. */
-export function parseJsonStream(text: string, command: string): JsonValue[] {
-  const reader = new JsonReader(text, command);
+export function parseJsonStream(text: string, command: string, budget?: JsonBudget): JsonValue[] {
+  budget?.step(Math.ceil(text.length / 64));
+  budget?.reserve(text.length * 2);
+  const reader = new JsonReader(text, command, budget);
   const values: JsonValue[] = [];
   for (;;) {
     reader.skipSpace();
     if (reader.done()) return values;
+    budget?.reserve(8, 1);
     values.push(reader.value());
   }
 }
 
-export function parseJsonText(text: string, command: string): JsonValue {
-  const values = parseJsonStream(text, command);
+export function parseJsonText(text: string, command: string, budget?: JsonBudget): JsonValue {
+  const values = parseJsonStream(text, command, budget);
   const only = values[0];
   if (values.length !== 1 || only === undefined) {
     throw new VfsError("EINVAL", `${command}: expected one JSON value`);
@@ -163,10 +187,12 @@ const ESCAPES: Record<string, string> = {
 
 class JsonReader {
   private offset = 0;
+  private depth = 0;
 
   constructor(
     private readonly text: string,
     private readonly command: string,
+    private readonly budget?: JsonBudget,
   ) {}
 
   done(): boolean {
@@ -193,6 +219,16 @@ class JsonReader {
   }
 
   value(): JsonValue {
+    this.budget?.step();
+    if (++this.depth > 128) throw new VfsError("E2BIG", "jq: JSON nesting limit exceeded");
+    try {
+      return this.readValue();
+    } finally {
+      this.depth -= 1;
+    }
+  }
+
+  private readValue(): JsonValue {
     this.skipSpace();
     const character = this.text[this.offset];
     if (character === undefined) this.fail("unexpected end of input");
@@ -271,6 +307,7 @@ class JsonReader {
       return items;
     }
     for (;;) {
+      this.budget?.reserve(8, 1);
       items.push(this.value());
       this.skipSpace();
       if (!this.nextItem("]")) return items;
@@ -293,6 +330,7 @@ class JsonReader {
       // A repeated key keeps the first position and the last value, which is
       // what `jq` does — and what a plain object would also do, by accident.
       const value = this.value();
+      this.budget?.reserve(32 + key.length * 2, 1);
       entries.set(key, value);
       this.skipSpace();
       if (!this.nextItem("}")) return entries;
@@ -315,6 +353,7 @@ export interface RenderOptions {
   /** Indent width, or `"\t"`. Absent renders on one line. */
   readonly indent?: number | "\t" | undefined;
   readonly sortKeys?: boolean | undefined;
+  readonly budget?: JsonBudget | undefined;
 }
 
 /** Whether a string holds anything the JSON writer has to escape. */
@@ -355,6 +394,8 @@ function renderJsonNumber(value: number): string {
 }
 
 export function renderJson(value: JsonValue, options: RenderOptions = {}): string {
+  if (options.budget !== undefined)
+    reserveJsonOutput(value, options.budget, options.indent === "\t" ? 1 : (options.indent ?? 0));
   const indent =
     options.indent === undefined
       ? undefined

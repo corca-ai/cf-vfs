@@ -1,5 +1,6 @@
 import { VfsError } from "../../core/errors.js";
 import type { PosixRegex } from "../../core/posix-regex.js";
+import { codePointLength, sliceCodePoints } from "../../core/unicode.js";
 import type { Expression, LValue } from "./awk-ast.js";
 import { formatAwk } from "./awk-format.js";
 import {
@@ -25,10 +26,15 @@ import {
   truth,
   validateFieldSeparator,
 } from "./awk-runtime.js";
+import { checkAwkString, joinAwkStrings } from "./awk-strings.js";
 
 export function arrayKey(indices: readonly Expression[], state: RuntimeState): string {
   const separator = asString(getVariable(state, "SUBSEP"));
-  return indices.map((index) => asString(evaluate(index, state))).join(separator);
+  return joinAwkStrings(
+    state,
+    indices.map((index) => asString(evaluate(index, state))),
+    separator,
+  );
 }
 
 type ResolvedLValue =
@@ -173,9 +179,9 @@ function matchCall(arguments_: readonly Expression[], state: RuntimeState): numb
     setVariable(state, "RLENGTH", -1);
     return 0;
   }
-  const start = [...source.slice(0, found.index)].length + 1;
+  const start = codePointLength(source.slice(0, found.index)) + 1;
   setVariable(state, "RSTART", start);
-  setVariable(state, "RLENGTH", [...source.slice(found.index, found.end)].length);
+  setVariable(state, "RLENGTH", codePointLength(source.slice(found.index, found.end)));
   return start;
 }
 
@@ -291,23 +297,25 @@ function expectArgumentCount(
 
 function builtinLength(arguments_: readonly AwkValue[], state: RuntimeState): number {
   expectArgumentCount("length", arguments_, 0, 1, "accepts at most one argument");
-  return [...asString(arguments_[0] ?? inputValue(state.record))].length;
+  return codePointLength(asString(arguments_[0] ?? inputValue(state.record)));
 }
 
 function builtinSubstr(arguments_: readonly AwkValue[]): AwkValue {
   expectArgumentCount("substr", arguments_, 2, 3, "expects two or three arguments");
-  const points = [...asString(arguments_[0] ?? inputValue(""))];
+  const text = asString(arguments_[0] ?? inputValue(""));
   const start = Math.max(1, Math.trunc(asNumber(arguments_[1] ?? inputValue("")))) - 1;
   const length =
-    arguments_[2] === undefined ? points.length : Math.max(0, Math.trunc(asNumber(arguments_[2])));
-  return stringValue(points.slice(start, start + length).join(""));
+    arguments_[2] === undefined
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, Math.trunc(asNumber(arguments_[2])));
+  return stringValue(sliceCodePoints(text, start, start + length));
 }
 
 function builtinIndex(arguments_: readonly AwkValue[]): number {
   expectArgumentCount("index", arguments_, 2, 2, "expects two arguments");
   const source = asString(arguments_[0] ?? inputValue(""));
   const found = source.indexOf(asString(arguments_[1] ?? inputValue("")));
-  return found < 0 ? 0 : [...source.slice(0, found)].length + 1;
+  return found < 0 ? 0 : codePointLength(source.slice(0, found)) + 1;
 }
 
 function builtinCase(name: "tolower" | "toupper", arguments_: readonly AwkValue[]): AwkValue {
@@ -362,9 +370,11 @@ function evaluateMembership(
   state: RuntimeState,
 ): number {
   const values = expression.key.kind === "tuple" ? expression.key.values : [expression.key];
-  const key = values
-    .map((value) => asString(evaluate(value, state)))
-    .join(expression.key.kind === "tuple" ? asString(getVariable(state, "SUBSEP")) : "");
+  const key = joinAwkStrings(
+    state,
+    values.map((value) => asString(evaluate(value, state))),
+    expression.key.kind === "tuple" ? asString(getVariable(state, "SUBSEP")) : "",
+  );
   return getArray(state, expression.array).has(key) ? 1 : 0;
 }
 
@@ -466,11 +476,15 @@ function evaluateBinary(
   if (["+", "-", "*", "/", "%", "^"].includes(expression.operator)) {
     return arithmetic(expression.operator, left, right);
   }
-  if (expression.operator === "concat") return stringValue(`${asString(left)}${asString(right)}`);
+  if (expression.operator === "concat")
+    return stringValue(joinAwkStrings(state, [asString(left), asString(right)]));
   return comparisonResult(expression.operator, compare(left, right));
 }
 
 export function evaluate(expression: Expression, state: RuntimeState): AwkValue {
+  return checkAwkString(state, evaluateNode(expression, state));
+}
+function evaluateNode(expression: Expression, state: RuntimeState): AwkValue {
   state.context.budget.step();
   switch (expression.kind) {
     case "number":

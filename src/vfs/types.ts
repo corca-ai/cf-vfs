@@ -597,3 +597,13 @@ export interface VirtualFileSystem {
 export interface PosixVirtualFileSystem extends VirtualFileSystem {
   forCredentials(credentials: PosixCredentials, options?: PosixViewOptions): VirtualFileSystem;
 }
+
+/** Optional backend authorization and quota check for deferred writes to existing inline files. */
+export interface InlineWriteValidator {
+  validateInlineWrite(
+    path: string,
+    options?: WriteFileOptions,
+    sizeBytes?: number,
+    additionalInlineBytes?: number,
+  ): number;
+}

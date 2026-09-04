@@ -19,3 +19,24 @@ export function codePointLength(value: string): number {
   for (const _character of value) length += 1;
   return length;
 }
+
+/** Slice non-negative code-point positions without materializing a character array. */
+export function sliceCodePoints(
+  value: string,
+  start: number,
+  end = Number.POSITIVE_INFINITY,
+): string {
+  const first = Number.isNaN(start) ? 0 : start;
+  const last = Number.isNaN(end) ? 0 : end;
+  if (last <= first) return "";
+  let point = 0;
+  let offset = 0;
+  let from = value.length;
+  for (const character of value) {
+    if (point === first) from = offset;
+    if (point >= last) break;
+    offset += character.length;
+    point += 1;
+  }
+  return value.slice(from, offset);
+}

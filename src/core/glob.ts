@@ -1,5 +1,7 @@
 import { type BracketExpression, parseBracketExpression } from "./bracket.js";
 
+import { VfsError } from "./errors.js";
+
 function escapeRegex(character: string): string {
   return /[\\^$.*+?()[\]{}|]/.test(character) ? `\\${character}` : character;
 }
@@ -16,9 +18,11 @@ function bracketRegex(expression: BracketExpression): string {
   return `(?=[^/])[${expression.negated ? "^" : ""}${body}]`;
 }
 
-export function globToRegExp(pattern: string): RegExp {
+function globParts(pattern: string): string[] {
+  if (pattern.length > 16_384) throw new VfsError("E2BIG", "glob pattern length limit exceeded");
   const characters = [...pattern];
-  let source = "^";
+  const parts: string[] = [];
+  let source = "";
   for (let index = 0; index < characters.length; index += 1) {
     const character = characters[index] ?? "";
     switch (character) {
@@ -26,7 +30,8 @@ export function globToRegExp(pattern: string): RegExp {
         source += escapeRegex(characters[++index] ?? "\\");
         break;
       case "*":
-        source += "[^/]*";
+        parts.push(source);
+        source = "";
         break;
       case "?":
         source += "[^/]";
@@ -41,7 +46,23 @@ export function globToRegExp(pattern: string): RegExp {
         source += escapeRegex(character);
     }
   }
-  return new RegExp(`${source}$`, "u");
+  parts.push(source);
+  return parts.filter((part, index) => index === 0 || part !== "" || index === parts.length - 1);
+}
+
+export function globToRegExp(pattern: string): RegExp {
+  const parts = globParts(pattern);
+  let expression = `^${parts[0] ?? ""}`;
+  // Lookahead commits the earliest fixed fragment after each non-final star.
+  // Backtracking cannot multiply choices across successive wildcards.
+  for (let index = 1; index < parts.length; index += 1) {
+    const fixed = parts[index] ?? "";
+    expression +=
+      index === parts.length - 1
+        ? `[^/]*${fixed}`
+        : `(?=(?<g${index}>[^/]*?${fixed}))\\k<g${index}>`;
+  }
+  return new RegExp(`${expression}$`, "u");
 }
 
 export function matchesGlob(value: string, pattern?: string): boolean {

@@ -368,6 +368,16 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
 
   /** Relays what the namespace did to an open document. */
   private announce(notice: DocumentNotice): void {
+    if (notice.kind === "error") {
+      for (const [socket, session] of this.sessions) {
+        if (session.watching.has(notice.path))
+          send(socket, {
+            type: "error",
+            message: `${notice.path}: ${notice.message ?? "document could not be saved"}`,
+          });
+      }
+      return;
+    }
     if (notice.kind === "changed") {
       this.broadcastDocument(notice.path);
       return;

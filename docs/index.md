@@ -53,6 +53,8 @@ second and offers the first from a subpath.
   statuses, utilities, opaque behavior, and direct VFS primitives.
 - [Architecture](architecture.md) — SQLite inline bytes, immutable R2 objects,
   mutation tokens, upload verification, read leases, and GC alarms.
+- [Collaborative documents](collaboration.md) — document guards, authorization,
+  deferred quotas, publication, and reconciliation.
 - [POSIX and Bash compatibility](posix-compatibility.md) — supported behavior,
   deliberate atomic-redirection divergence, and rejected syntax.
 - [Operations and security](operations.md) — policy, quotas, cancellation,

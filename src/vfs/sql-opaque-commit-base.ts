@@ -27,6 +27,7 @@ type VerificationProgress =
   | ({ readonly kind: "verify" } & VerificationLease);
 
 type OpaqueCommit =
+  | { readonly kind: "expired"; readonly path: string }
   | { readonly kind: "stale"; readonly path: string; readonly objectKey: string }
   | { readonly kind: "committed"; readonly stat: OpaqueFileStat };
 
@@ -229,6 +230,13 @@ export abstract class SqlOpaqueCommit extends SqlOpaqueStart {
     metadata: OpaqueObjectMetadata,
   ): OpaqueCommit {
     const session = this.requireVerificationLease(uploadId, lease);
+    if (
+      session.expiresAtMs <= this.now() ||
+      (session.verificationLeaseUntilMs ?? 0) <= this.now()
+    ) {
+      this.staleOpaqueCommit(uploadId, session);
+      return { kind: "expired", path: session.path };
+    }
     if (this.tokenFor(session.path) !== session.expectedMutationToken) {
       return this.staleOpaqueCommit(uploadId, session);
     }
@@ -409,6 +417,16 @@ export abstract class SqlOpaqueCommit extends SqlOpaqueStart {
     originalObjectKey: string,
     committed: OpaqueCommit,
   ): OpaqueFileStat {
+    if (committed.kind === "expired") {
+      emitVfsEvent(this.onEvent, {
+        type: "vfs.opaque-upload",
+        phase: "expire",
+        uploadId,
+        objectKey: originalObjectKey,
+        path: committed.path,
+      });
+      throw new VfsError("ETIMEDOUT", "upload verification expired", committed.path);
+    }
     if (committed.kind === "stale") {
       emitVfsEvent(this.onEvent, {
         type: "vfs.opaque-upload",

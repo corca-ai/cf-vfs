@@ -21,9 +21,9 @@ const MAX_DOCUMENT_BYTES = 16 * 1024;
  * The demo deliberately does not ship a CRDT, and the reason is worth stating
  * because it is easy to assume one is always required. Every change to this
  * workspace — a keystroke arriving on a socket, a `sed -i` inside a shell —
- * runs on one Durable Object, which is single-threaded and processes them one
- * at a time. There is no concurrent application for a CRDT to reconcile, so a
- * string plus the library's edit derivation is the whole of what is needed.
+ * runs on one Durable Object. Asynchronous operations can interleave: document
+ * guards refuse stale writes and reconciliation merges disjoint edits from a
+ * common base. Overlapping edits remain pending and report a save error.
  *
  * What would change that is a client applying its own edits before the server
  * has confirmed them. This one does not: it sends what it has and takes what
@@ -57,7 +57,8 @@ export class DemoDocument implements CollaborativeDocument {
 
 export interface DocumentNotice {
   readonly path: string;
-  readonly kind: "changed" | "gone" | "moved";
+  readonly kind: "changed" | "gone" | "moved" | "error";
+  readonly message?: string;
   readonly to?: string;
 }
 
@@ -171,7 +172,13 @@ export class DemoDocuments {
       path,
       setTimeout(() => {
         this.#timers.delete(path);
-        void this.#publish(path);
+        void this.#publish(path).catch((error: unknown) => {
+          this.#notify?.({
+            path,
+            kind: "error",
+            message: error instanceof Error ? error.message : String(error),
+          });
+        });
       }, PUBLISH_DELAY_MS),
     );
   }
@@ -186,8 +193,8 @@ export class DemoDocuments {
       // as an external change and publish once more; a second conflict is left
       // alone rather than retried in a loop.
       await fileSystem.reconcile(path);
+      await fileSystem.publish(path);
       this.#notify?.({ path, kind: "changed" });
-      await fileSystem.publish(path).catch(() => undefined);
     }
   }
 

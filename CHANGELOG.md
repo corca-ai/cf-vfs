@@ -29,6 +29,23 @@ included.
   `&>`/`&>>` redirection without adding OS
   process semantics.
 
+### Changed
+
+- **Breaking:** Collaborative view mutation tokens now include document versions.
+  Read/modify/write callers must carry tokens from the same view. Deferred
+  writes require backend `InlineWriteValidator` support (provided by SQL and
+  credential-bound views). Writes racing a reopened or edited document fail
+  with `EREVISION`; reconciliation preserves disjoint changes and reports
+  overlapping edits without discarding either version. See
+  [the collaboration contract](docs/collaboration.md).
+
+### Fixed
+
+- Correct non-BMP subtree path translation, final R2 verification expiry checks,
+  jq binding order, and the documented original-text `TextEdit` offsets.
+- Bound glob backtracking, jq synchronous work and intermediate allocations,
+  and AWK scalar strings. Add external-watchdog and boundary regression checks.
+
 ## [0.3.0] — 2026-08-28
 
 ### Changed

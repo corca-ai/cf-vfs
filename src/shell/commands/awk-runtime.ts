@@ -4,6 +4,7 @@ import { compilePosixRegex, type PosixRegex } from "../../core/posix-regex.js";
 import { utf8ByteLength } from "../../core/unicode.js";
 import type { ShellCommandContext } from "../types.js";
 import type { AwkRule } from "./awk-ast.js";
+import { retainAwkVariable } from "./awk-strings.js";
 
 export interface AwkString {
   readonly kind: "string";
@@ -20,6 +21,9 @@ export interface AwkRuntimeState {
   readonly arrays: Map<string, Map<string, AwkValue>>;
   readonly regexCache: Map<string, PosixRegex>;
   readonly activeRanges: Set<AwkRule>;
+  scalarSizes: Map<string, number>;
+  scalarBytes: number;
+  scalarRelease: () => void;
   arrayEntries: number;
   arrayBytes: number;
   arrayRelease: () => void;
@@ -118,6 +122,7 @@ export function setVariable(state: AwkRuntimeState, name: string, value: AwkValu
     throw new VfsError("ENOTSUP", `awk: changing ${name} is unsupported`);
   }
   if (name === "FS") validateFieldSeparator(state, text);
+  retainAwkVariable(state, name, value);
   state.variables.set(name, value);
 }
 

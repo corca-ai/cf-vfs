@@ -43,24 +43,11 @@ import type {
   WriteFilesOptions,
   WriteResult,
 } from "../vfs/types.js";
-import { textEdits } from "./edits.js";
-import { type DocumentRegistry, decodeText } from "./registry.js";
+import { DocumentOperations } from "./operations.js";
+import type { DocumentRegistry } from "./registry.js";
 import type { OpenDocument } from "./types.js";
 
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
-
-async function bodyText(body: ByteBody, path: string): Promise<string> {
-  if (typeof body === "string") return body;
-  const bytes =
-    body instanceof ReadableStream
-      ? await readAllBytes(body, MAX_DOCUMENT_BYTES)
-      : body instanceof Uint8Array
-        ? body
-        : ArrayBuffer.isView(body)
-          ? new Uint8Array(body.buffer, body.byteOffset, body.byteLength)
-          : new Uint8Array(body);
-  return decodeText(bytes, path);
-}
 
 function streamOf(body: string | Uint8Array): ReadableStream<Uint8Array> {
   const bytes = typeof body === "string" ? encodeUtf8(body) : body;
@@ -77,11 +64,11 @@ function streamOf(body: string | Uint8Array): ReadableStream<Uint8Array> {
  *
  * Two rules, and the second is the one worth understanding.
  *
- * **A write to an open document becomes an edit.** Without this, `sed -i` on a
- * file someone is typing into is a guarded whole-file publication: it wins and
- * discards their work, or it loses with `EREVISION`. Neither is what an editor
- * wants. Routed through the document it merges, and every other holder sees it
- * as an ordinary remote change.
+ * **A write to an open document becomes an edit.** Read/modify/write callers
+ * use the token from this view, which covers the document version as well as
+ * storage. A stale write fails with EREVISION and preserves pending edits.
+ * Unguarded writes explicitly replace the current text. Reconciliation merges
+ * disjoint changes from a common base and reports overlaps to the host.
  *
  * **A read of an open document sees what has not been published yet.**
  * Flushing before an execution is not enough on its own, because a write
@@ -95,11 +82,12 @@ function streamOf(body: string | Uint8Array): ReadableStream<Uint8Array> {
 export class CollaborativeFileSystem implements PosixVirtualFileSystem {
   readonly #inner: VirtualFileSystem;
   readonly #registry: DocumentRegistry;
-  #credentials: PosixCredentials | undefined;
+  readonly #documents: DocumentOperations;
 
   constructor(inner: VirtualFileSystem, registry: DocumentRegistry) {
     this.#inner = inner;
     this.#registry = registry;
+    this.#documents = new DocumentOperations(inner, registry);
   }
 
   /**
@@ -119,15 +107,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
    * reconcile and try again rather than overwrite.
    */
   async publish(path: string): Promise<boolean> {
-    const open = this.#registry.get(path);
-    if (open === undefined || !open.dirty) return false;
-    const publishedText = open.document.text();
-    const result = await this.#inner.writeFile(path, publishedText, {
-      ifMutationToken: open.token,
-      skipIfUnchanged: true,
-    });
-    this.#recordStoredText(path, open, publishedText, result.mutationToken);
-    return true;
+    return this.#documents.publish(path);
   }
 
   /**
@@ -139,34 +119,17 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
    * reconciling against that is work with no result.
    */
   async reconcile(path: string): Promise<boolean> {
-    const open = this.#registry.get(path);
-    if (open === undefined) return false;
-    const read = this.#inner.readFile(path);
-    const bytes = await readAllBytes(read.stream, MAX_DOCUMENT_BYTES);
-    const storedText = decodeText(bytes, path);
-    if (!this.#registry.isUnchanged(path, open)) return false;
-    const edits = textEdits(open.document.text(), storedText);
-    if (edits.length > 0) open.document.applyExternal(edits);
-    this.#recordStoredText(path, open, storedText, read.stat.mutationToken);
-    return edits.length > 0;
+    return this.#documents.reconcile(path);
   }
 
   forCredentials(credentials: PosixCredentials, options?: PosixViewOptions): VirtualFileSystem {
     if (!supportsPosixCredentials(this.#inner)) {
       throw new TypeError("the underlying filesystem does not support POSIX credentials");
     }
-    const view = new CollaborativeFileSystem(
+    return new CollaborativeFileSystem(
       this.#inner.forCredentials(credentials, options),
       this.#registry,
     );
-    view.#credentials = {
-      uid: credentials.uid,
-      gid: credentials.gid,
-      ...(credentials.supplementaryGids === undefined
-        ? {}
-        : { supplementaryGids: [...credentials.supplementaryGids] }),
-    };
-    return view;
   }
 
   /** The document holding unpublished text at `path`, if there is one. */
@@ -175,57 +138,21 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     return open === undefined || !open.dirty ? undefined : { text: open.document.text() };
   }
 
-  #recordStoredText(
-    path: string,
-    open: OpenDocument,
-    storedText: string,
-    mutationToken: string,
-  ): void {
-    if (!this.#registry.isUnchanged(path, open)) return;
-    this.#registry.markPublished(path, mutationToken);
-    if (open.document.text() !== storedText) this.#registry.markDirty(path);
-  }
-
   #metadataResult(path: string, open: OpenDocument | undefined, stat: VfsStat): VfsStat {
     const current = this.#registry.get(path);
     if (open !== undefined && current?.document === open.document) {
-      this.#registry.markPublished(path, stat.mutationToken);
-      if (open.dirty) this.#registry.markDirty(path);
+      this.#registry.recordMetadata(path, open, stat.mutationToken);
     }
     return this.#withPendingSize(stat);
   }
 
-  #withPendingSize(stat: VfsStat): VfsStat {
+  #withPendingSize<Stat extends VfsStat>(stat: Stat): Stat {
     const pending = this.#pending(stat.path);
-    return pending === undefined ? stat : { ...stat, sizeBytes: utf8ByteLength(pending.text) };
-  }
-
-  #assertDocumentWrite(path: string): void {
-    const credentials = this.#credentials;
-    if (credentials === undefined || credentials.uid === 0) return;
-    const stat = this.#inner.stat(path);
-    const permissions =
-      stat.uid === credentials.uid
-        ? (stat.mode >> 6) & 0o7
-        : stat.gid === credentials.gid || credentials.supplementaryGids?.includes(stat.gid) === true
-          ? (stat.mode >> 3) & 0o7
-          : stat.mode & 0o7;
-    if ((permissions & 0o2) === 0) throw new VfsError("EACCES", "permission denied", stat.path);
-  }
-
-  #assertDocumentPreconditions(
-    path: string,
-    options: { ifMutationToken?: string; disposition?: "create" | "replace" | "upsert" } = {},
-  ): void {
-    if (options.disposition === "create") {
-      throw new VfsError("EEXIST", "file or directory already exists", this.#inner.stat(path).path);
-    }
-    if (
-      options.ifMutationToken !== undefined &&
-      this.#inner.getMutationToken(path) !== options.ifMutationToken
-    ) {
-      throw new VfsError("EREVISION", "path mutation token does not match", path);
-    }
+    return {
+      ...stat,
+      sizeBytes: pending === undefined ? stat.sizeBytes : utf8ByteLength(pending.text),
+      mutationToken: this.#registry.mutationToken(stat.path, stat.mutationToken),
+    };
   }
 
   /**
@@ -260,14 +187,14 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     const resolved = this.#resolved(path);
     const pending = this.#pending(resolved);
     const result = this.#inner.readFile(path, options);
-    if (pending === undefined) return result;
+    if (pending === undefined) return { ...result, stat: this.#withPendingSize(result.stat) };
     // The stored snapshot is released rather than left holding in-flight
     // budget for bytes nobody is going to read.
     void result.stream.cancel();
     const bytes = encodeUtf8(pending.text);
     const selected = byteRangeBounds(options?.range, bytes.byteLength, resolved);
     return {
-      stat: { ...result.stat, sizeBytes: bytes.byteLength },
+      stat: this.#withPendingSize({ ...result.stat, sizeBytes: bytes.byteLength }),
       stream: streamOf(bytes.subarray(selected.offset, selected.offset + selected.length)),
     };
   }
@@ -281,55 +208,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
   }
 
   async writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult> {
-    const resolved = this.#resolved(path);
-    let open = this.#registry.get(resolved);
-    if (open === undefined) return this.#inner.writeFile(path, body, options);
-    this.#assertDocumentWrite(path);
-    this.#assertDocumentPreconditions(path, options);
-    const next = await bodyText(body, resolved);
-    open = this.#registry.get(resolved);
-    if (open === undefined) return this.#inner.writeFile(path, next, options);
-    this.#assertDocumentWrite(path);
-    this.#assertDocumentPreconditions(path, options);
-    const edits = textEdits(open.document.text(), next);
-    if (edits.length === 0) {
-      // The text is already what the document holds, so there is nothing to
-      // merge and the write is either a publication of this very document or a
-      // redundant write. Both belong in storage: swallowing them would make
-      // `publishDocument` a silent no-op whenever it is handed this view
-      // rather than the one underneath, which is a mistake nothing would
-      // report.
-      const result = await this.#inner.writeFile(path, next, options);
-      this.#recordStoredText(resolved, open, next, result.mutationToken);
-      return result;
-    }
-    const stat =
-      options?.mode === undefined
-        ? this.#inner.stat(resolved)
-        : this.#inner.setMetadata(path, {
-            mode: options.mode,
-            ...(options.ifMutationToken === undefined
-              ? {}
-              : { ifMutationToken: options.ifMutationToken }),
-          });
-    if (options?.mode !== undefined) {
-      const current = this.#registry.get(resolved);
-      if (current?.document === open.document) {
-        this.#registry.markPublished(resolved, stat.mutationToken);
-      }
-    }
-    open.document.applyExternal(edits);
-    this.#registry.markDirty(resolved);
-    // Content has not reached storage. With no mode change the revision and
-    // token are the ones already there; with one they describe that metadata
-    // mutation, which is also the token the eventual publication will guard.
-    return {
-      path: resolved,
-      revision: stat.revision,
-      mutationToken: stat.mutationToken,
-      sizeBytes: utf8ByteLength(open.document.text()),
-      created: false,
-    };
+    return this.#documents.write(path, body, options);
   }
 
   /**
@@ -381,33 +260,11 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     body: ByteBody,
     options?: AppendFileOptions,
   ): Promise<WriteResult> {
-    const resolved = this.#resolved(path);
-    let open = this.#registry.get(resolved);
-    if (open === undefined) return this.#inner.appendFile(path, body, options);
-    this.#assertDocumentWrite(path);
-    this.#assertDocumentPreconditions(path, options);
-    const addition = await bodyText(body, resolved);
-    open = this.#registry.get(resolved);
-    if (open === undefined) return this.#inner.appendFile(path, addition, options);
-    this.#assertDocumentWrite(path);
-    this.#assertDocumentPreconditions(path, options);
-    const text = open.document.text();
-    if (addition.length > 0) {
-      open.document.applyExternal([{ offset: text.length, remove: 0, insert: addition }]);
-      this.#registry.markDirty(resolved);
-    }
-    const stat = this.#inner.stat(resolved);
-    return {
-      path: resolved,
-      revision: stat.revision,
-      mutationToken: stat.mutationToken,
-      sizeBytes: utf8ByteLength(open.document.text()),
-      created: false,
-    };
+    return this.#documents.write(path, body, { ...options, disposition: "replace" }, true);
   }
 
   getMutationToken(path: string, options?: MutationTokenOptions): string {
-    return this.#inner.getMutationToken(path, options);
+    return this.#documents.token(path, options);
   }
 
   lstat(path: string): VfsStat {
@@ -419,7 +276,11 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
   }
 
   symlink(path: string, target: string, options?: SymlinkOptions): VfsStat {
-    return this.#inner.symlink(path, target, options);
+    return this.#inner.symlink(
+      path,
+      target,
+      this.#documents.storageOptions(path, options ?? {}, false),
+    );
   }
 
   realpath(path: string, options?: { follow?: boolean }): string {
@@ -469,19 +330,31 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
   touch(path: string, options?: TouchOptions): VfsStat {
     const resolved = this.#resolved(path);
     const open = this.#registry.get(resolved);
-    return this.#metadataResult(resolved, open, this.#inner.touch(path, options));
+    return this.#metadataResult(
+      resolved,
+      open,
+      this.#inner.touch(path, this.#documents.storageOptions(path, options ?? {})),
+    );
   }
 
   setMetadata(path: string, options: MetadataUpdateOptions): VfsStat {
     const resolved = this.#resolved(path);
     const open = this.#registry.get(resolved);
-    return this.#metadataResult(resolved, open, this.#inner.setMetadata(path, options));
+    return this.#metadataResult(
+      resolved,
+      open,
+      this.#inner.setMetadata(path, this.#documents.storageOptions(path, options)),
+    );
   }
 
   setOwnership(path: string, options: OwnershipUpdateOptions): VfsStat {
     const resolved = this.#resolved(path);
     const open = this.#registry.get(resolved);
-    return this.#metadataResult(resolved, open, this.#inner.setOwnership(path, options));
+    return this.#metadataResult(
+      resolved,
+      open,
+      this.#inner.setOwnership(path, this.#documents.storageOptions(path, options)),
+    );
   }
 
   mkdir(path: string, recursive?: boolean, mode?: number): VfsStat {
@@ -504,7 +377,7 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     path: string,
     options?: BeginOpaqueUploadOptions,
   ): Promise<OpaqueUploadReservation> {
-    return this.#inner.beginOpaqueUpload(path, options);
+    return this.#inner.beginOpaqueUpload(path, this.#documents.storageOptions(path, options ?? {}));
   }
 
   commitOpaqueUpload(

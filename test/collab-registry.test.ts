@@ -213,12 +213,11 @@ it("refuses to publish over a change it did not see", async () => {
     code: "EREVISION",
   });
 
-  // Reconciling is what a caller does with that, and the local edit survives.
-  expect(await view.reconcile("/doc.txt")).toBe(true);
-  registry.markDirty("/doc.txt");
-  expect(await view.publish("/doc.txt")).toBe(true);
+  await expect(view.reconcile("/doc.txt")).rejects.toMatchObject({ code: "EREVISION" });
+  expect(document.text()).toBe("mine body\n");
+  expect(registry.get("/doc.txt")?.dirty).toBe(true);
   expect(await read(fileSystem, "/doc.txt")).toBe("someone else\n");
-  expect(document.external).toHaveLength(1);
+  expect(document.external).toHaveLength(0);
 });
 
 it("keeps a locally merged reconciliation pending", async () => {

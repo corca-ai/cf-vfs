@@ -1,5 +1,6 @@
 import { VfsError } from "../core/errors.js";
 import { isDescendant, normalizePath } from "../core/path.js";
+import { utf8ByteLength } from "../core/unicode.js";
 import type { VfsEvent } from "../vfs/events.js";
 import type { CollaborativeDocument, OpenDocument } from "./types.js";
 
@@ -7,6 +8,9 @@ interface Entry {
   document: CollaborativeDocument;
   token: string;
   dirty: boolean;
+  version: number;
+  publishedText: string;
+  needsRefresh: boolean;
 }
 
 /**
@@ -18,6 +22,7 @@ interface Entry {
  * publication as one's own, and following a path when the namespace moves it.
  */
 export class DocumentRegistry {
+  #version = 0;
   readonly #open = new Map<string, Entry>();
   readonly #snapshots = new WeakMap<OpenDocument, Entry>();
 
@@ -29,7 +34,14 @@ export class DocumentRegistry {
    * other order would leave a window where a change is silently overwritten.
    */
   open(path: string, document: CollaborativeDocument, token: string): void {
-    this.#open.set(normalizePath(path), { document, token, dirty: false });
+    this.#open.set(normalizePath(path), {
+      document,
+      token,
+      dirty: false,
+      version: ++this.#version,
+      publishedText: document.text(),
+      needsRefresh: false,
+    });
   }
 
   close(path: string): void {
@@ -45,6 +57,9 @@ export class DocumentRegistry {
       document: entry.document,
       token: entry.token,
       dirty: entry.dirty,
+      version: entry.version,
+      publishedText: entry.publishedText,
+      needsRefresh: entry.needsRefresh,
     };
     this.#snapshots.set(snapshot, entry);
     return snapshot;
@@ -63,7 +78,10 @@ export class DocumentRegistry {
   /** Records that a document holds text the namespace has not been given. */
   markDirty(path: string): void {
     const entry = this.#open.get(normalizePath(path));
-    if (entry !== undefined) entry.dirty = true;
+    if (entry !== undefined) {
+      entry.dirty = true;
+      entry.version = ++this.#version;
+    }
   }
 
   /** Records a publication: the token it produced, and that nothing is pending. */
@@ -72,6 +90,41 @@ export class DocumentRegistry {
     if (entry === undefined) return;
     entry.token = token;
     entry.dirty = false;
+    entry.publishedText = entry.document.text();
+    entry.needsRefresh = false;
+  }
+
+  recordStored(path: string, snapshot: OpenDocument, text: string, token: string): void {
+    if (!this.isUnchanged(path, snapshot)) return;
+    const entry = this.#open.get(normalizePath(path));
+    if (entry === undefined) return;
+    entry.token = token;
+    entry.publishedText = text;
+    entry.needsRefresh = false;
+    entry.dirty = entry.document.text() !== text;
+  }
+
+  recordMetadata(path: string, snapshot: OpenDocument, token: string): void {
+    if (!this.isUnchanged(path, snapshot)) return;
+    const entry = this.#open.get(normalizePath(path));
+    if (entry !== undefined) entry.token = token;
+  }
+
+  mutationToken(path: string, storageToken: string): string {
+    const entry = this.#open.get(normalizePath(path));
+    return entry === undefined ? storageToken : `document:${entry.version}:${storageToken}`;
+  }
+
+  pendingGrowth(except: string): number {
+    let bytes = 0;
+    for (const [path, entry] of this.#open) {
+      if (path !== except && entry.dirty)
+        bytes += Math.max(
+          0,
+          utf8ByteLength(entry.document.text()) - utf8ByteLength(entry.publishedText),
+        );
+    }
+    return bytes;
   }
 
   /**
@@ -108,6 +161,8 @@ export class DocumentRegistry {
     }
     for (const [path] of moved) this.#open.delete(path);
     for (const [path, entry] of moved) {
+      entry.version = ++this.#version;
+      entry.needsRefresh = true;
       this.#open.set(`${to}${path.slice(root.length)}`, entry);
     }
   }

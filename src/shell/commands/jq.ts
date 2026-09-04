@@ -1,5 +1,6 @@
 import { isVfsError } from "../../core/errors.js";
 import { compileJq, JqRuntimeError, JqSyntaxError, parseJqArgument } from "../../core/jq.js";
+import { JqEvaluationBudget } from "../../core/jq-budget.js";
 import { type JsonValue, parseJsonStream, renderJson } from "../../core/json-value.js";
 import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import {
@@ -62,29 +63,41 @@ interface JqInvocation {
   readonly has: (name: string) => boolean;
 }
 
-function jqInvocation(argv: readonly string[]): JqInvocation {
-  const parsed = parseAppletOptions(JQ, argv);
-  const has = (name: string): boolean => parsed.options.some((option) => option.name === name);
-  const valuesFor = (name: string): string[] =>
-    parsed.options.flatMap((option) =>
-      option.name === name && "argument" in option ? [option.argument] : [],
-    );
-  const operands = [...parsed.operands];
+function extractBindings(argv: readonly string[], budget: JqEvaluationBudget) {
+  const rest: string[] = [];
   const variables = new Map<string, JsonValue>();
-  for (const name of valuesFor("arg")) {
-    const value = operands.shift();
-    if (value === undefined) throw appletUsageError(JQ, `--arg ${name} is missing its value`);
-    variables.set(name, value);
-  }
-  for (const name of valuesFor("argjson")) {
-    const value = operands.shift();
-    if (value === undefined) throw appletUsageError(JQ, `--argjson ${name} is missing its value`);
-    try {
-      variables.set(name, parseJqArgument(value));
-    } catch {
-      throw appletUsageError(JQ, `--argjson ${name} is not valid JSON`);
+  let filterSeen = false;
+  for (let index = 0; index < argv.length; index += 1) {
+    const option = argv[index] ?? "";
+    const [spelling, attached] = option.split(/=(.*)/su);
+    if (spelling !== "--arg" && spelling !== "--argjson") {
+      if (!option.startsWith("-") || option === "--") filterSeen = true;
+      rest.push(option);
+      continue;
     }
+    if (filterSeen) throw appletUsageError(JQ, "bindings must precede the filter");
+    const name = attached ?? argv[++index];
+    const value = argv[++index];
+    if (name === undefined || value === undefined)
+      throw appletUsageError(JQ, `${spelling} requires NAME VALUE`);
+    variables.set(name, bindingValue(spelling, value, budget));
   }
+  return { rest, variables };
+}
+function bindingValue(option: string, value: string, budget: JqEvaluationBudget): JsonValue {
+  if (option === "--arg") return value;
+  try {
+    return parseJqArgument(value, budget);
+  } catch (error) {
+    if (isVfsError(error) && error.code !== "EINVAL") throw error;
+    throw appletUsageError(JQ, "--argjson value is not valid JSON");
+  }
+}
+function jqInvocation(argv: readonly string[], budget: JqEvaluationBudget): JqInvocation {
+  const { rest, variables } = extractBindings(argv, budget);
+  const parsed = parseAppletOptions(JQ, rest);
+  const has = (name: string): boolean => parsed.options.some((option) => option.name === name);
+  const operands = [...parsed.operands];
   const source = operands.shift();
   if (source === undefined) throw appletUsageError(JQ, "missing filter");
   try {
@@ -99,18 +112,24 @@ async function jqInputs(
   context: ShellCommandContext,
   paths: readonly string[],
   fds: ShellFileDescriptors,
+  budget: JqEvaluationBudget,
 ): Promise<JsonValue[]> {
   const inputs: JsonValue[] = [];
   const collected = await inputTexts(context, paths, fds[0]);
   try {
-    for (const input of collected.value) inputs.push(...parseJsonStream(input.text, "jq"));
+    for (const input of collected.value) {
+      for (const value of parseJsonStream(input.text, "jq", budget)) inputs.push(value);
+    }
     return inputs;
   } finally {
     collected.release();
   }
 }
 
-function jqRenderer(has: (name: string) => boolean): (value: JsonValue) => string {
+function jqRenderer(
+  has: (name: string) => boolean,
+  budget: JqEvaluationBudget,
+): (value: JsonValue) => string {
   const rawOutput = has("raw-output") || has("join-output");
   const indent = has("tab") ? ("\t" as const) : has("compact") ? undefined : 2;
   return (value) =>
@@ -119,6 +138,7 @@ function jqRenderer(has: (name: string) => boolean): (value: JsonValue) => strin
       : renderJson(value, {
           ...(indent === undefined ? {} : { indent }),
           sortKeys: has("sort-keys"),
+          budget,
         });
 }
 
@@ -128,15 +148,16 @@ async function runJqFilter(
   filter: ReturnType<typeof compileJq>,
   subjects: readonly JsonValue[],
   has: (name: string) => boolean,
+  budget: JqEvaluationBudget,
 ): Promise<{ readonly status: number; readonly last: JsonValue | undefined }> {
   const output = new BufferedTextWriter(context, fds[1]);
-  const render = jqRenderer(has);
+  const render = jqRenderer(has, budget);
   let last: JsonValue | undefined;
   try {
     for (const subject of subjects) {
       let results: JsonValue[];
       try {
-        results = filter.run(subject);
+        results = filter.run(subject, context.budget);
       } catch (error) {
         if (!(error instanceof JqRuntimeError)) throw error;
         await output.flush();
@@ -173,27 +194,32 @@ async function runJqFilter(
  * `ENOTSUP` for the same reason `sort`'s is.
  */
 export const jqCommand = /* @__PURE__ */ defineApplet(JQ, async (context, argv, fds) => {
-  const { filter, paths, has } = jqInvocation(argv);
-  if (filter instanceof JqSyntaxError) {
-    await writeText(fds[2], `${filter.message}\n`);
-    return FILTER_REJECTED;
-  }
-
-  let inputs: JsonValue[];
+  const budget = new JqEvaluationBudget(context.budget);
   try {
-    inputs = has("null-input") ? [] : await jqInputs(context, paths, fds);
-  } catch (error) {
-    await writeText(fds[2], `${isVfsError(error) ? error.message : String(error)}\n`);
-    return RUNTIME_FAILED;
+    const { filter, paths, has } = jqInvocation(argv, budget);
+    if (filter instanceof JqSyntaxError) {
+      await writeText(fds[2], `${filter.message}\n`);
+      return FILTER_REJECTED;
+    }
+
+    let inputs: JsonValue[];
+    try {
+      inputs = has("null-input") ? [] : await jqInputs(context, paths, fds, budget);
+    } catch (error) {
+      await writeText(fds[2], `${isVfsError(error) ? error.message : String(error)}\n`);
+      return RUNTIME_FAILED;
+    }
+
+    const subjects = has("null-input") ? [null] : has("slurp") ? [inputs] : inputs;
+    const { status, last } = await runJqFilter(context, fds, filter, subjects, has, budget);
+    if (status !== 0) return status;
+
+    if (!has("exit-status")) return 0;
+    // `-e` answers about the last value: absent or false-y is a non-zero status,
+    // which is what makes `jq -e` usable as a shell condition.
+    if (last === undefined) return 4;
+    return last === null || last === false ? NO_TRUE_OUTPUT : 0;
+  } finally {
+    budget.release();
   }
-
-  const subjects = has("null-input") ? [null] : has("slurp") ? [inputs] : inputs;
-  const { status, last } = await runJqFilter(context, fds, filter, subjects, has);
-  if (status !== 0) return status;
-
-  if (!has("exit-status")) return 0;
-  // `-e` answers about the last value: absent or false-y is a non-zero status,
-  // which is what makes `jq -e` usable as a shell condition.
-  if (last === undefined) return 4;
-  return last === null || last === false ? NO_TRUE_OUTPUT : 0;
 });
