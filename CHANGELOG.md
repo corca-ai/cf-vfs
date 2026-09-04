@@ -31,6 +31,11 @@ included.
 
 ### Changed
 
+- Repeated POSIX regex searches read code points directly from the source
+  instead of rebuilding whole-input arrays and translating offsets on each
+  match. Short ASCII byte-length checks avoid encoding. Local Node/workerd
+  benchmarks retain the existing SQL, execution-limit, and bundle budgets;
+  see [the text-processing measurements](bench/text-processing-2026-09-05.md).
 - **Breaking:** Collaborative view mutation tokens now include document versions.
   Read/modify/write callers must carry tokens from the same view. Deferred
   writes require backend `InlineWriteValidator` support (provided by SQL and

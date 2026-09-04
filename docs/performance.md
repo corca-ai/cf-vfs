@@ -16,6 +16,14 @@ environments and interpretation. The
 records the measured candidates retained and rejected for sub-10 KiB code and
 Markdown editing.
 
+The [September text-processing follow-up](../bench/text-processing-2026-09-05.md)
+compares repeated regex searches and short-record processing against `fedaf0e`
+on Node and local workerd. Run `npm run bench:text` for its Node workloads;
+the matching workerd cases are included in `npm run bench:do` and `bench:check`.
+Repeated searches advance directly through the source's code points and retain
+UTF-16 capture offsets, avoiding whole-input arrays for every match. Short
+ASCII byte counts avoid encoding; larger strings retain the native encoder.
+
 ## Structural guards versus wall-clock benchmarks
 
 Elapsed time is noisy enough that a small regression hides inside it, so the

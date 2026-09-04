@@ -7,6 +7,10 @@ export function encodeUtf8(value: string): Uint8Array<ArrayBuffer> {
 
 /** Returns the number of bytes needed to encode `value` as UTF-8. */
 export function utf8ByteLength(value: string): number {
+  // Encoding dominates short ASCII keys, paths, and records. Keep the native
+  // encoder for larger text: scanning an 8 KiB ASCII string was slower than
+  // encoding it in the local A/B benchmark.
+  if (value.length <= 128 && !/[\u0080-\u{10ffff}]/u.test(value)) return value.length;
   return encodeUtf8(value).byteLength;
 }
 

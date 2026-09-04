@@ -18,6 +18,10 @@ interface Thread {
   readonly caps: readonly number[];
 }
 
+function codePointWidth(code: number): number {
+  return code > 0xffff ? 2 : 1;
+}
+
 /** Mutable state for one bounded Thompson simulation. */
 class Matcher {
   private readonly seen: Int32Array;
@@ -28,7 +32,7 @@ class Matcher {
 
   constructor(
     private readonly program: readonly PosixRegexInstruction[],
-    private readonly codes: readonly number[],
+    private readonly text: string,
     private readonly command: string,
   ) {
     this.seen = new Int32Array(program.length).fill(-1);
@@ -70,15 +74,14 @@ class Matcher {
         if (at === 0) this.add(list, mark, pc + 1, caps, at);
         return;
       case "eol":
-        if (at === this.codes.length) this.add(list, mark, pc + 1, caps, at);
+        if (at === this.text.length) this.add(list, mark, pc + 1, caps, at);
         return;
       default:
         list.push({ pc, caps });
     }
   }
 
-  private advance(position: number, mark: number): readonly number[] | undefined {
-    const code = position < this.codes.length ? (this.codes[position] ?? -1) : -1;
+  private advance(code: number, nextPosition: number, mark: number): readonly number[] | undefined {
     for (const thread of this.current) {
       this.charge();
       const instruction = this.program[thread.pc];
@@ -88,7 +91,7 @@ class Matcher {
         instruction.op === "any" ||
         (instruction.op === "set" && inPosixSet(instruction.set, code))
       ) {
-        this.add(this.next, mark, thread.pc + 1, thread.caps, position + 1);
+        this.add(this.next, mark, thread.pc + 1, thread.caps, nextPosition);
       }
     }
     return undefined;
@@ -105,18 +108,21 @@ class Matcher {
     const empty = new Array<number>(slots).fill(-1);
     let currentMark = 0;
     let matched: readonly number[] | undefined;
-    for (let position = from; ; position += 1) {
+    for (let position = from; ; ) {
       if (matched === undefined) {
         if (this.current.length === 0) currentMark = this.mark();
         this.add(this.current, currentMark, 0, empty, position);
       }
       if (this.current.length === 0 && matched !== undefined) break;
       const nextMark = this.mark();
-      const candidate = this.advance(position, nextMark);
+      const code = this.text.codePointAt(position) ?? -1;
+      const nextPosition = position + codePointWidth(code);
+      const candidate = this.advance(code, nextPosition, nextMark);
       if (candidate !== undefined) matched = candidate;
       this.swapLists();
       currentMark = nextMark;
-      if (position >= this.codes.length) break;
+      if (position >= this.text.length) break;
+      position = nextPosition;
     }
     return matched;
   }
@@ -124,10 +130,10 @@ class Matcher {
 
 export function runPosixRegex(
   program: readonly PosixRegexInstruction[],
-  codes: readonly number[],
+  text: string,
   from: number,
   slots: number,
   command: string,
 ): readonly number[] | undefined {
-  return new Matcher(program, codes, command).run(from, slots);
+  return new Matcher(program, text, command).run(from, slots);
 }

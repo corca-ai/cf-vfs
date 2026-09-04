@@ -1,0 +1,9 @@
+[
+  { "name": "sed-global-dense", "input": "x", "repeat": 4000, "script": "sed 's/x/y/g' /input", "output": "y", "outputRepeat": 4000 },
+  { "name": "grep-only-matching-dense", "input": "x", "repeat": 4000, "script": "grep -o x /input", "output": "x\n", "outputRepeat": 4000 },
+  { "name": "awk-gsub-dense", "input": "x", "repeat": 4000, "script": "awk '{gsub(/x/,\"y\"); print length($0)}' /input", "output": "4000\n", "outputRepeat": 1 },
+  { "name": "awk-regex-split-dense", "input": "x,", "repeat": 2000, "script": "awk '{print split($0,a,/x+/)}' /input", "output": "2001\n", "outputRepeat": 1 },
+  { "name": "grep-short-lines", "input": "needle value 123\n", "repeat": 5000, "script": "grep needle /input", "output": "needle value 123\n", "outputRepeat": 5000 },
+  { "name": "sed-short-lines", "input": "needle value 123\n", "repeat": 5000, "script": "sed 's/needle/thread/' /input", "output": "thread value 123\n", "outputRepeat": 5000 },
+  { "name": "awk-short-lines", "input": "needle value 123\n", "repeat": 5000, "script": "awk '{n++} END {print n}' /input", "output": "5000\n", "outputRepeat": 1 }
+]

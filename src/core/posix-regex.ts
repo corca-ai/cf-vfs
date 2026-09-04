@@ -393,20 +393,16 @@ export interface PosixMatch {
   readonly groups: readonly (string | undefined)[];
 }
 
-function codePointOffsets(points: readonly string[], textLength: number): readonly number[] {
-  const offsets: number[] = [];
-  let offset = 0;
-  for (const character of points) {
-    offsets.push(offset);
-    offset += character.length;
-  }
-  offsets.push(textLength);
-  return offsets;
+function startingOffset(text: string, from: number): number {
+  let offset = Number.isNaN(from) ? 0 : Math.max(0, Math.ceil(from));
+  const unit = text.charCodeAt(offset);
+  const previous = text.charCodeAt(offset - 1);
+  if (unit >= 0xdc00 && unit <= 0xdfff && previous >= 0xd800 && previous <= 0xdbff) offset += 1;
+  return offset;
 }
 
 function capturedGroups(
   text: string,
-  offsets: readonly number[],
   captures: readonly number[],
   slots: number,
 ): readonly (string | undefined)[] {
@@ -414,7 +410,7 @@ function capturedGroups(
   for (let group = 0; group * 2 < slots; group += 1) {
     const open = captures[group * 2] ?? -1;
     const close = captures[group * 2 + 1] ?? -1;
-    groups.push(open < 0 || close < 0 ? undefined : text.slice(offsets[open], offsets[close]));
+    groups.push(open < 0 || close < 0 ? undefined : text.slice(open, close));
   }
   return groups;
 }
@@ -451,18 +447,15 @@ export class PosixRegex {
 
   /** Finds the leftmost match at or after the string offset `from`. */
   exec(text: string, from = 0): PosixMatch | undefined {
-    const points = [...text];
-    // String offset of each code point, so a match can be reported in the units
-    // every caller slices with.
-    const offsets = codePointOffsets(points, text.length);
-    let start = 0;
-    while (start < offsets.length && (offsets[start] ?? 0) < from) start += 1;
-
-    const codes = points.map((character) => character.codePointAt(0) ?? 0);
-    const found = runPosixRegex(this.program, codes, start, this.slots, this.command);
+    // The matcher advances by code point but stores UTF-16 offsets directly.
+    // Repeated searches no longer rebuild arrays for the whole input or scan
+    // its prefix merely to translate the caller's next offset.
+    const start = startingOffset(text, from);
+    if (start > text.length) return undefined;
+    const found = runPosixRegex(this.program, text, start, this.slots, this.command);
     if (found === undefined) return undefined;
-    const groups = capturedGroups(text, offsets, found, this.slots);
-    return { index: offsets[found[0] ?? 0] ?? 0, end: offsets[found[1] ?? 0] ?? 0, groups };
+    const groups = capturedGroups(text, found, this.slots);
+    return { index: found[0] ?? 0, end: found[1] ?? 0, groups };
   }
 }
 

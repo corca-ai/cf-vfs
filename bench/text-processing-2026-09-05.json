@@ -1,0 +1,341 @@
+{
+  "baselineCommit": "fedaf0e",
+  "date": "2026-09-05",
+  "cpu": "Apple M5 Max",
+  "os": "Darwin 25.5.0 arm64",
+  "versions": {
+    "workerd": "1.20260714.1",
+    "wrangler": "4.114.0",
+    "@cloudflare/vitest-pool-workers": "0.18.6"
+  },
+  "node": {
+    "before": {
+      "node": "v26.8.1",
+      "platform": "darwin",
+      "arch": "arm64",
+      "warmups": 3,
+      "samples": 11,
+      "rows": [
+        {
+          "name": "sed-global-dense",
+          "medianMs": 76.64929099999995,
+          "p10Ms": 75.78333300000008,
+          "p90Ms": 79.35512500000004,
+          "outputBytes": 4000,
+          "statements": 2,
+          "returnedRows": 2
+        },
+        {
+          "name": "grep-only-matching-dense",
+          "medianMs": 76.1747089999999,
+          "p10Ms": 74.89550000000008,
+          "p90Ms": 78.29670899999996,
+          "outputBytes": 8000,
+          "statements": 2,
+          "returnedRows": 2
+        },
+        {
+          "name": "awk-gsub-dense",
+          "medianMs": 76.31379199999992,
+          "p10Ms": 75.71370800000022,
+          "p90Ms": 80.25737499999968,
+          "outputBytes": 5,
+          "statements": 2,
+          "returnedRows": 2
+        },
+        {
+          "name": "awk-regex-split-dense",
+          "medianMs": 39.6388750000001,
+          "p10Ms": 39.22379200000023,
+          "p90Ms": 41.4167080000002,
+          "outputBytes": 5,
+          "statements": 2,
+          "returnedRows": 2
+        },
+        {
+          "name": "grep-short-lines",
+          "medianMs": 5.0620420000000195,
+          "p10Ms": 4.942332999999962,
+          "p90Ms": 5.133374999999887,
+          "outputBytes": 85000,
+          "statements": 2,
+          "returnedRows": 2
+        },
+        {
+          "name": "sed-short-lines",
+          "medianMs": 11.612874999999804,
+          "p10Ms": 11.428499999999985,
+          "p90Ms": 12.291709000000083,
+          "outputBytes": 85000,
+          "statements": 2,
+          "returnedRows": 2
+        },
+        {
+          "name": "awk-short-lines",
+          "medianMs": 3.8945000000003347,
+          "p10Ms": 3.6377089999996315,
+          "p90Ms": 4.1443749999998545,
+          "outputBytes": 5,
+          "statements": 2,
+          "returnedRows": 2
+        },
+        {
+          "name": "utf8-ascii-short",
+          "medianMs": 11.040332999999919,
+          "p10Ms": 9.058916999999383,
+          "p90Ms": 13.243208000000777,
+          "bytes": 1800000,
+          "repeats": 100000
+        },
+        {
+          "name": "utf8-ascii-8k",
+          "medianMs": 4.591667000000598,
+          "p10Ms": 4.530042000000321,
+          "p90Ms": 4.781582999999955,
+          "bytes": 81920000,
+          "repeats": 10000
+        },
+        {
+          "name": "utf8-unicode-8k",
+          "medianMs": 23.117750000000342,
+          "p10Ms": 21.274083999999675,
+          "p90Ms": 24.151457999999366,
+          "bytes": 81900000,
+          "repeats": 10000
+        }
+      ]
+    },
+    "after": {
+      "node": "v26.8.1",
+      "platform": "darwin",
+      "arch": "arm64",
+      "warmups": 3,
+      "samples": 11,
+      "rows": [
+        {
+          "name": "sed-global-dense",
+          "medianMs": 1.7589589999999973,
+          "p10Ms": 1.5812499999999972,
+          "p90Ms": 1.9245420000000024,
+          "outputBytes": 4000,
+          "statements": 2,
+          "returnedRows": 2
+        },
+        {
+          "name": "grep-only-matching-dense",
+          "medianMs": 1.301667000000009,
+          "p10Ms": 1.2288340000000062,
+          "p90Ms": 1.3412500000000023,
+          "outputBytes": 8000,
+          "statements": 2,
+          "returnedRows": 2
+        },
+        {
+          "name": "awk-gsub-dense",
+          "medianMs": 1.1954999999999956,
+          "p10Ms": 1.0489999999999924,
+          "p90Ms": 1.4386249999999876,
+          "outputBytes": 5,
+          "statements": 2,
+          "returnedRows": 2
+        },
+        {
+          "name": "awk-regex-split-dense",
+          "medianMs": 0.9194580000000059,
+          "p10Ms": 0.7920000000000016,
+          "p90Ms": 1.031708000000009,
+          "outputBytes": 5,
+          "statements": 2,
+          "returnedRows": 2
+        },
+        {
+          "name": "grep-short-lines",
+          "medianMs": 3.7609999999999957,
+          "p10Ms": 3.6997080000000153,
+          "p90Ms": 3.903749999999974,
+          "outputBytes": 85000,
+          "statements": 2,
+          "returnedRows": 2
+        },
+        {
+          "name": "sed-short-lines",
+          "medianMs": 6.468707999999992,
+          "p10Ms": 6.369250000000022,
+          "p90Ms": 7.025042000000013,
+          "outputBytes": 85000,
+          "statements": 2,
+          "returnedRows": 2
+        },
+        {
+          "name": "awk-short-lines",
+          "medianMs": 2.522541999999987,
+          "p10Ms": 2.4312079999999696,
+          "p90Ms": 2.6794160000000034,
+          "outputBytes": 5,
+          "statements": 2,
+          "returnedRows": 2
+        },
+        {
+          "name": "utf8-ascii-short",
+          "medianMs": 1.1079170000000431,
+          "p10Ms": 1.1010840000000144,
+          "p90Ms": 1.148916999999983,
+          "bytes": 1800000,
+          "repeats": 100000
+        },
+        {
+          "name": "utf8-ascii-8k",
+          "medianMs": 4.83279200000004,
+          "p10Ms": 4.441041999999982,
+          "p90Ms": 5.113666999999964,
+          "bytes": 81920000,
+          "repeats": 10000
+        },
+        {
+          "name": "utf8-unicode-8k",
+          "medianMs": 21.148707999999942,
+          "p10Ms": 20.885832999999934,
+          "p90Ms": 23.126666999999998,
+          "bytes": 81900000,
+          "repeats": 10000
+        }
+      ]
+    },
+    "order": "after, before; earlier before/after rounds confirmed the same direction"
+  },
+  "workerd": {
+    "warmups": 3,
+    "samples": 11,
+    "executionsPerSample": 3,
+    "before": [
+      {
+        "name": "sed-global-dense",
+        "medianMs": 101,
+        "p10Ms": 80.33333333333333,
+        "p90Ms": 136.66666666666666,
+        "statements": 2,
+        "rowsRead": 2,
+        "rowsWritten": 0
+      },
+      {
+        "name": "grep-only-matching-dense",
+        "medianMs": 80.66666666666667,
+        "p10Ms": 77.66666666666667,
+        "p90Ms": 81.66666666666667,
+        "statements": 2,
+        "rowsRead": 2,
+        "rowsWritten": 0
+      },
+      {
+        "name": "awk-gsub-dense",
+        "medianMs": 79,
+        "p10Ms": 77.66666666666667,
+        "p90Ms": 82.33333333333333,
+        "statements": 2,
+        "rowsRead": 2,
+        "rowsWritten": 0
+      },
+      {
+        "name": "awk-regex-split-dense",
+        "medianMs": 41.666666666666664,
+        "p10Ms": 40,
+        "p90Ms": 43,
+        "statements": 2,
+        "rowsRead": 2,
+        "rowsWritten": 0
+      },
+      {
+        "name": "grep-short-lines",
+        "medianMs": 7.333333333333333,
+        "p10Ms": 7,
+        "p90Ms": 8.666666666666666,
+        "statements": 2,
+        "rowsRead": 2,
+        "rowsWritten": 0
+      },
+      {
+        "name": "sed-short-lines",
+        "medianMs": 19,
+        "p10Ms": 18.333333333333332,
+        "p90Ms": 20.666666666666668,
+        "statements": 2,
+        "rowsRead": 2,
+        "rowsWritten": 0
+      },
+      {
+        "name": "awk-short-lines",
+        "medianMs": 6,
+        "p10Ms": 5.333333333333333,
+        "p90Ms": 6.666666666666667,
+        "statements": 2,
+        "rowsRead": 2,
+        "rowsWritten": 0
+      }
+    ],
+    "after": [
+      {
+        "name": "sed-global-dense",
+        "medianMs": 3.6666666666666665,
+        "p10Ms": 3.3333333333333335,
+        "p90Ms": 4,
+        "statements": 2,
+        "rowsRead": 2,
+        "rowsWritten": 0
+      },
+      {
+        "name": "grep-only-matching-dense",
+        "medianMs": 2,
+        "p10Ms": 1.6666666666666667,
+        "p90Ms": 2.3333333333333335,
+        "statements": 2,
+        "rowsRead": 2,
+        "rowsWritten": 0
+      },
+      {
+        "name": "awk-gsub-dense",
+        "medianMs": 1.3333333333333333,
+        "p10Ms": 1.3333333333333333,
+        "p90Ms": 1.6666666666666667,
+        "statements": 2,
+        "rowsRead": 2,
+        "rowsWritten": 0
+      },
+      {
+        "name": "awk-regex-split-dense",
+        "medianMs": 1.3333333333333333,
+        "p10Ms": 1,
+        "p90Ms": 1.6666666666666667,
+        "statements": 2,
+        "rowsRead": 2,
+        "rowsWritten": 0
+      },
+      {
+        "name": "grep-short-lines",
+        "medianMs": 6.333333333333333,
+        "p10Ms": 5,
+        "p90Ms": 7,
+        "statements": 2,
+        "rowsRead": 2,
+        "rowsWritten": 0
+      },
+      {
+        "name": "sed-short-lines",
+        "medianMs": 9.666666666666666,
+        "p10Ms": 7.666666666666667,
+        "p90Ms": 10.666666666666666,
+        "statements": 2,
+        "rowsRead": 2,
+        "rowsWritten": 0
+      },
+      {
+        "name": "awk-short-lines",
+        "medianMs": 3.3333333333333335,
+        "p10Ms": 2.6666666666666665,
+        "p90Ms": 3.6666666666666665,
+        "statements": 2,
+        "rowsRead": 2,
+        "rowsWritten": 0
+      }
+    ]
+  }
+}
