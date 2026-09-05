@@ -112,4 +112,32 @@ for (const size of [0, -1, 0.5, NaN, Infinity]) {
   ],
   { timeout: 5000 },
 );
-console.log(`execution limits verified in ${cases.length + 1} isolated processes`);
+// Both existence-only and capturing regex searches must still charge failed
+// NFA work; an early-success optimization must not remove the failure bound.
+await run(
+  process.execPath,
+  [
+    "--input-type=module",
+    "-e",
+    `
+import assert from 'node:assert/strict';
+import { compilePosixRegex } from ${JSON.stringify(new URL("core/posix-regex.js", root).href)};
+import { NodeSqlFileSystem } from ${JSON.stringify(new URL("testing/node.js", root).href)};
+const pattern = compilePosixRegex('a?'.repeat(400) + 'b', 'extended', 'test');
+for (const operation of ['test', 'exec']) {
+  assert.throws(() => pattern[operation]('a'.repeat(20000)), {
+    code: 'EINVAL', message: /pattern is too expensive/,
+  });
+}
+const fs = new NodeSqlFileSystem();
+try {
+  await fs.writeFile('/' + 'a'.repeat(100), '');
+  for (const pattern of ['*a'.repeat(12) + 'b', 'a*a'.repeat(12) + 'b']) {
+    assert.deepEqual(fs.find({path: '/', name: pattern}), []);
+  }
+} finally { fs.close(); }
+`,
+  ],
+  { timeout: 5000 },
+);
+console.log(`execution limits verified in ${cases.length + 2} isolated processes`);

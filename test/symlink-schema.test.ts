@@ -245,6 +245,18 @@ const V2_SCHEMA = `
   CREATE INDEX vfs_entries_symlink
     ON vfs_entries(path) WHERE kind = 'symlink';
 
+  CREATE TABLE vfs_gc_queue (
+    r2_key TEXT PRIMARY KEY,
+    not_before_ms INTEGER NOT NULL,
+    next_attempt_at_ms INTEGER NOT NULL
+  ) WITHOUT ROWID;
+  CREATE TABLE vfs_upload_sessions (
+    id TEXT PRIMARY KEY,
+    state TEXT NOT NULL,
+    expires_at_ms INTEGER NOT NULL,
+    verification_lease_until_ms INTEGER
+  ) WITHOUT ROWID;
+
   CREATE TABLE vfs_usage (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     inline_bytes INTEGER NOT NULL CHECK (inline_bytes >= 0),
@@ -389,7 +401,7 @@ it("migrates a version-2 database to root-owned entries in place", () => {
     database
       .prepare("SELECT GROUP_CONCAT(version, ',') AS versions FROM vfs_schema_migrations")
       .get()?.["versions"],
-  ).toBe("1,2,3,4,5,6,7");
+  ).toBe("1,2,3,4,5,6,7,8");
   // The version-6 columns exist on a migrated database and carry nothing:
   // the digest cache is filled by use rather than backfilled by a migration.
   expect(

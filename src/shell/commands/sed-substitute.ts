@@ -13,6 +13,10 @@ import { SedText } from "./sed-text.js";
  */
 function expandReplacement(replacement: string, match: PosixMatch, budget: ShellBudget): string {
   const output = new SedText(budget);
+  if (!/[&\\]/u.test(replacement)) {
+    output.append(replacement);
+    return output.result();
+  }
   for (let index = 0; index < replacement.length; index += 1) {
     const character = replacement[index] ?? "";
     if (character === "&") {

@@ -5,5 +5,8 @@
   { "name": "awk-regex-split-dense", "input": "x,", "repeat": 2000, "script": "awk '{print split($0,a,/x+/)}' /input", "output": "2001\n", "outputRepeat": 1 },
   { "name": "grep-short-lines", "input": "needle value 123\n", "repeat": 5000, "script": "grep needle /input", "output": "needle value 123\n", "outputRepeat": 5000 },
   { "name": "sed-short-lines", "input": "needle value 123\n", "repeat": 5000, "script": "sed 's/needle/thread/' /input", "output": "thread value 123\n", "outputRepeat": 5000 },
-  { "name": "awk-short-lines", "input": "needle value 123\n", "repeat": 5000, "script": "awk '{n++} END {print n}' /input", "output": "5000\n", "outputRepeat": 1 }
+  { "name": "awk-short-lines", "input": "needle value 123\n", "repeat": 5000, "script": "awk '{n++} END {print n}' /input", "output": "5000\n", "outputRepeat": 1 },
+  { "name": "grep-regex-long-record", "input": "needle123", "repeat": 8000, "script": "grep -Ec '^([a-z]+[0-9]+)+$' /input", "output": "1\n", "outputRepeat": 1 },
+  { "name": "awk-regex-long-record", "input": "needle123", "repeat": 8000, "script": "awk '/^([a-z]+[0-9]+)+$/ {print NR}' /input", "output": "1\n", "outputRepeat": 1 },
+  { "name": "sed-capture-long-record", "input": "needle123", "repeat": 8000, "script": "sed -E 's/^([a-z]+[0-9]+)+$/\\1/' /input", "output": "needle123", "outputRepeat": 1 }
 ]

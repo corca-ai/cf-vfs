@@ -32,14 +32,16 @@ it.each(workloads)("text processing: $name", async (workload) => {
     };
     for (let index = 0; index < 3; index += 1) await execute();
     const durations: number[] = [];
+    const repeatsPerSample = 10;
     for (let sample = 0; sample < 11; sample += 1) {
       const start = performance.now();
-      for (let repeat = 0; repeat < 3; repeat += 1) await execute();
-      durations.push((performance.now() - start) / 3);
+      for (let repeat = 0; repeat < repeatsPerSample; repeat += 1) await execute();
+      durations.push((performance.now() - start) / repeatsPerSample);
     }
     durations.sort((a, b) => a - b);
     return {
       name: workload.name,
+      repeatsPerSample,
       medianMs: durations[5],
       p10Ms: durations[1],
       p90Ms: durations[9],

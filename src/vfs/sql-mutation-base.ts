@@ -6,6 +6,22 @@ import { SqlPath } from "./sql-path-base.js";
 import type { SubtreeSummary } from "./types.js";
 
 export abstract class SqlMutation extends SqlPath {
+  private deferredUsage: { inlineBytes: number; entries: number; changed: boolean } | undefined;
+
+  /** Keep batch quota checks current while writing the singleton only once. */
+  protected withDeferredUsage<T>(callback: () => T): T {
+    if (this.deferredUsage !== undefined) return callback();
+    const delta = { inlineBytes: 0, entries: 0, changed: false };
+    this.deferredUsage = delta;
+    try {
+      const result = callback();
+      if (delta.changed) this.writeUsage(delta.inlineBytes, delta.entries);
+      return result;
+    } finally {
+      this.deferredUsage = undefined;
+    }
+  }
+
   protected usage(): { inlineBytes: number; entries: number } {
     if (this.transactionUsage !== undefined) return this.transactionUsage;
     const row = this.sql
@@ -42,8 +58,23 @@ export abstract class SqlMutation extends SqlPath {
       if (this.onEvent !== undefined) this.pendingUsage = this.transactionUsage ?? this.usage();
       return;
     }
-    // `next_ino` rides this statement rather than one of its own: the row is
-    // already being written, so persisting the high-water mark is free.
+    if (this.deferredUsage === undefined) this.writeUsage(inlineDelta, entryDelta);
+    else {
+      this.deferredUsage.inlineBytes += inlineDelta;
+      this.deferredUsage.entries += entryDelta;
+      this.deferredUsage.changed = true;
+    }
+    const cached = this.transactionUsage;
+    if (cached !== undefined) {
+      this.transactionUsage = {
+        inlineBytes: cached.inlineBytes + inlineDelta,
+        entries: cached.entries + entryDelta,
+      };
+    }
+    if (this.onEvent !== undefined) this.pendingUsage = this.usage();
+  }
+
+  private writeUsage(inlineDelta: number, entryDelta: number): void {
     this.sql.exec(
       `UPDATE vfs_usage SET
          inline_bytes = inline_bytes + ?, entries = entries + ?,
@@ -53,14 +84,6 @@ export abstract class SqlMutation extends SqlPath {
       entryDelta,
       this.nextIno,
     );
-    const cached = this.transactionUsage;
-    if (cached !== undefined) {
-      this.transactionUsage = {
-        inlineBytes: cached.inlineBytes + inlineDelta,
-        entries: cached.entries + entryDelta,
-      };
-    }
-    if (this.onEvent !== undefined) this.pendingUsage = this.usage();
   }
 
   /** Reports the storage limit that refused work, then fails. */
