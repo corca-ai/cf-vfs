@@ -99,7 +99,8 @@ finally { fs.close(); }
     assert.notEqual(result.exitCode, 0, test.name);
     // Deadline expiry also refuses stderr I/O; the execution event still
     // identifies that failure even when no diagnostic can be delivered.
-    if (result.failureCode !== "ETIMEDOUT") assert.match(result.stderr, /limit|deadline/, test.name);
+    if (result.failureCode !== "ETIMEDOUT")
+      assert.match(result.stderr, /limit|deadline/, test.name);
   }
 }
 // Invalid chunk sizes used to loop synchronously. Keep that regression outside
