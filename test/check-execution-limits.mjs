@@ -80,8 +80,14 @@ for (const test of cases) {
       "-e",
       `${setup}
 ${test.prepare ?? ""}
-const shell = new Shell({ fileSystem: fs, commands: [...defaultShellCommands, awkCommand], limits: ${JSON.stringify({ deadlineMs: test.success ? 1000 : 50, ...test.limits })} });
-try { console.log(JSON.stringify(await shell.executeText({ script: ${JSON.stringify(test.script)} }))); }
+let failureCode;
+const shell = new Shell({ fileSystem: fs, commands: [...defaultShellCommands, awkCommand], limits: ${JSON.stringify({ deadlineMs: test.success ? 1000 : 50, ...test.limits })}, onEvent(event) {
+  if (event.type === 'shell.execution') failureCode = event.failureCode;
+} });
+try {
+  const result = await shell.executeText({ script: ${JSON.stringify(test.script)} });
+  console.log(JSON.stringify({ ...result, failureCode }));
+}
 finally { fs.close(); }
 `,
     ],
@@ -91,7 +97,9 @@ finally { fs.close(); }
   if (test.success) assert.equal(result.exitCode, 0, test.name);
   else {
     assert.notEqual(result.exitCode, 0, test.name);
-    assert.match(result.stderr, /limit|deadline/, test.name);
+    // Deadline expiry also refuses stderr I/O; the execution event still
+    // identifies that failure even when no diagnostic can be delivered.
+    if (result.failureCode !== "ETIMEDOUT") assert.match(result.stderr, /limit|deadline/, test.name);
   }
 }
 // Invalid chunk sizes used to loop synchronously. Keep that regression outside
