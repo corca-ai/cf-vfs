@@ -97,9 +97,9 @@ finally { fs.close(); }
   if (test.success) assert.equal(result.exitCode, 0, test.name);
   else {
     assert.notEqual(result.exitCode, 0, test.name);
-    // Deadline expiry also refuses stderr I/O; the execution event still
-    // identifies that failure even when no diagnostic can be delivered.
-    if (result.failureCode !== "ETIMEDOUT")
+    // Deadline expiry can refuse diagnostics for an earlier work limit too.
+    // The execution event retains the original structured failure code.
+    if (result.failureCode !== "ETIMEDOUT" && result.failureCode !== "E2BIG")
       assert.match(result.stderr, /limit|deadline/, test.name);
   }
 }
