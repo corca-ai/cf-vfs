@@ -59,9 +59,12 @@ const used = [...new Set([...section.matchAll(/\[[^\]]+\](?![(:])/gu)].map((matc
 
 const tarball = `${manifest.name.replace("@", "").replace("/", "-")}-${version}.tgz`;
 const integrity = argument("integrity");
+const linkedSection = section.trim().replace(/\]\(((?:docs|bench)\/[^)\s]+)\)/gu, (_match, path) =>
+  `](${REPOSITORY}/blob/${tag}/${path})`,
+);
 
 process.stdout.write(
-  `${section.trim()}\n\n` +
+  `${linkedSection}\n\n` +
     (used.length === 0 ? "" : `${used.join("\n")}\n\n`) +
     "## Installing without build scripts\n\n" +
     "A consumer that pins `ignore-scripts=true` never runs `prepare`, so it cannot build\n" +

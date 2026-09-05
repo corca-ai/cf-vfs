@@ -4,7 +4,11 @@ import {
   foldPosixRanges as foldRanges,
   POSIX_CLASSES,
 } from "./posix-regex-charset.js";
-import { type PosixRegexInstruction as Instruction, runPosixRegex } from "./posix-regex-matcher.js";
+import {
+  type PosixRegexInstruction as Instruction,
+  posixLiteral,
+  runPosixRegex,
+} from "./posix-regex-matcher.js";
 
 /**
  * The two POSIX regular-expression dialects this project declares.
@@ -432,6 +436,7 @@ function capturedGroups(
  */
 export class PosixRegex {
   private readonly slots: number;
+  private readonly literal: string | undefined;
 
   constructor(
     private readonly program: readonly Instruction[],
@@ -439,10 +444,12 @@ export class PosixRegex {
     private readonly command: string,
   ) {
     this.slots = (groups + 1) * 2;
+    this.literal = groups === 0 ? posixLiteral(program) : undefined;
   }
 
   test(text: string): boolean {
-    return this.exec(text) !== undefined;
+    if (this.literal !== undefined) return text.includes(this.literal);
+    return runPosixRegex(this.program, text, 0, 0, this.command) !== undefined;
   }
 
   /** Finds the leftmost match at or after the string offset `from`. */
@@ -452,6 +459,12 @@ export class PosixRegex {
     // its prefix merely to translate the caller's next offset.
     const start = startingOffset(text, from);
     if (start > text.length) return undefined;
+    if (this.literal !== undefined) {
+      const index = text.indexOf(this.literal, start);
+      return index < 0
+        ? undefined
+        : { index, end: index + this.literal.length, groups: [this.literal] };
+    }
     const found = runPosixRegex(this.program, text, start, this.slots, this.command);
     if (found === undefined) return undefined;
     const groups = capturedGroups(text, found, this.slots);

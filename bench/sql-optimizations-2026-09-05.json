@@ -1,0 +1,250 @@
+{
+  "date": "2026-09-05",
+  "baselineCommit": "6fa62a3021a72669af87bef3ed5aa4be8a05ffd0",
+  "cpu": "Apple M5 Max",
+  "os": "Darwin 25.5.0 arm64",
+  "versions": {
+    "workerd": "1.20260714.1",
+    "wrangler": "4.114.0",
+    "@cloudflare/vitest-pool-workers": "0.18.6"
+  },
+  "warmups": 3,
+  "samples": 11,
+  "repeatsPerSample": {
+    "appendAndMaintenance": 100,
+    "other": 10
+  },
+  "before": [
+    {
+      "name": "batch-create-10",
+      "medianMs": 0.3,
+      "p10Ms": 0.2,
+      "p90Ms": 0.4,
+      "statements": 61,
+      "rowsRead": 61,
+      "rowsWritten": 50
+    },
+    {
+      "name": "batch-create-100",
+      "medianMs": 2.5,
+      "p10Ms": 2.3,
+      "p90Ms": 2.6,
+      "statements": 601,
+      "rowsRead": 601,
+      "rowsWritten": 500
+    },
+    {
+      "name": "append-string",
+      "medianMs": 0.03,
+      "p10Ms": 0.02,
+      "p90Ms": 0.04,
+      "statements": 7,
+      "rowsRead": 7,
+      "rowsWritten": 3
+    },
+    {
+      "name": "append-bytes",
+      "medianMs": 0.03,
+      "p10Ms": 0.03,
+      "p90Ms": 0.03,
+      "statements": 7,
+      "rowsRead": 7,
+      "rowsWritten": 3
+    },
+    {
+      "name": "find-shallow",
+      "medianMs": 12.8,
+      "p10Ms": 12.7,
+      "p90Ms": 13,
+      "statements": 7,
+      "rowsRead": 20056,
+      "rowsWritten": 0
+    },
+    {
+      "name": "find-filtered",
+      "medianMs": 10.8,
+      "p10Ms": 10.7,
+      "p90Ms": 10.9,
+      "statements": 7,
+      "rowsRead": 20056,
+      "rowsWritten": 0
+    },
+    {
+      "name": "find-all",
+      "medianMs": 11.6,
+      "p10Ms": 11.2,
+      "p90Ms": 11.8,
+      "statements": 7,
+      "rowsRead": 20056,
+      "rowsWritten": 0
+    },
+    {
+      "name": "maintenance-1000",
+      "medianMs": 0.08,
+      "p10Ms": 0.07,
+      "p90Ms": 0.08,
+      "statements": 1,
+      "rowsRead": 2002,
+      "rowsWritten": 0
+    },
+    {
+      "name": "gc-insert-1000",
+      "statements": 1,
+      "rowsRead": 0,
+      "rowsWritten": 2,
+      "databaseBytes": 290816
+    },
+    {
+      "name": "maintenance-10000",
+      "medianMs": 0.81,
+      "p10Ms": 0.8,
+      "p90Ms": 0.82,
+      "statements": 1,
+      "rowsRead": 20002,
+      "rowsWritten": 0
+    },
+    {
+      "name": "gc-insert-10000",
+      "statements": 1,
+      "rowsRead": 0,
+      "rowsWritten": 2,
+      "databaseBytes": 2031616
+    }
+  ],
+  "after": [
+    {
+      "name": "batch-create-10",
+      "repeatsPerSample": 10,
+      "medianMs": 0.3,
+      "p10Ms": 0.2,
+      "p90Ms": 0.3,
+      "statements": 52,
+      "rowsRead": 52,
+      "rowsWritten": 41
+    },
+    {
+      "name": "batch-create-100",
+      "repeatsPerSample": 10,
+      "medianMs": 2.2,
+      "p10Ms": 2.1,
+      "p90Ms": 2.5,
+      "statements": 502,
+      "rowsRead": 502,
+      "rowsWritten": 401
+    },
+    {
+      "name": "append-string",
+      "repeatsPerSample": 100,
+      "medianMs": 0.03,
+      "p10Ms": 0.02,
+      "p90Ms": 0.03,
+      "statements": 6,
+      "rowsRead": 7,
+      "rowsWritten": 3
+    },
+    {
+      "name": "append-bytes",
+      "repeatsPerSample": 100,
+      "medianMs": 0.03,
+      "p10Ms": 0.03,
+      "p90Ms": 0.03,
+      "statements": 7,
+      "rowsRead": 7,
+      "rowsWritten": 3
+    },
+    {
+      "name": "find-shallow",
+      "repeatsPerSample": 10,
+      "medianMs": 0.1,
+      "p10Ms": 0.1,
+      "p90Ms": 0.2,
+      "statements": 2,
+      "rowsRead": 52,
+      "rowsWritten": 0
+    },
+    {
+      "name": "find-filtered",
+      "repeatsPerSample": 10,
+      "medianMs": 0.8,
+      "p10Ms": 0.8,
+      "p90Ms": 0.9,
+      "statements": 2,
+      "rowsRead": 5051,
+      "rowsWritten": 0
+    },
+    {
+      "name": "find-all",
+      "repeatsPerSample": 10,
+      "medianMs": 11,
+      "p10Ms": 10.7,
+      "p90Ms": 11.5,
+      "statements": 7,
+      "rowsRead": 5061,
+      "rowsWritten": 0
+    },
+    {
+      "name": "maintenance-1000",
+      "repeatsPerSample": 100,
+      "medianMs": 0,
+      "p10Ms": 0,
+      "p90Ms": 0.01,
+      "statements": 1,
+      "rowsRead": 4,
+      "rowsWritten": 0
+    },
+    {
+      "name": "gc-insert-1000",
+      "statements": 1,
+      "rowsRead": 0,
+      "rowsWritten": 3,
+      "databaseBytes": 327680
+    },
+    {
+      "name": "maintenance-10000",
+      "repeatsPerSample": 100,
+      "medianMs": 0,
+      "p10Ms": 0,
+      "p90Ms": 0.01,
+      "statements": 1,
+      "rowsRead": 4,
+      "rowsWritten": 0
+    },
+    {
+      "name": "gc-insert-10000",
+      "statements": 1,
+      "rowsRead": 0,
+      "rowsWritten": 3,
+      "databaseBytes": 2338816
+    }
+  ],
+  "findDifferential": {
+    "comparisons": 31104,
+    "baseline": "/tmp/cf-vfs-sql-baseline/dist"
+  },
+  "verification": {
+    "nodeTests": 1693,
+    "workerdTests": 107,
+    "isolatedLimitChecks": 14,
+    "nodeBenchmarkScenarios": 17,
+    "workerdBenchmarkTests": 27,
+    "bundlePresets": 9
+  },
+  "sqlBundleBytes": {
+    "vfs": {
+      "before": 179734,
+      "after": 182775,
+      "budget": 188032
+    },
+    "r2-opaque": {
+      "before": 181105,
+      "after": 184146,
+      "budget": 189568
+    },
+    "linux-profile": {
+      "before": 671245,
+      "after": 674286,
+      "budget": 700544
+    }
+  },
+  "emptyMaintenanceIndexPagesBytes": 8192
+}

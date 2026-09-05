@@ -79,7 +79,7 @@ export abstract class SqlWrite extends SqlWritePlan {
           digest,
           this.now(),
           posix,
-          undefined,
+          false,
           !materialized,
         );
         queued = outcome.queuedGarbage;
@@ -169,7 +169,8 @@ export abstract class SqlWrite extends SqlWritePlan {
     this.assertPermission(before, posix, WRITE_PERMISSION, normalized);
     this.validateGuard(normalized, before, options, path);
     const capturedToken = before.mutationToken;
-    const buffered = await this.collectInline(body);
+    const materialized = typeof body === "string";
+    const buffered = materialized ? this.collectInlineSync(body) : await this.collectInline(body);
     return this.useBuffered(buffered, (chunks, bytes) =>
       this.commitAppend(
         normalized,
@@ -180,6 +181,7 @@ export abstract class SqlWrite extends SqlWritePlan {
         bytes,
         options,
         posix,
+        materialized ? before : undefined,
       ),
     );
   }
@@ -193,9 +195,11 @@ export abstract class SqlWrite extends SqlWritePlan {
     suffixBytes: number,
     options: AppendFileOptions,
     posix: PosixAccessContext | undefined,
+    snapshot?: InlineEntryRow,
   ): WriteResult {
     return this.transaction(() => {
-      const current = this.requireInline(path);
+      const current =
+        snapshot === undefined || suffixBytes === 0 ? this.requireInline(path) : snapshot;
       if (current.mutationToken !== capturedToken) {
         throw new VfsError("EREVISION", "path changed while the body was streaming", path);
       }
@@ -211,7 +215,7 @@ export abstract class SqlWrite extends SqlWritePlan {
           created: false,
         };
       }
-      return this.appendContent(current, path, suffixChunks, suffixBytes);
+      return this.appendContent(current, path, suffixChunks, suffixBytes, snapshot !== undefined);
     });
   }
 
@@ -220,22 +224,26 @@ export abstract class SqlWrite extends SqlWritePlan {
     path: string,
     suffixChunks: readonly Uint8Array[],
     suffixBytes: number,
+    conditional: boolean,
   ): WriteResult {
     const sizeBytes = current.sizeBytes + suffixBytes;
     this.assertAppendSize(current, path, sizeBytes);
     this.assertCapacity(suffixBytes, 0, path);
     const plan = this.appendChunkPlan(current, path, suffixChunks);
-    this.writeChunks(current.id, plan.firstChunkIndex, plan.chunks);
     const now = this.now();
     const mutationVersion = current.mutationVersion + 1;
-    this.sql.exec(
+    const written = this.sql.exec<SqlRow>(
       `UPDATE vfs_entries SET size_bytes = ?, modified_at_ms = ?, revision = revision + 1,
-         mutation_version = ? WHERE id = ?`,
+         mutation_version = ? WHERE id = ? ${conditional ? "AND mutation_version = ? RETURNING id" : ""}`,
       sizeBytes,
       now,
       mutationVersion,
       current.id,
+      ...(conditional ? [current.mutationVersion] : []),
     );
+    if (conditional && firstRow(written) === undefined)
+      throw new VfsError("EREVISION", "path changed before append", path);
+    this.writeChunks(current.id, plan.firstChunkIndex, plan.chunks);
     const token = this.publishToken(path, mutationVersion, true, "write");
     this.updateUsage(suffixBytes, 0);
     return {

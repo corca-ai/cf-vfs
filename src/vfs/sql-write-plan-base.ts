@@ -153,14 +153,14 @@ export abstract class SqlWritePlan extends SqlRead {
     const row = this.sql
       .exec<SqlRow>(
         `SELECT MIN(due) AS due FROM (
-         SELECT MAX(not_before_ms, next_attempt_at_ms) AS due FROM vfs_gc_queue
+         SELECT MIN(MAX(not_before_ms, next_attempt_at_ms)) AS due FROM vfs_gc_queue
          UNION ALL
-         SELECT expires_at_ms AS due FROM vfs_upload_sessions WHERE state = 'open'
+         SELECT MIN(expires_at_ms) AS due FROM vfs_upload_sessions WHERE state = 'open'
          UNION ALL
-         SELECT verification_lease_until_ms AS due
-         FROM vfs_upload_sessions WHERE state = 'verifying'
+         SELECT MIN(verification_lease_until_ms) AS due
+         FROM vfs_upload_sessions INDEXED BY vfs_upload_verification_expiry WHERE state = 'verifying'
          UNION ALL
-         SELECT expires_at_ms AS due FROM vfs_upload_sessions WHERE state = 'committed'
+         SELECT MIN(expires_at_ms) AS due FROM vfs_upload_sessions WHERE state = 'committed'
        )`,
       )
       .one();
@@ -232,9 +232,9 @@ export abstract class SqlWritePlan extends SqlRead {
    * the single-path form runs this code, so its statement, row-read, and
    * row-written counts cannot move because a batch exists.
    *
-   * `pending` is a batch's running capacity delta. A single write leaves it
-   * undefined and validates its own growth here, before the insert it guards.
-   * A batch accumulates instead and weighs the whole set once, which is a
+   * A single write validates its own growth before the insert it guards.
+   * A batch checks cached usage after all files and parents are created,
+   * weighing the whole set once, which is a
    * different answer rather than a cheaper one -- see `assertCapacityFrom`.
    * Ordering inside the transaction is free either way: whichever entry is
    * refused, every one of them rolls back.
@@ -246,7 +246,7 @@ export abstract class SqlWritePlan extends SqlRead {
     digest: string | undefined,
     now: number,
     posix: PosixAccessContext | undefined,
-    pending?: { inlineBytes: number; entries: number },
+    deferCapacity = false,
     revalidate = true,
   ): InlineWriteOutcome {
     let current = plan.capturedEntry;
@@ -269,7 +269,7 @@ export abstract class SqlWritePlan extends SqlRead {
     const state = { current, parent };
     const unchanged = this.unchangedInlineWrite(plan, current, chunks, sizeBytes, digest);
     if (unchanged !== null) return unchanged;
-    const mutation = this.inlineMutationPlan(plan, state, sizeBytes, posix, pending);
+    const mutation = this.inlineMutationPlan(plan, state, sizeBytes, posix, deferCapacity);
     if (
       current?.contentClass === "inline" &&
       chunks.length < Math.ceil(current.sizeBytes / this.chunkBytes)
@@ -326,7 +326,7 @@ export abstract class SqlWritePlan extends SqlRead {
     state: InlineCommitState,
     sizeBytes: number,
     posix: PosixAccessContext | undefined,
-    pending: { inlineBytes: number; entries: number } | undefined,
+    deferCapacity: boolean,
   ): InlineMutationPlan {
     const { current, parent } = state;
     const owner =
@@ -339,11 +339,7 @@ export abstract class SqlWritePlan extends SqlRead {
     const previousInlineBytes = current?.contentClass === "inline" ? current.sizeBytes : 0;
     const inlineDelta = sizeBytes - previousInlineBytes;
     const entryDelta = current === null ? 1 : 0;
-    if (pending === undefined) this.assertCapacity(inlineDelta, entryDelta, plan.path);
-    else {
-      pending.inlineBytes += inlineDelta;
-      pending.entries += entryDelta;
-    }
+    if (!deferCapacity) this.assertCapacity(inlineDelta, entryDelta, plan.path);
     const mutationVersion =
       current === null ? this.nextEntryVersion(plan.path) : current.mutationVersion + 1;
     return { owner, mode, inlineDelta, entryDelta, mutationVersion };
@@ -470,32 +466,38 @@ export abstract class SqlWritePlan extends SqlRead {
   ): { results: WriteResult[]; queuedGarbage: boolean } {
     let queuedGarbage = false;
     const results = this.useBufferedSet(collected, () =>
-      this.transaction(() => {
-        const before = this.usage();
-        // Headroom is a property of the database rather than of the set, so it
-        // is weighed before the batch writes anything as well as after. The
-        // quotas can only be weighed after, because what the set costs is not
-        // known until every entry has decided whether it is writing at all.
-        this.assertCapacityFrom(before, 0, 0);
-        const now = this.now();
-        const pending = { inlineBytes: 0, entries: 0 };
-        const written: WriteResult[] = [];
-        for (const item of collected) {
-          const outcome = this.commitInlineWrite(
-            item.plan,
-            item.lease.chunks,
-            item.lease.sizeBytes,
-            item.digest,
-            now,
-            posix,
-            pending,
+      this.transaction(() =>
+        this.withDeferredUsage(() => {
+          const before = this.usage();
+          // Headroom is a property of the database rather than of the set, so it
+          // is weighed before the batch writes anything as well as after. The
+          // quotas can only be weighed after, because what the set costs is not
+          // known until every entry has decided whether it is writing at all.
+          this.assertCapacityFrom(before, 0, 0);
+          const now = this.now();
+          const written: WriteResult[] = [];
+          for (const item of collected) {
+            const outcome = this.commitInlineWrite(
+              item.plan,
+              item.lease.chunks,
+              item.lease.sizeBytes,
+              item.digest,
+              now,
+              posix,
+              true,
+            );
+            if (outcome.queuedGarbage) queuedGarbage = true;
+            written.push(outcome.result);
+          }
+          const after = this.usage();
+          this.assertCapacityFrom(
+            before,
+            after.inlineBytes - before.inlineBytes,
+            after.entries - before.entries,
           );
-          if (outcome.queuedGarbage) queuedGarbage = true;
-          written.push(outcome.result);
-        }
-        this.assertCapacityFrom(before, pending.inlineBytes, pending.entries);
-        return written;
-      }),
+          return written;
+        }),
+      ),
     );
     return { results, queuedGarbage };
   }

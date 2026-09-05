@@ -24,7 +24,29 @@ Repeated searches advance directly through the source's code points and retain
 UTF-16 capture offsets, avoiding whole-input arrays for every match. Short
 ASCII byte counts avoid encoding; larger strings retain the native encoder.
 
+The [second September pass](../bench/text-processing-follow-up-2026-09-05.md)
+measures further gains against `6fa62a3`: validated exact-string patterns use
+native string search, existence-only searches skip capture materialization,
+and each NFA search reuses its own bounded thread objects. Sed validates plain
+replacement strings in one piece. The shared workloads now include 72 KiB
+records with repeated capture groups, and workerd averages ten executions per
+sample to resolve the faster cases. Non-regex and non-literal controls remain
+in the suite.
+
 ## Structural guards versus wall-clock benchmarks
+
+The [September SQL follow-up](../bench/sql-optimizations-2026-09-05.md) measures
+batch usage aggregation, synchronous string append, cursor seeking and find
+filtering, and indexed maintenance scheduling. Its workerd cases run with
+`npm run bench:do` and `npm run bench:check`, asserting statement and row costs.
+`findPage()` retains scanned-row limits and cursor semantics; `find()` can use
+a direct-child index and safe literal-name prefix/type prefilters. Arbitrary
+glob patterns stay in the bounded JavaScript matcher.
+
+Schema version 8 adds an expression index for the GC queue's effective due
+time and a partial index for verification lease expiry. Scheduling reads one
+minimum per active category. The report includes the extra index-write and
+database-space costs rather than treating these reads as a free optimization.
 
 Elapsed time is noisy enough that a small regression hides inside it, so the
 gates split in two. Counted work — output chunks, SQL statements, rows read, and

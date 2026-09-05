@@ -80,8 +80,14 @@ for (const test of cases) {
       "-e",
       `${setup}
 ${test.prepare ?? ""}
-const shell = new Shell({ fileSystem: fs, commands: [...defaultShellCommands, awkCommand], limits: ${JSON.stringify({ deadlineMs: test.success ? 1000 : 50, ...test.limits })} });
-try { console.log(JSON.stringify(await shell.executeText({ script: ${JSON.stringify(test.script)} }))); }
+let failureCode;
+const shell = new Shell({ fileSystem: fs, commands: [...defaultShellCommands, awkCommand], limits: ${JSON.stringify({ deadlineMs: test.success ? 1000 : 50, ...test.limits })}, onEvent(event) {
+  if (event.type === 'shell.execution') failureCode = event.failureCode;
+} });
+try {
+  const result = await shell.executeText({ script: ${JSON.stringify(test.script)} });
+  console.log(JSON.stringify({ ...result, failureCode }));
+}
 finally { fs.close(); }
 `,
     ],
@@ -91,7 +97,10 @@ finally { fs.close(); }
   if (test.success) assert.equal(result.exitCode, 0, test.name);
   else {
     assert.notEqual(result.exitCode, 0, test.name);
-    assert.match(result.stderr, /limit|deadline/, test.name);
+    // Deadline expiry also refuses stderr I/O; the execution event still
+    // identifies that failure even when no diagnostic can be delivered.
+    if (result.failureCode !== "ETIMEDOUT")
+      assert.match(result.stderr, /limit|deadline/, test.name);
   }
 }
 // Invalid chunk sizes used to loop synchronously. Keep that regression outside
@@ -112,4 +121,32 @@ for (const size of [0, -1, 0.5, NaN, Infinity]) {
   ],
   { timeout: 5000 },
 );
-console.log(`execution limits verified in ${cases.length + 1} isolated processes`);
+// Both existence-only and capturing regex searches must still charge failed
+// NFA work; an early-success optimization must not remove the failure bound.
+await run(
+  process.execPath,
+  [
+    "--input-type=module",
+    "-e",
+    `
+import assert from 'node:assert/strict';
+import { compilePosixRegex } from ${JSON.stringify(new URL("core/posix-regex.js", root).href)};
+import { NodeSqlFileSystem } from ${JSON.stringify(new URL("testing/node.js", root).href)};
+const pattern = compilePosixRegex('a?'.repeat(400) + 'b', 'extended', 'test');
+for (const operation of ['test', 'exec']) {
+  assert.throws(() => pattern[operation]('a'.repeat(20000)), {
+    code: 'EINVAL', message: /pattern is too expensive/,
+  });
+}
+const fs = new NodeSqlFileSystem();
+try {
+  await fs.writeFile('/' + 'a'.repeat(100), '');
+  for (const pattern of ['*a'.repeat(12) + 'b', 'a*a'.repeat(12) + 'b']) {
+    assert.deepEqual(fs.find({path: '/', name: pattern}), []);
+  }
+} finally { fs.close(); }
+`,
+  ],
+  { timeout: 5000 },
+);
+console.log(`execution limits verified in ${cases.length + 2} isolated processes`);

@@ -299,8 +299,22 @@ ${ENTRY_TRIGGERS}
     );
     markMigrated();
   }
+  if (currentVersion < 8) {
+    migrateMaintenanceIndexes(context, now);
+    markMigrated();
+  }
   return stringColumn(
     context.sql.exec<SqlRow>("SELECT mutation_epoch FROM vfs_state WHERE singleton = 1").one(),
     "mutation_epoch",
   );
+}
+
+function migrateMaintenanceIndexes(context: SqlMigrationContext, now: number): void {
+  context.execBatch(`
+      CREATE INDEX vfs_gc_earliest
+        ON vfs_gc_queue(MAX(not_before_ms, next_attempt_at_ms));
+      CREATE INDEX vfs_upload_verification_expiry
+        ON vfs_upload_sessions(verification_lease_until_ms) WHERE state = 'verifying';
+    `);
+  context.sql.exec("INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (8, ?)", now);
 }

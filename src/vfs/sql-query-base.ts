@@ -7,6 +7,7 @@ import {
   normalizePath,
   pathRequiresDirectory,
 } from "../core/path.js";
+import { utf8ByteLength } from "../core/unicode.js";
 import { validatePositiveInteger } from "./config.js";
 import { SqlContent } from "./sql-content-base.js";
 import {
@@ -41,6 +42,17 @@ import type {
 
 const DEFAULT_CHANGE_PAGE = 1000;
 const MAX_CHANGE_PAGE = 10_000;
+
+function sqlNamePrefilter(name: string | undefined): string | undefined {
+  if (name === undefined || name.includes("\0") || /[\\[]/u.test(name)) return undefined;
+  const wildcard = name.search(/[?*]/u);
+  const prefix = wildcard < 0 ? name : name.slice(0, wildcard);
+  // Durable Object SQLite limits GLOB patterns to 50 bytes, including '*'.
+  if (prefix.length > 49 || utf8ByteLength(prefix) > 49) return undefined;
+  // SQLite GLOB backtracks between stars. Use only one trailing star and
+  // leave the complete pattern to the bounded JavaScript glob compiler.
+  return prefix === "" ? undefined : `${prefix}*`;
+}
 
 export abstract class SqlQuery extends SqlContent {
   protected abstract opaqueObject(id: number): OpaqueObjectRow | null;
@@ -206,11 +218,15 @@ export abstract class SqlQuery extends SqlContent {
     let cursor = options.cursor;
     const context = this.findScanContext(options, access);
     do {
-      const page = this.scanFindPage(context, {
-        ...options,
-        ...(cursor === undefined ? {} : { cursor }),
-        limit: Math.min(maximum - result.length, 1000),
-      });
+      const page = this.scanFindPage(
+        context,
+        {
+          ...options,
+          ...(cursor === undefined ? {} : { cursor }),
+          limit: Math.min(maximum - result.length, 1000),
+        },
+        true,
+      );
       result.push(...page.entries);
       cursor = page.nextCursor ?? undefined;
     } while (cursor !== undefined && result.length < maximum);
@@ -248,26 +264,55 @@ export abstract class SqlQuery extends SqlContent {
     };
   }
 
-  protected scanFindPage(context: FindScanContext, options: FindOptions): EntryPage {
-    const { root, rootEntry, range, namePattern, pathPattern } = context;
-    const limit = options.limit ?? 1000;
+  private findRows(
+    context: FindScanContext,
+    options: FindOptions,
+    limit: number,
+    filterInSql: boolean,
+  ): EntryRow[] {
+    const { root, rootEntry, range } = context;
+    if (rootEntry.kind === "file") return [];
+    if (filterInSql && options.maxDepth !== undefined && options.maxDepth < 1) return [];
     const cursor = options.cursor ?? (root === "/" ? "" : root);
+    const shallow = filterInSql && options.maxDepth === 1;
+    const index = shallow ? "vfs_entries_parent_name" : "vfs_entries_path";
+    // SQL MAX uses SQLite's text ordering, including non-BMP path characters.
+    // A fixed lower bound otherwise makes later pages rescan earlier paths.
+    let where = shallow
+      ? "e.parent_path = ? AND e.path > ? AND e.path <> ?"
+      : "e.path >= MAX(?, ?) AND e.path < ? AND e.path > ? AND e.path <> ?";
+    const bindings: SqlStorageValue[] = shallow
+      ? [root, cursor, root]
+      : [range.lower, cursor, range.upper, cursor, root];
+    if (filterInSql && options.type !== undefined) {
+      where += " AND e.kind = ?";
+      bindings.push(options.type);
+    }
+    const name = filterInSql ? sqlNamePrefilter(options.name) : undefined;
+    if (name !== undefined) {
+      // A superset only: keep JS glob semantics, including its end anchor's
+      // trailing-newline behavior. Brackets and escapes stay entirely in JS.
+      where += " AND e.name GLOB ?";
+      bindings.push(name);
+    }
+    return this.rows(
+      `SELECT ${ENTRY_COLUMNS} FROM vfs_entries e INDEXED BY ${index}
+       WHERE ${where} ORDER BY ${shallow ? "e.name" : "e.path"} LIMIT ?`,
+      ...bindings,
+      limit,
+    );
+  }
+
+  protected scanFindPage(
+    context: FindScanContext,
+    options: FindOptions,
+    filterInSql = false,
+  ): EntryPage {
+    const { root, rootEntry, namePattern, pathPattern } = context;
+    const limit = options.limit ?? 1000;
     const includeRoot =
       options.cursor === undefined && (rootEntry.kind === "file" || (options.includeRoot ?? false));
-    const descendants =
-      rootEntry.kind === "file"
-        ? []
-        : this.rows(
-            `SELECT ${ENTRY_COLUMNS}
-       FROM vfs_entries e INDEXED BY vfs_entries_path
-       WHERE e.path >= ? AND e.path < ? AND e.path > ? AND e.path <> ?
-       ORDER BY e.path LIMIT ?`,
-            range.lower,
-            range.upper,
-            cursor,
-            root,
-            limit + (includeRoot ? 0 : 1),
-          );
+    const descendants = this.findRows(context, options, limit + (includeRoot ? 0 : 1), filterInSql);
     const scannedRows = (includeRoot ? [rootEntry, ...descendants] : descendants).slice(0, limit);
     const entries = scannedRows
       .filter((row) => {

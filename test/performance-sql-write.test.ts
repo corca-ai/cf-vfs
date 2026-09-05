@@ -168,9 +168,8 @@ it("keeps batch aggregation cheaper than separate writes", async () => {
   // cost is paid once per batch entry and does not erase aggregation's gain.
   expect(single).toEqual({ statements: 8, rows: 2 });
   expect(batchOfOne).toEqual({ statements: 9, rows: 2 });
-  // And a set shares one transaction and one usage read across its entries
-  // rather than paying for them once per file.
-  expect(batchOfThree).toEqual({ statements: 21, rows: 4 });
+  // A set shares the transaction, usage read, and usage UPDATE across entries.
+  expect(batchOfThree).toEqual({ statements: 19, rows: 4 });
   expect(threeWrites).toEqual({ statements: 24, rows: 6 });
 });
 

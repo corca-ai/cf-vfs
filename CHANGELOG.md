@@ -16,6 +16,8 @@ included.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-09-05
+
 ### Added
 
 - An opt-in, tree-shakable `awkCommand` implements a bounded streaming AWK
@@ -31,6 +33,16 @@ included.
 
 ### Changed
 
+- SQL batches flush workspace usage once, string appends avoid a repeated
+  metadata lookup, and find queries seek from their cursor and narrow eligible
+  scans before materializing rows. Schema version 8 adds indexed maintenance
+  minima; GC queue inserts trade one additional index write for bounded alarm
+  scheduling reads. See [the SQL measurements](bench/sql-optimizations-2026-09-05.md).
+- Exact-string POSIX patterns use native string search after dialect validation;
+  boolean regex searches skip captures and reuse bounded matching states.
+  Sed checks ordinary replacement strings as a whole instead of per character.
+  See [the second text-processing pass](bench/text-processing-follow-up-2026-09-05.md)
+  for incremental Node/workerd measurements against `6fa62a3`.
 - Repeated POSIX regex searches read code points directly from the source
   instead of rebuilding whole-input arrays and translating offsets on each
   match. Short ASCII byte-length checks avoid encoding. Local Node/workerd
@@ -46,6 +58,10 @@ included.
 
 ### Fixed
 
+- Long name filters retain JavaScript matching when their SQL prefilter would
+  exceed Durable Object SQLite's 50-byte GLOB pattern limit.
+- Batch entry quotas include automatically created parent directories and
+  roll back the entire batch when those parents take it over the limit.
 - Preserve unseen stored document changes across metadata updates; accept
   link-chain guards for permission, ownership, and timestamp mutations.
 - Correct unified-patch empty-range positions and avoid argument-stack overflows
@@ -291,7 +307,8 @@ to the release, so the package can be installed by a consumer that pins
 [`a335bd1`]: https://github.com/corca-ai/cf-vfs/commit/a335bd1
 [`1a4447d`]: https://github.com/corca-ai/cf-vfs/commit/1a4447d
 [`32a2c15`]: https://github.com/corca-ai/cf-vfs/commit/32a2c15
-[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/corca-ai/cf-vfs/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/corca-ai/cf-vfs/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/corca-ai/cf-vfs/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/corca-ai/cf-vfs/releases/tag/v0.1.0
