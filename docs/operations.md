@@ -669,6 +669,16 @@ key, error text, attempt count, and exponential next-attempt time. Maintenance
 is due at the earliest open expiry, verification lease, retention deadline, or
 retry. Operations are idempotent and survive object eviction.
 
+The filesystem instance that runs maintenance must have `opaqueStore`
+configured to delete R2 bodies, including after eviction or redeployment.
+An instance without it still expires upload sessions and committed receipts,
+but excludes body-deletion deadlines from alarm scheduling. The GC queue is
+preserved and reported in `vfs.garbage.remaining`; it cannot make progress
+until a configured instance calls `drainGarbage()`. After restoring the store,
+run maintenance once to drain due bodies and arm any remaining deadlines.
+This also applies when several filesystem instances share the same SQLite
+storage: configuring the upload instance does not configure the alarm instance.
+
 A Durable Object has one alarm, and composing this filesystem inside a host
 class that owns `alarm()` shares it. There is no way to ask whether the alarm
 currently set belongs to the filesystem, so scheduling is earliest-wins in both

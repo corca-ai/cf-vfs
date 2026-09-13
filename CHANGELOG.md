@@ -16,6 +16,15 @@ included.
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-09-13
+
+### Fixed
+
+- Metadata-only filesystems no longer repeatedly schedule overdue body-deletion
+  alarms when `opaqueStore` is absent. They preserve queued bodies for a
+  configured collector while continuing upload and receipt expiry maintenance.
+  The deployed benchmark now connects its alarm collector to its R2 bucket.
+
 ## [0.4.0] — 2026-09-05
 
 ### Added
@@ -307,7 +316,8 @@ to the release, so the package can be installed by a consumer that pins
 [`a335bd1`]: https://github.com/corca-ai/cf-vfs/commit/a335bd1
 [`1a4447d`]: https://github.com/corca-ai/cf-vfs/commit/1a4447d
 [`32a2c15`]: https://github.com/corca-ai/cf-vfs/commit/32a2c15
-[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/corca-ai/cf-vfs/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/corca-ai/cf-vfs/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/corca-ai/cf-vfs/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/corca-ai/cf-vfs/compare/v0.1.0...v0.2.0
