@@ -24,6 +24,7 @@ included.
   alarms when `opaqueStore` is absent. They preserve queued bodies for a
   configured collector while continuing upload and receipt expiry maintenance.
   The deployed benchmark now connects its alarm collector to its R2 bucket.
+  ([#120](https://github.com/corca-ai/cf-vfs/pull/120))
 
 ## [0.4.0] — 2026-09-05
 
