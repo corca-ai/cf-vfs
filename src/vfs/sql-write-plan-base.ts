@@ -150,10 +150,17 @@ export abstract class SqlWritePlan extends SqlRead {
    * `VfsDurableObject` does and the README shows.
    */
   protected async scheduleGarbageAlarm(): Promise<void> {
+    // Metadata-only instances can expire sessions, but cannot delete bodies.
+    // Retain their GC queue for a configured collector without waking forever
+    // on a deadline that this instance cannot advance.
+    const garbageDue =
+      this.opaqueStore === undefined
+        ? "SELECT NULL AS due"
+        : "SELECT MIN(MAX(not_before_ms, next_attempt_at_ms)) AS due FROM vfs_gc_queue";
     const row = this.sql
       .exec<SqlRow>(
         `SELECT MIN(due) AS due FROM (
-         SELECT MIN(MAX(not_before_ms, next_attempt_at_ms)) AS due FROM vfs_gc_queue
+         ${garbageDue}
          UNION ALL
          SELECT MIN(expires_at_ms) AS due FROM vfs_upload_sessions WHERE state = 'open'
          UNION ALL

@@ -215,7 +215,9 @@ export class RemoteBenchmarkHarness {
   constructor(storage: DurableObjectStorage, bucket?: R2Bucket) {
     this.storage = storage;
     this.bucket = bucket;
-    this.fileSystem = new DurableObjectFileSystem(storage);
+    this.fileSystem = new DurableObjectFileSystem(storage, {
+      ...(bucket === undefined ? {} : { opaqueStore: new R2OpaqueStore(bucket) }),
+    });
   }
 
   ping(): void {}

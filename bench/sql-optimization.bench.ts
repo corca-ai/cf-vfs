@@ -1,6 +1,7 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { expect, it } from "vitest";
+import { R2OpaqueStore } from "../src/storage/r2.js";
 import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
 import type { TestWorkspaceVfs } from "../test/worker.js";
 import { meterSqlStorage, type SqlMeter } from "./metered-sql.js";
@@ -117,7 +118,9 @@ it.each([1000, 10000])("SQL maintenance scheduling: %s pending rows per table", 
   );
   await runInDurableObject(stub, async (_instance, state) => {
     const meter = meterSqlStorage(state.storage);
-    const fs = new BenchmarkFileSystem(meter.storage);
+    const fs = new BenchmarkFileSystem(meter.storage, {
+      opaqueStore: new R2OpaqueStore(env.VFS_TEST_BUCKET),
+    });
     const future = Date.now() + 86400000;
     state.storage.transactionSync(() => {
       for (let i = 0; i < count; i += 1) {
