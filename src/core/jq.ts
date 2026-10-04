@@ -158,14 +158,10 @@ export class JqFilter {
     input: JsonValue,
   ): Generator<JsonValue> {
     let produced = false;
-    try {
-      for (const value of this.evaluate(node.left, input)) {
-        if (!isTruthy(value)) continue;
-        produced = true;
-        yield value;
-      }
-    } catch (error) {
-      if (!(error instanceof JqRuntimeError)) throw error;
+    for (const value of this.evaluate(node.left, input)) {
+      if (!isTruthy(value)) continue;
+      produced = true;
+      yield value;
     }
     if (!produced) yield* this.evaluate(node.right, input);
   }

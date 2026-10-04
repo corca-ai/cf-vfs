@@ -83,7 +83,10 @@ class Lexer {
     if (identifier !== null) {
       return this.advance({ type: "ident", value: identifier[0] }, identifier[0].length);
     }
-    const number = /[0-9]/u.test(character) ? NUMBER.exec(this.source.slice(this.offset)) : null;
+    const numeric =
+      /[0-9]/u.test(character) ||
+      (character === "." && /[0-9]/u.test(this.source[this.offset + 1] ?? ""));
+    const number = numeric ? NUMBER.exec(this.source.slice(this.offset)) : null;
     if (number !== null) {
       return this.advance({ type: "number", value: Number(number[0]) }, number[0].length);
     }

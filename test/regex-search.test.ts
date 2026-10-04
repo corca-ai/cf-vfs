@@ -71,3 +71,9 @@ it.each([
     }
   }
 });
+
+it("rejects long concatenations before exhausting the compiler stack", () => {
+  expect(() => compilePosixRegex("a".repeat(20000), "extended", "test")).toThrowError(
+    expect.objectContaining({ code: "EINVAL", message: "test: pattern is too complex" }),
+  );
+});

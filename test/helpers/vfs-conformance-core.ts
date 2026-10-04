@@ -357,4 +357,41 @@ export const CORE_CONFORMANCE: readonly VfsConformanceCase[] = [
       });
     }
   }),
+  conformanceCase(
+    "conforms: refuses file creation through a missing directory assertion",
+    async (factory) => {
+      const fs = await factory();
+      const operations = [
+        () => fs.writeFile("/missing/", "data"),
+        () => fs.appendFile("/missing/", "data"),
+        () => fs.writeFiles([{ path: "/missing/", body: "data" }]),
+        () => fs.touch("/missing/"),
+        () => fs.symlink("/missing/", "/target"),
+      ];
+      for (const operation of operations) {
+        expect(await refusal(async () => operation())).toMatchObject({ code: "ENOENT" });
+        expect(await refusal(async () => fs.lstat("/missing"))).toMatchObject({ code: "ENOENT" });
+      }
+      expect((await fs.mkdir("/missing/")).kind).toBe("directory");
+    },
+  ),
+  conformanceCase(
+    "conforms: checks directory assertions against the copied or moved kind",
+    async (factory) => {
+      const fs = await factory();
+      await fs.writeFile("/file", "data");
+      expect(await refusal(async () => fs.copy("/file", "/copied/"))).toMatchObject({
+        code: "ENOENT",
+      });
+      expect(await refusal(async () => fs.move("/file", "/moved/"))).toMatchObject({
+        code: "ENOENT",
+      });
+      expect(await readText(fs, "/file")).toBe("data");
+      await fs.mkdir("/directory");
+      await fs.copy("/directory", "/copied/", { recursive: true });
+      await fs.move("/directory", "/moved/");
+      expect((await fs.stat("/copied/")).kind).toBe("directory");
+      expect((await fs.stat("/moved/")).kind).toBe("directory");
+    },
+  ),
 ];

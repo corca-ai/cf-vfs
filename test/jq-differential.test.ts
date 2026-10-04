@@ -89,3 +89,37 @@ describe("deliberate divergences", () => {
 
   for (const [id, demonstrate] of Object.entries(DEMONSTRATIONS)) it(id, demonstrate);
 });
+
+it.each([
+  { filter: "(1 / 0) // 2", input: "null", code: 5, output: "" },
+  { filter: 'has("x")', input: "null", code: 0, output: "false\n" },
+  {
+    filter: "to_entries",
+    input: "[1,2]",
+    code: 0,
+    output: '[{"key":0,"value":1},{"key":1,"value":2}]\n',
+  },
+  {
+    filter: "from_entries",
+    input: '[{"key":"x","value":null,"v":1}]',
+    code: 0,
+    output: '{"x":null}\n',
+  },
+  { filter: "from_entries", input: '[{"name":"x","Value":2}]', code: 0, output: '{"x":2}\n' },
+  { filter: "from_entries", input: '[{"key":1,"value":2}]', code: 5, output: "" },
+  { filter: "flatten(-1)", input: "[1]", code: 5, output: "" },
+  { filter: "tonumber", input: '"0x10"', code: 5, output: "" },
+])("matches jq for $filter over $input", async ({ filter, input, code, output }) => {
+  const harness = createBashHarness();
+  await harness.fileSystem.writeFile("/input", input);
+  const result = await harness.run(`jq -c '${filter}' < /input`);
+  expect(result.exitCode).toBe(code);
+  expect(result.stdout).toBe(output);
+});
+
+it("parses a jq fractional literal without a leading zero", async () => {
+  const harness = createBashHarness();
+  const result = await harness.run("jq -cn '.5, -.5'");
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toBe("0.5\n-0.5\n");
+});

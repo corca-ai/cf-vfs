@@ -1,5 +1,11 @@
 import { VfsError } from "../core/errors.js";
-import { basename, descendantRange, dirname, isDescendant } from "../core/path.js";
+import {
+  basename,
+  descendantRange,
+  dirname,
+  isDescendant,
+  pathRequiresDirectory,
+} from "../core/path.js";
 import { codePointLength } from "../core/unicode.js";
 import type { CreationParents, EntryRow } from "./sql-model.js";
 import { SqlMove } from "./sql-move-base.js";
@@ -36,7 +42,10 @@ export abstract class SqlCopy extends SqlMove {
     // named source can be dereferenced, and only when asked.
     const sourceAccess = this.resolveAccess(from, false, options.dereference ?? false);
     const source = sourceAccess.path;
-    const targetAccess = this.resolveAccess(to, true, false);
+    const requiresDirectory = pathRequiresDirectory(to);
+    if (requiresDirectory) sourceAccess.row ??= this.requireEntry(source, false);
+    const allowMissingDirectory = !requiresDirectory || sourceAccess.row?.kind === "directory";
+    const targetAccess = this.resolveAccess(to, allowMissingDirectory, false);
     const target = targetAccess.path;
     const state = { queued: 0 };
     const result = this.transaction(() =>

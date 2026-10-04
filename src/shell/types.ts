@@ -30,7 +30,7 @@ export type ShellFileSystem = Pick<
   | "symlink"
   | "realpath"
 > & {
-  inspectWriteTarget(path: string): VfsStat | null;
+  inspectWriteTarget(path: string, follow?: boolean): VfsStat | null;
   /**
    * Enforces the declared roots without reading or writing anything.
    *

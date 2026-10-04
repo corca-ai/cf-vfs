@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { defineTestApplet } from "./helpers/applet.js";
 import { createBashHarness } from "./helpers/bash.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 
@@ -80,4 +81,42 @@ describe("symlink policy", () => {
     expect(() => fileSystem.stat("/directory/new")).toThrow();
     expect(fileSystem.list("/elsewhere")).toEqual([]);
   });
+});
+
+it("can replace an escaping symlink without accessing its target", async () => {
+  const harness = createBashHarness({
+    policy: { readRoots: ["/allowed"], writeRoots: ["/allowed"] },
+  });
+  harness.fileSystem.mkdir("/allowed");
+  await harness.fileSystem.writeFile("/secret", "secret");
+  harness.fileSystem.symlink("/allowed/link", "/secret");
+  const result = await harness.run("ln -sf /new-target /allowed/link");
+  expect(result.exitCode).toBe(0);
+  expect(harness.fileSystem.readlink("/allowed/link")).toBe("/new-target");
+  expect(await harness.readText("/secret")).toBe("secret");
+});
+
+it("charges symlink primitives to a custom command's mutation budget", async () => {
+  const harness = createBashHarness({
+    limits: { maxMutations: 1 },
+    extraCommands: [
+      defineTestApplet("links", async (context) => {
+        context.fileSystem.symlink("/one", "/target");
+        context.fileSystem.symlink("/two", "/target");
+        return 0;
+      }),
+    ],
+  });
+  const result = await harness.run("links");
+  expect(result.exitCode).not.toBe(0);
+  expect(() => harness.fileSystem.lstat("/two")).toThrowError(
+    expect.objectContaining({ code: "ENOENT" }),
+  );
+});
+
+it("charges a successful ln operation exactly once", async () => {
+  const harness = createBashHarness({ limits: { maxMutations: 1 } });
+  const result = await harness.run("ln -s /target /link");
+  expect(result.exitCode).toBe(0);
+  expect(harness.fileSystem.readlink("/link")).toBe("/target");
 });

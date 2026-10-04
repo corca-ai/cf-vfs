@@ -11,7 +11,7 @@ export interface StopSet {
 export abstract class ParserCursor {
   protected readonly tokens: readonly Token[];
   protected readonly context: ParseContext;
-  protected readonly depth: number;
+  protected depth: number;
   protected index = 0;
 
   constructor(tokens: readonly Token[], context: ParseContext, depth: number) {
@@ -113,7 +113,12 @@ export abstract class ParserCursor {
 
   protected withDepth<T>(run: () => T): T {
     this.context.depth(this.depth + 1);
-    return run();
+    this.depth += 1;
+    try {
+      return run();
+    } finally {
+      this.depth -= 1;
+    }
   }
 
   protected takeWord(): ShellWord {

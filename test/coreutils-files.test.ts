@@ -356,3 +356,28 @@ describe("small deterministic utilities", () => {
     expect(result.exitCode).not.toBe(0);
   });
 });
+
+it("preserves empty NUL-separated xargs arguments", async () => {
+  const harness = createBashHarness();
+  await harness.fileSystem.writeFile("/input", "\0a\0\0");
+  const result = await harness.run("xargs -0 -n 1 printf '[%s]\\n' < /input");
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toBe("[]\n[a]\n[]\n");
+});
+
+it("sorts unterminated operands as separate records", async () => {
+  const harness = createBashHarness();
+  await harness.fileSystem.writeFile("/one", "b");
+  await harness.fileSystem.writeFile("/two", "a\n");
+  const result = await harness.run("sort /one /two");
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toBe("a\nb\n");
+});
+
+it("bounds buffered xargs argument records", async () => {
+  const harness = createBashHarness({ limits: { maxBufferedRecords: 2 } });
+  await harness.fileSystem.writeFile("/input", "a b c");
+  const result = await harness.run("xargs echo < /input");
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stdout).toBe("");
+});

@@ -64,7 +64,10 @@ async function collectArguments(
   let heldBytes = 0;
   let release: () => void = () => undefined;
   const take = (value: string): void => {
-    if (value.length === 0) return;
+    if (value.length === 0 && !nullSeparated) return;
+    if (values.length >= context.budget.limits.maxBufferedRecords) {
+      throw new VfsError("E2BIG", "xargs: buffered record limit exceeded");
+    }
     context.budget.step();
     values.push(value);
     heldBytes += utf8ByteLength(value);
@@ -73,9 +76,10 @@ async function collectArguments(
   };
   const consume = (chunk: string, final: boolean): string => {
     const parts = nullSeparated ? chunk.split("\0") : chunk.split(/[ \t\n]+/u);
-    const remainder = final ? "" : (parts.pop() ?? "");
+    const remainder = parts.pop() ?? "";
     for (const value of parts) take(value);
-    return remainder;
+    if (final && remainder !== "") take(remainder);
+    return final ? "" : remainder;
   };
   try {
     let carry = "";

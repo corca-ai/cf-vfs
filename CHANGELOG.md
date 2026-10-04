@@ -16,6 +16,20 @@ included.
 
 ## [Unreleased]
 
+### Fixed
+
+- File creation, uploads, copy, and move now respect missing-directory assertions
+  in VFS paths. Byte ranges consistently use validated own fields in SQLite,
+  R2, and the in-memory opaque store. ([#121](https://github.com/corca-ai/cf-vfs/pull/121))
+- Shell, AWK, and regular-expression nesting fail with bounded diagnostics before
+  exhausting the stack. Link creation obeys mutation budgets and checks the
+  destination link without following its target; saved curl responses obey
+  memory limits and cancel unused bodies. ([#121](https://github.com/corca-ai/cf-vfs/pull/121))
+- jq preserves runtime errors through alternatives, handles array entries and
+  null values correctly, and validates numeric conversions and flatten depths.
+  sort keeps unterminated file operands separate, and xargs preserves empty
+  NUL-delimited arguments while enforcing its record limit. ([#121](https://github.com/corca-ai/cf-vfs/pull/121))
+
 ## [0.4.1] — 2026-09-13
 
 ### Fixed

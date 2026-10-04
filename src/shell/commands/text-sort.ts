@@ -119,7 +119,9 @@ export const sortCommand = /* @__PURE__ */ defineApplet(SORT, async (context, ar
   const collected = await inputTexts(context, invocation.operands, fds[0]);
   try {
     const lines = checkedTextLines(
-      collected.value.map((input) => input.text).join(""),
+      collected.value
+        .map(({ text }) => (text === "" || text.endsWith("\n") ? text : `${text}\n`))
+        .join(""),
       context.budget.limits.maxBufferedRecords,
       context.budget.limits.maxLineBytes,
     );

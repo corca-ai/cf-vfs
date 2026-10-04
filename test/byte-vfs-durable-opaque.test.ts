@@ -416,3 +416,26 @@ it("persists failed GC backoff and lets a later alarm finish the retry", async (
     ).toBe(0);
   });
 });
+
+it("reads only own byte-range fields through the R2 binding", async () => {
+  const key = `range-${crypto.randomUUID()}`;
+  try {
+    await env.VFS_TEST_BUCKET.put(key, "abcdefghijkl");
+    const range = Object.assign(Object.create({ suffix: 5 }), { offset: 2 });
+    const stream = await new R2OpaqueStore(env.VFS_TEST_BUCKET).getStream(key, range);
+    if (stream === null) throw new Error("missing range body");
+    expect(new TextDecoder().decode(await readAllBytes(stream, 12))).toBe("cdefghijkl");
+  } finally {
+    await env.VFS_TEST_BUCKET.delete(key);
+  }
+});
+
+it("refuses an opaque reservation through a missing directory assertion", async () => {
+  const error = await workspace("opaque-missing-directory")
+    .beginOpaqueUpload("/missing/")
+    .then(
+      () => null,
+      (error: unknown) => error,
+    );
+  expect(error).toMatchObject({ code: "ENOENT" });
+});

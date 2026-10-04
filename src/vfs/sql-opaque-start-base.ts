@@ -13,7 +13,7 @@ export abstract class SqlOpaqueStart extends SqlCopy {
     if (this.opaqueStore === undefined) {
       throw new VfsError("ENOTSUP", "opaque storage is not configured");
     }
-    const normalized = this.normalizeAccessPath(path, true);
+    const normalized = this.normalizeAccessPath(path);
     const existing = this.oneEntry(normalized);
     if (existing?.kind === "directory") throw new VfsError("EISDIR", "is a directory", normalized);
     if (

@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import { byteRangeBounds, validateByteRange } from "../src/vfs/range.js";
 import type { ByteRange } from "../src/vfs/types.js";
 
@@ -99,4 +100,25 @@ it("does not treat prototype properties as range fields", () => {
       message: "byte range must use offset/length or suffix",
     }),
   );
+});
+
+it("ignores inherited suffixes when selecting an own offset range", () => {
+  const range = Object.assign(Object.create({ suffix: 5 }), { offset: 2 });
+  expect(byteRangeBounds(range, 12)).toEqual({ offset: 2, length: 10 });
+});
+
+it("rejects non-enumerable invalid range fields", () => {
+  const range = Object.defineProperty({ offset: 0 }, "offset", { value: -1 });
+  expect(() => byteRangeBounds(range, 12)).toThrowError(
+    expect.objectContaining({ code: "EINVAL" }),
+  );
+});
+
+it("selects the same own range fields in the in-memory opaque store", async () => {
+  const store = new MemoryOpaqueStore();
+  await store.putIfAbsent("body", "abcdefghijkl");
+  const range = Object.assign(Object.create({ suffix: 5 }), { offset: 2 });
+  const stream = await store.getStream("body", range);
+  if (stream === null) throw new Error("missing body");
+  expect(await new Response(stream).text()).toBe("cdefghijkl");
 });

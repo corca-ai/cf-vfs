@@ -283,6 +283,10 @@ class Parser extends ConditionalParser {
   }
 
   private functionDefinition(name: string): FunctionDefinitionNode {
+    return this.withDepth(() => this.parseFunctionDefinition(name));
+  }
+
+  private parseFunctionDefinition(name: string): FunctionDefinitionNode {
     const token = this.take();
     const sourceOffset = token.type === "word" ? token.word.sourceOffset : 0;
     this.expectOperator("(");

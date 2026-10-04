@@ -256,13 +256,13 @@ export class ReservedPathFileSystem implements ShellFileSystem {
   /** Reserved names that are children of the root. */
   readonly #rootNames: readonly string[];
 
-  inspectWriteTarget(path: string): VfsStat | null {
+  inspectWriteTarget(path: string, follow = true): VfsStat | null {
     const at = this.#statAt(path);
     if (at !== undefined) return at;
     // A new name under `/dev` is refused here rather than by the inner
     // filesystem, which would report the missing parent instead of the rule.
     this.#refuseMutation(path);
-    return this.#inner.inspectWriteTarget(path);
+    return this.#inner.inspectWriteTarget(path, follow);
   }
 
   assertReadable(path: string): void {

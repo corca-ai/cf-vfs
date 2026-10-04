@@ -12,7 +12,7 @@ import {
   type Statement,
   UNARY_OPERATORS,
 } from "./awk-ast.js";
-import type { AwkToken } from "./awk-lexer.js";
+import { AwkSyntaxError, type AwkToken } from "./awk-lexer.js";
 import { AwkParserCursor } from "./awk-parser-cursor.js";
 
 class Parser extends AwkParserCursor {
@@ -88,7 +88,7 @@ class Parser extends AwkParserCursor {
   }
 
   private statementBody(): Statement[] {
-    return this.atOperator("{") ? this.block() : [this.statement()];
+    return this.atOperator("{") ? this.block() : this.nested(() => [this.statement()]);
   }
 
   private loopBody(): Statement[] {
@@ -255,16 +255,26 @@ class Parser extends AwkParserCursor {
       this.fail("assignment target is not writable");
     }
     const operator = this.takeOneOf("operator", ASSIGNMENT_OPERATORS);
-    return this.node({ kind: "assign", target: left, operator, value: this.assignment() });
+    return this.node({
+      kind: "assign",
+      target: left,
+      operator,
+      value: this.nested(() => this.assignment()),
+    });
   }
 
   private conditional(): Expression {
     const condition = this.logicalOr();
     if (!this.atOperator("?")) return condition;
     this.take();
-    const consequent = this.assignment();
+    const consequent = this.nested(() => this.assignment());
     this.expectOperator(":");
-    return this.node({ kind: "conditional", condition, consequent, alternate: this.assignment() });
+    return this.node({
+      kind: "conditional",
+      condition,
+      consequent,
+      alternate: this.nested(() => this.assignment()),
+    });
   }
 
   private logicalOr(): Expression {
@@ -357,7 +367,12 @@ class Parser extends AwkParserCursor {
     let expression = this.unary();
     while (this.atOneOf("operator", MULTIPLICATIVE_OPERATORS)) {
       const operator = this.takeOneOf("operator", MULTIPLICATIVE_OPERATORS);
-      expression = this.node({ kind: "binary", operator, left: expression, right: this.unary() });
+      expression = this.node({
+        kind: "binary",
+        operator,
+        left: expression,
+        right: this.nested(() => this.unary()),
+      });
     }
     return expression;
   }
@@ -365,11 +380,11 @@ class Parser extends AwkParserCursor {
   private unary(): Expression {
     if (this.atOneOf("operator", UNARY_OPERATORS)) {
       const operator = this.takeOneOf("operator", UNARY_OPERATORS);
-      return this.node({ kind: "unary", operator, operand: this.unary() });
+      return this.node({ kind: "unary", operator, operand: this.nested(() => this.unary()) });
     }
     if (this.atOperator("++") || this.atOperator("--")) {
       const delta = this.take().value === "++" ? 1 : -1;
-      const target = this.unary();
+      const target = this.nested(() => this.unary());
       if (target.kind !== "variable" && target.kind !== "field" && target.kind !== "array") {
         this.fail("update target is not writable");
       }
@@ -382,7 +397,12 @@ class Parser extends AwkParserCursor {
     const expression = this.postfix();
     if (!this.atOperator("^")) return expression;
     this.take();
-    return this.node({ kind: "binary", operator: "^", left: expression, right: this.unary() });
+    return this.node({
+      kind: "binary",
+      operator: "^",
+      left: expression,
+      right: this.nested(() => this.unary()),
+    });
   }
 
   private postfix(): Expression {
@@ -428,9 +448,9 @@ class Parser extends AwkParserCursor {
     if (["function", "getline", "return"].includes(token.value)) {
       this.fail(`unsupported construct ${token.value}`, token);
     }
-    if (this.atOperator("(")) return this.callExpression(token.value, token);
+    if (this.atOperator("(")) return this.nested(() => this.callExpression(token.value, token));
     if (token.value === "length") return this.node({ kind: "call", name: "length", arguments: [] });
-    if (this.atOperator("[")) return this.arrayExpression(token.value);
+    if (this.atOperator("[")) return this.nested(() => this.arrayExpression(token.value));
     return this.node({ kind: "variable", name: token.value });
   }
 
@@ -458,12 +478,24 @@ class Parser extends AwkParserCursor {
       });
     }
     if (token.kind === "identifier") return this.identifierExpression(token);
-    if (token.kind === "operator" && token.value === "(") return this.parenthesizedExpression();
+    if (token.kind === "operator" && token.value === "(")
+      return this.nested(() => this.parenthesizedExpression());
     if (token.kind === "operator" && token.value === "$") {
-      return this.node({ kind: "field", index: this.unary() });
+      return this.node({ kind: "field", index: this.nested(() => this.unary()) });
     }
     this.fail("expected an expression", token);
   }
+}
+
+/** Array containers do not add depth; only executable syntax nodes do. */
+function validateTreeDepth(value: unknown, depth: number, maximum: number): void {
+  if (Array.isArray(value)) {
+    for (const item of value) validateTreeDepth(item, depth, maximum);
+    return;
+  }
+  if (value === null || typeof value !== "object" || !("kind" in value || "phase" in value)) return;
+  if (depth >= maximum) throw new AwkSyntaxError("program nesting limit exceeded", 0);
+  for (const child of Object.values(value)) validateTreeDepth(child, depth + 1, maximum);
 }
 
 export function parseAwkProgram(
@@ -471,5 +503,7 @@ export function parseAwkProgram(
   maximumNodes: number,
   maximumDepth: number,
 ): AwkRule[] {
-  return new Parser(tokens, maximumNodes, maximumDepth).parse();
+  const rules = new Parser(tokens, maximumNodes, maximumDepth).parse();
+  validateTreeDepth(rules, 0, maximumDepth);
+  return rules;
 }
