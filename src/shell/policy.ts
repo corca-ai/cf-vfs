@@ -192,10 +192,11 @@ export class ScopedFileSystem implements ShellFileSystem {
   }
 
   symlink(path: string, target: string, options?: SymlinkOptions) {
-    this.write(path);
+    this.writeLink(path);
     // The link is created inside the roots, but what it names is checked when
     // it is followed rather than here: a link may point anywhere, and a policy
     // that changes later must still govern what the link reaches.
+    this.#budget.mutation();
     return this.#inner.symlink(path, target, options);
   }
 
@@ -207,11 +208,11 @@ export class ScopedFileSystem implements ShellFileSystem {
     this.write(path);
   }
 
-  inspectWriteTarget(path: string): VfsStat | null {
+  inspectWriteTarget(path: string, follow = true): VfsStat | null {
     const normalized = normalizePath(path);
-    this.write(normalized);
+    this.#check(path, this.#policy.writeRoots, "path is outside the writable roots", follow);
     try {
-      return this.#inner.stat(normalized);
+      return follow ? this.#inner.stat(path) : this.#inner.lstat(path);
     } catch (error) {
       if (!(error instanceof VfsError) || error.code !== "ENOENT") throw error;
     }

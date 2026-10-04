@@ -221,3 +221,33 @@ it("reports a save conflict while retaining local and external versions", async 
   expect(await stored(storage, "/doc.txt")).toBe("external\n");
   expect(documents.registry.get("/doc.txt")?.dirty).toBe(true);
 });
+
+it("shares one document between concurrent opens", async () => {
+  const { documents, storage } = room();
+  await storage.writeFile("/doc", "text");
+  const [first, second] = await Promise.all([documents.open("/doc"), documents.open("/doc")]);
+  expect(first).toBe(second);
+});
+
+it("closes an open destination when a move replaces it", async () => {
+  const { documents, storage, notices } = room();
+  await storage.writeFile("/source", "source");
+  await storage.writeFile("/dest", "destination");
+  await documents.open("/dest");
+  await storage.move("/source", "/dest", { replace: true });
+  expect(documents.get("/dest")).toBeUndefined();
+  expect(notices).toContainEqual({ path: "/dest", kind: "gone" });
+});
+
+it("publishes pending edits at a moved document's new path", async () => {
+  vi.useFakeTimers();
+  const { documents, storage, nextMutation } = room();
+  await storage.writeFile("/source", "old");
+  const document = await documents.open("/source");
+  documents.applyClientText("/source", document.version(), "edited");
+  await storage.move("/source", "/dest");
+  const published = nextMutation("/dest");
+  await vi.runOnlyPendingTimersAsync();
+  await published;
+  expect(await stored(storage, "/dest")).toBe("edited");
+});

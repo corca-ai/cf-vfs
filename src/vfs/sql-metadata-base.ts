@@ -129,7 +129,7 @@ export abstract class SqlMetadata extends SqlWrite {
   }
 
   touch(path: string, options: TouchOptions = {}, posix?: PosixAccessContext): VfsStat {
-    const access = this.resolveAccess(path, true);
+    const access = this.resolveAccess(path);
     const normalized = access.path;
     const existing = access.row ?? this.oneEntry(normalized);
     if (existing !== null) {
@@ -243,7 +243,7 @@ export abstract class SqlMetadata extends SqlWrite {
     options: SymlinkOptions = {},
     posix?: PosixAccessContext,
   ): VfsStat {
-    const access = this.resolveAccess(path, true, false);
+    const access = this.resolveAccess(path, false, false);
     const normalized = access.path;
     const parentPath = dirname(normalized);
     const name = basename(normalized);

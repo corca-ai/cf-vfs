@@ -387,3 +387,43 @@ it("refuses an output path outside the write roots before transferring", async (
   const result = await shell.run("curl -o /elsewhere.txt https://example.test/");
   expect(result.exitCode).not.toBe(0);
 });
+
+it("enforces the semantic buffer limit on a saved curl body", async () => {
+  const harness = createBashHarness({
+    extraCommands: [curlCommand],
+    network: {
+      async fetch() {
+        return new Response(new Uint8Array(64));
+      },
+    },
+    policy: { network: "allow" },
+    limits: { maxBufferedBytes: 32 },
+  });
+  const result = await harness.run("curl -o /out https://example.test/");
+  expect(result.exitCode).not.toBe(0);
+  expect(() => harness.fileSystem.stat("/out")).toThrowError(
+    expect.objectContaining({ code: "ENOENT" }),
+  );
+});
+
+it("cancels a curl response when its output path is refused", async () => {
+  let cancelled = false;
+  const harness = createBashHarness({
+    extraCommands: [curlCommand],
+    network: {
+      async fetch() {
+        return new Response(
+          new ReadableStream({
+            cancel() {
+              cancelled = true;
+            },
+          }),
+        );
+      },
+    },
+    policy: { network: "allow", writeRoots: ["/allowed"] },
+  });
+  const result = await harness.run("curl -o /refused https://example.test/");
+  expect(result.exitCode).not.toBe(0);
+  expect(cancelled).toBe(true);
+});

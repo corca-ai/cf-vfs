@@ -99,6 +99,9 @@ export class DemoDocuments {
     const fileSystem = this.#require();
     const read = fileSystem.readFile(path);
     const bytes = await readAllBytes(read.stream, MAX_DOCUMENT_BYTES);
+    // Another open may have finished while this read was awaiting its stream.
+    const opened = this.#documents.get(path);
+    if (opened !== undefined) return opened;
     const document = new DemoDocument(decode(bytes, path));
     this.#documents.set(path, document);
     this.registry.open(path, document, read.stat.mutationToken);
@@ -206,12 +209,25 @@ export class DemoDocuments {
     if (event.op === "move" && event.subtree?.to !== undefined) {
       const { root, to } = event.subtree;
       for (const path of before) {
+        if (path !== to && !path.startsWith(`${to}/`)) continue;
+        this.#documents.delete(path);
+        const timer = this.#timers.get(path);
+        if (timer !== undefined) clearTimeout(timer);
+        this.#timers.delete(path);
+        this.#notify?.({ path, kind: "gone" });
+      }
+      for (const path of before) {
         if (path !== root && !path.startsWith(`${root}/`)) continue;
         const moved = `${to}${path.slice(root.length)}`;
         const document = this.#documents.get(path);
         if (document === undefined) continue;
+        const pending = this.#timers.has(path);
+        const timer = this.#timers.get(path);
+        if (timer !== undefined) clearTimeout(timer);
+        this.#timers.delete(path);
         this.#documents.delete(path);
         this.#documents.set(moved, document);
+        if (pending) this.schedulePublish(moved);
         this.#notify?.({ path, kind: "moved", to: moved });
       }
       return;

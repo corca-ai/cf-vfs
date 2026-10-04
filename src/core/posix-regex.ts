@@ -328,10 +328,22 @@ function compile(node: Node, command: string): readonly Instruction[] {
       case "eol":
         push({ op: "eol" });
         return;
-      case "cat":
-        emit(current.left);
-        emit(current.right);
+      case "cat": {
+        // Concatenations are left-associated. Walk their spine explicitly so
+        // the program limit fires before a long literal exhausts the stack.
+        const right: Node[] = [];
+        let left: Node = current;
+        while (left.kind === "cat") {
+          right.push(left.right);
+          left = left.left;
+        }
+        emit(left);
+        for (let index = right.length - 1; index >= 0; index -= 1) {
+          const part = right[index];
+          if (part !== undefined) emit(part);
+        }
         return;
+      }
       case "alt": {
         const frame: Split = { op: "split", x: 0, y: 0 };
         push(frame);

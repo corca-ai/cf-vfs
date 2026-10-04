@@ -48,7 +48,23 @@ export class R2OpaqueStore implements OpaqueStore {
 
   async getStream(key: string, range?: ByteRange): Promise<ReadableStream<Uint8Array> | null> {
     validateByteRange(range, key);
-    const object = await this.bucket.get(key, range === undefined ? undefined : { range });
+    // Web IDL reads inherited properties too; pass the same own fields that
+    // validation and inline range selection accepted.
+    const ownRange: R2Range | undefined =
+      range === undefined
+        ? undefined
+        : Object.hasOwn(range, "suffix") && range.suffix !== undefined
+          ? { suffix: range.suffix }
+          : {
+              offset: Object.hasOwn(range, "offset") ? (range.offset ?? 0) : 0,
+              ...(Object.hasOwn(range, "length") && range.length !== undefined
+                ? { length: range.length }
+                : {}),
+            };
+    const object = await this.bucket.get(
+      key,
+      ownRange === undefined ? undefined : { range: ownRange },
+    );
     return object?.body ?? null;
   }
 

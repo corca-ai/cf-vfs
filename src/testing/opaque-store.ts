@@ -1,4 +1,5 @@
 import { VfsError } from "../core/errors.js";
+import { byteRangeBounds } from "../vfs/range.js";
 import { collectBytes, streamFromChunks } from "../vfs/streams.js";
 import type { ByteBody, ByteRange, OpaqueObjectMetadata, OpaqueStore } from "../vfs/types.js";
 
@@ -16,9 +17,8 @@ function rangeChunks(chunks: readonly Uint8Array[], range: ByteRange | undefined
     writeOffset += chunk.byteLength;
   }
   if (range === undefined) return [bytes];
-  if (range.suffix !== undefined) return [bytes.slice(Math.max(0, size - range.suffix))];
-  const offset = range.offset ?? 0;
-  return [bytes.slice(offset, range.length === undefined ? size : offset + range.length)];
+  const { offset, length } = byteRangeBounds(range, size);
+  return [bytes.slice(offset, offset + length)];
 }
 
 export class MemoryOpaqueStore implements OpaqueStore {

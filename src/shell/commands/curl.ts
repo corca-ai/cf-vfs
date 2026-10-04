@@ -1,5 +1,6 @@
 import { isVfsError, VfsError } from "../../core/errors.js";
 import { encodeUtf8 } from "../../core/unicode.js";
+import { bodyToStream } from "../../vfs/streams.js";
 import type { ShellRequest } from "../network.js";
 import { fetchThrough, redirectTarget } from "../network.js";
 import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
@@ -9,7 +10,14 @@ import {
   defineApplet,
   parseAppletOptions,
 } from "./applet.js";
-import { commandPath, parseInteger, pipeToSink, readWithAbort, writeText } from "./helpers.js";
+import {
+  type BufferLease,
+  collectStream,
+  commandPath,
+  parseInteger,
+  pipeToSink,
+  writeText,
+} from "./helpers.js";
 
 const CURL = {
   name: "curl",
@@ -214,10 +222,13 @@ async function writeCurlResponse(
   context.fileSystem.assertWritable(path);
   if (invocation.head) {
     await response.body?.cancel().catch(() => undefined);
-    await context.fileSystem.writeFile(path, rendered);
-    return;
   }
-  await context.fileSystem.writeFile(path, await collectBody(context, response, rendered));
+  const collected = await collectBody(context, invocation.head ? null : response.body, rendered);
+  try {
+    await context.fileSystem.writeFile(path, collected.value);
+  } finally {
+    collected.release();
+  }
 }
 
 /**
@@ -230,40 +241,26 @@ async function writeCurlResponse(
  */
 async function collectBody(
   context: ShellCommandContext,
-  response: Response,
+  body: ReadableStream<Uint8Array> | null,
   prefix: string,
-): Promise<Uint8Array> {
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  const encoded = encodeUtf8(prefix);
-  if (encoded.byteLength > 0) {
-    chunks.push(encoded);
-    total = encoded.byteLength;
+): Promise<BufferLease<Uint8Array>> {
+  const collected = await collectStream(context, body ?? bodyToStream(""));
+  if (prefix === "") return collected;
+  let release: (() => void) | undefined;
+  try {
+    const encoded = encodeUtf8(prefix);
     context.budget.io(encoded.byteLength);
+    release = context.budget.buffered(encoded.byteLength + collected.value.byteLength);
+    const bytes = new Uint8Array(encoded.byteLength + collected.value.byteLength);
+    bytes.set(encoded);
+    bytes.set(collected.value, encoded.byteLength);
+    return { value: bytes, release };
+  } catch (error) {
+    release?.();
+    throw error;
+  } finally {
+    collected.release();
   }
-  const body = response.body;
-  if (body !== null) {
-    const reader = body.getReader();
-    try {
-      for (;;) {
-        const next = await readWithAbort(reader, context.signal);
-        if (next.done) break;
-        context.budget.io(next.value.byteLength);
-        chunks.push(next.value);
-        total += next.value.byteLength;
-      }
-    } finally {
-      reader.releaseLock();
-      await body.cancel().catch(() => undefined);
-    }
-  }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
 }
 
 /**
@@ -293,8 +290,12 @@ export const curlCommand = /* @__PURE__ */ defineApplet(CURL, async (context, ar
   }
   const fetched = await curlFetch(context, invocation, fds);
   if ("status" in fetched) return fetched.status;
-  const failure = await curlResponseFailure(fetched.response, invocation, fds);
-  if (failure !== undefined) return failure;
-  await writeCurlResponse(context, fetched.response, invocation, fds);
-  return 0;
+  try {
+    const failure = await curlResponseFailure(fetched.response, invocation, fds);
+    if (failure !== undefined) return failure;
+    await writeCurlResponse(context, fetched.response, invocation, fds);
+    return 0;
+  } finally {
+    await fetched.response.body?.cancel().catch(() => undefined);
+  }
 });

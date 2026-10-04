@@ -81,11 +81,15 @@ function numberValue(input: JsonValue): JsonValue {
   if (typeof input !== "string") {
     throw new JqRuntimeError(`jq: cannot convert ${jsonKind(input)} to a number`);
   }
-  const parsed = Number(input.trim());
-  if (input.trim() === "" || Number.isNaN(parsed)) {
+  const text = input.trim();
+  if (/^[+-]?nan$/iu.test(text)) return Number.NaN;
+  if (/^[+-]?inf(?:inity)?$/iu.test(text)) {
+    return text.startsWith("-") ? -Infinity : Infinity;
+  }
+  if (!/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/u.test(text)) {
     throw new JqRuntimeError(`jq: cannot parse ${JSON.stringify(input)} as a number`);
   }
-  return parsed;
+  return Number(text);
 }
 
 function uniqueValues(input: JsonValue, budget: JqEvaluationBudget): JsonValue[] {
@@ -110,7 +114,8 @@ function extremeValue(
 }
 
 function toEntries(input: JsonValue): JsonValue[] {
-  return [...requireObject(input, "to_entries")].map(
+  const entries = Array.isArray(input) ? input.entries() : requireObject(input, "to_entries");
+  return [...entries].map(
     ([key, value]) =>
       new Map<string, JsonValue>([
         ["key", key],
@@ -123,9 +128,10 @@ function fromEntries(input: JsonValue): JsonObject {
   const built: JsonObject = new Map();
   for (const item of requireArray(input, "from_entries")) {
     const entry = requireObject(item, "from_entries");
-    const key = entry.get("key") ?? entry.get("k") ?? entry.get("name") ?? null;
-    const value = entry.get("value") ?? entry.get("v") ?? null;
-    built.set(key === null ? "null" : scalarText(key, "from_entries"), value);
+    const key = entry.get("key") ?? entry.get("Key") ?? entry.get("name") ?? entry.get("Name");
+    if (typeof key !== "string") throw new JqRuntimeError("jq: from_entries needs a string key");
+    const value = entry.has("value") ? entry.get("value") : entry.get("Value");
+    built.set(key, value ?? null);
   }
   return built;
 }
@@ -177,6 +183,7 @@ function keysOf(value: JsonValue): JsonValue[] {
 }
 
 export function hasMember(value: JsonValue, key: JsonValue): boolean {
+  if (value === null) return false;
   if (value instanceof Map) {
     if (typeof key !== "string") throw new JqRuntimeError("jq: has needs a string key");
     return value.has(key);
@@ -211,6 +218,7 @@ export function flatten(
   depth: number,
   budget: JqEvaluationBudget,
 ): JsonValue[] {
+  if (depth < 0) throw new JqRuntimeError("jq: flatten depth must not be negative");
   return budget.collect(flattenValues(items, depth, budget));
 }
 function* flattenValues(

@@ -75,8 +75,9 @@ export const lnCommand = /* @__PURE__ */ defineApplet(LN, async (context, argv) 
   // treating it as an explicit destination a second time would turn `ln -s
   // /missing/foo` into `foo/foo` whenever `./foo` is a directory.
   const path =
-    name === undefined ? commandPath(context, linkName) : destinationPath(context, target, name);
-  context.budget.mutation();
+    name === undefined
+      ? commandPath(context, linkName)
+      : destinationPath(context, target, name, false);
   context.fileSystem.symlink(path, target, { replace: has("force") });
   return 0;
 });

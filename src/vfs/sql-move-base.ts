@@ -1,5 +1,11 @@
 import { VfsError } from "../core/errors.js";
-import { basename, descendantRange, dirname, isDescendant } from "../core/path.js";
+import {
+  basename,
+  descendantRange,
+  dirname,
+  isDescendant,
+  pathRequiresDirectory,
+} from "../core/path.js";
 import { codePointLength } from "../core/unicode.js";
 import { SqlMetadata } from "./sql-metadata-base.js";
 import { type EntryRow, firstRow, integerColumn, type SqlRow } from "./sql-model.js";
@@ -158,7 +164,10 @@ export abstract class SqlMove extends SqlMetadata {
     // Both ends name the link itself: renaming a link moves the link.
     const sourceAccess = this.resolveAccess(from, false, false);
     const source = sourceAccess.path;
-    const targetAccess = this.resolveAccess(to, true, false);
+    const requiresDirectory = pathRequiresDirectory(to);
+    if (requiresDirectory) sourceAccess.row ??= this.requireEntry(source, false);
+    const allowMissingDirectory = !requiresDirectory || sourceAccess.row?.kind === "directory";
+    const targetAccess = this.resolveAccess(to, allowMissingDirectory, false);
     const target = targetAccess.path;
     if (source === "/") throw new VfsError("EINVAL", "cannot move root", source);
     if (source === target) {

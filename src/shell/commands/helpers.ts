@@ -226,9 +226,10 @@ export function destinationPath(
   context: ShellCommandContext,
   source: string,
   targetValue: string,
+  follow = true,
 ): string {
   const target = commandPath(context, targetValue);
-  const stat = context.fileSystem.inspectWriteTarget(target);
+  const stat = context.fileSystem.inspectWriteTarget(target, follow);
   if (stat === null) return target;
   return stat.kind === "directory" ? `${target === "/" ? "" : target}/${basename(source)}` : target;
 }

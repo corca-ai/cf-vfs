@@ -196,7 +196,7 @@ export abstract class SqlWritePlan extends SqlRead {
   ): InlineWritePlan {
     const access =
       snapshot === undefined
-        ? this.resolveAccess(path, true)
+        ? this.resolveAccess(path)
         : { path: snapshot.path, row: snapshot, followed: [] };
     const normalized = access.path;
     const state =
