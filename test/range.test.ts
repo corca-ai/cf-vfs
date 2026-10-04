@@ -2,6 +2,8 @@ import { expect, it } from "vitest";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import { byteRangeBounds, validateByteRange } from "../src/vfs/range.js";
 import type { ByteRange } from "../src/vfs/types.js";
+import { INVALID_OWN_RANGE_CASES, OWN_RANGE_CASES } from "./helpers/boundary-cases.js";
+import { createTestFileSystem } from "./helpers/node-sql.js";
 
 it.each<{
   readonly name: string;
@@ -91,34 +93,23 @@ it.each([
   );
 });
 
-it("does not treat prototype properties as range fields", () => {
-  const range = Object.create({ suffix: 5 }) as unknown;
+it.each(OWN_RANGE_CASES)(
+  "selects $name consistently across local adapters",
+  async ({ make, expected }) => {
+    const range = make();
+    expect(byteRangeBounds(range, 12)).toEqual(expected);
+    const text = "abcdefghijkl".slice(expected.offset, expected.offset + expected.length);
+    const store = new MemoryOpaqueStore();
+    await store.putIfAbsent("body", "abcdefghijkl");
+    const stream = await store.getStream("body", range);
+    if (stream === null) throw new Error("missing body");
+    expect(await new Response(stream).text()).toBe(text);
+    const fs = createTestFileSystem();
+    await fs.writeFile("/body", "abcdefghijkl");
+    expect(await new Response(fs.readFile("/body", { range }).stream).text()).toBe(text);
+  },
+);
 
-  expect(() => validateByteRange(range)).toThrowError(
-    expect.objectContaining({
-      code: "EINVAL",
-      message: "byte range must use offset/length or suffix",
-    }),
-  );
-});
-
-it("ignores inherited suffixes when selecting an own offset range", () => {
-  const range = Object.assign(Object.create({ suffix: 5 }), { offset: 2 });
-  expect(byteRangeBounds(range, 12)).toEqual({ offset: 2, length: 10 });
-});
-
-it("rejects non-enumerable invalid range fields", () => {
-  const range = Object.defineProperty({ offset: 0 }, "offset", { value: -1 });
-  expect(() => byteRangeBounds(range, 12)).toThrowError(
-    expect.objectContaining({ code: "EINVAL" }),
-  );
-});
-
-it("selects the same own range fields in the in-memory opaque store", async () => {
-  const store = new MemoryOpaqueStore();
-  await store.putIfAbsent("body", "abcdefghijkl");
-  const range = Object.assign(Object.create({ suffix: 5 }), { offset: 2 });
-  const stream = await store.getStream("body", range);
-  if (stream === null) throw new Error("missing body");
-  expect(await new Response(stream).text()).toBe("cdefghijkl");
+it.each(INVALID_OWN_RANGE_CASES)("rejects $name", ({ make }) => {
+  expect(() => validateByteRange(make())).toThrowError(expect.objectContaining({ code: "EINVAL" }));
 });

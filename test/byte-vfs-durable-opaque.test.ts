@@ -5,6 +5,7 @@ import { R2OpaqueStore } from "../src/storage/r2.js";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
 import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
 import { readAllBytes } from "../src/vfs/streams.js";
+import { OWN_RANGE_CASES } from "./helpers/boundary-cases.js";
 import type { TestWorkspaceVfs } from "./worker.js";
 
 function workspace(name: string): DurableObjectStub<TestWorkspaceVfs> {
@@ -417,14 +418,16 @@ it("persists failed GC backoff and lets a later alarm finish the retry", async (
   });
 });
 
-it("reads only own byte-range fields through the R2 binding", async () => {
+it.each(OWN_RANGE_CASES)("reads $name through the real R2 binding", async ({ make, expected }) => {
   const key = `range-${crypto.randomUUID()}`;
   try {
     await env.VFS_TEST_BUCKET.put(key, "abcdefghijkl");
-    const range = Object.assign(Object.create({ suffix: 5 }), { offset: 2 });
+    const range = make();
     const stream = await new R2OpaqueStore(env.VFS_TEST_BUCKET).getStream(key, range);
     if (stream === null) throw new Error("missing range body");
-    expect(new TextDecoder().decode(await readAllBytes(stream, 12))).toBe("cdefghijkl");
+    expect(new TextDecoder().decode(await readAllBytes(stream, 12))).toBe(
+      "abcdefghijkl".slice(expected.offset, expected.offset + expected.length),
+    );
   } finally {
     await env.VFS_TEST_BUCKET.delete(key);
   }

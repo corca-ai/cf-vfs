@@ -251,3 +251,47 @@ it("publishes pending edits at a moved document's new path", async () => {
   await published;
   expect(await stored(storage, "/dest")).toBe("edited");
 });
+
+it("retains only the source publication when replacing an open dirty destination", async () => {
+  vi.useFakeTimers();
+  const { documents, storage, nextMutation, notices } = room();
+  await storage.writeFile("/source", "source");
+  await storage.writeFile("/dest", "destination");
+  const source = await documents.open("/source");
+  const destination = await documents.open("/dest");
+  documents.applyClientText("/source", source.version(), "source edited");
+  documents.applyClientText("/dest", destination.version(), "destination edited");
+  await storage.move("/source", "/dest", { replace: true });
+  expect(documents.get("/dest")).toBe(source);
+  expect(documents.openPaths()).toEqual(["/dest"]);
+  expect(vi.getTimerCount()).toBe(1);
+  const published = nextMutation("/dest");
+  await vi.runOnlyPendingTimersAsync();
+  await published;
+  expect(await stored(storage, "/dest")).toBe("source edited");
+  expect(notices).toContainEqual({ path: "/dest", kind: "gone" });
+  expect(notices).toContainEqual({ path: "/source", kind: "moved", to: "/dest" });
+});
+
+it.each(["close", "remove", "dispose"])("cancels pending publication on %s", async (action) => {
+  vi.useFakeTimers();
+  const { documents, storage, notices } = room();
+  await storage.writeFile("/doc", "stored");
+  const document = await documents.open("/doc");
+  documents.applyClientText("/doc", document.version(), "pending");
+  if (action === "close") documents.close("/./doc");
+  else if (action === "remove") await storage.remove("/doc");
+  else documents.dispose();
+  expect(documents.openPaths()).toEqual([]);
+  expect(vi.getTimerCount()).toBe(0);
+  await vi.runOnlyPendingTimersAsync();
+  expect(notices.some((notice) => notice.kind === "error")).toBe(false);
+  if (action !== "remove") expect(await stored(storage, "/doc")).toBe("stored");
+});
+
+it("shares the registry document across equivalent path spellings", async () => {
+  const { documents, storage } = room();
+  await storage.writeFile("/doc", "stored");
+  expect(await documents.open("/./doc")).toBe(await documents.open("/doc"));
+  expect(documents.openPaths()).toEqual(["/doc"]);
+});
