@@ -434,6 +434,25 @@ core is recorded from the already-pinned BusyBox 1.37.0 image in
 oracle image. These suites pass argv directly to their oracle rather than
 making an oracle shell reinterpret the language program.
 
+Normal tests (including CI) load recorded JSON answers and execute only the
+cf-vfs implementation. They never launch real jq or Docker. Run
+`npm run test:jq-fixtures:regenerate` explicitly to record jq's stdout, stderr,
+and exit status, or `npm run test:jq-fixtures:check` to verify the committed
+answers without changing them. Both commands execute the fixture's immutable
+image digest, not its descriptive tag, and require Docker. Review fixture diffs
+against the oracle; do not edit expected outputs to match the implementation.
+Successful outputs and statuses match exactly. Error cases require the same
+status/output and a nonempty diagnostic; diagnostic wording and source
+locations are profile-specific. Numeric lexical differences remain declared
+in the divergence registry, including numbers produced by `tonumber`.
+
+`test/helpers/boundary-cases.ts` catalogs own/inherited/non-enumerable byte-range
+fields, normalized trailing-slash paths, and recursive AWK syntax with shallow
+valid controls. The range cases run through SQLite, the memory opaque store,
+and the real R2 binding; namespace cases run through shared Node/workerd
+conformance. Prototype/descriptor cases execute inside each runtime because
+RPC serialization does not preserve JavaScript prototypes or descriptors.
+
 `test/performance-guards.test.ts` asserts counted work rather than elapsed time:
 output slab batching, SQL statement and row counts for the common no-opaque
 path, set-based traversal, and the fact that resolving a registered applet

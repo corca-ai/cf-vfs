@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { MemoryOpaqueStore } from "../src/testing/opaque-store.js";
+import { DIRECTORY_ASSERTION_PATHS } from "./helpers/boundary-cases.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 
 it.each(["write", "touch", "symlink"])(
@@ -16,9 +17,9 @@ it.each(["write", "touch", "symlink"])(
   },
 );
 
-it("refuses a missing directory assertion for an opaque reservation", async () => {
+it.each(DIRECTORY_ASSERTION_PATHS)("refuses an opaque reservation at %s", async (path) => {
   const fs = createTestFileSystem({ opaqueStore: new MemoryOpaqueStore() });
-  await expect(fs.beginOpaqueUpload("/missing/")).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(fs.beginOpaqueUpload(path)).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it.each(["copy", "move"])(

@@ -16,6 +16,16 @@ included.
 
 ## [Unreleased]
 
+### Changed
+
+- Development checks share boundary-case catalogs and record jq failure answers
+  from its pinned image. Local performance comparison freshly builds a baseline
+  commit and alternates paired measurements with reproducible metadata.
+  ([#122](https://github.com/corca-ai/cf-vfs/pull/122))
+- The demo uses its document registry as the single owner of open documents;
+  moved or removed documents reconcile publication timers from registry state.
+  ([#122](https://github.com/corca-ai/cf-vfs/pull/122))
+
 ### Fixed
 
 - File creation, uploads, copy, and move now respect missing-directory assertions

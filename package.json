@@ -201,7 +201,11 @@
     "test:awk-fixtures:regenerate": "node scripts/regenerate-awk-fixtures.mjs",
     "test:utility-fixtures:regenerate": "node scripts/regenerate-utility-fixtures.mjs",
     "test:bundle-budgets:record": "npm run build && node test/check-tree-shaking.mjs --record",
-    "check": "npm run typegen && npm run build && npm run typecheck && npm run lint && npm run knip && npm test && npm run test:limits && npm run test:quality && npm run test:docs && npm run test:package && npm run test:tree-shaking"
+    "check": "npm run typegen && npm run build && npm run typecheck && npm run lint && npm run knip && npm test && npm run test:bench-protocol && npm run test:limits && npm run test:quality && npm run test:docs && npm run test:package && npm run test:tree-shaking",
+    "test:jq-fixtures:regenerate": "node scripts/regenerate-jq-fixtures.mjs",
+    "test:jq-fixtures:check": "node scripts/regenerate-jq-fixtures.mjs --check",
+    "bench:compare": "node bench/compare.mjs",
+    "test:bench-protocol": "node test/check-performance-comparison.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.5",

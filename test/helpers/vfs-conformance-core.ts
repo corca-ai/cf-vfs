@@ -1,5 +1,6 @@
 import { expect } from "vitest";
 import { readAllBytes } from "../../src/vfs/streams.js";
+import { DIRECTORY_ASSERTION_PATHS } from "./boundary-cases.js";
 import {
   conformanceCase,
   gatedBody,
@@ -361,16 +362,18 @@ export const CORE_CONFORMANCE: readonly VfsConformanceCase[] = [
     "conforms: refuses file creation through a missing directory assertion",
     async (factory) => {
       const fs = await factory();
-      const operations = [
-        () => fs.writeFile("/missing/", "data"),
-        () => fs.appendFile("/missing/", "data"),
-        () => fs.writeFiles([{ path: "/missing/", body: "data" }]),
-        () => fs.touch("/missing/"),
-        () => fs.symlink("/missing/", "/target"),
-      ];
-      for (const operation of operations) {
-        expect(await refusal(async () => operation())).toMatchObject({ code: "ENOENT" });
-        expect(await refusal(async () => fs.lstat("/missing"))).toMatchObject({ code: "ENOENT" });
+      for (const path of DIRECTORY_ASSERTION_PATHS) {
+        const operations = [
+          () => fs.writeFile(path, "data"),
+          () => fs.appendFile(path, "data"),
+          () => fs.writeFiles([{ path, body: "data" }]),
+          () => fs.touch(path),
+          () => fs.symlink(path, "/target"),
+        ];
+        for (const operation of operations) {
+          expect(await refusal(async () => operation())).toMatchObject({ code: "ENOENT" });
+          expect(await refusal(async () => fs.lstat("/missing"))).toMatchObject({ code: "ENOENT" });
+        }
       }
       expect((await fs.mkdir("/missing/")).kind).toBe("directory");
     },
@@ -380,12 +383,11 @@ export const CORE_CONFORMANCE: readonly VfsConformanceCase[] = [
     async (factory) => {
       const fs = await factory();
       await fs.writeFile("/file", "data");
-      expect(await refusal(async () => fs.copy("/file", "/copied/"))).toMatchObject({
-        code: "ENOENT",
-      });
-      expect(await refusal(async () => fs.move("/file", "/moved/"))).toMatchObject({
-        code: "ENOENT",
-      });
+      for (const path of DIRECTORY_ASSERTION_PATHS) {
+        expect(await refusal(async () => fs.copy("/file", path))).toMatchObject({ code: "ENOENT" });
+        expect(await refusal(async () => fs.move("/file", path))).toMatchObject({ code: "ENOENT" });
+        expect(await refusal(async () => fs.lstat("/missing"))).toMatchObject({ code: "ENOENT" });
+      }
       expect(await readText(fs, "/file")).toBe("data");
       await fs.mkdir("/directory");
       await fs.copy("/directory", "/copied/", { recursive: true });

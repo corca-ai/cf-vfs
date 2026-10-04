@@ -59,6 +59,36 @@ Cancellation, concurrent shells, R2 operation and range behavior, and memory
 stay in `bench/`, where a broad ceiling and a checked-in baseline carry the
 interpretation. Nothing counts JavaScript allocation directly.
 
+## Comparing a change locally
+
+```sh
+npm run bench:compare -- --base origin/main --output /tmp/cf-vfs-comparison.json
+```
+
+The command resolves the baseline to a commit, archives it into a temporary
+folder, and freshly compiles both baseline and current working tree with the
+installed TypeScript compiler. It never trusts an existing `dist`. Separate
+filesystems execute identical text and UTF-8 workloads in one Node process,
+alternating baseline/candidate and candidate/baseline order. Defaults are ten
+warmup pairs and forty measured pairs; `--warmups` and `--samples` override them.
+Temporary baseline files are removed on completion or failure.
+
+The report records commit identities, compiled JavaScript and lockfile hashes,
+the working-tree diff hash, compiler and Node versions, machine, protocol hash,
+command, raw paired durations, medians,
+p10/p90, and a deterministic bootstrap interval for paired timing ratios.
+A ratio above one means the candidate was slower. Timing is advisory: an
+interval near one or a small difference needs repeated runs, preferably an
+unchanged-code control (`--base HEAD` on a clean tree), before calling it a
+regression. Module layout, JIT, GC, and background work can affect even identical code. Bootstrap intervals
+describe the sampled run, not all machine or process variability.
+
+Each sample checks expected output and identical SQL statements/returned rows;
+a structural difference fails immediately and requires an explicit review of
+the workload's cost model. `npm run test:bench-protocol` checks pairing,
+statistics, and cost rejection in the normal verification gate. Existing
+`npm run bench:check` Node/workerd cost gates remain required independently.
+
 ## Stream and storage cost model
 
 Pipeline edges carry `Uint8Array` chunks through a small raw

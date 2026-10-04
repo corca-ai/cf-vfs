@@ -7,6 +7,7 @@ import {
   textEdits,
 } from "../src/collab/index.js";
 import { VfsError } from "../src/core/errors.js";
+import { normalizePath } from "../src/core/path.js";
 import type { VfsEvent } from "../src/vfs/events.js";
 import { readAllBytes } from "../src/vfs/streams.js";
 
@@ -71,7 +72,6 @@ export interface DocumentNotice {
  */
 export class DemoDocuments {
   readonly registry = new DocumentRegistry();
-  readonly #documents = new Map<string, DemoDocument>();
   readonly #timers = new Map<string, ReturnType<typeof setTimeout>>();
   #fileSystem: CollaborativeFileSystem | undefined;
   #notify: ((notice: DocumentNotice) => void) | undefined;
@@ -83,7 +83,8 @@ export class DemoDocuments {
   }
 
   get(path: string): DemoDocument | undefined {
-    return this.#documents.get(path);
+    const document = this.registry.get(path)?.document;
+    return document instanceof DemoDocument ? document : undefined;
   }
 
   /**
@@ -94,30 +95,26 @@ export class DemoDocuments {
    * between the two is overwritten instead of refused.
    */
   async open(path: string): Promise<DemoDocument> {
-    const existing = this.#documents.get(path);
+    const existing = this.get(path);
     if (existing !== undefined) return existing;
     const fileSystem = this.#require();
     const read = fileSystem.readFile(path);
     const bytes = await readAllBytes(read.stream, MAX_DOCUMENT_BYTES);
     // Another open may have finished while this read was awaiting its stream.
-    const opened = this.#documents.get(path);
+    const opened = this.get(path);
     if (opened !== undefined) return opened;
     const document = new DemoDocument(decode(bytes, path));
-    this.#documents.set(path, document);
     this.registry.open(path, document, read.stat.mutationToken);
     return document;
   }
 
   close(path: string): void {
-    this.#documents.delete(path);
     this.registry.close(path);
-    const timer = this.#timers.get(path);
-    if (timer !== undefined) clearTimeout(timer);
-    this.#timers.delete(path);
+    this.#cancelPublish(normalizePath(path));
   }
 
   openPaths(): string[] {
-    return [...this.#documents.keys()];
+    return this.registry.paths();
   }
 
   /**
@@ -128,7 +125,7 @@ export class DemoDocuments {
    * pointing at a closed database.
    */
   dispose(): void {
-    for (const path of [...this.#documents.keys()]) this.close(path);
+    for (const path of this.registry.paths()) this.close(path);
   }
 
   /**
@@ -139,7 +136,7 @@ export class DemoDocuments {
    * stale writer is told so rather than allowed to overwrite, and resynchronizes.
    */
   applyClientText(path: string, base: number, text: string): "applied" | "stale" {
-    const document = this.#documents.get(path);
+    const document = this.get(path);
     if (document === undefined) throw new VfsError("ENOENT", "document is not open", path);
     if (new TextEncoder().encode(text).byteLength > MAX_DOCUMENT_BYTES) {
       throw new VfsError("EFBIG", "document is larger than this room allows", path);
@@ -160,7 +157,7 @@ export class DemoDocuments {
    * document ahead of storage and nothing else would publish it.
    */
   noticeShellWrites(): void {
-    for (const path of this.#documents.keys()) {
+    for (const path of this.registry.paths()) {
       const open = this.registry.get(path);
       if (open?.dirty !== true) continue;
       this.#notify?.({ path, kind: "changed" });
@@ -169,8 +166,8 @@ export class DemoDocuments {
   }
 
   schedulePublish(path: string): void {
-    const existing = this.#timers.get(path);
-    if (existing !== undefined) clearTimeout(existing);
+    path = normalizePath(path);
+    this.#cancelPublish(path);
     this.#timers.set(
       path,
       setTimeout(() => {
@@ -204,41 +201,31 @@ export class DemoDocuments {
   /** Follows the namespace, so a `mv` or `rm` in the terminal is not a stale tab. */
   observe(event: VfsEvent): void {
     if (event.type !== "vfs.mutation") return;
-    const before = new Set(this.#documents.keys());
+    if (event.op !== "move" && event.op !== "remove") return;
+    const before = this.registry.paths().map((path) => ({ path, document: this.get(path) }));
     this.registry.observe(event);
-    if (event.op === "move" && event.subtree?.to !== undefined) {
-      const { root, to } = event.subtree;
-      for (const path of before) {
-        if (path !== to && !path.startsWith(`${to}/`)) continue;
-        this.#documents.delete(path);
-        const timer = this.#timers.get(path);
-        if (timer !== undefined) clearTimeout(timer);
-        this.#timers.delete(path);
-        this.#notify?.({ path, kind: "gone" });
+    const after = new Map(this.registry.paths().map((path) => [this.get(path), path]));
+    const changes = before.flatMap(({ path, document }) => {
+      const to = after.get(document);
+      return to === path ? [] : [{ path, to, pending: this.#cancelPublish(path) }];
+    });
+    // Cancel every old timer before arming destinations: a replaced document
+    // and a moved source can share the same destination path.
+    for (const { path, to, pending } of changes) {
+      if (to === undefined) this.#notify?.({ path, kind: "gone" });
+      else {
+        if (pending) this.schedulePublish(to);
+        this.#notify?.({ path, kind: "moved", to });
       }
-      for (const path of before) {
-        if (path !== root && !path.startsWith(`${root}/`)) continue;
-        const moved = `${to}${path.slice(root.length)}`;
-        const document = this.#documents.get(path);
-        if (document === undefined) continue;
-        const pending = this.#timers.has(path);
-        const timer = this.#timers.get(path);
-        if (timer !== undefined) clearTimeout(timer);
-        this.#timers.delete(path);
-        this.#documents.delete(path);
-        this.#documents.set(moved, document);
-        if (pending) this.schedulePublish(moved);
-        this.#notify?.({ path, kind: "moved", to: moved });
-      }
-      return;
     }
-    if (event.op !== "remove") return;
-    const root = event.subtree?.root ?? event.path;
-    for (const path of before) {
-      if (path !== root && !path.startsWith(`${root}/`)) continue;
-      this.close(path);
-      this.#notify?.({ path, kind: "gone" });
-    }
+  }
+
+  #cancelPublish(path: string): boolean {
+    const timer = this.#timers.get(path);
+    if (timer === undefined) return false;
+    clearTimeout(timer);
+    this.#timers.delete(path);
+    return true;
   }
 
   #require(): CollaborativeFileSystem {
