@@ -1,0 +1,126 @@
+--- a/src/vfs/sql-content-base.ts
++++ b/src/vfs/sql-content-base.ts
+@@ -68,6 +68,23 @@
+ }
+ 
+ export abstract class SqlContent extends SqlMutation {
++  private batchParents: Map<string, EntryRow> | undefined;
++
++  /** Reuse directory rows only within an atomic file-write batch. */
++  protected withBatchParents<T>(callback: () => T): T {
++    if (this.batchParents !== undefined) return callback();
++    this.batchParents = new Map();
++    try {
++      return callback();
++    } finally {
++      this.batchParents = undefined;
++    }
++  }
++
++  private creationParent(path: string): EntryRow | null {
++    return this.batchParents?.get(path) ?? this.oneResolved(path);
++  }
++
+   protected createDirectory(
+     path: string,
+     now: number,
+@@ -134,11 +151,11 @@
+     let current = dirname(path);
+     // The walk resolves each candidate; keeping the row it stopped on spares
+     // `requireDirectory` from resolving that same path a second time.
+-    let parent = this.oneResolved(current);
++    let parent = this.creationParent(current);
+     while (parent === null) {
+       missing.unshift(current);
+       current = dirname(current);
+-      parent = this.oneResolved(current);
++      parent = this.creationParent(current);
+     }
+     // A link is not a parent, even one that resolves to a directory. The child
+     // is stored naming what stands here, and a link can be repointed or removed
+@@ -150,6 +167,7 @@
+       throw new VfsError("ENOTDIR", "not a directory", current);
+     }
+     const existingParent = this.requireDirectory(current, parent);
++    this.batchParents?.set(current, existingParent);
+     if (missing.length > 0 && !recursive) {
+       throw new VfsError("ENOENT", "parent directory does not exist", dirname(path));
+     }
+@@ -193,6 +211,7 @@
+     let parent = parents.existing;
+     for (const missingParent of parents.missing) {
+       parent = this.createDirectory(missingParent, now, DIRECTORY_MODE, access, true, parent);
++      this.batchParents?.set(missingParent, parent);
+     }
+     return parent;
+   }
+--- a/src/vfs/sql-write-plan-base.ts
++++ b/src/vfs/sql-write-plan-base.ts
+@@ -474,36 +474,38 @@
+     let queuedGarbage = false;
+     const results = this.useBufferedSet(collected, () =>
+       this.transaction(() =>
+-        this.withDeferredUsage(() => {
+-          const before = this.usage();
+-          // Headroom is a property of the database rather than of the set, so it
+-          // is weighed before the batch writes anything as well as after. The
+-          // quotas can only be weighed after, because what the set costs is not
+-          // known until every entry has decided whether it is writing at all.
+-          this.assertCapacityFrom(before, 0, 0);
+-          const now = this.now();
+-          const written: WriteResult[] = [];
+-          for (const item of collected) {
+-            const outcome = this.commitInlineWrite(
+-              item.plan,
+-              item.lease.chunks,
+-              item.lease.sizeBytes,
+-              item.digest,
+-              now,
+-              posix,
+-              true,
++        this.withBatchParents(() =>
++          this.withDeferredUsage(() => {
++            const before = this.usage();
++            // Headroom is a property of the database rather than of the set, so it
++            // is weighed before the batch writes anything as well as after. The
++            // quotas can only be weighed after, because what the set costs is not
++            // known until every entry has decided whether it is writing at all.
++            this.assertCapacityFrom(before, 0, 0);
++            const now = this.now();
++            const written: WriteResult[] = [];
++            for (const item of collected) {
++              const outcome = this.commitInlineWrite(
++                item.plan,
++                item.lease.chunks,
++                item.lease.sizeBytes,
++                item.digest,
++                now,
++                posix,
++                true,
++              );
++              if (outcome.queuedGarbage) queuedGarbage = true;
++              written.push(outcome.result);
++            }
++            const after = this.usage();
++            this.assertCapacityFrom(
++              before,
++              after.inlineBytes - before.inlineBytes,
++              after.entries - before.entries,
+             );
+-            if (outcome.queuedGarbage) queuedGarbage = true;
+-            written.push(outcome.result);
+-          }
+-          const after = this.usage();
+-          this.assertCapacityFrom(
+-            before,
+-            after.inlineBytes - before.inlineBytes,
+-            after.entries - before.entries,
+-          );
+-          return written;
+-        }),
++            return written;
++          }),
++        ),
+       ),
+     );
+     return { results, queuedGarbage };

@@ -1,0 +1,705 @@
+{
+  "method": "isolated processes, warmup per workload, alternating AB/BA",
+  "node": "v24.18.0",
+  "platform": "linux",
+  "results": [
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "before": {
+        "ms": {
+          "median": 31.56909300000001,
+          "p10": 31.368535,
+          "p90": 32.19575020000001
+        },
+        "sql": 3000,
+        "returnedRows": 3000,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 17.91217499999999,
+          "p10": 17.046136999999995,
+          "p90": 21.599211000000007
+        },
+        "sql": 1500,
+        "returnedRows": 1500,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.5675144498470891,
+        "p10": 0.5402448095925484,
+        "p90": 0.6661294901462081,
+        "ci95": [
+          0.5430128448733066,
+          0.611352562394602
+        ]
+      }
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "before": {
+        "ms": {
+          "median": 19.670226000000014,
+          "p10": 18.896273200000035,
+          "p90": 23.431823999999985
+        },
+        "sql": 1000,
+        "returnedRows": 1000,
+        "blobBytes": 1638400
+      },
+      "after": {
+        "ms": {
+          "median": 12.358717000000013,
+          "p10": 10.468220800000022,
+          "p90": 12.876780000000014
+        },
+        "sql": 600,
+        "returnedRows": 600,
+        "blobBytes": 1638400
+      },
+      "ratio": {
+        "median": 0.5889864613972478,
+        "p10": 0.48276250330852644,
+        "p90": 0.6738409736167261,
+        "ci95": [
+          0.5128684808513154,
+          0.6734903808425998
+        ]
+      }
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "before": {
+        "ms": {
+          "median": 11.77031599999998,
+          "p10": 10.74472280000001,
+          "p90": 12.660625400000015
+        },
+        "sql": 1600,
+        "returnedRows": 1000,
+        "blobBytes": 1638400
+      },
+      "after": {
+        "ms": {
+          "median": 7.433429999999987,
+          "p10": 7.151814000000013,
+          "p90": 8.4311462
+        },
+        "sql": 800,
+        "returnedRows": 600,
+        "blobBytes": 1638400
+      },
+      "ratio": {
+        "median": 0.6644666121528627,
+        "p10": 0.5845260508004112,
+        "p90": 0.7644017939018396,
+        "ci95": [
+          0.5966246983000254,
+          0.7557543902273745
+        ]
+      }
+    }
+  ],
+  "raw": [
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 31.56909300000001,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 19.62027599999999,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 11.022225000000049,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 17.142422999999994,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 12.447276000000016,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 7.460769999999968,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 19.263655999999997,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 10.871724,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 7.1393900000000485,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 31.517112999999995,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 21.197879,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 11.78037599999999,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 32.06957400000002,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 21.671290999999997,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 11.92429599999997,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 17.91217499999999,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 12.764097000000021,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 8.228722000000005,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 27.31594700000001,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 10.56102500000003,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 8.050261000000035,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 31.637642999999997,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 29.146839999999997,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 10.65195399999999,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 31.936453999999998,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 19.670226000000014,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 12.35954700000002,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 17.503574,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 13.247708000000017,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 7.374010999999996,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 18.043205,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 12.358717000000013,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 7.433429999999987,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 31.257262999999995,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 18.751345999999984,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 13.864938999999993,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 32.700455000000005,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 22.00306999999998,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 11.77031599999998,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 20.170027000000005,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 11.443225999999981,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 7.355790000000013,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 16.66099299999999,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 10.097003999999998,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 9.240842999999984,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 31.484983999999983,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 19.655078000000003,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 11.565634999999986,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 31.396353000000005,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 18.93250500000005,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 10.767915000000016,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 17.817884000000006,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 12.784048000000013,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 7.154920000000004,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 8
+    }
+  ]
+}

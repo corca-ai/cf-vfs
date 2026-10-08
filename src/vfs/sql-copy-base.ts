@@ -18,6 +18,9 @@ import {
 import type { CopyOptions, CopyResult, SubtreeSummary } from "./types.js";
 
 interface CopyPlan {
+  readonly preservedLinkIdentity: number | null;
+  readonly preservedLinkCount: number;
+  readonly extraInlineBytes: number;
   readonly destination: EntryRow | null;
   readonly now: number;
   readonly targetParent: EntryRow | undefined;
@@ -89,6 +92,7 @@ export abstract class SqlCopy extends SqlMove {
       state,
     );
     this.insertCopyRows(source, target, plan, posix);
+    this.noteDirectoryChange(sourceEntry);
     return this.finishCopy(source, target, plan);
   }
 
@@ -134,6 +138,12 @@ export abstract class SqlCopy extends SqlMove {
   ): CopyPlan {
     const parents = this.copyCreationParents(target, targetFollowed, options, posix);
     const destination = targetResolved ?? this.oneEntry(target);
+    if (
+      destination !== null &&
+      (destination.linkIdentity ?? destination.id) === (sourceEntry.linkIdentity ?? sourceEntry.id)
+    ) {
+      throw new VfsError("EINVAL", "source and destination share an inode", target);
+    }
     this.assertDestinationReplaceable(destination, target, options.replace ?? false);
     const now = this.now();
     const preparedParent = this.createCopyParent(
@@ -152,13 +162,20 @@ export abstract class SqlCopy extends SqlMove {
       targetParent === undefined ? { uid: 0, gid: 0 } : this.creationOwner(targetParent, posix);
     const sourceRange = descendantRange(source);
     const summary = this.aggregateSubtree(source);
-    const replacedInlineBytes = destination?.contentClass === "inline" ? destination.sizeBytes : 0;
+    const {
+      preserve,
+      preservedLinkIdentity,
+      preservedLinkCount,
+      extraInlineBytes,
+      replacedInlineBytes,
+    } = this.copyLinks(sourceEntry, destination, summary);
     this.assertCapacity(
-      summary.inlineBytes - replacedInlineBytes,
+      summary.inlineBytes - replacedInlineBytes + extraInlineBytes,
       summary.entries - (destination === null ? 0 : 1),
       target,
     );
-    if (destination !== null) state.queued += this.removeExact(target, now, false);
+    if (destination !== null)
+      state.queued += this.removeExact(target, now, false, destination, preserve);
     const changeSeq = this.nextChangeSeq();
     // Copying one file over another keeps the destination's identity, the
     // way `cp` keeps its inode: it opens the destination and writes through
@@ -179,6 +196,9 @@ export abstract class SqlCopy extends SqlMove {
     // the general rule collapses to one past what was there.
     const rootRevision = (destination?.revision ?? 0) + 1;
     return {
+      preservedLinkIdentity,
+      preservedLinkCount,
+      extraInlineBytes,
       destination,
       now,
       targetParent,
@@ -191,6 +211,20 @@ export abstract class SqlCopy extends SqlMove {
     };
   }
 
+  private copyLinks(source: EntryRow, destination: EntryRow | null, summary: SubtreeSummary) {
+    const replacedInlineBytes = destination?.contentClass === "inline" ? destination.sizeBytes : 0;
+    const preserve = destination?.kind === "file" && source.kind === "file";
+    const preservedLinkIdentity = preserve ? (destination.linkIdentity ?? null) : null;
+    const preservedLinkCount = preserve ? (destination.linkCount ?? 1) : 1;
+    const extraInlineBytes = (summary.inlineBytes - replacedInlineBytes) * (preservedLinkCount - 1);
+    return {
+      preserve,
+      preservedLinkIdentity,
+      preservedLinkCount,
+      extraInlineBytes,
+      replacedInlineBytes,
+    };
+  }
   private copyCreationParents(
     target: string,
     followed: readonly string[],
@@ -237,7 +271,7 @@ export abstract class SqlCopy extends SqlMove {
       `INSERT INTO vfs_entries (
          id, path, parent_path, name, kind, content_class, opaque_object_id,
          link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
-         mutation_version
+         mutation_version, link_identity, link_count
        )
        SELECT
          ? + ROW_NUMBER() OVER (ORDER BY e.path),
@@ -251,7 +285,7 @@ export abstract class SqlCopy extends SqlMove {
          COALESCE((
            SELECT version + 1 FROM vfs_path_tombstones
            WHERE path = ? || substr(e.path, ?)
-         ), 1)
+         ), 1), ?, CASE WHEN e.kind = 'directory' THEN e.link_count ELSE ? END
        FROM vfs_entries e
        WHERE e.path = ? OR (e.path >= ? AND e.path < ?)`,
       plan.inoBase,
@@ -269,6 +303,8 @@ export abstract class SqlCopy extends SqlMove {
       plan.rootRevision,
       target,
       codePointLength(source) + 1,
+      plan.preservedLinkIdentity,
+      plan.preservedLinkCount,
       source,
       plan.sourceRange.lower,
       plan.sourceRange.upper,
@@ -287,11 +323,11 @@ export abstract class SqlCopy extends SqlMove {
     this.sql.exec(
       `WITH RECURSIVE copied (
            path, parent_path, name, kind, content_class, opaque_object_id,
-           link_target, size_bytes, copied_mode, copied_uid, copied_gid
+           link_target, size_bytes, link_count, copied_mode, copied_uid, copied_gid
          ) AS (
            SELECT
              e.path, e.parent_path, e.name, e.kind, e.content_class,
-             e.opaque_object_id, e.link_target, e.size_bytes,
+             e.opaque_object_id, e.link_target, e.size_bytes, e.link_count,
              CASE WHEN e.kind = 'symlink' THEN e.mode ELSE
                (e.mode & ?) |
                CASE WHEN e.kind = 'directory' AND (? & ?) <> 0 THEN ? ELSE 0 END
@@ -303,7 +339,7 @@ export abstract class SqlCopy extends SqlMove {
            UNION ALL
            SELECT
              e.path, e.parent_path, e.name, e.kind, e.content_class,
-             e.opaque_object_id, e.link_target, e.size_bytes,
+             e.opaque_object_id, e.link_target, e.size_bytes, e.link_count,
              CASE WHEN e.kind = 'symlink' THEN e.mode ELSE
                (e.mode & ?) |
                CASE
@@ -322,7 +358,7 @@ export abstract class SqlCopy extends SqlMove {
          INSERT INTO vfs_entries (
            id, path, parent_path, name, kind, content_class, opaque_object_id,
            link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
-           mutation_version
+           mutation_version, link_identity, link_count
          )
          SELECT
            ? + ROW_NUMBER() OVER (ORDER BY copied.path),
@@ -337,7 +373,7 @@ export abstract class SqlCopy extends SqlMove {
            COALESCE((
              SELECT version + 1 FROM vfs_path_tombstones
              WHERE path = ? || substr(copied.path, ?)
-           ), 1)
+           ), 1), CASE WHEN copied.path = ? THEN ? ELSE NULL END, CASE WHEN copied.kind = 'directory' THEN copied.link_count WHEN copied.path = ? THEN ? ELSE 1 END
          FROM copied`,
       ~posix.umask,
       plan.targetParent?.mode ?? 0,
@@ -367,6 +403,10 @@ export abstract class SqlCopy extends SqlMove {
       plan.rootRevision,
       target,
       codePointLength(source) + 1,
+      source,
+      plan.preservedLinkIdentity,
+      source,
+      plan.preservedLinkCount,
     );
   }
 
@@ -396,7 +436,7 @@ export abstract class SqlCopy extends SqlMove {
     // predict the end state and subtract what the removal will give back;
     // this runs after, and `removeExact` has already applied that half.
     // Reusing the net delta here would subtract the destination twice.
-    this.updateUsage(plan.summary.inlineBytes, plan.summary.entries);
+    this.updateUsage(plan.summary.inlineBytes + plan.extraInlineBytes, plan.summary.entries);
     // A copy publishes entries at the destination and leaves the source
     // alone, so what a consumer has to reflect is a create at `to`.
     this.recordMutation(

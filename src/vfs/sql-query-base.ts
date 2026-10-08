@@ -4,7 +4,9 @@ import {
   depthFrom,
   descendantRange,
   dirname,
+  hasDotSegments,
   normalizePath,
+  normalizeResolutionPath,
   pathRequiresDirectory,
 } from "../core/path.js";
 import { utf8ByteLength } from "../core/unicode.js";
@@ -86,7 +88,8 @@ export abstract class SqlQuery extends SqlContent {
       this.sql.exec<SqlRow>(
         `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e
-       WHERE e.id = ?`,
+       WHERE (e.id = ? AND e.link_identity IS NULL) OR e.link_identity = ? ORDER BY e.id LIMIT 1`,
+        ino,
         ino,
       ),
     );
@@ -117,7 +120,8 @@ export abstract class SqlQuery extends SqlContent {
     follow: boolean,
   ): { path: string; row: EntryRow | null; followed: string[] } {
     const requiresDirectory = pathRequiresDirectory(path);
-    const resolved = this.resolveEntry(normalizePath(path), follow || requiresDirectory);
+    const normalized = hasDotSegments(path) ? normalizeResolutionPath(path) : normalizePath(path);
+    const resolved = this.resolveEntry(normalized, follow || requiresDirectory);
     if (requiresDirectory && resolved.row !== null && resolved.row.kind !== "directory") {
       throw new VfsError("ENOTDIR", "not a directory", resolved.path);
     }
@@ -125,8 +129,15 @@ export abstract class SqlQuery extends SqlContent {
   }
 
   protected statEntry(path: string, follow: boolean, posix?: PosixAccessContext): VfsStat {
-    const access = this.accessEntry(path, follow);
-    this.assertTraverse(access.path, access.followed, posix);
+    const checked =
+      posix !== undefined &&
+      !pathRequiresDirectory(path) &&
+      !hasDotSegments(path) &&
+      this.links() === 0
+        ? this.plainPosixEntry(path, posix)
+        : null;
+    const access = checked ?? this.accessEntry(path, follow);
+    if (checked === null) this.assertTraverse(access.path, access.followed, posix);
     if (access.row === null) {
       throw new VfsError("ENOENT", "no such file or directory", access.path);
     }
@@ -142,6 +153,66 @@ export abstract class SqlQuery extends SqlContent {
       ...(object.contentType === null ? {} : { contentType: object.contentType }),
       ...(object.verifiedSha256 === null ? {} : { verifiedSha256: object.verifiedSha256 }),
     };
+  }
+
+  private plainPosixEntry(path: string, posix: PosixAccessContext) {
+    const normalized = normalizePath(path);
+    const ancestors: string[] = [];
+    if (normalized !== "/") {
+      for (let parent = dirname(normalized); ; parent = dirname(parent)) {
+        ancestors.push(parent);
+        if (parent === "/") break;
+      }
+    }
+    // Return one envelope while SQLite still checks the same indexed ancestors.
+    // Combining statements saves boundary work, not billed rows.
+    const row = this.sql
+      .exec<SqlRow>(
+        `SELECT ${ENTRY_COLUMNS},
+          (SELECT json_group_array(json_array(path,kind,mode,uid,gid))
+             FROM vfs_entries INDEXED BY vfs_entries_path
+             WHERE path IN (SELECT value FROM json_each(?))) AS parents
+       FROM (SELECT 1) seed
+       LEFT JOIN vfs_entries e INDEXED BY vfs_entries_path ON e.path = ?`,
+        JSON.stringify(ancestors),
+        normalized,
+      )
+      .one();
+    const parents: unknown = JSON.parse(stringColumn(row, "parents"));
+    if (!Array.isArray(parents) || parents.length !== ancestors.length)
+      throw new VfsError("ENOENT", "an ancestor directory does not exist", normalized);
+    for (const parent of parents) this.checkPlainParent(parent, normalized, posix);
+    return {
+      path: normalized,
+      row: row["id"] === null ? null : parseEntry(row, this.mutationEpoch),
+      followed: [],
+    };
+  }
+
+  private checkPlainParent(value: unknown, path: string, posix: PosixAccessContext): void {
+    if (
+      !Array.isArray(value) ||
+      typeof value[0] !== "string" ||
+      typeof value[1] !== "string" ||
+      typeof value[2] !== "number" ||
+      typeof value[3] !== "number" ||
+      typeof value[4] !== "number"
+    )
+      throw new VfsError("EIO", "invalid ancestor metadata", path);
+    const parent = value[0],
+      kind = value[1],
+      mode = value[2],
+      uid = value[3],
+      gid = value[4];
+    if (![mode, uid, gid].every(Number.isSafeInteger))
+      throw new VfsError("EIO", "invalid ancestor metadata", path);
+    if (kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", parent);
+    this.assertPermission(
+      { path: parent, kind: "directory", mode, uid, gid },
+      posix,
+      EXECUTE_PERMISSION,
+      path,
+    );
   }
 
   getMutationToken(

@@ -1,0 +1,33 @@
+--- a/src/fs/file-handle.ts
++++ b/src/fs/file-handle.ts
+@@ -58,8 +58,7 @@
+         encoding !== "utf-8"
+       )
+         throw new VfsError("ENOTSUP", "unsupported encoding");
+-      const size = this.owner.stat(this.ino).size;
+-      const result = await this.owner.read(this.ino, this.cursor, Math.max(0, size - this.cursor));
++      const result = await this.owner.readRemaining(this.ino, this.cursor);
+       this.cursor += result.byteLength;
+       return encoding ? new TextDecoder().decode(result) : result;
+     });
+--- a/src/fs/sql-file-handles.ts
++++ b/src/fs/sql-file-handles.ts
+@@ -229,10 +229,17 @@
+     return this.port.maintenance();
+   }
+   stat(ino: number): FsStats {
+-    return new FsStats(this.port.stat(this.entry(ino)), this.entry(ino).linkCount ?? 1);
++    const entry = this.entry(ino);
++    return new FsStats(this.port.stat(entry), entry.linkCount ?? 1);
+   }
+   async read(ino: number, offset: number, length: number): Promise<Uint8Array> {
++    return this.readEntry(this.entry(ino), offset, length);
++  }
++  readRemaining(ino: number, offset: number): Promise<Uint8Array> {
+     const entry = this.entry(ino);
++    return this.readEntry(entry, offset, Math.max(0, entry.sizeBytes - offset));
++  }
++  private async readEntry(entry: EntryRow, offset: number, length: number): Promise<Uint8Array> {
+     const selected = Math.min(length, Math.max(0, entry.sizeBytes - offset));
+     if (selected === 0) return new Uint8Array();
+     if (entry.contentClass === "opaque") return this.readOpaque(entry, offset, selected);

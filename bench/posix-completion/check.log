@@ -1,0 +1,596 @@
+
+> @corca-ai/cf-vfs@0.4.1 check
+> npm run typegen && npm run build && npm run typecheck && npm run lint && npm run knip && npm test && npm run test:posix && npm run test:bench-protocol && npm run test:limits && npm run test:quality && npm run test:docs && npm run test:package && npm run test:tree-shaking
+
+
+> @corca-ai/cf-vfs@0.4.1 typegen
+> npm run typegen:test && npm run typegen:benchmark
+
+
+> @corca-ai/cf-vfs@0.4.1 typegen:test
+> wrangler types worker-configuration.d.ts --config wrangler.test.jsonc --env-interface VfsTestEnv --include-runtime false
+
+
+ ⛅️ wrangler 4.114.0 (update available 4.148.0)
+───────────────────────────────────────────────
+Generating project types...
+
+interface __BaseEnv_VfsTestEnv {
+	VFS_TEST_BUCKET: R2Bucket;
+	VFS_TEST: DurableObjectNamespace<import("./test/worker").TestWorkspaceVfs>;
+}
+declare namespace Cloudflare {
+	interface GlobalProps {
+		mainModule: typeof import("./test/worker");
+		durableNamespaces: "TestWorkspaceVfs";
+	}
+	interface Env extends __BaseEnv_VfsTestEnv {}
+}
+interface VfsTestEnv extends __BaseEnv_VfsTestEnv {}
+
+
+✨ Types written to worker-configuration.d.ts
+
+📣 Remember to rerun 'wrangler types' after you change your wrangler.jsonc file.
+
+
+> @corca-ai/cf-vfs@0.4.1 typegen:benchmark
+> wrangler types bench/worker-configuration.d.ts --config wrangler.benchmark.jsonc --env-interface VfsBenchmarkEnv --include-runtime false
+
+
+ ⛅️ wrangler 4.114.0 (update available 4.148.0)
+───────────────────────────────────────────────
+Generating project types...
+
+interface __BaseEnv_VfsBenchmarkEnv {
+	BENCHMARK_BUCKET: R2Bucket;
+	ASSETS: Fetcher;
+	BENCHMARK_TOKEN: string;
+	BENCHMARK: DurableObjectNamespace<import("./remote-worker").VfsBenchmark>;
+	DEMO_WORKSPACES: DurableObjectNamespace<import("./remote-worker").DemoWorkspace>;
+}
+declare namespace Cloudflare {
+	interface GlobalProps {
+		mainModule: typeof import("./remote-worker");
+		durableNamespaces: "VfsBenchmark" | "DemoWorkspace";
+	}
+	interface Env extends __BaseEnv_VfsBenchmarkEnv {}
+}
+interface VfsBenchmarkEnv extends __BaseEnv_VfsBenchmarkEnv {}
+type StringifyValues<EnvType extends Record<string, unknown>> = {
+	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
+};
+declare namespace NodeJS {
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "BENCHMARK_TOKEN">> {}
+}
+
+
+✨ Types written to bench/worker-configuration.d.ts
+
+📣 Remember to rerun 'wrangler types' after you change your wrangler.jsonc file.
+
+
+> @corca-ai/cf-vfs@0.4.1 build
+> npm run clean && tsc -p tsconfig.build.json
+
+
+> @corca-ai/cf-vfs@0.4.1 clean
+> node -e "require('node:fs').rmSync('dist', { recursive: true, force: true })"
+
+
+> @corca-ai/cf-vfs@0.4.1 typecheck
+> tsc --noEmit && tsc -p bench/tsconfig.remote.json
+
+
+> @corca-ai/cf-vfs@0.4.1 lint
+> biome check
+
+bench/regex-differential.mjs:41:3 lint/style/useTemplate  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Template literals are preferred over string concatenation.
+  
+    39 │   "needle123".repeat(50),
+    40 │   "ab".repeat(80),
+  > 41 │   "a".repeat(400) + "!",
+       │   ^^^^^^^^^^^^^^^^^^^^^
+    42 │ ];
+    43 │ for (let i = 0; i < 70; i++)
+  
+  i Unsafe fix: Use a template literal.
+  
+    39 39 │     "needle123".repeat(50),
+    40 40 │     "ab".repeat(80),
+    41    │ - ··"a".repeat(400)·+·"!",
+       41 │ + ··`${"a".repeat(400)}!`,
+    42 42 │   ];
+    43 43 │   for (let i = 0; i < 70; i++)
+  
+
+bench/regex-differential.mjs:85:13 lint/style/useTemplate  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Template literals are preferred over string concatenation.
+  
+    83 │             outcome(() => b.exec(text, from)),
+    84 │             outcome(() => a.exec(text, from)),
+  > 85 │             context + " from=" + from,
+       │             ^^^^^^^^^^^^^^^^^^^^^^^^^
+    86 │           );
+    87 │           comparisons++;
+  
+  i Unsafe fix: Use a template literal.
+  
+    83 83 │               outcome(() => b.exec(text, from)),
+    84 84 │               outcome(() => a.exec(text, from)),
+    85    │ - ············context·+·"·from="·+·from,
+       85 │ + ············`${context}·from=${from}`,
+    86 86 │             );
+    87 87 │             comparisons++;
+  
+
+Checked 331 files in 53ms. No fixes applied.
+Found 2 infos.
+
+> @corca-ai/cf-vfs@0.4.1 knip
+> knip
+
+
+> @corca-ai/cf-vfs@0.4.1 test
+> vitest run --config vitest.node.config.ts && vitest run
+
+
+ RUN  v4.1.10 /Users/ak/prjs/cc/cf-vfs
+
+
+ Test Files  81 passed (81)
+      Tests  1813 passed (1813)
+   Start at  16:17:34
+   Duration  1.46s (transform 5.29s, setup 0ms, import 11.57s, tests 6.82s, environment 3ms)
+
+
+ RUN  v4.1.10 /Users/ak/prjs/cc/cf-vfs
+
+uncaught exception; source = Uncaught (in promise); stack = VfsError: byte range must use offset/length or suffix
+    at validateByteRange (/Users/ak/prjs/cc/cf-vfs/src/vfs/range.ts:32:11)
+    at rpcReadFileOptions (/Users/ak/prjs/cc/cf-vfs/src/vfs/rpc-validation.ts:374:3)
+    at TestWorkspaceVfs.readFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:141:62)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: length must be a positive integer
+    at validateByteRange (/Users/ak/prjs/cc/cf-vfs/src/vfs/range.ts:25:13)
+    at rpcReadFileOptions (/Users/ak/prjs/cc/cf-vfs/src/vfs/rpc-validation.ts:374:3)
+    at TestWorkspaceVfs.readFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:141:62)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: suffix must be a positive integer
+    at validateByteRange (/Users/ak/prjs/cc/cf-vfs/src/vfs/range.ts:25:13)
+    at rpcReadFileOptions (/Users/ak/prjs/cc/cf-vfs/src/vfs/rpc-validation.ts:374:3)
+    at TestWorkspaceVfs.readFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:141:62)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: offset must be a non-negative integer
+    at validateByteRange (/Users/ak/prjs/cc/cf-vfs/src/vfs/range.ts:25:13)
+    at rpcReadFileOptions (/Users/ak/prjs/cc/cf-vfs/src/vfs/rpc-validation.ts:374:3)
+    at TestWorkspaceVfs.readFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:141:62)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: byte range must use offset/length or suffix
+    at validateByteRange (/Users/ak/prjs/cc/cf-vfs/src/vfs/range.ts:35:11)
+    at rpcReadFileOptions (/Users/ak/prjs/cc/cf-vfs/src/vfs/rpc-validation.ts:374:3)
+    at TestWorkspaceVfs.readFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:141:62)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: unknown byte range field: unexpected
+    at validateByteRange (/Users/ak/prjs/cc/cf-vfs/src/vfs/range.ts:22:23)
+    at rpcReadFileOptions (/Users/ak/prjs/cc/cf-vfs/src/vfs/rpc-validation.ts:374:3)
+    at TestWorkspaceVfs.readFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:141:62)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: is a directory
+    at DurableObjectFileSystem.digestFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-read-base.ts:55:13)
+    at TestWorkspaceVfs.digestFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:137:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.requireEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:288:29)
+    at DurableObjectFileSystem.commitMove (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-move-base.ts:264:48)
+    at /Users/ak/prjs/cc/cf-vfs/src/vfs/sql-move-base.ts:237:12
+    at /Users/ak/prjs/cc/cf-vfs/src/vfs/sql-base.ts:488:26
+    at DurableObjectFileSystem.transaction (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-base.ts:485:35)
+    at DurableObjectFileSystem.move (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-move-base.ts:236:25)
+    at TestWorkspaceVfs.move (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:192:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.requireEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:288:29)
+    at /Users/ak/prjs/cc/cf-vfs/src/vfs/sql-move-base.ts:225:48
+    at /Users/ak/prjs/cc/cf-vfs/src/vfs/sql-base.ts:488:26
+    at DurableObjectFileSystem.transaction (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-base.ts:485:35)
+    at DurableObjectFileSystem.move (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-move-base.ts:224:19)
+    at TestWorkspaceVfs.move (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:192:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.requireEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:288:29)
+    at DurableObjectFileSystem.commitCopy (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-copy-base.ts:82:48)
+    at /Users/ak/prjs/cc/cf-vfs/src/vfs/sql-copy-base.ts:55:12
+    at /Users/ak/prjs/cc/cf-vfs/src/vfs/sql-base.ts:488:26
+    at DurableObjectFileSystem.transaction (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-base.ts:485:35)
+    at DurableObjectFileSystem.copy (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-copy-base.ts:54:25)
+    at TestWorkspaceVfs.copy (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:200:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:354:13)
+    at DurableObjectFileSystem.beginOpaqueUpload (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-opaque-start-base.ts:16:25)
+    at TestWorkspaceVfs.beginOpaqueUpload (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:211:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no entry holds that identity
+    at DurableObjectFileSystem.statById (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:96:34)
+    at TestWorkspaceVfs.statById (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:82:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no entry holds that identity
+    at DurableObjectFileSystem.statById (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:96:34)
+    at TestWorkspaceVfs.statById (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:82:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: ino must be a positive safe integer
+    at rpcIdentity (/Users/ak/prjs/cc/cf-vfs/src/vfs/rpc-validation.ts:261:11)
+    at TestWorkspaceVfs.statById (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:82:37)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: ino must be a positive safe integer
+    at rpcIdentity (/Users/ak/prjs/cc/cf-vfs/src/vfs/rpc-validation.ts:261:11)
+    at TestWorkspaceVfs.statById (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:82:37)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: ino must be a positive safe integer
+    at rpcIdentity (/Users/ak/prjs/cc/cf-vfs/src/vfs/rpc-validation.ts:261:11)
+    at TestWorkspaceVfs.statById (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:82:37)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:354:13)
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:215:16)
+    at DurableObjectFileSystem.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:69:23)
+    at TestWorkspaceVfs.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:145:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:354:13)
+    at DurableObjectFileSystem.appendFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:165:25)
+    at TestWorkspaceVfs.appendFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:160:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:354:13)
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:215:16)
+    at DurableObjectFileSystem.writeFiles (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:117:25)
+    at TestWorkspaceVfs.writeFiles (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:156:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:354:13)
+    at DurableObjectFileSystem.touch (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-metadata-base.ts:139:25)
+    at TestWorkspaceVfs.touch (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:168:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:354:13)
+    at DurableObjectFileSystem.symlink (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-metadata-base.ts:255:25)
+    at TestWorkspaceVfs.symlink (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:94:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:354:13)
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:215:16)
+    at DurableObjectFileSystem.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:69:23)
+    at TestWorkspaceVfs.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:145:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:354:13)
+    at DurableObjectFileSystem.appendFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:165:25)
+    at TestWorkspaceVfs.appendFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:160:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:354:13)
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:215:16)
+    at DurableObjectFileSystem.writeFiles (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:117:25)
+    at TestWorkspaceVfs.writeFiles (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:156:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:354:13)
+    at DurableObjectFileSystem.touch (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-metadata-base.ts:139:25)
+    at TestWorkspaceVfs.touch (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:168:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:354:13)
+    at DurableObjectFileSystem.symlink (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-metadata-base.ts:255:25)
+    at TestWorkspaceVfs.symlink (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:94:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveDottedEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:206:38)
+    at DurableObjectFileSystem.resolveEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:172:21)
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:347:16)
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:215:16)
+    at DurableObjectFileSystem.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:69:23)
+    at TestWorkspaceVfs.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:145:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveDottedEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:206:38)
+    at DurableObjectFileSystem.resolveEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:172:21)
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:347:16)
+    at DurableObjectFileSystem.appendFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:165:25)
+    at TestWorkspaceVfs.appendFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:160:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveDottedEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:206:38)
+    at DurableObjectFileSystem.resolveEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:172:21)
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:347:16)
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:215:16)
+    at DurableObjectFileSystem.writeFiles (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:117:25)
+    at TestWorkspaceVfs.writeFiles (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:156:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveDottedEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:206:38)
+    at DurableObjectFileSystem.resolveEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:172:21)
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:347:16)
+    at DurableObjectFileSystem.touch (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-metadata-base.ts:139:25)
+    at TestWorkspaceVfs.touch (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:168:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveDottedEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:206:38)
+    at DurableObjectFileSystem.resolveEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:172:21)
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:347:16)
+    at DurableObjectFileSystem.symlink (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-metadata-base.ts:255:25)
+    at TestWorkspaceVfs.symlink (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:94:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:354:13)
+    at DurableObjectFileSystem.copy (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-copy-base.ts:51:31)
+    at TestWorkspaceVfs.copy (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:200:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:354:13)
+    at DurableObjectFileSystem.move (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-move-base.ts:220:31)
+    at TestWorkspaceVfs.move (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:192:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:354:13)
+    at DurableObjectFileSystem.copy (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-copy-base.ts:51:31)
+    at TestWorkspaceVfs.copy (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:200:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:354:13)
+    at DurableObjectFileSystem.move (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-move-base.ts:220:31)
+    at TestWorkspaceVfs.move (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:192:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveDottedEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:206:38)
+    at DurableObjectFileSystem.resolveEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:172:21)
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:347:16)
+    at DurableObjectFileSystem.copy (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-copy-base.ts:51:31)
+    at TestWorkspaceVfs.copy (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:200:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such directory
+    at DurableObjectFileSystem.resolveDottedEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:206:38)
+    at DurableObjectFileSystem.resolveEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:172:21)
+    at DurableObjectFileSystem.resolveAccess (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:347:16)
+    at DurableObjectFileSystem.move (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-move-base.ts:220:31)
+    at TestWorkspaceVfs.move (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:192:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:68:17)
+    at TestWorkspaceVfs.lstat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:86:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: path mutation token does not match
+    at DurableObjectFileSystem.validateGuard (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:530:13)
+    at DurableObjectFileSystem.createTouchedFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-metadata-base.ts:167:10)
+    at /Users/ak/prjs/cc/cf-vfs/src/vfs/sql-metadata-base.ts:153:12
+    at /Users/ak/prjs/cc/cf-vfs/src/vfs/sql-base.ts:488:26
+    at DurableObjectFileSystem.transaction (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-base.ts:485:35)
+    at DurableObjectFileSystem.touch (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-metadata-base.ts:152:17)
+    at TestWorkspaceVfs.touch (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:168:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: path mutation token does not match
+    at DurableObjectFileSystem.validateGuard (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:530:13)
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:233:10)
+    at DurableObjectFileSystem.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:69:23)
+    at TestWorkspaceVfs.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:145:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: path mutation token does not match
+    at DurableObjectFileSystem.validateGuard (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:530:13)
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:233:10)
+    at DurableObjectFileSystem.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:69:23)
+    at TestWorkspaceVfs.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:145:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: path mutation token does not match
+    at DurableObjectFileSystem.validateGuard (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:530:13)
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:233:10)
+    at DurableObjectFileSystem.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:69:23)
+    at TestWorkspaceVfs.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:145:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: path mutation token does not match
+    at DurableObjectFileSystem.validateGuard (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:530:13)
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:233:10)
+    at DurableObjectFileSystem.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:69:23)
+    at TestWorkspaceVfs.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:145:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: path mutation token does not match
+    at DurableObjectFileSystem.validateGuard (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:530:13)
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:233:10)
+    at DurableObjectFileSystem.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:69:23)
+    at TestWorkspaceVfs.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:145:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: file or directory already exists
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:227:13)
+    at DurableObjectFileSystem.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:69:23)
+    at TestWorkspaceVfs.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:145:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: is a directory
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:232:45)
+    at DurableObjectFileSystem.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:69:23)
+    at TestWorkspaceVfs.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:145:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.requireEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:288:29)
+    at DurableObjectFileSystem.subtreeSummary (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:411:38)
+    at TestWorkspaceVfs.subtreeSummary (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:126:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: path mutation token does not match
+    at DurableObjectFileSystem.validateGuard (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-path-base.ts:530:13)
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:233:10)
+    at DurableObjectFileSystem.writeFiles (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:117:25)
+    at TestWorkspaceVfs.writeFiles (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:156:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: is a directory
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:232:45)
+    at DurableObjectFileSystem.writeFiles (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:117:25)
+    at TestWorkspaceVfs.writeFiles (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:156:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: the batch names this path more than once
+    at DurableObjectFileSystem.writeFiles (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:123:15)
+    at TestWorkspaceVfs.writeFiles (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:156:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: no such file or directory
+    at DurableObjectFileSystem.statEntry (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:142:13)
+    at DurableObjectFileSystem.stat (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-query-base.ts:63:17)
+    at TestWorkspaceVfs.stat (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:78:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: file or directory already exists
+    at DurableObjectFileSystem.planInlineWrite (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-plan-base.ts:227:13)
+    at DurableObjectFileSystem.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/sql-write-base.ts:69:23)
+    at TestWorkspaceVfs.writeFile (/Users/ak/prjs/cc/cf-vfs/src/vfs/durable-object.ts:145:28)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+uncaught exception; source = Uncaught (in promise); stack = VfsError: options.cwd must be a string
+    at rpcString (/Users/ak/prjs/cc/cf-vfs/src/vfs/rpc-validation.ts:182:40)
+    at parseTextOptions (/Users/ak/prjs/cc/cf-vfs/src/shell/rpc-validation.ts:54:50)
+    at parseRemoteTextOptions (/Users/ak/prjs/cc/cf-vfs/src/shell/rpc-validation.ts:64:10)
+    at TestWorkspaceVfs.executeText (/Users/ak/prjs/cc/cf-vfs/src/shell/durable-object.ts:79:35)
+    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47
+
+ Test Files  9 passed (9)
+      Tests  125 passed (125)
+   Start at  16:17:36
+   Duration  2.20s (transform 2.27s, setup 0ms, import 9.36s, tests 1.04s, environment 0ms)
+
+
+> @corca-ai/cf-vfs@0.4.1 test:posix
+> node bench/posix-semantics.mjs --check
+
+{"matches":43,"total":43,"differences":[]}
+
+> @corca-ai/cf-vfs@0.4.1 test:bench-protocol
+> node test/check-performance-comparison.mjs
+
+Performance comparison protocol checks passed
+
+> @corca-ai/cf-vfs@0.4.1 test:limits
+> node test/check-execution-limits.mjs
+
+execution limits verified in 14 isolated processes
+
+> @corca-ai/cf-vfs@0.4.1 test:quality
+> biome lint --config-path biome.quality.jsonc --max-diagnostics=none src test
+
+Checked 286 files in 19ms. No fixes applied.
+
+> @corca-ai/cf-vfs@0.4.1 test:docs
+> node test/check-docs.mjs
+
+documentation links, 78 documented applets, and the CLAUDE.md symlink verified
+
+> @corca-ai/cf-vfs@0.4.1 test:package
+> node test/check-package.mjs
+
+package tarball, runtime/type consumers, and explicit exports verified
+
+> @corca-ai/cf-vfs@0.4.1 test:tree-shaking
+> npm run build && node test/check-tree-shaking.mjs
+
+
+> @corca-ai/cf-vfs@0.4.1 build
+> npm run clean && tsc -p tsconfig.build.json
+
+
+> @corca-ai/cf-vfs@0.4.1 clean
+> node -e "require('node:fs').rmSync('dist', { recursive: true, force: true })"
+
+  ls 16479/17408 bytes (one applet imported from its own subpath)
+  commands 17986/18944 bytes (a small explicit registry of two applets)
+  awk 97966/102912 bytes (the opt-in AWK applet and its bounded regex engine)
+  vfs 203578/213504 bytes (the SQLite filesystem with no shell and no R2)
+  shell 234942/246784 bytes (the non-interactive shell with one applet)
+  interactive 244737/257024 bytes (the interactive session adapter)
+  default-registry 501787/526976 bytes (the convenience preset with every applet)
+  linux-profile 696850/731392 bytes (the opt-in Linux profile over the SQLite filesystem)
+  r2-opaque 205276/215296 bytes (the SQLite filesystem with the R2 opaque adapter)
+  fs-adapter 238395/249600 bytes (the opt-in promise filesystem adapter)
+  fs-tiered 248084/259712 bytes (the opt-in adapter with metadata reuse and R2 content)
+tree-shaking and bundle budgets verified across 11 presets

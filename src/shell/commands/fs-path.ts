@@ -1,5 +1,5 @@
 import { VfsError } from "../../core/errors.js";
-import { normalizePath } from "../../core/path.js";
+import { normalizeFileSystemPath } from "../../core/path.js";
 import { type AppletSpec, appletUsageError, defineApplet } from "./applet.js";
 import { commandPath, writeText } from "./helpers.js";
 
@@ -63,7 +63,7 @@ export const realpathCommand = /* @__PURE__ */ defineApplet(
   async (context, argv, fds) => {
     if (argv.length === 0) throw appletUsageError(REALPATH, "missing operand");
     for (const path of argv) {
-      const normalized = normalizePath(path, context.session.cwd);
+      const normalized = normalizeFileSystemPath(path, context.session.cwd);
       const canonical = context.fileSystem.realpath(normalized);
       context.fileSystem.stat(canonical);
       await writeText(fds[1], `${canonical}\n`);

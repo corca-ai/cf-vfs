@@ -52,7 +52,7 @@ export abstract class SqlWritePlan extends SqlRead {
         `SELECT id, path, expected_mutation_token, r2_key, state,
               verification_token, expected_size_bytes, expires_at_ms,
               verification_lease_until_ms, create_parents, mode,
-              content_type, receipt_json
+              content_type, receipt_json, written_path, traversal_token
        FROM vfs_upload_sessions WHERE id = ?`,
         id,
       ),
@@ -84,7 +84,8 @@ export abstract class SqlWritePlan extends SqlRead {
   protected queueObjectIfUnreferenced(objectId: number, now: number): boolean {
     const object = firstRow(
       this.sql.exec<SqlRow>(
-        "DELETE FROM vfs_opaque_objects WHERE id=? AND NOT EXISTS(SELECT 1 FROM vfs_entries WHERE opaque_object_id=?) RETURNING r2_key,retain_until_ms",
+        "DELETE FROM vfs_opaque_objects WHERE id=? AND NOT EXISTS(SELECT 1 FROM vfs_entries WHERE opaque_object_id=?) AND NOT EXISTS(SELECT 1 FROM vfs_detached_inodes WHERE opaque_object_id=?) RETURNING r2_key,retain_until_ms",
+        objectId,
         objectId,
         objectId,
       ),
@@ -102,13 +103,29 @@ export abstract class SqlWritePlan extends SqlRead {
    * own, so a caller that replaces an entry adds only what it inserted --
    * subtracting the removal again double-counts it.
    */
-  protected removeExact(path: string, now: number, bumpPath = true): number {
-    const entry = this.oneEntry(path);
+  protected removeExact(
+    path: string,
+    now: number,
+    bumpPath = true,
+    resolved?: EntryRow,
+    preserveInode = false,
+  ): number {
+    const entry = resolved ?? this.oneEntry(path);
     if (entry === null) return 0;
+    this.noteDirectoryChange(entry);
+    const retained = preserveInode ? 0 : (this.retainOpenInodes?.(path, false, entry) ?? 0);
+    if (entry.linkIdentity != null)
+      this.sql.exec(
+        "UPDATE vfs_entries SET unlinking = 1, changed_at_ms = ?, revision = revision + 1, mutation_version = mutation_version + 1 WHERE id = ?",
+        now,
+        entry.id,
+      );
     if (entry.contentClass === "inline") {
       this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", entry.id);
     }
     this.sql.exec("DELETE FROM vfs_entries WHERE id = ?", entry.id);
+    if (entry.linkIdentity != null && !preserveInode)
+      this.publishLinkedMetadata([entry.linkIdentity]);
     if (entry.kind === "symlink") this.symlinkCountStale = true;
     const mutationVersion = entry.mutationVersion + (bumpPath ? 1 : 0);
     this.sql.exec(
@@ -118,7 +135,7 @@ export abstract class SqlWritePlan extends SqlRead {
       mutationVersion,
     );
     if (bumpPath) this.publishToken(path, mutationVersion, false, "remove");
-    this.updateUsage(entry.contentClass === "inline" ? -entry.sizeBytes : 0, -1);
+    this.updateUsage((entry.contentClass === "inline" ? -entry.sizeBytes : 0) + retained, -1);
     if (
       entry.contentClass === "opaque" &&
       entry.opaqueObjectId !== null &&
@@ -344,7 +361,7 @@ export abstract class SqlWritePlan extends SqlRead {
           : this.creationOwner(parent ?? this.requireDirectory(dirname(plan.path)), posix);
     const mode = this.inlineWriteMode(plan, current, parent, posix);
     const previousInlineBytes = current?.contentClass === "inline" ? current.sizeBytes : 0;
-    const inlineDelta = sizeBytes - previousInlineBytes;
+    const inlineDelta = (sizeBytes - previousInlineBytes) * (current?.linkCount ?? 1);
     const entryDelta = current === null ? 1 : 0;
     if (!deferCapacity) this.assertCapacity(inlineDelta, entryDelta, plan.path);
     const mutationVersion =
@@ -380,12 +397,13 @@ export abstract class SqlWritePlan extends SqlRead {
       return firstRow(
         this.sql.exec<SqlRow>(
           `UPDATE vfs_entries SET
-             size_bytes = ?, mode = ?, modified_at_ms = ?, revision = revision + 1,
+             size_bytes = ?, mode = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,
              body_digest = ?, body_digest_revision = revision + 1, mutation_version = ?
            WHERE id = ? AND mutation_version = ?
            RETURNING id, revision`,
           sizeBytes,
           mutation.mode,
+          now,
           now,
           digest ?? null,
           mutation.mutationVersion,
@@ -404,7 +422,7 @@ export abstract class SqlWritePlan extends SqlRead {
          ON CONFLICT(path) DO UPDATE SET
            kind = 'file', content_class = 'inline', opaque_object_id = NULL,
            size_bytes = excluded.size_bytes, mode = excluded.mode,
-           modified_at_ms = excluded.modified_at_ms,
+           modified_at_ms = excluded.modified_at_ms, changed_at_ms = excluded.modified_at_ms,
            revision = vfs_entries.revision + 1,
            body_digest = excluded.body_digest,
            body_digest_revision = vfs_entries.revision + 1,
@@ -440,6 +458,7 @@ export abstract class SqlWritePlan extends SqlRead {
       mutation.mutationVersion,
       true,
       current === null ? "create" : "write",
+      current,
     );
     this.writeChunks(
       integerColumn(written, "id"),

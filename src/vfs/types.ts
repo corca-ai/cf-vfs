@@ -70,12 +70,15 @@ export interface StatBase {
    * an identity: a path is unique and an entry stores the one it lives at.
    */
   ino: number;
+  nlink?: number;
   sizeBytes: number;
   mode: number;
   uid: number;
   gid: number;
   createdAtMs: number;
   modifiedAtMs: number;
+  /** Metadata change time, independently persisted from content modification time. */
+  changedAtMs?: number;
   revision: number;
   mutationToken: string;
 }

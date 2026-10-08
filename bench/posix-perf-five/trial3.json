@@ -1,0 +1,705 @@
+{
+  "method": "isolated processes, warmup per workload, alternating AB/BA",
+  "node": "v24.18.0",
+  "platform": "linux",
+  "results": [
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "before": {
+        "ms": {
+          "median": 23.182045999999957,
+          "p10": 22.176433600000017,
+          "p90": 31.534741
+        },
+        "sql": 1560,
+        "returnedRows": 1360,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 9.87808499999997,
+          "p10": 9.658168799999965,
+          "p90": 12.984409200000016
+        },
+        "sql": 280,
+        "returnedRows": 80,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.4562981631085119,
+        "p10": 0.3113022985817048,
+        "p90": 0.5559537146861749,
+        "ci95": [
+          0.33145731756383023,
+          0.553854478590889
+        ]
+      }
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "before": {
+        "ms": {
+          "median": 23.742617000000052,
+          "p10": 21.432397200000004,
+          "p90": 31.970847400000004
+        },
+        "sql": 1520,
+        "returnedRows": 1360,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 12.802610000000016,
+          "p10": 12.515758800000025,
+          "p90": 16.672797000000013
+        },
+        "sql": 360,
+        "returnedRows": 120,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.5376361839135068,
+        "p10": 0.46050084737577,
+        "p90": 0.7621542528395242,
+        "ci95": [
+          0.4823066025825893,
+          0.7584629065842392
+        ]
+      }
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "before": {
+        "ms": {
+          "median": 89.74548699999991,
+          "p10": 54.1192976,
+          "p90": 103.8432734
+        },
+        "sql": 3156,
+        "returnedRows": 3096,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 19.111670000000004,
+          "p10": 18.621351200000003,
+          "p90": 31.901336200000042
+        },
+        "sql": 84,
+        "returnedRows": 24,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.2803374889648387,
+        "p10": 0.18155651576708529,
+        "p90": 0.5225996026303725,
+        "ci95": [
+          0.18199515671998398,
+          0.3906261218212323
+        ]
+      }
+    }
+  ],
+  "raw": [
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 21.648312000000033,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 26.305858,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 53.73824000000002,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 9.87808499999997,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 12.687489000000028,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 18.716857000000005,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 13.292409999999961,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 16.751724999999965,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 25.525068000000033,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 24.005516,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 22.08641300000005,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 96.55792399999996,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 24.94600700000001,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 21.434732999999994,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 61.61855200000002,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 12.90740900000003,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 16.653065000000026,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 24.069815999999946,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 9.678484999999966,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 12.689509000000044,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 18.88636800000006,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 22.535095000000013,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 22.07874300000003,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 54.214562,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 22.82862399999999,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 33.09784100000002,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 90.006617,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 12.88334900000001,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 16.23938499999997,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 25.23222899999996,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 9.576903999999956,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 12.76488999999998,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 18.787517999999977,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 28.893325000000004,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 23.742617000000052,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 103.23086799999999,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 42.10040499999997,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 25.40367900000001,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 89.74548699999991,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 9.711815000000001,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 12.802610000000016,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 18.239328,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 9.730785999999966,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 11.828838000000019,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 19.111670000000004,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 22.308464000000015,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 31.689099,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 106.29289500000004,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 23.182045999999957,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 21.423054000000036,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 54.64708500000006,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 12.83947999999998,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 15.659624000000008,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 57.40640900000005,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    }
+  ]
+}

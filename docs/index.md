@@ -53,6 +53,8 @@ second and offers the first from a subpath.
   statuses, utilities, opaque behavior, and direct VFS primitives.
 - [Architecture](architecture.md) — SQLite inline bytes, immutable R2 objects,
   mutation tokens, upload verification, read leases, and GC alarms.
+- [Promise filesystem adapter](fs.md) — optional FS-shaped metadata reuse and
+  immutable large-body access without changing the VFS core.
 - [Collaborative documents](collaboration.md) — document guards, authorization,
   deferred quotas, publication, and reconciliation.
 - [POSIX and Bash compatibility](posix-compatibility.md) — supported behavior,

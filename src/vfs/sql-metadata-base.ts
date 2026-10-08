@@ -41,21 +41,25 @@ export abstract class SqlMetadata extends SqlWrite {
       }
       this.validateGuard(normalized, entry, options, written);
       const mutationVersion = entry.mutationVersion + 1;
-      const modifiedAtMs = options.modifiedAtMs ?? this.now();
+      const changedAtMs = this.now();
+      const modifiedAtMs =
+        options.modifiedAtMs ?? (options.mode === undefined ? changedAtMs : entry.modifiedAtMs);
       this.sql.exec(
-        `UPDATE vfs_entries SET mode = ?, modified_at_ms = ?, revision = revision + 1,
+        `UPDATE vfs_entries SET mode = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,
            mutation_version = ?
          WHERE id = ?`,
         options.mode ?? entry.mode,
         modifiedAtMs,
+        changedAtMs,
         mutationVersion,
         entry.id,
       );
-      const token = this.publishToken(normalized, mutationVersion, true, "metadata");
+      const token = this.publishToken(normalized, mutationVersion, true, "metadata", entry);
       return rowToStat({
         ...entry,
         mode: options.mode ?? entry.mode,
         modifiedAtMs,
+        changedAtMs,
         revision: entry.revision + 1,
         mutationVersion,
         mutationToken: token,
@@ -99,29 +103,32 @@ export abstract class SqlMetadata extends SqlWrite {
     }
     this.validateGuard(path, entry, options, written);
     const mutationVersion = entry.mutationVersion + 1;
-    const modifiedAtMs = this.now();
+    const changedAtMs = this.now();
+    const modifiedAtMs = entry.modifiedAtMs;
     const mode =
       posix !== undefined && posix.credentials.uid !== 0 && (uid !== undefined || gid !== undefined)
         ? entry.mode & ~0o6000
         : entry.mode;
     this.sql.exec(
       `UPDATE vfs_entries
-       SET uid = ?, gid = ?, mode = ?, modified_at_ms = ?, revision = revision + 1,
+       SET uid = ?, gid = ?, mode = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,
            mutation_version = ? WHERE id = ?`,
       uid ?? entry.uid,
       gid ?? entry.gid,
       mode,
       modifiedAtMs,
+      changedAtMs,
       mutationVersion,
       entry.id,
     );
-    const token = this.publishToken(path, mutationVersion, true, "metadata");
+    const token = this.publishToken(path, mutationVersion, true, "metadata", entry);
     return rowToStat({
       ...entry,
       uid: uid ?? entry.uid,
       gid: gid ?? entry.gid,
       mode,
       modifiedAtMs,
+      changedAtMs,
       revision: entry.revision + 1,
       mutationVersion,
       mutationToken: token,
@@ -175,8 +182,8 @@ export abstract class SqlMetadata extends SqlWrite {
         `INSERT INTO vfs_entries (
          id, path, parent_path, name, kind, content_class, opaque_object_id,
          size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
-         mutation_version
-       ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, 0, ?, ?, ?, ?, ?, 1, ?)
+         mutation_version, changed_at_ms
+       ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, 0, ?, ?, ?, ?, ?, 1, ?, ?)
        RETURNING id`,
         this.allocateIno(),
         path,
@@ -188,6 +195,7 @@ export abstract class SqlMetadata extends SqlWrite {
         now,
         options.modifiedAtMs ?? now,
         mutationVersion,
+        now,
       )
       .one();
     const token = this.publishToken(path, mutationVersion, true, "create");
@@ -205,6 +213,7 @@ export abstract class SqlMetadata extends SqlWrite {
       gid: owner.gid,
       createdAtMs: now,
       modifiedAtMs: options.modifiedAtMs ?? now,
+      changedAtMs: now,
       revision: 1,
       mutationToken: token,
     };
@@ -354,6 +363,7 @@ export abstract class SqlMetadata extends SqlWrite {
       gid: owner.gid,
       createdAtMs: now,
       modifiedAtMs: now,
+      changedAtMs: now,
       revision,
       mutationVersion,
       mutationToken: token,

@@ -1,0 +1,37 @@
+--- a/src/vfs/sql-write-base.ts
++++ b/src/vfs/sql-write-base.ts
+@@ -279,8 +279,11 @@
+   ): { firstChunkIndex: number; chunks: readonly Uint8Array[] } {
+     const lastChunk = firstRow(
+       this.sql.exec<SqlRow>(
+-        `SELECT chunk_index, body FROM vfs_inline_chunks
++        `SELECT chunk_index, length(body) AS body_bytes,
++                CASE WHEN length(body) = ? THEN NULL ELSE body END AS body
++         FROM vfs_inline_chunks
+          WHERE entry_id = ? ORDER BY chunk_index DESC LIMIT 1`,
++        this.chunkBytes,
+         current.id,
+       ),
+     );
+@@ -291,17 +294,17 @@
+       return { firstChunkIndex: 0, chunks: suffixChunks };
+     }
+     const index = integerColumn(lastChunk, "chunk_index");
+-    const tail = new Uint8Array(blobColumn(lastChunk, "body"));
++    const tailBytes = integerColumn(lastChunk, "body_bytes");
+     const expectedIndex = Math.floor((current.sizeBytes - 1) / this.chunkBytes);
+     const expectedBytes = current.sizeBytes - expectedIndex * this.chunkBytes;
+-    if (current.sizeBytes === 0 || index !== expectedIndex || tail.byteLength !== expectedBytes) {
++    if (current.sizeBytes === 0 || index !== expectedIndex || tailBytes !== expectedBytes) {
+       throw new VfsError("EIO", "inline file chunks do not match its size", path);
+     }
+-    return tail.byteLength === this.chunkBytes
++    return tailBytes === this.chunkBytes
+       ? { firstChunkIndex: index + 1, chunks: suffixChunks }
+       : {
+           firstChunkIndex: index,
+-          chunks: rechunk([tail, ...suffixChunks], this.chunkBytes),
++          chunks: rechunk([new Uint8Array(blobColumn(lastChunk, "body")), ...suffixChunks], this.chunkBytes),
+         };
+   }
+ }

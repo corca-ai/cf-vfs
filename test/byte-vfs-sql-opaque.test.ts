@@ -90,6 +90,7 @@ it("delivers one mutation per path once a set commits, and none when it rolls ba
       path: "/two",
       mutationToken: written[1]?.mutationToken,
     },
+    { type: "vfs.mutation", op: "metadata", path: "/", mutationToken: expect.any(String) },
   ]);
 
   // Over the quota only once the whole set is counted, so both entries

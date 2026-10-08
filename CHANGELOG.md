@@ -16,8 +16,36 @@ included.
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-10-08
+
+### Added
+
+- Optional `/fs`, `/fs/metadata`, and `/fs/content` entry points provide a
+  promise filesystem subset, bounded metadata reuse, and immutable large-body
+  access while preserving separate VFS and shell dependency graphs. The
+  [independent evaluation](bench/fs-evaluation-2026-10-08.md) records measured
+  costs, compatibility limits, and rejected optimization attempts.
+
 ### Changed
 
+- Descriptor operations reuse inode metadata within one operation, shrinking
+  truncate deletes chunks in sets, and full-chunk writes skip discarded bodies.
+  File namespace mutations avoid directory nlink recounts, and known unshared
+  inodes skip alias queries. The [five-trial evaluation](bench/posix-perf-five-2026-10-08.md)
+  records independent and combined measurements with the Linux semantic oracle.
+
+- Filesystem metadata separates ctime from mtime and updates parent directories.
+  Local descriptors share inode contents through rename/unlink, support bounded
+  positional I/O and storage synchronization, and hard links share identity.
+  Opaque publication guards symlink/dot traversal; opaque append streams a full
+  replacement. The [completion evaluation](bench/posix-completion-2026-10-08.md)
+  records compatibility, performance costs, and remaining immutable-store limits.
+
+- Credential-bound stat combines indexed ancestor and target reads, replacement
+  rename reuses its destination row, and the Node testing adapter reuses bounded
+  prepared statements. The [POSIX evaluation](bench/posix-evaluation-2026-10-08.md)
+  records all ten experiments, Linux semantic differences, and runtime-specific
+  performance measurements.
 - Development checks share boundary-case catalogs and record jq failure answers
   from its pinned image. Local performance comparison freshly builds a baseline
   commit and alternates paired measurements with reproducible metadata.
@@ -28,6 +56,12 @@ included.
 
 ### Fixed
 
+- VFS and promise-FS paths resolve links before dot components, reject missing
+  or non-directory prefixes, and preserve traversal permission and mutation
+  guards. Metadata reuse cannot replace these paths with lexical lookups.
+  Opaque writes decline dot paths whose traversal guard cannot be reserved.
+  The [follow-up evaluation](bench/posix-path-fix-2026-10-08.md) records semantic
+  and performance comparisons.
 - File creation, uploads, copy, and move now respect missing-directory assertions
   in VFS paths. Byte ranges consistently use validated own fields in SQLite,
   R2, and the in-memory opaque store. ([#121](https://github.com/corca-ai/cf-vfs/pull/121))
@@ -341,7 +375,8 @@ to the release, so the package can be installed by a consumer that pins
 [`a335bd1`]: https://github.com/corca-ai/cf-vfs/commit/a335bd1
 [`1a4447d`]: https://github.com/corca-ai/cf-vfs/commit/1a4447d
 [`32a2c15`]: https://github.com/corca-ai/cf-vfs/commit/32a2c15
-[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/corca-ai/cf-vfs/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/corca-ai/cf-vfs/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/corca-ai/cf-vfs/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/corca-ai/cf-vfs/compare/v0.2.0...v0.3.0

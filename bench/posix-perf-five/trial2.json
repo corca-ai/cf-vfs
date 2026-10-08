@@ -1,0 +1,705 @@
+{
+  "method": "isolated processes, warmup per workload, alternating AB/BA",
+  "node": "v24.18.0",
+  "platform": "linux",
+  "results": [
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "before": {
+        "ms": {
+          "median": 34.29020700000001,
+          "p10": 32.611514799999995,
+          "p90": 42.371943400000006
+        },
+        "sql": 3000,
+        "returnedRows": 900,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 34.597571000000016,
+          "p10": 33.2279228,
+          "p90": 36.27309520000001
+        },
+        "sql": 3000,
+        "returnedRows": 900,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 1.001199603667785,
+        "p10": 0.875764863574181,
+        "p90": 1.0905857517781963,
+        "ci95": [
+          0.9751343000058293,
+          1.0836308063165028
+        ]
+      }
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "before": {
+        "ms": {
+          "median": 36.718632000000014,
+          "p10": 35.92866140000003,
+          "p90": 40.83528100000003
+        },
+        "sql": 3000,
+        "returnedRows": 900,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 22.270582999999988,
+          "p10": 21.961562000000036,
+          "p90": 23.491659200000036
+        },
+        "sql": 3000,
+        "returnedRows": 900,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.609855717765341,
+        "p10": 0.5617380150235752,
+        "p90": 0.6432626011354262,
+        "ci95": [
+          0.565690154767181,
+          0.6374606494054581
+        ]
+      }
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "before": {
+        "ms": {
+          "median": 157.82061,
+          "p10": 153.82891480000004,
+          "p90": 163.1205327999999
+        },
+        "sql": 5000,
+        "returnedRows": 1500,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 129.256981,
+          "p10": 127.88217999999998,
+          "p90": 132.0157668
+        },
+        "sql": 5000,
+        "returnedRows": 1500,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.8260577249795096,
+        "p10": 0.7853803558489356,
+        "p90": 0.8492755850274787,
+        "ci95": [
+          0.8180680128999286,
+          0.8473199472402503
+        ]
+      }
+    }
+  ],
+  "raw": [
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 34.29020700000001,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 36.220380000000034,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 157.82061,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 33.437557,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 22.20565099999999,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 129.1467899999999,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 35.67952,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 23.150222999999983,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 130.83236399999998,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 35.636769999999984,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 40.923857,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 158.38162399999987,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 67.71954500000001,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 40.81313700000004,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 182.07616799999994,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 32.389386,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 23.831564000000014,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 128.60727200000008,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 35.453731000000005,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 23.406683000000044,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 127.364552,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 32.71753699999999,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 36.718632000000014,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 158.18912599999987,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 33.32585800000001,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 38.99388499999998,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 152.62695800000006,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 37.27182400000001,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 22.13489100000004,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 129.32386599999995,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 33.53157900000001,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 21.640642000000014,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 131.94696,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 33.158198,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 39.639996999999994,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 156.35779600000012,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 32.187426,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 36.267292999999995,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 154.12940400000002,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 33.957449999999994,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 22.270582999999988,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 128.01158699999996,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 34.597571000000016,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 23.374964000000034,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 132.29099399999996,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 35.01060199999999,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 35.07277099999999,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 154.34754599999997,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 36.035043,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 36.142634000000044,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 158.00273200000004,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 36.023413000000005,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 22.041792000000044,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 129.256981,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    }
+  ]
+}

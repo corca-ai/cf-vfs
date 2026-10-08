@@ -1,5 +1,11 @@
 import { VfsError } from "../core/errors.js";
-import { dirname, normalizePath, pathRequiresDirectory } from "../core/path.js";
+import {
+  dirname,
+  hasDotSegments,
+  normalizePath,
+  normalizeResolutionPath,
+  pathRequiresDirectory,
+} from "../core/path.js";
 import { NEVER_MUTATED_TOKEN } from "./config.js";
 import type { VfsMutationOp } from "./events.js";
 import { SqlBase } from "./sql-base.js";
@@ -16,10 +22,20 @@ import {
   parseEntry,
   type SqlRow,
   type SymlinkEntryRow,
+  stringColumn,
 } from "./sql-model.js";
 import type { PosixAccessContext } from "./sql-posix.js";
 import { ENTRY_COLUMNS } from "./sql-schema.js";
 import { MAX_SYMLINK_HOPS } from "./types.js";
+
+function followsTerminalLink(row: EntryRow, follow: boolean): row is SymlinkEntryRow {
+  return follow && row.kind === "symlink";
+}
+
+interface PathResolution {
+  readonly followed: string[];
+  hops: number;
+}
 
 export abstract class SqlPath extends SqlBase {
   protected rows(query: string, ...bindings: SqlStorageValue[]): EntryRow[] {
@@ -59,7 +75,7 @@ export abstract class SqlPath extends SqlBase {
          WHERE e.path = ?
          UNION ALL
          SELECT NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-                NULL, NULL, NULL, NULL, NULL, NULL, NULL, version
+                NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, version
          FROM vfs_path_tombstones
          WHERE path = ?
          LIMIT 1`,
@@ -89,9 +105,10 @@ export abstract class SqlPath extends SqlBase {
    * the same thing wherever it is read from.
    */
   protected linkDestination(row: SymlinkEntryRow): string {
-    return row.linkTarget.startsWith("/")
-      ? normalizePath(row.linkTarget)
-      : normalizePath(row.linkTarget, row.parentPath);
+    return normalizeResolutionPath(
+      pathRequiresDirectory(row.linkTarget) ? `${row.linkTarget}.` : row.linkTarget,
+      row.parentPath,
+    );
   }
 
   /**
@@ -143,28 +160,57 @@ export abstract class SqlPath extends SqlBase {
   protected resolveEntry(
     input: string,
     follow: boolean,
+    context?: PathResolution,
   ): { path: string; row: EntryRow | null; followed: string[] } {
     let path = input;
     // The links crossed on the way, so a guard can cover the whole chain
     // rather than only where it currently ends.
-    const followed: string[] = [];
-    for (let hops = 0; hops <= MAX_SYMLINK_HOPS; hops += 1) {
+    const followed = context?.followed ?? [];
+    for (let hops = context?.hops ?? 0; hops <= MAX_SYMLINK_HOPS; hops += 1) {
+      if (context !== undefined) context.hops = hops;
+      if (hasDotSegments(path))
+        return this.resolveDottedEntry(path, follow, context ?? { followed, hops });
       const row = this.oneEntry(path);
       if (row === null) {
-        if (this.links() === 0) return { path, row: null, followed };
-        const ancestor = this.linkAncestor(path);
+        const ancestor = this.missingAncestorLink(path);
         if (ancestor === null) return { path, row: null, followed };
         followed.push(ancestor.path);
-        path = normalizePath(
+        path = normalizeResolutionPath(
           `${this.linkDestination(ancestor)}/${path.slice(ancestor.path.length)}`,
         );
         continue;
       }
-      if (row.kind !== "symlink" || !follow) return { path, row, followed };
+      if (!followsTerminalLink(row, follow)) return { path, row, followed };
       followed.push(row.path);
       path = this.linkDestination(row);
     }
     throw new VfsError("ELOOP", "too many levels of symbolic links", input);
+  }
+
+  private missingAncestorLink(path: string): SymlinkEntryRow | null {
+    return this.links() === 0 ? null : this.linkAncestor(path);
+  }
+
+  private resolveDottedEntry(input: string, follow: boolean, context: PathResolution) {
+    let path = "/";
+    for (const segment of input.split("/").filter(Boolean)) {
+      if (segment !== "." && segment !== "..") {
+        path = `${path}/${segment}`;
+        continue;
+      }
+      if (path === "/") {
+        context.followed.push("/");
+        continue;
+      }
+      const prefix = this.resolveEntry(normalizePath(path), true, context);
+      if (prefix.row === null) throw new VfsError("ENOENT", "no such directory", prefix.path);
+      if (prefix.row.kind !== "directory")
+        throw new VfsError("ENOTDIR", "not a directory", prefix.path);
+      // A trailing slash marks a directory whose own search permission matters.
+      context.followed.push(`${prefix.path}/`);
+      path = segment === ".." ? dirname(prefix.path) : prefix.path;
+    }
+    return this.resolveEntry(normalizePath(path), follow, context);
   }
 
   /**
@@ -190,15 +236,20 @@ export abstract class SqlPath extends SqlBase {
    * exists to catch.
    */
   protected guardToken(path: string, entry?: EntryRow | null): string {
-    const normalized = normalizePath(path);
+    const normalized = normalizeResolutionPath(path);
     // With no links the guard is the named path's own token, which is what a
     // row resolved for that same path holds. With links it also covers every
     // one crossed, and those have no row here.
-    if (this.links() === 0) return this.tokenOf(normalized, entry);
+    if (this.links() === 0 && !hasDotSegments(normalized)) return this.tokenOf(normalized, entry);
     const resolved = this.resolveEntry(normalized, true);
     const base = this.tokenFor(resolved.path);
     if (resolved.followed.length === 0) return base;
-    return [base, ...resolved.followed.map((link) => this.tokenFor(link))].join("|");
+    return [
+      base,
+      ...resolved.followed.map((link) =>
+        this.tokenFor(link.endsWith("/") ? normalizePath(link) : link),
+      ),
+    ].join("|");
   }
 
   /**
@@ -209,8 +260,8 @@ export abstract class SqlPath extends SqlBase {
    * whether the file happened to be there already.
    */
   realpath(path: string, options: { follow?: boolean } = {}, access?: PosixAccessContext): string {
-    const normalized = normalizePath(path);
-    if (this.links() === 0) {
+    const normalized = normalizeResolutionPath(path);
+    if (this.links() === 0 && !hasDotSegments(normalized)) {
       this.assertTraverse(normalized, [], access);
       return normalized;
     }
@@ -230,7 +281,10 @@ export abstract class SqlPath extends SqlBase {
   }
 
   protected requireEntry(path: string, follow = true): EntryRow {
-    const row = this.oneResolved(path, follow);
+    const row =
+      this.symlinkCount === 0 && !this.symlinkCountStale && !hasDotSegments(path)
+        ? this.oneEntry(path)
+        : this.oneResolved(path, follow);
     if (row === null) throw new VfsError("ENOENT", "no such file or directory", path);
     return row;
   }
@@ -283,11 +337,12 @@ export abstract class SqlPath extends SqlBase {
     // followed even when the caller asked not to follow one: `rm dirlink/` is
     // a question about the directory, not about the link.
     const requiresDirectory = pathRequiresDirectory(path);
-    const normalized = normalizePath(path);
+    const dotted = hasDotSegments(path);
+    const normalized = dotted ? normalizeResolutionPath(path) : normalizePath(path);
     // With no links there is nothing to resolve and no row to fetch, so this
     // costs exactly what it did before links existed: nothing.
     const resolved =
-      this.links() === 0
+      this.links() === 0 && !dotted
         ? { path: normalized, row: null, followed: [] }
         : this.resolveEntry(normalized, followTerminal || requiresDirectory);
     if (requiresDirectory && resolved.row === null && resolved.path !== "/") {
@@ -382,13 +437,60 @@ export abstract class SqlPath extends SqlBase {
     version: number,
     present: boolean,
     op: VfsMutationOp,
+    knownEntry?: EntryRow | null,
   ): string {
+    const linkIdentity = knownEntry === undefined ? undefined : (knownEntry?.linkIdentity ?? null);
     this.recordPathChange(path, present);
     const token = formatMutationToken(this.mutationEpoch, version);
     this.recordMutation({ op, path, mutationToken: token });
+    if (
+      this.sharedInodes &&
+      linkIdentity !== null &&
+      present &&
+      (op === "write" || op === "metadata")
+    ) {
+      for (const row of this.sql
+        .exec<SqlRow>(
+          `SELECT path, mutation_version FROM vfs_entries WHERE path <> ? AND link_identity = ${linkIdentity === undefined ? "(SELECT link_identity FROM vfs_entries WHERE path = ?)" : "?"}`,
+          path,
+          linkIdentity ?? path,
+        )
+        .toArray()) {
+        const alias = stringColumn(row, "path");
+        this.recordPathChange(alias, true);
+        this.recordMutation({
+          op,
+          path: alias,
+          mutationToken: formatMutationToken(
+            this.mutationEpoch,
+            integerColumn(row, "mutation_version"),
+          ),
+        });
+      }
+    }
     return token;
   }
 
+  protected publishLinkedMetadata(identities: readonly number[]): void {
+    if (identities.length === 0) return;
+    for (const row of this.sql
+      .exec<SqlRow>(
+        "SELECT path, mutation_version FROM vfs_entries WHERE link_identity IN (SELECT value FROM json_each(?))",
+        JSON.stringify(identities),
+      )
+      .toArray()) {
+      const path = stringColumn(row, "path");
+      this.recordPathChange(path, true);
+      this.recordMutation({
+        op: "metadata",
+        path,
+        mutationToken: formatMutationToken(
+          this.mutationEpoch,
+          integerColumn(row, "mutation_version"),
+        ),
+      });
+    }
+  }
   /** Consumes an absent path's tombstone and returns its next live version. */
   protected nextEntryVersion(path: string, previousVersion = 0): number {
     const tombstone = firstRow(
@@ -410,6 +512,11 @@ export abstract class SqlPath extends SqlBase {
    * workspace does not build an object it would only discard.
    */
   protected recordMutation(mutation: PendingMutation): void {
+    if (mutation.op === "create" || mutation.op === "remove" || mutation.op === "move") {
+      this.pendingParents ??= new Set();
+      this.pendingParents.add(dirname(mutation.path));
+      if (mutation.subtree?.to !== undefined) this.pendingParents.add(dirname(mutation.subtree.to));
+    }
     if (this.onEvent === undefined) return;
     this.pendingMutations.push(mutation);
   }

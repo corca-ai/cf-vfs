@@ -1,5 +1,5 @@
 import { VfsError } from "../core/errors.js";
-import { compareUtf8, normalizePath } from "../core/path.js";
+import { compareUtf8, normalizeFileSystemPath } from "../core/path.js";
 import type { ShellBudget, ShellFileSystem, ShellSession } from "./types.js";
 
 export function escapeGlob(value: string): string {
@@ -74,7 +74,7 @@ interface GlobSearch {
 }
 
 function globSearch(pattern: string, cwd: string, fileSystem: ShellFileSystem): GlobSearch {
-  const absolutePattern = normalizePath(pattern, cwd);
+  const absolutePattern = normalizeFileSystemPath(pattern, cwd);
   const firstMeta = firstGlobMeta(absolutePattern);
   const escapedPrefix = firstMeta < 0 ? absolutePattern : absolutePattern.slice(0, firstMeta);
   const rootEnd = Math.max(escapedPrefix.lastIndexOf("/"), 0);
@@ -120,7 +120,7 @@ function displayedGlobPath(value: string, pattern: string, cwd: string, path: st
   const directoryEnd = pattern.lastIndexOf("/", relativeMeta);
   if (directoryEnd < 0) return relativePath(cwd, path);
   const lexicalDirectory = unescapeGlob(pattern.slice(0, directoryEnd + 1));
-  const base = normalizePath(lexicalDirectory, cwd);
+  const base = normalizeFileSystemPath(lexicalDirectory, cwd);
   return `${lexicalDirectory}${relativePath(base, path)}`;
 }
 

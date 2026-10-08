@@ -1,0 +1,48 @@
+
+> @corca-ai/cf-vfs@0.4.1 lint
+> biome check
+
+bench/regex-differential.mjs:41:3 lint/style/useTemplate  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Template literals are preferred over string concatenation.
+  
+    39 │   "needle123".repeat(50),
+    40 │   "ab".repeat(80),
+  > 41 │   "a".repeat(400) + "!",
+       │   ^^^^^^^^^^^^^^^^^^^^^
+    42 │ ];
+    43 │ for (let i = 0; i < 70; i++)
+  
+  i Unsafe fix: Use a template literal.
+  
+    39 39 │     "needle123".repeat(50),
+    40 40 │     "ab".repeat(80),
+    41    │ - ··"a".repeat(400)·+·"!",
+       41 │ + ··`${"a".repeat(400)}!`,
+    42 42 │   ];
+    43 43 │   for (let i = 0; i < 70; i++)
+  
+
+bench/regex-differential.mjs:85:13 lint/style/useTemplate  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  i Template literals are preferred over string concatenation.
+  
+    83 │             outcome(() => b.exec(text, from)),
+    84 │             outcome(() => a.exec(text, from)),
+  > 85 │             context + " from=" + from,
+       │             ^^^^^^^^^^^^^^^^^^^^^^^^^
+    86 │           );
+    87 │           comparisons++;
+  
+  i Unsafe fix: Use a template literal.
+  
+    83 83 │               outcome(() => b.exec(text, from)),
+    84 84 │               outcome(() => a.exec(text, from)),
+    85    │ - ············context·+·"·from="·+·from,
+       85 │ + ············`${context}·from=${from}`,
+    86 86 │             );
+    87 87 │             comparisons++;
+  
+
+Checked 334 files in 58ms. No fixes applied.
+Found 2 infos.

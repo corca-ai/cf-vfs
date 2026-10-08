@@ -1,0 +1,56 @@
+
+> @corca-ai/cf-vfs@0.4.1 bench:check
+> npm run build && node bench/check-node-sql.mjs && npm run bench:do
+
+
+> @corca-ai/cf-vfs@0.4.1 build
+> npm run clean && tsc -p tsconfig.build.json
+
+
+> @corca-ai/cf-vfs@0.4.1 clean
+> node -e "require('node:fs').rmSync('dist', { recursive: true, force: true })"
+
+benchmark scenarios verified (17 measurements)
+
+> @corca-ai/cf-vfs@0.4.1 bench:do
+> vitest run --config vitest.performance.config.ts --disableConsoleIntercept
+
+
+ RUN  v4.1.10 /Users/ak/prjs/cc/cf-vfs
+
+text processing workerd: {"name":"sed-global-dense","repeatsPerSample":10,"medianMs":1,"p10Ms":0.9,"p90Ms":1,"statements":2,"rowsRead":2,"rowsWritten":0}
+text processing workerd: {"name":"grep-only-matching-dense","repeatsPerSample":10,"medianMs":0.4,"p10Ms":0.4,"p90Ms":0.5,"statements":2,"rowsRead":2,"rowsWritten":0}
+text processing workerd: {"name":"awk-gsub-dense","repeatsPerSample":10,"medianMs":0.3,"p10Ms":0.3,"p90Ms":0.4,"statements":2,"rowsRead":2,"rowsWritten":0}
+text processing workerd: {"name":"awk-regex-split-dense","repeatsPerSample":10,"medianMs":0.8,"p10Ms":0.7,"p90Ms":0.8,"statements":2,"rowsRead":2,"rowsWritten":0}
+text processing workerd: {"name":"grep-short-lines","repeatsPerSample":10,"medianMs":1.2,"p10Ms":1.1,"p90Ms":1.2,"statements":2,"rowsRead":2,"rowsWritten":0}
+text processing workerd: {"name":"sed-short-lines","repeatsPerSample":10,"medianMs":2.8,"p10Ms":2.8,"p90Ms":2.9,"statements":2,"rowsRead":2,"rowsWritten":0}
+text processing workerd: {"name":"awk-short-lines","repeatsPerSample":10,"medianMs":2.6,"p10Ms":2.5,"p90Ms":2.7,"statements":2,"rowsRead":2,"rowsWritten":0}
+text processing workerd: {"name":"grep-regex-long-record","repeatsPerSample":10,"medianMs":4.9,"p10Ms":4.9,"p90Ms":5.1,"statements":2,"rowsRead":2,"rowsWritten":0}
+text processing workerd: {"name":"awk-regex-long-record","repeatsPerSample":10,"medianMs":4.9,"p10Ms":4.8,"p90Ms":5,"statements":2,"rowsRead":2,"rowsWritten":0}
+text processing workerd: {"name":"sed-capture-long-record","repeatsPerSample":10,"medianMs":5.7,"p10Ms":5.7,"p90Ms":5.8,"statements":2,"rowsRead":2,"rowsWritten":0}
+SQL optimization: {"name":"batch-create-10","repeatsPerSample":10,"medianMs":0.3,"p10Ms":0.2,"p90Ms":0.3,"statements":52,"rowsRead":52,"rowsWritten":41}
+SQL optimization: {"name":"batch-create-100","repeatsPerSample":10,"medianMs":2.3,"p10Ms":2.1,"p90Ms":2.4,"statements":502,"rowsRead":502,"rowsWritten":401}
+SQL optimization: {"name":"append-string","repeatsPerSample":100,"medianMs":0.03,"p10Ms":0.02,"p90Ms":0.03,"statements":6,"rowsRead":7,"rowsWritten":3}
+SQL optimization: {"name":"append-bytes","repeatsPerSample":100,"medianMs":0.03,"p10Ms":0.03,"p90Ms":0.03,"statements":7,"rowsRead":7,"rowsWritten":3}
+SQL optimization: {"name":"find-shallow","repeatsPerSample":10,"medianMs":0.2,"p10Ms":0.1,"p90Ms":0.2,"statements":2,"rowsRead":52,"rowsWritten":0}
+SQL optimization: {"name":"find-filtered","repeatsPerSample":10,"medianMs":0.8,"p10Ms":0.8,"p90Ms":0.9,"statements":2,"rowsRead":5051,"rowsWritten":0}
+SQL optimization: {"name":"find-all","repeatsPerSample":10,"medianMs":11.2,"p10Ms":10.7,"p90Ms":11.3,"statements":7,"rowsRead":5061,"rowsWritten":0}
+SQL optimization: {"name":"maintenance-1000","repeatsPerSample":100,"medianMs":0,"p10Ms":0,"p90Ms":0.01,"statements":1,"rowsRead":4,"rowsWritten":0}
+SQL optimization: {"name":"gc-insert-1000","statements":1,"rowsRead":0,"rowsWritten":3,"databaseBytes":327680}
+SQL optimization: {"name":"maintenance-10000","repeatsPerSample":100,"medianMs":0,"p10Ms":0,"p90Ms":0.01,"statements":1,"rowsRead":4,"rowsWritten":0}
+SQL optimization: {"name":"gc-insert-10000","statements":1,"rowsRead":0,"rowsWritten":3,"databaseBytes":2338816}
+DO small-BLOB benchmark: {"fileCount":512,"logicalBytes":5242790,"databaseBytes":6254592,"storageAmplification":1.1929892290173743,"chunks":512,"checksum":125590,"writeMs":32,"readMs":18,"writeCost":{"statements":3584,"rowsRead":3584,"rowsWritten":2560},"readCost":{"statements":1024,"rowsRead":1535,"rowsWritten":0}}
+DO storage benchmark: {"rowsRead":17,"rowsWritten":5,"databaseBytesBefore":1155072,"databaseBytesAfter":1155072,"chunks":4,"outputBytes":1048576,"firstByte":7,"estimatedSqlRowUsd":0.000005017}
+DO append benchmark: {"1MiB":{"durationMs":0.7,"maxRowsWritten":3},"8MiB":{"durationMs":1,"maxRowsWritten":3}}
+DO subtree benchmark: {"copy":9,"move":8,"remove":9}
+DO change-cursor benchmark: {"off":{"statements":31,"rowsRead":348,"rowsWritten":111,"point":{"statements":3,"rowsRead":5,"rowsWritten":2},"databaseBytes":106496,"changes":0},"on":{"statements":37,"rowsRead":436,"rowsWritten":195,"point":{"statements":4,"rowsRead":5,"rowsWritten":4},"databaseBytes":106496,"changes":31}}
+DO subtree latency: {"100":{"copyMs":0.35,"moveMs":0.15,"removeMs":0.2},"1000":{"copyMs":3.1,"moveMs":2.1,"removeMs":1.4}}
+DO point benchmark: {"statCost":{"statements":1,"nextCalls":0,"toArrayCalls":1,"oneCalls":0},"populatedStatCost":{"rowsRead":1,"statements":1},"overwriteCost":{"statements":3,"rowsRead":5,"rowsWritten":2},"readEditCost":{"statements":4,"rowsRead":6,"rowsWritten":2},"coldDigestCost":{"statements":3,"rowsRead":3,"rowsWritten":1},"warmDigestCost":{"statements":1,"rowsRead":1,"rowsWritten":0},"statQueryPlan":["SEARCH e USING INDEX vfs_entries_path (path=?)"],"warmInitializeMs":0.006,"statMs":0.0042,"overwriteMs":0.02,"writeAfterReadMs":{"cached":0.011,"uncached":0.017},"utf8ReadMs":0.0188,"globFindMs":2.1}
+token schema workerd spike: {"split":{"layout":"split","databaseBytes":1613824,"statMs":23,"listMs":34,"updateMs":21,"costs":{"stat":{"statements":10000,"rowsRead":20000,"rowsWritten":0},"list":{"statements":500,"rowsRead":100000,"rowsWritten":0},"update":{"statements":10000,"rowsRead":15000,"rowsWritten":10000}}},"separated":{"layout":"separated","databaseBytes":1306624,"statMs":22,"listMs":30,"updateMs":14,"costs":{"stat":{"statements":10000,"rowsRead":10000,"rowsWritten":0},"list":{"statements":500,"rowsRead":50000,"rowsWritten":0},"update":{"statements":5000,"rowsRead":10000,"rowsWritten":5000}}}}
+POSIX COST [{"op":"stat","depth":1,"ms":5,"statements":500,"rowsRead":3500},{"op":"stat","depth":16,"ms":12,"statements":500,"rowsRead":26000},{"op":"stat","depth":64,"ms":57,"statements":500,"rowsRead":98000},{"op":"rename-replace","bytes":80,"statements":11,"rowsRead":150,"rowsWritten":9},{"op":"rename-replace","bytes":1048576,"statements":11,"rowsRead":154,"rowsWritten":12},{"op":"rename-replace","bytes":8388608,"statements":11,"rowsRead":182,"rowsWritten":40}]
+
+ Test Files  5 passed (5)
+      Tests  28 passed (28)
+   Start at  12:40:48
+   Duration  8.89s (transform 227ms, setup 0ms, import 1.17s, tests 7.00s, environment 0ms)
+

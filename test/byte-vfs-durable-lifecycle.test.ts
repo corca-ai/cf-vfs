@@ -42,10 +42,10 @@ it("reports mutations only after the real transaction commits", async () => {
     return { committed, refused, afterRollback, moved: [...events] };
   });
 
-  expect(observed.committed).toEqual(["create /first"]);
+  expect(observed.committed).toEqual(["create /first", "metadata /"]);
   expect(observed.refused).toBe("ENOSPC");
   expect(observed.afterRollback).toEqual([]);
-  expect(observed.moved).toEqual(["move /first -> /second"]);
+  expect(observed.moved).toEqual(["move /first -> /second", "metadata /"]);
 });
 
 it("never reissues an entry identity after the object is evicted", async () => {
@@ -147,7 +147,10 @@ it("resumes the change sequence after the object is evicted", async () => {
     await fileSystem.writeFile("/b", "two");
     return fileSystem.changesSince(before);
   });
-  expect(after.changes).toEqual([{ path: "/b", present: true }]);
+  expect(after.changes).toEqual([
+    { path: "/b", present: true },
+    { path: "/", present: true },
+  ]);
   expect(after.cursor).toBeGreaterThan(before);
 });
 

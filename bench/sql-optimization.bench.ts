@@ -14,8 +14,8 @@ class BenchmarkFileSystem extends DurableObjectFileSystem {
 
 const expectedCosts: Record<string, { statements: number; rowsRead: number; rowsWritten: number }> =
   {
-    "batch-create-10": { statements: 52, rowsRead: 52, rowsWritten: 41 },
-    "batch-create-100": { statements: 502, rowsRead: 502, rowsWritten: 401 },
+    "batch-create-10": { statements: 53, rowsRead: 53, rowsWritten: 42 },
+    "batch-create-100": { statements: 503, rowsRead: 503, rowsWritten: 402 },
     "append-string": { statements: 6, rowsRead: 7, rowsWritten: 3 },
     "append-bytes": { statements: 7, rowsRead: 7, rowsWritten: 3 },
     "find-shallow": { statements: 2, rowsRead: 52, rowsWritten: 0 },

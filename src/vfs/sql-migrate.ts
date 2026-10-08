@@ -299,10 +299,8 @@ ${ENTRY_TRIGGERS}
     );
     markMigrated();
   }
-  if (currentVersion < 8) {
-    migrateMaintenanceIndexes(context, now);
-    markMigrated();
-  }
+  migrateMaintenance(context, currentVersion, now, markMigrated);
+  migrateInodeStorage(context, currentVersion, now, markMigrated);
   return stringColumn(
     context.sql.exec<SqlRow>("SELECT mutation_epoch FROM vfs_state WHERE singleton = 1").one(),
     "mutation_epoch",
@@ -317,4 +315,60 @@ function migrateMaintenanceIndexes(context: SqlMigrationContext, now: number): v
         ON vfs_upload_sessions(verification_lease_until_ms) WHERE state = 'verifying';
     `);
   context.sql.exec("INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (8, ?)", now);
+}
+
+function migrateInodeStorage(
+  context: SqlMigrationContext,
+  currentVersion: number,
+  now: number,
+  markMigrated: () => void,
+): void {
+  if (currentVersion < 9) {
+    context.execBatch(`ALTER TABLE vfs_entries ADD COLUMN changed_at_ms INTEGER;
+      ALTER TABLE vfs_upload_sessions ADD COLUMN written_path TEXT;
+      ALTER TABLE vfs_upload_sessions ADD COLUMN traversal_token TEXT;
+      CREATE TABLE vfs_detached_inodes (
+        id INTEGER PRIMARY KEY, entry_json TEXT NOT NULL,
+        inline_bytes INTEGER NOT NULL CHECK(inline_bytes >= 0), opaque_object_id INTEGER
+      );
+      CREATE INDEX vfs_detached_opaque ON vfs_detached_inodes(opaque_object_id) WHERE opaque_object_id IS NOT NULL;
+      CREATE TABLE vfs_detached_chunks (
+        entry_id INTEGER NOT NULL, chunk_index INTEGER NOT NULL, body BLOB NOT NULL,
+        PRIMARY KEY(entry_id, chunk_index)
+      ) WITHOUT ROWID;
+      CREATE TRIGGER vfs_detached_object_guard BEFORE DELETE ON vfs_opaque_objects
+      WHEN EXISTS (SELECT 1 FROM vfs_detached_inodes WHERE opaque_object_id = OLD.id)
+      BEGIN SELECT RAISE(ABORT, 'opaque object has an open inode'); END;
+    `);
+    context.sql.exec(
+      "INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (9, ?)",
+      now,
+    );
+    markMigrated();
+  }
+  if (currentVersion < 10) {
+    context.execBatch(`ALTER TABLE vfs_entries ADD COLUMN link_identity INTEGER;
+      ALTER TABLE vfs_entries ADD COLUMN link_count INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE vfs_entries ADD COLUMN unlinking INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE vfs_entries ADD COLUMN mirroring INTEGER NOT NULL DEFAULT 0;
+      CREATE INDEX vfs_entries_link_identity ON vfs_entries(link_identity) WHERE link_identity IS NOT NULL;
+      CREATE INDEX vfs_entries_child_directories ON vfs_entries(parent_path) WHERE kind = 'directory' AND path <> '/';
+      UPDATE vfs_entries SET link_count = 2 + (SELECT COUNT(*) FROM vfs_entries child WHERE child.parent_path = vfs_entries.path AND child.kind = 'directory' AND child.path <> '/') WHERE kind = 'directory';`);
+    context.sql.exec(
+      "INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (10, ?)",
+      now,
+    );
+    markMigrated();
+  }
+}
+
+function migrateMaintenance(
+  context: SqlMigrationContext,
+  version: number,
+  now: number,
+  mark: () => void,
+): void {
+  if (version >= 8) return;
+  migrateMaintenanceIndexes(context, now);
+  mark();
 }

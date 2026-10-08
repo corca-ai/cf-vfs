@@ -237,7 +237,10 @@ export abstract class SqlOpaqueCommit extends SqlOpaqueStart {
       this.staleOpaqueCommit(uploadId, session);
       return { kind: "expired", path: session.path };
     }
-    if (this.tokenFor(session.path) !== session.expectedMutationToken) {
+    if (
+      this.tokenFor(session.path) !== session.expectedMutationToken ||
+      !this.matchesUploadTraversal(session)
+    ) {
       return this.staleOpaqueCommit(uploadId, session);
     }
     const existing = this.oneEntry(session.path);
@@ -246,7 +249,7 @@ export abstract class SqlOpaqueCommit extends SqlOpaqueStart {
     const now = this.now();
     this.prepareParents(session.path, session.createParents, now, []);
     this.assertCapacity(
-      existing?.contentClass === "inline" ? -existing.sizeBytes : 0,
+      existing?.contentClass === "inline" ? -existing.sizeBytes * (existing.linkCount ?? 1) : 0,
       existing === null ? 1 : 0,
       session.path,
     );
@@ -256,6 +259,20 @@ export abstract class SqlOpaqueCommit extends SqlOpaqueStart {
     const stat = this.publishOpaqueEntry(session, existing, metadata, written, now);
     this.storeOpaqueReceipt(uploadId, stat, now);
     return { kind: "committed", stat };
+  }
+
+  private matchesUploadTraversal(session: UploadRow): boolean {
+    if (session.writtenPath === null) return true;
+    try {
+      return (
+        this.resolveAccess(session.writtenPath).path === session.path &&
+        this.guardToken(session.writtenPath) === session.traversalToken
+      );
+    } catch (error) {
+      if (error instanceof VfsError && ["ENOENT", "ENOTDIR", "ELOOP"].includes(error.code))
+        return false;
+      throw error;
+    }
   }
 
   private requireVerificationLease(uploadId: string, lease: VerificationLease): UploadRow {
@@ -335,7 +352,7 @@ export abstract class SqlOpaqueCommit extends SqlOpaqueStart {
          ON CONFLICT(path) DO UPDATE SET
            kind = 'file', content_class = 'opaque', opaque_object_id = excluded.opaque_object_id,
            size_bytes = excluded.size_bytes, mode = excluded.mode,
-           modified_at_ms = excluded.modified_at_ms,
+           modified_at_ms = excluded.modified_at_ms, changed_at_ms = excluded.modified_at_ms,
            revision = vfs_entries.revision + 1,
            mutation_version = excluded.mutation_version
          RETURNING id, revision`,
@@ -368,9 +385,10 @@ export abstract class SqlOpaqueCommit extends SqlOpaqueStart {
       written.mutationVersion,
       true,
       existing === null ? "create" : "write",
+      existing,
     );
     this.updateUsage(
-      existing?.contentClass === "inline" ? -existing.sizeBytes : 0,
+      existing?.contentClass === "inline" ? -existing.sizeBytes * (existing.linkCount ?? 1) : 0,
       existing === null ? 1 : 0,
     );
     this.queueReplacedOpaqueObject(existing, now);
@@ -378,7 +396,8 @@ export abstract class SqlOpaqueCommit extends SqlOpaqueStart {
     return {
       path: session.path,
       parentPath: written.parentPath,
-      ino: integerColumn(written.row, "id"),
+      ino: existing?.linkIdentity ?? integerColumn(written.row, "id"),
+      nlink: existing?.linkCount ?? 1,
       name: written.name,
       kind: "file",
       contentClass: "opaque",
@@ -388,6 +407,7 @@ export abstract class SqlOpaqueCommit extends SqlOpaqueStart {
       gid: written.gid,
       createdAtMs: written.createdAtMs,
       modifiedAtMs: now,
+      changedAtMs: now,
       revision: integerColumn(written.row, "revision"),
       mutationToken: token,
       ...(contentType === undefined ? {} : { contentType }),

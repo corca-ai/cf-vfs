@@ -1,0 +1,48 @@
+--- a/src/fs/sql-file-handles.ts
++++ b/src/fs/sql-file-handles.ts
+@@ -377,29 +377,23 @@
+       const current = this.entry(ino);
+       const detached = entry.linkCount === 0;
+       const table = detached ? "vfs_detached_chunks" : "vfs_inline_chunks";
+-      let remaining = size;
+-      for (const row of this.port.sql
+-        .exec<SqlRow>(
+-          `SELECT chunk_index, length(body) AS size FROM ${table} WHERE entry_id = ? ORDER BY chunk_index`,
++      if (size === 0) this.port.sql.exec(`DELETE FROM ${table} WHERE entry_id = ?`, current.id);
++      else {
++        const first = this.port.sql.exec<SqlRow>(
++          `SELECT length(body) AS size FROM ${table} WHERE entry_id = ? AND chunk_index = 0`,
+           current.id,
+-        )
+-        .toArray()) {
+-        const index = integerColumn(row, "chunk_index");
+-        const length = integerColumn(row, "size");
+-        if (remaining <= 0)
+-          this.port.sql.exec(
+-            `DELETE FROM ${table} WHERE entry_id = ? AND chunk_index = ?`,
+-            entry.id,
+-            index,
+-          );
+-        else if (remaining < length)
+-          this.port.sql.exec(
+-            `UPDATE ${table} SET body = substr(body, 1, ?) WHERE entry_id = ? AND chunk_index = ?`,
+-            remaining,
+-            current.id,
+-            index,
+-          );
+-        remaining -= length;
++        ).one();
++        const width = integerColumn(first, "size");
++        if (width <= 0) throw new VfsError("EIO", "invalid inode chunk width");
++        const end = Math.ceil(size / width);
++        this.port.sql.exec(
++          `DELETE FROM ${table} WHERE entry_id = ? AND chunk_index >= ?`, current.id, end,
++        );
++        const tail = size % width;
++        if (tail !== 0) this.port.sql.exec(
++          `UPDATE ${table} SET body = substr(body, 1, ?) WHERE entry_id = ? AND chunk_index = ?`,
++          tail, current.id, end - 1,
++        );
+       }
+       this.update(current, size, detached);
+     });

@@ -38,7 +38,7 @@ it("adds no SQL for mutation notification, observed or not", async () => {
     if (observe) {
       expect(
         seen.filter((event) => (event as { type: string }).type === "vfs.mutation"),
-      ).toHaveLength(5);
+      ).toHaveLength(8);
     }
     return meter.statements;
   }
@@ -51,7 +51,7 @@ it("adds no SQL for mutation notification, observed or not", async () => {
   // themselves still add no query.
   const unobserved = await statements(false);
   const observed = await statements(true);
-  expect(unobserved).toBe(41);
+  expect(unobserved).toBe(44);
   expect(observed - unobserved).toBe(2);
 });
 

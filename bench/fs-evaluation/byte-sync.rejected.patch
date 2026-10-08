@@ -1,0 +1,70 @@
+--- a/src/vfs/buffering.ts
++++ b/src/vfs/buffering.ts
+@@ -107,13 +107,18 @@
+ 
+ /** Takes the same bounded lease without introducing an async boundary for materialized input. */
+ export function collectInlineBytesSync(
+-  body: string,
++  body: Exclude<ByteBody, ReadableStream<Uint8Array>>,
+   maximumBytes: number,
+   chunkBytes: number,
+   budget: InFlightByteBudget,
+   heldByCaller = 0,
+ ): BufferedChunksLease {
+-  const input = encodeUtf8(body);
++  const input =
++    typeof body === "string"
++      ? encodeUtf8(body)
++      : body instanceof ArrayBuffer
++        ? new Uint8Array(body)
++        : new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
+   const sizeBytes = input.byteLength;
+   budget.acquire(sizeBytes, heldByCaller);
+   if (sizeBytes > maximumBytes) {
+@@ -121,6 +126,10 @@
+     throw new VfsError("EFBIG", `stream exceeds the ${maximumBytes}-byte limit`);
+   }
+   const chunks =
+-    sizeBytes === 0 ? [] : sizeBytes <= chunkBytes ? [input] : rechunk([input], chunkBytes);
++    sizeBytes === 0
++      ? []
++      : sizeBytes <= chunkBytes
++        ? [typeof body === "string" ? input : input.slice()]
++        : rechunk([input], chunkBytes);
+   return leasedChunks(chunks, sizeBytes, budget, sizeBytes);
+ }
+--- a/src/vfs/sql-content-base.ts
++++ b/src/vfs/sql-content-base.ts
+@@ -245,7 +245,7 @@
+     }
+   }
+ 
+-  protected collectInlineSync(body: string) {
++  protected collectInlineSync(body: Exclude<ByteBody, ReadableStream<Uint8Array>>) {
+     try {
+       return collectInlineBytesSync(
+         body,
+--- a/src/vfs/sql-write-base.ts
++++ b/src/vfs/sql-write-base.ts
+@@ -55,9 +55,10 @@
+     options: WriteFileOptions = {},
+     posix?: PosixAccessContext,
+   ): Promise<WriteResult> {
+-    const materialized = options.skipIfUnchanged !== true && typeof body === "string";
++    const materialized = options.skipIfUnchanged !== true && !(body instanceof ReadableStream);
++    const uninterrupted = materialized && typeof body === "string";
+     const snapshot =
+-      materialized &&
++      uninterrupted &&
+       posix === undefined &&
+       options.disposition !== "create" &&
+       !pathRequiresDirectory(path) &&
+@@ -80,7 +81,7 @@
+           this.now(),
+           posix,
+           false,
+-          !materialized,
++          !uninterrupted,
+         );
+         queued = outcome.queuedGarbage;
+         return outcome.result;

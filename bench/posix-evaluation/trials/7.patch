@@ -1,0 +1,20 @@
+--- a/src/vfs/sql-read-base.ts
++++ b/src/vfs/sql-read-base.ts
+@@ -19,7 +19,6 @@
+ import { streamFromOwnedChunks } from "./streams.js";
+ import type { InlineReadResult, ReadFileOptions } from "./types.js";
+ 
+-const MIN_INLINE_SQL_RANGE_BYTES = 16 * 1024;
+ 
+ function sliceChunkSequence<Buffer extends ArrayBufferLike>(
+   chunks: readonly Uint8Array<Buffer>[],
+@@ -154,8 +153,7 @@
+     const selected = byteRangeBounds(options.range, entry.sizeBytes, normalized);
+     const readWholeBody =
+       options.range === undefined ||
+-      (selected.offset === 0 && selected.length === entry.sizeBytes) ||
+-      (entry.sizeBytes <= MIN_INLINE_SQL_RANGE_BYTES && entry.sizeBytes <= this.chunkBytes);
++      (selected.offset === 0 && selected.length === entry.sizeBytes);
+     const rows = this.readInlineRows(entry, selected, readWholeBody, normalized);
+     const materialized = rows.map((row) => new Uint8Array(blobColumn(row, "body")));
+     const chunks =

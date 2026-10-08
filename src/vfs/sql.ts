@@ -1,11 +1,14 @@
 import { VfsError } from "../core/errors.js";
+import { createHandleProvider, type HandleProvider, type SqlHandlePort } from "./handle-port.js";
 import { SqlGc } from "./sql-gc-base.js";
+import { type EntryRow, rowToStat } from "./sql-model.js";
 import {
   type PosixAccessContext,
   type PosixMutationOperation,
   posixContext,
   posixPermissions,
   READ_PERMISSION,
+  WRITE_PERMISSION,
 } from "./sql-posix.js";
 import type {
   AppendFileOptions,
@@ -53,6 +56,89 @@ export type {
 } from "./sql-model.js";
 
 export class SqlFileSystem extends SqlGc implements PosixVirtualFileSystem {
+  private handles: HandleProvider | undefined;
+  /** Hosts await this at startup to arm recovery maintenance before serving work. */
+  async initialize(): Promise<void> {
+    if (!this.recoveredDetached) return;
+    await this.scheduleGarbageAlarm();
+    this.recoveredDetached = false;
+  }
+  openFileHandle(path: string, flags = "r", mode = 0o666, access?: PosixAccessContext) {
+    this.handles ??= createHandleProvider(this.handlePort());
+    return this.handles.open(path, flags, mode, access);
+  }
+  linkFile(from: string, to: string, access?: PosixAccessContext): void {
+    this.handles ??= createHandleProvider(this.handlePort());
+    this.handles.link(from, to, access);
+  }
+  private handlePort(): SqlHandlePort {
+    return {
+      sql: this.sql,
+      batch: (query) => this.execBatch(query),
+      linked: () => {
+        this.sharedInodes = true;
+      },
+      sourceEntry: (path, access) => {
+        const resolved = this.resolveAccess(path, false, false);
+        this.assertTraverse(resolved.path, resolved.followed, access);
+        return resolved.row ?? this.requireEntry(resolved.path, false);
+      },
+      budget: this.inFlightBytes,
+      chunkBytes: this.chunkBytes,
+      maximum: this.maxInlineFileBytes,
+      store: this.opaqueStore,
+      transaction: (callback) => this.transaction(callback),
+      now: () => this.now(),
+      openEntry: (...args) => this.openHandleEntry(...args),
+      retain: (callback) => {
+        this.retainOpenInodes = callback;
+      },
+      capacity: (delta, path) => this.assertCapacity(delta, 0, path),
+      usage: (delta) => this.updateUsage(delta, 0),
+      publish: (entry) => {
+        this.publishToken(entry.path, entry.mutationVersion, true, "write", entry);
+      },
+      reclaimObject: (id) => {
+        this.queueObjectIfUnreferenced(id, this.now());
+      },
+      sync: () => this.storage.sync?.() ?? Promise.resolve(),
+      maintenance: () => this.scheduleGarbageAlarm(),
+      stat: rowToStat,
+    };
+  }
+  private openHandleEntry(
+    path: string,
+    read: boolean,
+    write: boolean,
+    create: boolean,
+    exclusive: boolean,
+    mode: number,
+    access?: PosixAccessContext,
+  ): EntryRow {
+    if (exclusive) {
+      const named = this.resolveAccess(path, false, false);
+      if ((named.row ?? this.oneEntry(named.path)) !== null)
+        throw new VfsError("EEXIST", "entry exists", path);
+    }
+    const resolved = this.resolveAccess(path);
+    this.assertTraverse(resolved.path, resolved.followed, access);
+    let entry = resolved.row ?? this.oneEntry(resolved.path);
+    const created = entry === null && create;
+    if (created) {
+      this.touch(path, { mode: 0o100000 | (mode & 0o7777) }, access);
+      entry = this.requireEntry(resolved.path);
+    }
+    if (entry === null) throw new VfsError("ENOENT", "file does not exist", path);
+    if (entry.kind !== "file") throw new VfsError("EISDIR", "not a regular file", path);
+    if (!created)
+      this.assertPermission(
+        entry,
+        access,
+        (read ? READ_PERMISSION : 0) | (write ? WRITE_PERMISSION : 0),
+        path,
+      );
+    return entry;
+  }
   forCredentials(credentials: PosixCredentials, options: PosixViewOptions = {}): VirtualFileSystem {
     return new PosixFileSystemView(this, posixContext(credentials, options));
   }
@@ -64,6 +150,14 @@ class PosixFileSystemView implements VirtualFileSystem {
     private readonly inner: SqlFileSystem,
     private readonly access: PosixAccessContext,
   ) {}
+
+  linkFile(from: string, to: string): void {
+    this.inner.linkFile(from, to, this.access);
+  }
+
+  openFileHandle(path: string, flags = "r", mode = 0o666) {
+    return this.inner.openFileHandle(path, flags, mode, this.access);
+  }
 
   getMutationToken(path: string, options?: MutationTokenOptions): string {
     return this.inner.getMutationToken(path, options, this.access);

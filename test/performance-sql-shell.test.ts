@@ -152,7 +152,7 @@ it("keeps credential-bound recursive copy set-based as the subtree grows", async
   meter.reset();
   const small = await user.copy("/small", "/destination/small", { recursive: true });
   const smallStatements = meter.statements;
-  expect(smallStatements).toBe(14);
+  expect(smallStatements).toBe(15);
 
   // Copy conservatively invalidates the symlink-count cache. Refresh it
   // outside both measurements so subtree size is the only variable.
@@ -192,10 +192,10 @@ it("walks a credential-bound creation parent only once per transaction", async (
       "/deep",
     ),
   }).toEqual({
-    touch: 9,
-    mkdir: 9,
-    symlink: 9,
-    write: 12,
-    recursiveTouch: 21,
+    touch: 10,
+    mkdir: 10,
+    symlink: 10,
+    write: 13,
+    recursiveTouch: 22,
   });
 });

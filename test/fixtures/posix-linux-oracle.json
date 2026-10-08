@@ -1,0 +1,637 @@
+{
+  "platform": "linux",
+  "node": "v24.18.0",
+  "cases": {
+    "empty-file": {
+      "value": 0,
+      "state": [
+        [
+          "a",
+          "file",
+          ""
+        ]
+      ]
+    },
+    "overwrite-keeps-inode": {
+      "value": true,
+      "state": [
+        [
+          "a",
+          "file",
+          "new"
+        ]
+      ]
+    },
+    "truncate-removes-tail": {
+      "value": "x",
+      "state": [
+        [
+          "a",
+          "file",
+          "x"
+        ]
+      ]
+    },
+    "append-creates": {
+      "value": "onetwo",
+      "state": [
+        [
+          "a",
+          "file",
+          "onetwo"
+        ]
+      ]
+    },
+    "exclusive-existing": {
+      "error": "EEXIST",
+      "state": [
+        [
+          "a",
+          "file",
+          "old"
+        ]
+      ]
+    },
+    "exclusive-dangling-link": {
+      "error": "EEXIST",
+      "state": [
+        [
+          "link",
+          "link",
+          "target"
+        ]
+      ]
+    },
+    "append-dangling-link": {
+      "value": "new",
+      "state": [
+        [
+          "link",
+          "link",
+          "target"
+        ],
+        [
+          "target",
+          "file",
+          "new"
+        ]
+      ]
+    },
+    "file-trailing-slash": {
+      "error": "ENOTDIR",
+      "state": [
+        [
+          "a",
+          "file",
+          "x"
+        ]
+      ]
+    },
+    "lstat-link": {
+      "value": [
+        true,
+        true
+      ],
+      "state": [
+        [
+          "link",
+          "link",
+          "target"
+        ],
+        [
+          "target",
+          "file",
+          "x"
+        ]
+      ]
+    },
+    "directory-link-trailing-slash": {
+      "value": true,
+      "state": [
+        [
+          "dir",
+          "directory"
+        ],
+        [
+          "link",
+          "link",
+          "dir"
+        ]
+      ]
+    },
+    "symlink-cycle": {
+      "error": "ELOOP",
+      "state": [
+        [
+          "a",
+          "link",
+          "b"
+        ],
+        [
+          "b",
+          "link",
+          "a"
+        ]
+      ]
+    },
+    "rmdir-nonempty": {
+      "error": "ENOTEMPTY",
+      "state": [
+        [
+          "dir",
+          "directory"
+        ],
+        [
+          "dir/a",
+          "file",
+          "x"
+        ]
+      ]
+    },
+    "unlink-directory": {
+      "error": "EISDIR",
+      "state": [
+        [
+          "dir",
+          "directory"
+        ]
+      ]
+    },
+    "rename-missing-same-path": {
+      "error": "ENOENT",
+      "state": []
+    },
+    "rename-file-directory": {
+      "error": "EISDIR",
+      "state": [
+        [
+          "a",
+          "file",
+          "x"
+        ],
+        [
+          "dir",
+          "directory"
+        ]
+      ]
+    },
+    "rename-directory-file": {
+      "error": "ENOTDIR",
+      "state": [
+        [
+          "a",
+          "file",
+          "x"
+        ],
+        [
+          "dir",
+          "directory"
+        ]
+      ]
+    },
+    "rename-directory-nonempty": {
+      "error": "ENOTEMPTY",
+      "state": [
+        [
+          "a",
+          "directory"
+        ],
+        [
+          "b",
+          "directory"
+        ],
+        [
+          "b/file",
+          "file",
+          "x"
+        ]
+      ]
+    },
+    "rename-keeps-inode": {
+      "value": [
+        true,
+        "one"
+      ],
+      "state": [
+        [
+          "b",
+          "file",
+          "one"
+        ]
+      ]
+    },
+    "rename-replaces-link": {
+      "value": [
+        "one",
+        "two"
+      ],
+      "state": [
+        [
+          "b",
+          "file",
+          "one"
+        ],
+        [
+          "target",
+          "file",
+          "two"
+        ]
+      ]
+    },
+    "rename-through-parent-link": {
+      "value": "one",
+      "state": [
+        [
+          "dir",
+          "directory"
+        ],
+        [
+          "dir/b",
+          "file",
+          "one"
+        ],
+        [
+          "link",
+          "link",
+          "dir"
+        ]
+      ]
+    },
+    "chmod-preserves-mtime": {
+      "value": true,
+      "state": [
+        [
+          "a",
+          "file",
+          "x"
+        ]
+      ]
+    },
+    "chmod-advances-ctime": {
+      "value": true,
+      "state": [
+        [
+          "a",
+          "file",
+          "x"
+        ]
+      ]
+    },
+    "rename-preserves-file-mtime": {
+      "value": true,
+      "state": [
+        [
+          "b",
+          "file",
+          "x"
+        ]
+      ]
+    },
+    "child-create-updates-parent-mtime": {
+      "value": true,
+      "state": [
+        [
+          "dir",
+          "directory"
+        ],
+        [
+          "dir/a",
+          "file",
+          "x"
+        ]
+      ]
+    },
+    "symlink-dotdot": {
+      "value": "target",
+      "state": [
+        [
+          "dir",
+          "directory"
+        ],
+        [
+          "dir/file",
+          "file",
+          "target"
+        ],
+        [
+          "dir/sub",
+          "directory"
+        ],
+        [
+          "file",
+          "file",
+          "lexical"
+        ],
+        [
+          "link",
+          "link",
+          "dir/sub"
+        ]
+      ]
+    },
+    "file-dotdot": {
+      "error": "ENOTDIR",
+      "state": [
+        [
+          "a",
+          "file",
+          "x"
+        ]
+      ]
+    },
+    "file-dot": {
+      "error": "ENOTDIR",
+      "state": [
+        [
+          "a",
+          "file",
+          "x"
+        ]
+      ]
+    },
+    "missing-dotdot": {
+      "error": "ENOENT",
+      "state": [
+        [
+          "a",
+          "file",
+          "x"
+        ]
+      ]
+    },
+    "nested-link-target-dotdot": {
+      "value": "target",
+      "state": [
+        [
+          "dir",
+          "directory"
+        ],
+        [
+          "dir/file",
+          "file",
+          "target"
+        ],
+        [
+          "dir/sub",
+          "directory"
+        ],
+        [
+          "file",
+          "file",
+          "lexical"
+        ],
+        [
+          "link",
+          "link",
+          "dir/sub"
+        ],
+        [
+          "nested",
+          "link",
+          "link/../file"
+        ]
+      ]
+    },
+    "lstat-link-dot": {
+      "value": true,
+      "state": [
+        [
+          "dir",
+          "directory"
+        ],
+        [
+          "link",
+          "link",
+          "dir"
+        ]
+      ]
+    },
+    "open-read-after-rename": {
+      "value": "old",
+      "state": [
+        [
+          "b",
+          "file",
+          "old"
+        ]
+      ]
+    },
+    "open-read-after-unlink": {
+      "value": "old",
+      "state": []
+    },
+    "open-handles-share-writes": {
+      "value": "new",
+      "state": [
+        [
+          "a",
+          "file",
+          "new"
+        ]
+      ]
+    },
+    "hardlink-shares-content": {
+      "value": [
+        true,
+        2,
+        "new"
+      ],
+      "state": [
+        [
+          "a",
+          "file",
+          "new"
+        ],
+        [
+          "b",
+          "file",
+          "new"
+        ]
+      ]
+    },
+    "hardlink-open-after-original-unlink": {
+      "value": "old",
+      "state": [
+        [
+          "b",
+          "file",
+          "old"
+        ]
+      ]
+    },
+    "hardlink-rename-same-inode": {
+      "value": 2,
+      "state": [
+        [
+          "a",
+          "file",
+          "old"
+        ],
+        [
+          "b",
+          "file",
+          "old"
+        ]
+      ]
+    },
+    "hardlink-symlink-inode": {
+      "value": [
+        2,
+        "missing"
+      ],
+      "state": [
+        [
+          "a",
+          "link",
+          "missing"
+        ],
+        [
+          "b",
+          "link",
+          "missing"
+        ]
+      ]
+    },
+    "directory-link-count": {
+      "value": [
+        3,
+        2
+      ],
+      "state": [
+        [
+          "a",
+          "directory"
+        ],
+        [
+          "sub",
+          "directory"
+        ]
+      ]
+    },
+    "handle-hole-write": {
+      "value": [
+        0,
+        0,
+        0,
+        120
+      ],
+      "state": [
+        [
+          "a",
+          "file",
+          "\u0000\u0000\u0000x"
+        ]
+      ]
+    },
+    "handle-truncate-extend": {
+      "value": [
+        97,
+        0,
+        0
+      ],
+      "state": [
+        [
+          "a",
+          "file",
+          "a\u0000\u0000"
+        ]
+      ]
+    },
+    "handle-explicit-position-cursor": {
+      "value": [
+        97
+      ],
+      "state": [
+        [
+          "a",
+          "file",
+          "abcd"
+        ]
+      ]
+    },
+    "handle-shared-write-after-last-unlink": {
+      "value": [
+        0,
+        "NEW"
+      ],
+      "state": []
+    },
+    "handle-sync": {
+      "value": "ok",
+      "state": [
+        [
+          "a",
+          "file",
+          "ok"
+        ]
+      ]
+    },
+    "directory-nlink-mixed-replacement": {
+      "value": [
+        4,
+        3,
+        2,
+        4,
+        3
+      ],
+      "state": [
+        [
+          "left",
+          "directory"
+        ],
+        [
+          "left/file",
+          "file",
+          "x"
+        ]
+      ]
+    },
+    "descriptor-overwrite-and-truncate-boundaries": {
+      "value": [
+        [
+          66,
+          66,
+          65,
+          65
+        ],
+        65537,
+        32769,
+        32768,
+        32767,
+        1,
+        0,
+        0,
+        5,
+        [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "state": [
+        [
+          "a",
+          "file",
+          "\u0000\u0000\u0000\u0000\u0000"
+        ]
+      ]
+    },
+    "linked-descriptor-truncate-after-unlink": {
+      "value": [
+        32769,
+        32769,
+        0,
+        [
+          66,
+          66,
+          66,
+          66
+        ]
+      ],
+      "state": []
+    }
+  },
+  "knownDifferences": []
+}

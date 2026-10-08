@@ -1,6 +1,8 @@
 /** Every error code this package raises. */
 export const VFS_ERROR_CODES = [
   "EACCES",
+  "EBADF",
+  "EMFILE",
   "EAGAIN",
   "E2BIG",
   "EEXIST",

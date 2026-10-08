@@ -43,7 +43,14 @@ it("migrates populated maintenance tables and preserves the earliest shared alar
       );
     }
     state.storage.sql.exec(
-      "DROP INDEX vfs_gc_earliest; DROP INDEX vfs_upload_verification_expiry; DELETE FROM vfs_schema_migrations WHERE version = 8",
+      `DROP INDEX vfs_gc_earliest; DROP INDEX vfs_upload_verification_expiry;
+       DROP TRIGGER vfs_detached_object_guard; DROP TABLE vfs_detached_chunks; DROP TABLE vfs_detached_inodes;
+       DROP INDEX vfs_entries_link_identity; DROP INDEX vfs_entries_child_directories;
+       ALTER TABLE vfs_entries DROP COLUMN link_identity; ALTER TABLE vfs_entries DROP COLUMN link_count;
+       ALTER TABLE vfs_entries DROP COLUMN unlinking; ALTER TABLE vfs_entries DROP COLUMN mirroring;
+       ALTER TABLE vfs_entries DROP COLUMN changed_at_ms;
+       ALTER TABLE vfs_upload_sessions DROP COLUMN written_path; ALTER TABLE vfs_upload_sessions DROP COLUMN traversal_token;
+       DELETE FROM vfs_schema_migrations WHERE version >= 8`,
     );
     const migrated = new MaintenanceFileSystem(state.storage);
     expect(migrated.getMutationToken("/kept")).toBe(token);
@@ -51,7 +58,7 @@ it("migrates populated maintenance tables and preserves the earliest shared alar
       state.storage.sql
         .exec<{ version: number }>("SELECT MAX(version) AS version FROM vfs_schema_migrations")
         .one().version,
-    ).toBe(8);
+    ).toBe(10);
     await state.storage.setAlarm(base + 400);
     await migrated.arm();
     expect(await state.storage.getAlarm()).toBe(base + 400);

@@ -8,6 +8,7 @@ src/vfs/              byte VFS contract, SQL core/adapters, streams, opaque life
 src/shell/            parser, expansion, FDs, pipes, redirection, policy, budgets
 src/shell/commands/   argv-based built-ins and utilities
 src/collab/           document registry, write-through view, and edit derivation
+src/fs/               optional promise-FS adapter, metadata reuse, content tier
 src/storage/          Cloudflare R2 and SQL compatibility entry points
 src/testing/          Node in-memory SQLite and deterministic R2 adapters
 test/                 Node SQLite, workerd, package, docs, and bundle checks
@@ -403,10 +404,10 @@ was traded and for what.
 
 ## Compatibility, bundle, and performance gates
 
-`test/check-tree-shaking.mjs` builds nine representative Worker bundles — one
+`test/check-tree-shaking.mjs` builds eleven representative Worker bundles — one
 applet, a small explicit registry, the opt-in AWK applet, the SQLite filesystem
 alone, shell-only, interactive, the full default registry, the opt-in Linux
-profile, and the R2 opaque adapter. Each preset
+profile, the R2 opaque adapter, and two opt-in FS adapters. Each preset
 declares the library modules that must and must not be reachable *and* a
 recorded byte budget in `test/fixtures/bundle-budgets.json`. Size alone is
 insufficient, so the inclusion check reads the emitted source map, whose
@@ -512,3 +513,9 @@ A follow-up bug hunt keeps those budgets unchanged. Its metadata and stream
 validation changes add 565 bytes to the VFS preset; bounded sed processing,
 standard diff positions, and cancellation handling add 1,846 bytes to the
 default registry. Reusing the bounded string join reduces AWK by 116 bytes.
+
+`npm run test:posix` checks 46 VFS traces against the recorded native Linux
+oracle, including failure state. `npm run bench:posix` measures native/VFS
+latency, SQL statements, returned rows, and returned BLOB bytes with setup
+outside timing. See the [experiment report](../bench/posix-evaluation-2026-10-08.md)
+for environments, rejected implementations, and reproduction commands.

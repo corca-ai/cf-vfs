@@ -9,6 +9,7 @@ const documents = [
   "CHANGELOG.md",
   "docs/index.md",
   "docs/collaboration.md",
+  "docs/fs.md",
   "docs/getting-started.md",
   "docs/commands.md",
   "docs/architecture.md",

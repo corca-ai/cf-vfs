@@ -1,0 +1,85 @@
+--- a/src/vfs/sql-base.ts
++++ b/src/vfs/sql-base.ts
+@@ -82,6 +82,8 @@
+    */
+   protected pendingMutations: PendingMutation[] = [];
+   protected pendingParents: Set<string> | undefined;
++  /** Only directory namespace changes can alter a parent's nlink. */
++  protected directoryParentsChanged = false;
+   protected sharedInodes = false;
+   protected retainOpenInodes:
+     | ((path: string, recursive: boolean, root: EntryRow) => number)
+@@ -98,6 +100,8 @@
+     const parents = this.pendingParents;
+     this.pendingParents = undefined;
+     if (parents === undefined) return;
++    const recount = this.directoryParentsChanged;
++    this.directoryParentsChanged = false;
+     const now = this.now();
+     const paths = [...parents];
+     const direct = paths.length <= 2;
+@@ -110,7 +114,7 @@
+       .exec<SqlRow>(
+         `UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,
+       revision = revision + 1, mutation_version = mutation_version + 1,
+-      link_count = 2 + (SELECT COUNT(*) FROM vfs_entries child INDEXED BY vfs_entries_child_directories WHERE child.parent_path = vfs_entries.path AND child.kind = 'directory' AND child.path <> '/')
++      link_count = ${recount ? "2 + (SELECT COUNT(*) FROM vfs_entries child INDEXED BY vfs_entries_child_directories WHERE child.parent_path = vfs_entries.path AND child.kind = 'directory' AND child.path <> '/')" : "link_count"}
+       WHERE ${predicate} AND kind = 'directory'
+       ${observed ? "RETURNING path, mutation_version" : ""}`,
+         now,
+@@ -520,6 +524,7 @@
+       this.pendingUsage = undefined;
+       this.pendingMutations = [];
+       this.pendingParents = undefined;
++      this.directoryParentsChanged = false;
+       const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+       if (/SQLITE_FULL|database or disk is full/iu.test(message)) {
+         throw new VfsError("ENOSPC", "SQLite database capacity is exhausted");
+--- a/src/vfs/sql-write-plan-base.ts
++++ b/src/vfs/sql-write-plan-base.ts
+@@ -112,6 +112,7 @@
+   ): number {
+     const entry = resolved ?? this.oneEntry(path);
+     if (entry === null) return 0;
++    if (entry.kind === "directory") this.directoryParentsChanged = true;
+     const retained = preserveInode ? 0 : (this.retainOpenInodes?.(path, false, entry) ?? 0);
+     if (entry.linkIdentity != null)
+       this.sql.exec(
+--- a/src/vfs/sql-content-base.ts
++++ b/src/vfs/sql-content-base.ts
+@@ -105,6 +105,7 @@
+         mutationVersion,
+       )
+       .one();
++    this.directoryParentsChanged = true;
+     const token = this.publishToken(path, mutationVersion, true, "create");
+     const id = integerColumn(inserted, "id");
+     this.updateUsage(0, 1);
+--- a/src/vfs/sql-move-base.ts
++++ b/src/vfs/sql-move-base.ts
+@@ -150,6 +150,7 @@
+     // Recorded here rather than in `publishSubtreeRemoval`, which cannot
+     // know whether it is publishing one path or a range, and which `move`
+     // calls twice for what is a single change.
++    if (root.kind === "directory") this.directoryParentsChanged = true;
+     this.recordMutation(
+       summary.entries > 1
+         ? { op: "remove", path, subtree: { root: path } }
+@@ -336,6 +337,7 @@
+     // One change, though two ranges were republished. A move is a prefix
+     // rename, so `root` and `to` are enough for a consumer to recompute
+     // every path it holds without being told them.
++    if (sourceEntry.kind === "directory") this.directoryParentsChanged = true;
+     this.recordMutation({
+       op: "move",
+       path: source,
+--- a/src/vfs/sql-copy-base.ts
++++ b/src/vfs/sql-copy-base.ts
+@@ -92,6 +92,7 @@
+       state,
+     );
+     this.insertCopyRows(source, target, plan, posix);
++    if (sourceEntry.kind === "directory") this.directoryParentsChanged = true;
+     return this.finishCopy(source, target, plan);
+   }
+ 

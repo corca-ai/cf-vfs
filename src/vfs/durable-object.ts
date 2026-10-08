@@ -71,6 +71,7 @@ export abstract class VfsDurableObject<Environment> extends DurableObject<Enviro
   ) {
     super(ctx, env);
     this.fileSystem = new DurableObjectFileSystem(ctx.storage, options);
+    ctx.blockConcurrencyWhile(() => this.fileSystem.initialize());
   }
 
   stat(path: string): VfsStat {

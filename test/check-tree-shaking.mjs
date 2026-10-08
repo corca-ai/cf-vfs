@@ -55,6 +55,9 @@ const M = {
   sql: "vfs/sql",
   doSql: "vfs/do-sql",
   r2: "storage/r2",
+  fsPromises: "fs/promises",
+  fsMetadata: "fs/metadata",
+  fsContent: "fs/content",
   collab: "collab/index",
   collabFs: "collab/filesystem",
   collabRegistry: "collab/registry",
@@ -411,6 +414,20 @@ const PRESETS = [
       M.identity,
     ],
   },
+  {
+    name: "fs-adapter",
+    config: "wrangler.fs-adapter-tree-shake.jsonc",
+    describe: "the opt-in promise filesystem adapter",
+    include: [M.sql, M.doSql, M.fsPromises],
+    exclude: [M.shell, M.registry, M.r2, M.fsMetadata, M.fsContent],
+  },
+  {
+    name: "fs-tiered",
+    config: "wrangler.fs-tiered-tree-shake.jsonc",
+    describe: "the opt-in adapter with metadata reuse and R2 content",
+    include: [M.sql, M.doSql, M.fsPromises, M.fsMetadata, M.fsContent, M.r2],
+    exclude: [M.shell, M.registry],
+  },
 ];
 
 // Artifacts rather than library modules, so these stay raw-text checks.
@@ -450,7 +467,8 @@ for (const preset of PRESETS) {
   for (const family of preset.include) {
     assert(familyMembers(modules, family).length > 0, `${preset.name} bundle is missing ${family}`);
   }
-  for (const family of [...preset.exclude, ...NEVER_BUNDLED]) {
+  const optionalFs = preset.name.startsWith("fs-") ? [] : [M.fsPromises, M.fsMetadata, M.fsContent];
+  for (const family of [...preset.exclude, ...NEVER_BUNDLED, ...optionalFs]) {
     const reached = familyMembers(modules, family);
     assert(reached.length === 0, `${preset.name} bundle reaches ${reached.join(", ")}`);
   }

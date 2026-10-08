@@ -1,0 +1,25 @@
+{
+  "baselineCommit": "edef5918735e54df5c46e6a5ea5bbfc43b0ff2a2",
+  "candidateSourceSha256": "013ac9afb98d46be459e5f1b4ad2b65e76951b37db272cc65c7240e2b5d40c85",
+  "node": "v24.18.0",
+  "trials": 1,
+  "batchReentrancy": {
+    "baseline": {
+      "error": "ENOTDIR",
+      "reads": 4,
+      "parent": "directory",
+      "entries": [
+        "/dir"
+      ]
+    },
+    "batch": {
+      "error": null,
+      "reads": 4,
+      "parent": "file",
+      "entries": [
+        "/dir",
+        "/dir/b"
+      ]
+    }
+  }
+}

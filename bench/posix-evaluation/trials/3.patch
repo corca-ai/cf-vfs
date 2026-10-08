@@ -1,0 +1,30 @@
+--- a/src/fs/metadata.ts
++++ b/src/fs/metadata.ts
+@@ -12,6 +12,7 @@
+   private readonly entries = new Map<string, VfsStat>();
+   private owner: VirtualFileSystem | undefined;
+   private epoch = 0;
++  private version: number | undefined;
+ 
+   constructor(private readonly maxEntries = 4096) {
+     if (!Number.isSafeInteger(maxEntries) || maxEntries < 1) {
+@@ -47,6 +48,9 @@
+ 
+   stat(fileSystem: VirtualFileSystem, path: string, follow: boolean): VfsStat {
+     this.bind(fileSystem);
++    const sql = Reflect.get(Reflect.get(fileSystem, "storage"), "sql");
++    const version = sql.exec("PRAGMA data_version").one().data_version;
++    if (this.version !== version) { this.clear(); this.version = version; }
+     const normalized = normalizePath(path);
+     const cached = pathRequiresDirectory(path) ? undefined : this.entries.get(normalized);
+     if (cached !== undefined && (!follow || cached.kind !== "symlink")) {
+@@ -64,6 +68,9 @@
+ 
+   list(fileSystem: VirtualFileSystem, path: string): VfsStat[] {
+     this.bind(fileSystem);
++    const sql = Reflect.get(Reflect.get(fileSystem, "storage"), "sql");
++    const version = sql.exec("PRAGMA data_version").one().data_version;
++    if (this.version !== version) { this.clear(); this.version = version; }
+     const epoch = this.epoch;
+     const entries = fileSystem.list(path);
+     // VFS list checks read AND search permission on the directory, plus

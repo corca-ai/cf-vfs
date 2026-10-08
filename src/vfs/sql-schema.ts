@@ -108,5 +108,5 @@ export const DROP_ENTRY_TRIGGERS = `
 export const ENTRY_COLUMNS = `
   e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,
   e.opaque_object_id, e.link_target, e.size_bytes, e.mode, e.uid, e.gid, e.created_at_ms,
-  e.modified_at_ms, e.revision, e.mutation_version
+  e.link_identity, e.link_count, e.modified_at_ms, COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms, e.revision, e.mutation_version
 `;

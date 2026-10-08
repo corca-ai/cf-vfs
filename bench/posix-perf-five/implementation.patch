@@ -1,0 +1,308 @@
+--- a/src/vfs/sql-metadata-base.ts
++++ b/src/vfs/sql-metadata-base.ts
+@@ -54,7 +54,7 @@
+         mutationVersion,
+         entry.id,
+       );
+-      const token = this.publishToken(normalized, mutationVersion, true, "metadata");
++      const token = this.publishToken(normalized, mutationVersion, true, "metadata", entry);
+       return rowToStat({
+         ...entry,
+         mode: options.mode ?? entry.mode,
+@@ -121,7 +121,7 @@
+       mutationVersion,
+       entry.id,
+     );
+-    const token = this.publishToken(path, mutationVersion, true, "metadata");
++    const token = this.publishToken(path, mutationVersion, true, "metadata", entry);
+     return rowToStat({
+       ...entry,
+       uid: uid ?? entry.uid,
+--- a/src/vfs/sql-path-base.ts
++++ b/src/vfs/sql-path-base.ts
+@@ -437,16 +437,23 @@
+     version: number,
+     present: boolean,
+     op: VfsMutationOp,
++    knownEntry?: EntryRow | null,
+   ): string {
++    const linkIdentity = knownEntry === undefined ? undefined : (knownEntry?.linkIdentity ?? null);
+     this.recordPathChange(path, present);
+     const token = formatMutationToken(this.mutationEpoch, version);
+     this.recordMutation({ op, path, mutationToken: token });
+-    if (this.sharedInodes && present && (op === "write" || op === "metadata")) {
++    if (
++      this.sharedInodes &&
++      linkIdentity !== null &&
++      present &&
++      (op === "write" || op === "metadata")
++    ) {
+       for (const row of this.sql
+         .exec<SqlRow>(
+-          `SELECT path, mutation_version FROM vfs_entries WHERE path <> ? AND link_identity = (SELECT link_identity FROM vfs_entries WHERE path = ?)`,
++          `SELECT path, mutation_version FROM vfs_entries WHERE path <> ? AND link_identity = ${linkIdentity === undefined ? "(SELECT link_identity FROM vfs_entries WHERE path = ?)" : "?"}`,
+           path,
+-          path,
++          linkIdentity ?? path,
+         )
+         .toArray()) {
+         const alias = stringColumn(row, "path");
+--- a/src/vfs/sql.ts
++++ b/src/vfs/sql.ts
+@@ -96,7 +96,7 @@
+       capacity: (delta, path) => this.assertCapacity(delta, 0, path),
+       usage: (delta) => this.updateUsage(delta, 0),
+       publish: (entry) => {
+-        this.publishToken(entry.path, entry.mutationVersion, true, "write");
++        this.publishToken(entry.path, entry.mutationVersion, true, "write", entry);
+       },
+       reclaimObject: (id) => {
+         this.queueObjectIfUnreferenced(id, this.now());
+--- a/src/vfs/sql-base.ts
++++ b/src/vfs/sql-base.ts
+@@ -82,22 +82,31 @@
+    */
+   protected pendingMutations: PendingMutation[] = [];
+   protected pendingParents: Set<string> | undefined;
++  /** Only directory namespace changes can alter a parent's nlink. */
++  protected directoryParentsChanged = false;
+   protected sharedInodes = false;
+   protected retainOpenInodes:
+     | ((path: string, recursive: boolean, root: EntryRow) => number)
+     | undefined;
++
++  protected noteDirectoryChange(entry: EntryRow): void {
++    if (entry.kind === "directory") this.directoryParentsChanged = true;
++  }
+ 
+   protected abstract publishToken(
+     path: string,
+     version: number,
+     present: boolean,
+     op: VfsMutationOp,
++    knownEntry?: EntryRow | null,
+   ): string;
+ 
+   protected flushParentTimes(): void {
+     const parents = this.pendingParents;
+     this.pendingParents = undefined;
+     if (parents === undefined) return;
++    const recount = this.directoryParentsChanged;
++    this.directoryParentsChanged = false;
+     const now = this.now();
+     const paths = [...parents];
+     const direct = paths.length <= 2;
+@@ -110,7 +119,7 @@
+       .exec<SqlRow>(
+         `UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,
+       revision = revision + 1, mutation_version = mutation_version + 1,
+-      link_count = 2 + (SELECT COUNT(*) FROM vfs_entries child INDEXED BY vfs_entries_child_directories WHERE child.parent_path = vfs_entries.path AND child.kind = 'directory' AND child.path <> '/')
++      link_count = ${recount ? "2 + (SELECT COUNT(*) FROM vfs_entries child INDEXED BY vfs_entries_child_directories WHERE child.parent_path = vfs_entries.path AND child.kind = 'directory' AND child.path <> '/')" : "link_count"}
+       WHERE ${predicate} AND kind = 'directory'
+       ${observed ? "RETURNING path, mutation_version" : ""}`,
+         now,
+@@ -124,6 +133,7 @@
+         integerColumn(row, "mutation_version"),
+         true,
+         "metadata",
++        null,
+       );
+   }
+   /**
+@@ -520,6 +530,7 @@
+       this.pendingUsage = undefined;
+       this.pendingMutations = [];
+       this.pendingParents = undefined;
++      this.directoryParentsChanged = false;
+       const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+       if (/SQLITE_FULL|database or disk is full/iu.test(message)) {
+         throw new VfsError("ENOSPC", "SQLite database capacity is exhausted");
+--- a/src/vfs/sql-write-plan-base.ts
++++ b/src/vfs/sql-write-plan-base.ts
+@@ -112,6 +112,7 @@
+   ): number {
+     const entry = resolved ?? this.oneEntry(path);
+     if (entry === null) return 0;
++    this.noteDirectoryChange(entry);
+     const retained = preserveInode ? 0 : (this.retainOpenInodes?.(path, false, entry) ?? 0);
+     if (entry.linkIdentity != null)
+       this.sql.exec(
+@@ -457,6 +458,7 @@
+       mutation.mutationVersion,
+       true,
+       current === null ? "create" : "write",
++      current,
+     );
+     this.writeChunks(
+       integerColumn(written, "id"),
+--- a/src/vfs/sql-content-base.ts
++++ b/src/vfs/sql-content-base.ts
+@@ -105,6 +105,7 @@
+         mutationVersion,
+       )
+       .one();
++    this.directoryParentsChanged = true;
+     const token = this.publishToken(path, mutationVersion, true, "create");
+     const id = integerColumn(inserted, "id");
+     this.updateUsage(0, 1);
+--- a/src/vfs/sql-move-base.ts
++++ b/src/vfs/sql-move-base.ts
+@@ -150,6 +150,7 @@
+     // Recorded here rather than in `publishSubtreeRemoval`, which cannot
+     // know whether it is publishing one path or a range, and which `move`
+     // calls twice for what is a single change.
++    this.noteDirectoryChange(root);
+     this.recordMutation(
+       summary.entries > 1
+         ? { op: "remove", path, subtree: { root: path } }
+@@ -336,6 +337,7 @@
+     // One change, though two ranges were republished. A move is a prefix
+     // rename, so `root` and `to` are enough for a consumer to recompute
+     // every path it holds without being told them.
++    this.noteDirectoryChange(sourceEntry);
+     this.recordMutation({
+       op: "move",
+       path: source,
+--- a/src/vfs/sql-opaque-commit-base.ts
++++ b/src/vfs/sql-opaque-commit-base.ts
+@@ -385,6 +385,7 @@
+       written.mutationVersion,
+       true,
+       existing === null ? "create" : "write",
++      existing,
+     );
+     this.updateUsage(
+       existing?.contentClass === "inline" ? -existing.sizeBytes * (existing.linkCount ?? 1) : 0,
+--- a/src/vfs/sql-write-base.ts
++++ b/src/vfs/sql-write-base.ts
+@@ -245,7 +245,7 @@
+     if (conditional && firstRow(written) === undefined)
+       throw new VfsError("EREVISION", "path changed before append", path);
+     this.writeChunks(current.id, plan.firstChunkIndex, plan.chunks);
+-    const token = this.publishToken(path, mutationVersion, true, "write");
++    const token = this.publishToken(path, mutationVersion, true, "write", current);
+     this.updateUsage(suffixBytes * (current.linkCount ?? 1), 0);
+     return {
+       path,
+--- a/src/vfs/sql-copy-base.ts
++++ b/src/vfs/sql-copy-base.ts
+@@ -92,6 +92,7 @@
+       state,
+     );
+     this.insertCopyRows(source, target, plan, posix);
++    this.noteDirectoryChange(sourceEntry);
+     return this.finishCopy(source, target, plan);
+   }
+ 
+--- a/src/fs/file-handle.ts
++++ b/src/fs/file-handle.ts
+@@ -58,8 +58,7 @@
+         encoding !== "utf-8"
+       )
+         throw new VfsError("ENOTSUP", "unsupported encoding");
+-      const size = this.owner.stat(this.ino).size;
+-      const result = await this.owner.read(this.ino, this.cursor, Math.max(0, size - this.cursor));
++      const result = await this.owner.readRemaining(this.ino, this.cursor);
+       this.cursor += result.byteLength;
+       return encoding ? new TextDecoder().decode(result) : result;
+     });
+--- a/src/fs/sql-file-handles.ts
++++ b/src/fs/sql-file-handles.ts
+@@ -229,10 +229,17 @@
+     return this.port.maintenance();
+   }
+   stat(ino: number): FsStats {
+-    return new FsStats(this.port.stat(this.entry(ino)), this.entry(ino).linkCount ?? 1);
++    const entry = this.entry(ino);
++    return new FsStats(this.port.stat(entry), entry.linkCount ?? 1);
+   }
+   async read(ino: number, offset: number, length: number): Promise<Uint8Array> {
++    return this.readEntry(this.entry(ino), offset, length);
++  }
++  readRemaining(ino: number, offset: number): Promise<Uint8Array> {
+     const entry = this.entry(ino);
++    return this.readEntry(entry, offset, Math.max(0, entry.sizeBytes - offset));
++  }
++  private async readEntry(entry: EntryRow, offset: number, length: number): Promise<Uint8Array> {
+     const selected = Math.min(length, Math.max(0, entry.sizeBytes - offset));
+     if (selected === 0) return new Uint8Array();
+     if (entry.contentClass === "opaque") return this.readOpaque(entry, offset, selected);
+@@ -343,16 +350,20 @@
+     const end = Math.ceil((start + body.byteLength) / chunkBytes);
+     for (let index = begin; index < end; index++) {
+       const base = index * chunkBytes;
+-      const old = firstRow(
+-        this.port.sql.exec<SqlRow>(
+-          `SELECT body FROM ${table} WHERE entry_id = ? AND chunk_index = ?`,
+-          entry.id,
+-          index,
+-        ),
+-      );
+       const chunk = new Uint8Array(Math.min(chunkBytes, size - base));
+-      if (old !== undefined)
+-        chunk.set(new Uint8Array(blobColumn(old, "body")).subarray(0, chunk.byteLength));
++      // Only surviving old bytes need a read; new/hole and fully replaced chunks do not.
++      const oldEnd = Math.min(base + chunk.byteLength, entry.sizeBytes);
++      if (base < oldEnd && (start > base || start + body.byteLength < oldEnd)) {
++        const old = firstRow(
++          this.port.sql.exec<SqlRow>(
++            `SELECT body FROM ${table} WHERE entry_id = ? AND chunk_index = ?`,
++            entry.id,
++            index,
++          ),
++        );
++        if (old !== undefined)
++          chunk.set(new Uint8Array(blobColumn(old, "body")).subarray(0, chunk.byteLength));
++      }
+       const from = Math.max(start, base);
+       const to = Math.min(start + body.byteLength, base + chunk.byteLength);
+       if (to > from) chunk.set(body.subarray(from - start, to - start), from - base);
+@@ -377,29 +388,30 @@
+       const current = this.entry(ino);
+       const detached = entry.linkCount === 0;
+       const table = detached ? "vfs_detached_chunks" : "vfs_inline_chunks";
+-      let remaining = size;
+-      for (const row of this.port.sql
+-        .exec<SqlRow>(
+-          `SELECT chunk_index, length(body) AS size FROM ${table} WHERE entry_id = ? ORDER BY chunk_index`,
++      if (size === 0) this.port.sql.exec(`DELETE FROM ${table} WHERE entry_id = ?`, current.id);
++      else {
++        const first = this.port.sql
++          .exec<SqlRow>(
++            `SELECT length(body) AS size FROM ${table} WHERE entry_id = ? AND chunk_index = 0`,
++            current.id,
++          )
++          .one();
++        const width = integerColumn(first, "size");
++        if (width <= 0) throw new VfsError("EIO", "invalid inode chunk width");
++        const end = Math.ceil(size / width);
++        this.port.sql.exec(
++          `DELETE FROM ${table} WHERE entry_id = ? AND chunk_index >= ?`,
+           current.id,
+-        )
+-        .toArray()) {
+-        const index = integerColumn(row, "chunk_index");
+-        const length = integerColumn(row, "size");
+-        if (remaining <= 0)
+-          this.port.sql.exec(
+-            `DELETE FROM ${table} WHERE entry_id = ? AND chunk_index = ?`,
+-            entry.id,
+-            index,
+-          );
+-        else if (remaining < length)
++          end,
++        );
++        const tail = size % width;
++        if (tail !== 0)
+           this.port.sql.exec(
+             `UPDATE ${table} SET body = substr(body, 1, ?) WHERE entry_id = ? AND chunk_index = ?`,
+-            remaining,
++            tail,
+             current.id,
+-            index,
++            end - 1,
+           );
+-        remaining -= length;
+       }
+       this.update(current, size, detached);
+     });

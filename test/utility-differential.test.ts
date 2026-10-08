@@ -84,25 +84,6 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     // A wildcard that would have to match the link's own name does not.
     expect((await harness.run("echo /li*/a.txt")).stdout).toBe("/li*/a.txt\n");
   },
-  "a-trailing-slash-is-not-an-assertion-about-the-path": async () => {
-    const harness = createBashHarness();
-    await harness.fileSystem.writeFile("/real.txt", "body\n");
-    harness.fileSystem.symlink("/filelink", "/real.txt");
-    // GNU refuses this with ENOTDIR; the slash is gone before `cat` sees it.
-    expect((await harness.run("cat /filelink/")).stdout).toBe("body\n");
-    // The filesystem itself does honour the distinction.
-    expect(() => harness.fileSystem.stat("/filelink/")).toThrowError(/not a directory/u);
-  },
-  "dot-dot-is-collapsed-before-a-link-is-followed": async () => {
-    const harness = createBashHarness();
-    await harness.fileSystem.writeFile("/x/y/here.txt", "near\n", { createParents: true });
-    await harness.fileSystem.writeFile("/deep.txt", "far\n");
-    harness.fileSystem.symlink("/x/y/l", "/");
-    // GNU resolves `..` against `/`, reaching nothing; here it cancels the
-    // link lexically and names `/x/y`.
-    expect(harness.fileSystem.realpath("/x/y/l/..")).toBe("/x/y");
-    expect((await harness.run("cat /x/y/l/../here.txt")).stdout).toBe("near\n");
-  },
   "devices-are-read-and-written-but-never-created-or-removed": async () => {
     const harness = createBashHarness();
     await harness.fileSystem.writeFile("/f.txt", "body\n");
@@ -241,7 +222,7 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
     harness.fileSystem.setMetadata("/work/py.sh", { mode: 0o100755 });
     const result = await harness.run("./py.sh", { cwd: "/work" });
     expect(result.exitCode).toBe(126);
-    expect(result.stderr).toBe("/work/py.sh: unsupported interpreter: /usr/bin/python3\n");
+    expect(result.stderr).toBe("/work/./py.sh: unsupported interpreter: /usr/bin/python3\n");
   },
   "diff-output-format": async () => {
     const harness = createBashHarness();

@@ -106,9 +106,9 @@ describe("Durable Object storage benchmark metrics", () => {
     expect(metrics.storageAmplification).toBeLessThan(2);
     expect(metrics.checksum).toBeGreaterThan(0);
     expect(metrics.writeCost).toEqual({
-      statements: 3_584,
-      rowsRead: 3_584,
-      rowsWritten: 2_560,
+      statements: 4_096,
+      rowsRead: 4_096,
+      rowsWritten: 3_072,
     });
     expect(metrics.readCost).toEqual({
       statements: 1_024,
@@ -182,7 +182,7 @@ describe("Durable Object storage benchmark metrics", () => {
       return statements;
     });
 
-    expect(metrics).toEqual({ "1": 7, "33": 7, "34": 8 });
+    expect(metrics).toEqual({ "1": 8, "33": 8, "34": 9 });
   });
 
   it("rewrites only the inline tail when appending", async () => {
@@ -325,21 +325,21 @@ describe("Durable Object storage benchmark metrics", () => {
       small: {
         copied: { copied: 2, opaqueBodiesCopied: 0 },
         moved: { moved: 2 },
-        moveCost: { statements: 8, rowsRead: 66 },
+        moveCost: { statements: 9, rowsRead: 70 },
         movedBody: "abcdefgh",
         removed: { removed: 2 },
       },
       large: {
         copied: { copied: 25, opaqueBodiesCopied: 0 },
         moved: { moved: 25 },
-        moveCost: { statements: 8, rowsRead: 112 },
+        moveCost: { statements: 9, rowsRead: 116 },
         movedBody: "abcdefgh",
         removed: { removed: 25 },
       },
       rootPaths: ["/large-source", "/small-source"],
     });
     expect(metrics.large.statements).toEqual(metrics.small.statements);
-    expect(metrics.large.statements).toEqual({ copy: 9, move: 8, remove: 9 });
+    expect(metrics.large.statements).toEqual({ copy: 10, move: 9, remove: 10 });
   });
 
   it("measures the independent change cursor on production mutations", async () => {
@@ -386,11 +386,11 @@ describe("Durable Object storage benchmark metrics", () => {
     const metrics = { off: await run(false), on: await run(true) };
     console.info(`DO change-cursor benchmark: ${JSON.stringify(metrics)}`);
     expect(metrics.off.changes).toBe(0);
-    expect(metrics.on.changes).toBe(31);
+    expect(metrics.on.changes).toBe(32);
     expect(metrics.off.point).toEqual({ statements: 3, rowsRead: 5, rowsWritten: 2 });
     expect(metrics.on.point).toEqual({ statements: 4, rowsRead: 5, rowsWritten: 4 });
-    expect(metrics.off.statements).toBe(31);
-    expect(metrics.on.statements).toBe(37);
+    expect(metrics.off.statements).toBe(34);
+    expect(metrics.on.statements).toBe(43);
   });
 
   it("measures subtree latency by entry count", async () => {

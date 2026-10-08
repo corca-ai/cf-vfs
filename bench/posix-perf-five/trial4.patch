@@ -1,0 +1,28 @@
+--- a/src/fs/sql-file-handles.ts
++++ b/src/fs/sql-file-handles.ts
+@@ -343,16 +343,16 @@
+     const end = Math.ceil((start + body.byteLength) / chunkBytes);
+     for (let index = begin; index < end; index++) {
+       const base = index * chunkBytes;
+-      const old = firstRow(
+-        this.port.sql.exec<SqlRow>(
+-          `SELECT body FROM ${table} WHERE entry_id = ? AND chunk_index = ?`,
+-          entry.id,
+-          index,
+-        ),
+-      );
+       const chunk = new Uint8Array(Math.min(chunkBytes, size - base));
+-      if (old !== undefined)
+-        chunk.set(new Uint8Array(blobColumn(old, "body")).subarray(0, chunk.byteLength));
++      // Only surviving old bytes need a read; new/hole and fully replaced chunks do not.
++      const oldEnd = Math.min(base + chunk.byteLength, entry.sizeBytes);
++      if (base < oldEnd && (start > base || start + body.byteLength < oldEnd)) {
++        const old = firstRow(this.port.sql.exec<SqlRow>(
++          `SELECT body FROM ${table} WHERE entry_id = ? AND chunk_index = ?`, entry.id, index,
++        ));
++        if (old !== undefined)
++          chunk.set(new Uint8Array(blobColumn(old, "body")).subarray(0, chunk.byteLength));
++      }
+       const from = Math.max(start, base);
+       const to = Math.min(start + body.byteLength, base + chunk.byteLength);
+       if (to > from) chunk.set(body.subarray(from - start, to - start), from - base);

@@ -1,0 +1,83 @@
+
+ RUN  v4.1.10 /Users/ak/prjs/cc/cf-vfs
+
+SQL optimization: {"name":"append-string","repeatsPerSample":100,"medianMs":0.03,"p10Ms":0.03,"p90Ms":0.04,"statements":6,"rowsRead":7,"rowsWritten":3}
+SQL optimization: {"name":"append-bytes","repeatsPerSample":100,"medianMs":0.03,"p10Ms":0.03,"p90Ms":0.04,"statements":7,"rowsRead":7,"rowsWritten":3}
+SQL optimization: {"name":"find-shallow","repeatsPerSample":10,"medianMs":0.2,"p10Ms":0.1,"p90Ms":0.2,"statements":2,"rowsRead":52,"rowsWritten":0}
+SQL optimization: {"name":"find-filtered","repeatsPerSample":10,"medianMs":0.9,"p10Ms":0.8,"p90Ms":0.9,"statements":2,"rowsRead":5051,"rowsWritten":0}
+SQL optimization: {"name":"find-all","repeatsPerSample":10,"medianMs":13.6,"p10Ms":13.5,"p90Ms":14,"statements":7,"rowsRead":5061,"rowsWritten":0}
+SQL optimization: {"name":"maintenance-1000","repeatsPerSample":100,"medianMs":0,"p10Ms":0,"p90Ms":0.01,"statements":1,"rowsRead":4,"rowsWritten":0}
+SQL optimization: {"name":"gc-insert-1000","statements":1,"rowsRead":0,"rowsWritten":3,"databaseBytes":348160}
+SQL optimization: {"name":"maintenance-10000","repeatsPerSample":100,"medianMs":0,"p10Ms":0,"p90Ms":0.01,"statements":1,"rowsRead":4,"rowsWritten":0}
+SQL optimization: {"name":"gc-insert-10000","statements":1,"rowsRead":0,"rowsWritten":3,"databaseBytes":2375680}
+ ❯ bench/sql-optimization.bench.ts (7 tests | 2 failed) 2370ms
+   × SQL batch creation: 10 files 49ms
+   × SQL batch creation: 100 files 292ms
+POSIX COST [{"op":"stat","depth":1,"ms":5,"statements":500,"rowsRead":3500},{"op":"stat","depth":16,"ms":12,"statements":500,"rowsRead":26000},{"op":"stat","depth":64,"ms":58,"statements":500,"rowsRead":98000},{"op":"rename-replace","bytes":80,"statements":12,"rowsRead":158,"rowsWritten":10},{"op":"rename-replace","bytes":1048576,"statements":12,"rowsRead":162,"rowsWritten":13},{"op":"rename-replace","bytes":8388608,"statements":12,"rowsRead":190,"rowsWritten":41}]
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  bench/sql-optimization.bench.ts > SQL batch creation: 10 files
+AssertionError: expected { name: 'batch-create-10', …(7) } to match object { statements: 52, rowsRead: 52, …(1) }
+(5 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "rowsRead": 52,
+-   "rowsWritten": 41,
+-   "statements": 52,
++   "rowsRead": 58,
++   "rowsWritten": 42,
++   "statements": 53,
+  }
+
+ ❯ measure bench/sql-optimization.bench.ts:52:18
+     50|   const expected = expectedCosts[name];
+     51|   if (expected === undefined) throw new Error(`missing SQL budget for …
+     52|   expect(result).toMatchObject(expected);
+       |                  ^
+     53|   console.log("SQL optimization:", JSON.stringify(result));
+     54|   return result;
+ ❯ bench/sql-optimization.bench.ts:63:5
+ ❯ maybeHandleRunRequest Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:164:18
+ ❯ DurableObject.Wrapper.fetch Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:550:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  bench/sql-optimization.bench.ts > SQL batch creation: 100 files
+AssertionError: expected { name: 'batch-create-100', …(7) } to match object { Object (statements, rowsRead, ...) }
+(5 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "rowsRead": 502,
+-   "rowsWritten": 401,
+-   "statements": 502,
++   "rowsRead": 508,
++   "rowsWritten": 402,
++   "statements": 503,
+  }
+
+ ❯ measure bench/sql-optimization.bench.ts:52:18
+     50|   const expected = expectedCosts[name];
+     51|   if (expected === undefined) throw new Error(`missing SQL budget for …
+     52|   expect(result).toMatchObject(expected);
+       |                  ^
+     53|   console.log("SQL optimization:", JSON.stringify(result));
+     54|   return result;
+ ❯ bench/sql-optimization.bench.ts:63:5
+ ❯ maybeHandleRunRequest Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:164:18
+ ❯ DurableObject.Wrapper.fetch Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:550:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 6 passed (8)
+   Start at  15:52:19
+   Duration  3.48s (transform 213ms, setup 0ms, import 610ms, tests 2.54s, environment 0ms)
+

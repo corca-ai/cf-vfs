@@ -1,0 +1,43 @@
+--- a/src/fs/content.ts
++++ b/src/fs/content.ts
+@@ -1,5 +1,4 @@
+ import { isVfsError, VfsError } from "../core/errors.js";
+-import { normalizePath } from "../core/path.js";
+ import { utf8ByteLength } from "../core/unicode.js";
+ import { validatePositiveInteger } from "../vfs/config.js";
+ import { putOpaque } from "../vfs/opaque.js";
+@@ -165,9 +164,11 @@
+     if (!opaque) return this.vfs.writeFile(path, body, options);
+     // The existing upload protocol reserves a canonical path, not a symlink
+     // chain. Decline that case rather than promise a guard it cannot enforce.
+-    if (this.vfs.realpath(path) !== normalizePath(path))
+-      throw new VfsError("ENOTSUP", "opaque writes require a canonical path", path);
+-    const token = options.ifMutationToken ?? this.vfs.getMutationToken(path);
++    const namedToken = this.vfs.getMutationToken(path);
++    if (options.ifMutationToken !== undefined && options.ifMutationToken !== namedToken)
++      throw new VfsError("EREVISION", "path mutation token does not match", path);
++    path = this.vfs.realpath(path);
++    const token = this.vfs.getMutationToken(path);
+     this.assertDisposition(path, options.disposition);
+     return putOpaque(this.vfs, this.store, path, body, {
+       ifMutationToken: token,
+--- a/src/fs/promises.ts
++++ b/src/fs/promises.ts
+@@ -99,6 +99,17 @@
+       return true;
+     } catch (error) {
+       if (error instanceof VfsError && error.code === "ENOENT") return false;
++      if (error instanceof VfsError && error.code === "ENOTSUP" && this.options.content !== undefined) {
++        const token = this.vfs.getMutationToken(path);
++        const opened = await this.options.content.open(path);
++        const prior = await materialize(opened, this.maximum, this.budget);
++        const suffix = typeof body === "string" ? new TextEncoder().encode(body) : body;
++        if (prior.byteLength + suffix.byteLength > this.maximum) throw new VfsError("EFBIG", "append too large", path);
++        const next = new Uint8Array(prior.byteLength + suffix.byteLength);
++        next.set(prior); next.set(suffix, prior.byteLength);
++        await this.options.content.write(path, next, { disposition: "replace", ifMutationToken: token });
++        return true;
++      }
+       throw error;
+     }
+   }

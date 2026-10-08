@@ -1,0 +1,820 @@
+{
+  "node": "v24.18.0",
+  "platform": "linux",
+  "results": [
+    {
+      "name": "empty-file",
+      "equal": true,
+      "native": {
+        "value": 0,
+        "state": [
+          [
+            "a",
+            "file",
+            ""
+          ]
+        ]
+      },
+      "vfs": {
+        "value": 0,
+        "state": [
+          [
+            "a",
+            "file",
+            ""
+          ]
+        ]
+      }
+    },
+    {
+      "name": "overwrite-keeps-inode",
+      "equal": true,
+      "native": {
+        "value": true,
+        "state": [
+          [
+            "a",
+            "file",
+            "new"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": true,
+        "state": [
+          [
+            "a",
+            "file",
+            "new"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "truncate-removes-tail",
+      "equal": true,
+      "native": {
+        "value": "x",
+        "state": [
+          [
+            "a",
+            "file",
+            "x"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": "x",
+        "state": [
+          [
+            "a",
+            "file",
+            "x"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "append-creates",
+      "equal": true,
+      "native": {
+        "value": "onetwo",
+        "state": [
+          [
+            "a",
+            "file",
+            "onetwo"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": "onetwo",
+        "state": [
+          [
+            "a",
+            "file",
+            "onetwo"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "exclusive-existing",
+      "equal": true,
+      "native": {
+        "error": "EEXIST",
+        "state": [
+          [
+            "a",
+            "file",
+            "old"
+          ]
+        ]
+      },
+      "vfs": {
+        "error": "EEXIST",
+        "state": [
+          [
+            "a",
+            "file",
+            "old"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "exclusive-dangling-link",
+      "equal": true,
+      "native": {
+        "error": "EEXIST",
+        "state": [
+          [
+            "link",
+            "link",
+            "target"
+          ]
+        ]
+      },
+      "vfs": {
+        "error": "EEXIST",
+        "state": [
+          [
+            "link",
+            "link",
+            "target"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "append-dangling-link",
+      "equal": true,
+      "native": {
+        "value": "new",
+        "state": [
+          [
+            "link",
+            "link",
+            "target"
+          ],
+          [
+            "target",
+            "file",
+            "new"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": "new",
+        "state": [
+          [
+            "link",
+            "link",
+            "target"
+          ],
+          [
+            "target",
+            "file",
+            "new"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "file-trailing-slash",
+      "equal": true,
+      "native": {
+        "error": "ENOTDIR",
+        "state": [
+          [
+            "a",
+            "file",
+            "x"
+          ]
+        ]
+      },
+      "vfs": {
+        "error": "ENOTDIR",
+        "state": [
+          [
+            "a",
+            "file",
+            "x"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "lstat-link",
+      "equal": true,
+      "native": {
+        "value": [
+          true,
+          true
+        ],
+        "state": [
+          [
+            "link",
+            "link",
+            "target"
+          ],
+          [
+            "target",
+            "file",
+            "x"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": [
+          true,
+          true
+        ],
+        "state": [
+          [
+            "link",
+            "link",
+            "target"
+          ],
+          [
+            "target",
+            "file",
+            "x"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "directory-link-trailing-slash",
+      "equal": true,
+      "native": {
+        "value": true,
+        "state": [
+          [
+            "dir",
+            "directory"
+          ],
+          [
+            "link",
+            "link",
+            "dir"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": true,
+        "state": [
+          [
+            "dir",
+            "directory"
+          ],
+          [
+            "link",
+            "link",
+            "dir"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "symlink-cycle",
+      "equal": true,
+      "native": {
+        "error": "ELOOP",
+        "state": [
+          [
+            "a",
+            "link",
+            "b"
+          ],
+          [
+            "b",
+            "link",
+            "a"
+          ]
+        ]
+      },
+      "vfs": {
+        "error": "ELOOP",
+        "state": [
+          [
+            "a",
+            "link",
+            "b"
+          ],
+          [
+            "b",
+            "link",
+            "a"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "rmdir-nonempty",
+      "equal": true,
+      "native": {
+        "error": "ENOTEMPTY",
+        "state": [
+          [
+            "dir",
+            "directory"
+          ],
+          [
+            "dir/a",
+            "file",
+            "x"
+          ]
+        ]
+      },
+      "vfs": {
+        "error": "ENOTEMPTY",
+        "state": [
+          [
+            "dir",
+            "directory"
+          ],
+          [
+            "dir/a",
+            "file",
+            "x"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "unlink-directory",
+      "equal": true,
+      "native": {
+        "error": "EISDIR",
+        "state": [
+          [
+            "dir",
+            "directory"
+          ]
+        ]
+      },
+      "vfs": {
+        "error": "EISDIR",
+        "state": [
+          [
+            "dir",
+            "directory"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "rename-missing-same-path",
+      "equal": true,
+      "native": {
+        "error": "ENOENT",
+        "state": []
+      },
+      "vfs": {
+        "error": "ENOENT",
+        "state": []
+      }
+    },
+    {
+      "name": "rename-file-directory",
+      "equal": true,
+      "native": {
+        "error": "EISDIR",
+        "state": [
+          [
+            "a",
+            "file",
+            "x"
+          ],
+          [
+            "dir",
+            "directory"
+          ]
+        ]
+      },
+      "vfs": {
+        "error": "EISDIR",
+        "state": [
+          [
+            "a",
+            "file",
+            "x"
+          ],
+          [
+            "dir",
+            "directory"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "rename-directory-file",
+      "equal": true,
+      "native": {
+        "error": "ENOTDIR",
+        "state": [
+          [
+            "a",
+            "file",
+            "x"
+          ],
+          [
+            "dir",
+            "directory"
+          ]
+        ]
+      },
+      "vfs": {
+        "error": "ENOTDIR",
+        "state": [
+          [
+            "a",
+            "file",
+            "x"
+          ],
+          [
+            "dir",
+            "directory"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "rename-directory-nonempty",
+      "equal": true,
+      "native": {
+        "error": "ENOTEMPTY",
+        "state": [
+          [
+            "a",
+            "directory"
+          ],
+          [
+            "b",
+            "directory"
+          ],
+          [
+            "b/file",
+            "file",
+            "x"
+          ]
+        ]
+      },
+      "vfs": {
+        "error": "ENOTEMPTY",
+        "state": [
+          [
+            "a",
+            "directory"
+          ],
+          [
+            "b",
+            "directory"
+          ],
+          [
+            "b/file",
+            "file",
+            "x"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "rename-keeps-inode",
+      "equal": true,
+      "native": {
+        "value": [
+          true,
+          "one"
+        ],
+        "state": [
+          [
+            "b",
+            "file",
+            "one"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": [
+          true,
+          "one"
+        ],
+        "state": [
+          [
+            "b",
+            "file",
+            "one"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "rename-replaces-link",
+      "equal": true,
+      "native": {
+        "value": [
+          "one",
+          "two"
+        ],
+        "state": [
+          [
+            "b",
+            "file",
+            "one"
+          ],
+          [
+            "target",
+            "file",
+            "two"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": [
+          "one",
+          "two"
+        ],
+        "state": [
+          [
+            "b",
+            "file",
+            "one"
+          ],
+          [
+            "target",
+            "file",
+            "two"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "rename-through-parent-link",
+      "equal": true,
+      "native": {
+        "value": "one",
+        "state": [
+          [
+            "dir",
+            "directory"
+          ],
+          [
+            "dir/b",
+            "file",
+            "one"
+          ],
+          [
+            "link",
+            "link",
+            "dir"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": "one",
+        "state": [
+          [
+            "dir",
+            "directory"
+          ],
+          [
+            "dir/b",
+            "file",
+            "one"
+          ],
+          [
+            "link",
+            "link",
+            "dir"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "chmod-preserves-mtime",
+      "equal": false,
+      "native": {
+        "value": true,
+        "state": [
+          [
+            "a",
+            "file",
+            "x"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": false,
+        "state": [
+          [
+            "a",
+            "file",
+            "x"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "chmod-advances-ctime",
+      "equal": true,
+      "native": {
+        "value": true,
+        "state": [
+          [
+            "a",
+            "file",
+            "x"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": true,
+        "state": [
+          [
+            "a",
+            "file",
+            "x"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "rename-preserves-file-mtime",
+      "equal": false,
+      "native": {
+        "value": true,
+        "state": [
+          [
+            "b",
+            "file",
+            "x"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": false,
+        "state": [
+          [
+            "b",
+            "file",
+            "x"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "child-create-updates-parent-mtime",
+      "equal": false,
+      "native": {
+        "value": true,
+        "state": [
+          [
+            "dir",
+            "directory"
+          ],
+          [
+            "dir/a",
+            "file",
+            "x"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": false,
+        "state": [
+          [
+            "dir",
+            "directory"
+          ],
+          [
+            "dir/a",
+            "file",
+            "x"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "symlink-dotdot",
+      "equal": false,
+      "native": {
+        "value": "target",
+        "state": [
+          [
+            "dir",
+            "directory"
+          ],
+          [
+            "dir/file",
+            "file",
+            "target"
+          ],
+          [
+            "dir/sub",
+            "directory"
+          ],
+          [
+            "file",
+            "file",
+            "lexical"
+          ],
+          [
+            "link",
+            "link",
+            "dir/sub"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": "lexical",
+        "state": [
+          [
+            "dir",
+            "directory"
+          ],
+          [
+            "dir/file",
+            "file",
+            "target"
+          ],
+          [
+            "dir/sub",
+            "directory"
+          ],
+          [
+            "file",
+            "file",
+            "lexical"
+          ],
+          [
+            "link",
+            "link",
+            "dir/sub"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "open-read-after-rename",
+      "equal": true,
+      "native": {
+        "value": "old",
+        "state": [
+          [
+            "b",
+            "file",
+            "old"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": "old",
+        "state": [
+          [
+            "b",
+            "file",
+            "old"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "open-read-after-unlink",
+      "equal": true,
+      "native": {
+        "value": "old",
+        "state": []
+      },
+      "vfs": {
+        "value": "old",
+        "state": []
+      }
+    },
+    {
+      "name": "open-handles-share-writes",
+      "equal": false,
+      "native": {
+        "value": "new",
+        "state": [
+          [
+            "a",
+            "file",
+            "new"
+          ]
+        ]
+      },
+      "vfs": {
+        "value": "old",
+        "state": [
+          [
+            "a",
+            "file",
+            "new"
+          ]
+        ]
+      }
+    }
+  ]
+}

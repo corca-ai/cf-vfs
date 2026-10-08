@@ -1,0 +1,11 @@
+--- a/src/fs/promises.ts
++++ b/src/fs/promises.ts
+@@ -204,7 +204,7 @@
+   async chmod(path: string, mode: number): Promise<void> {
+     const resolved = this.path(path);
+     const current = this.vfs.stat(resolved);
+-    this.vfs.setMetadata(resolved, { mode: (current.mode & ~0o7777) | (mode & 0o7777) });
++    this.vfs.setMetadata(resolved, { mode: (current.mode & ~0o7777) | (mode & 0o7777), modifiedAtMs: current.modifiedAtMs });
+   }
+   async readlink(path: string): Promise<string> {
+     return this.vfs.readlink(this.path(path));

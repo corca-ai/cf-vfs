@@ -3,6 +3,7 @@ import { encodeUtf8, utf8ByteLength } from "./unicode.js";
 
 const MAX_PATH_BYTES = 4096;
 const MAX_NAME_BYTES = 255;
+const DOT_COMPONENT = /(?:^|\/)\.{1,2}(?:\/|$)/u;
 
 export function compareUtf8(left: string, right: string): number {
   const leftBytes = encodeUtf8(left);
@@ -52,6 +53,26 @@ export function normalizePath(path: string, cwd = "/"): string {
   const normalized = `/${segments.join("/")}`;
   validatePath(normalized);
   return normalized;
+}
+
+/** Dot components must survive until filesystem links have been resolved. */
+export function hasDotSegments(path: string): boolean {
+  return (path.includes("/.") || path.startsWith(".")) && DOT_COMPONENT.test(path);
+}
+
+export function normalizeResolutionPath(path: string, cwd = "/"): string {
+  const normalized = normalizePath(path, cwd);
+  const absolute = path.startsWith("/") ? path : `${cwd}/${path}`;
+  if (!hasDotSegments(absolute)) return normalized;
+  validatePath(absolute);
+  return absolute;
+}
+
+/** Preserve filesystem operators and the final directory assertion for callers. */
+export function normalizeFileSystemPath(path: string, cwd = "/"): string {
+  if (hasDotSegments(path) || (!path.startsWith("/") && hasDotSegments(cwd)))
+    return normalizeResolutionPath(path, cwd);
+  return normalizePathPreservingTrailingSlash(path, cwd);
 }
 
 export function pathRequiresDirectory(path: string): boolean {

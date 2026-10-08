@@ -75,6 +75,9 @@ export abstract class SqlMove extends SqlMetadata {
             inlineBytes: root.contentClass === "inline" ? root.sizeBytes : 0,
           };
     const now = this.now();
+    const retained = this.retainOpenInodes?.(path, recursive, root) ?? 0;
+    const identities = this.linkedIdentities(path, range);
+    this.markUnlinking(path, range, now);
     this.publishSubtreeRemoval(path);
     this.sql.exec(
       `INSERT INTO vfs_gc_queue (
@@ -93,6 +96,7 @@ export abstract class SqlMove extends SqlMetadata {
          WHERE retained.opaque_object_id = o.id
            AND NOT (retained.path = ? OR (retained.path >= ? AND retained.path < ?))
        )
+       AND NOT EXISTS (SELECT 1 FROM vfs_detached_inodes d WHERE d.opaque_object_id = o.id)
        ON CONFLICT(r2_key) DO UPDATE SET
          not_before_ms = MAX(vfs_gc_queue.not_before_ms, excluded.not_before_ms),
          next_attempt_at_ms = MAX(
@@ -126,6 +130,7 @@ export abstract class SqlMove extends SqlMetadata {
       range.lower,
       range.upper,
     );
+    this.publishLinkedMetadata(identities);
     // A set-based delete does not report what it removed, so the link count
     // is recomputed on demand rather than tracked here.
     this.symlinkCountStale = true;
@@ -135,15 +140,17 @@ export abstract class SqlMove extends SqlMetadata {
          SELECT 1 FROM vfs_entries
          WHERE opaque_object_id = vfs_opaque_objects.id
        )
+       AND NOT EXISTS (SELECT 1 FROM vfs_detached_inodes d WHERE d.opaque_object_id = vfs_opaque_objects.id)
        AND EXISTS (
          SELECT 1 FROM vfs_gc_queue
          WHERE r2_key = vfs_opaque_objects.r2_key
        )`,
     );
-    this.updateUsage(-summary.inlineBytes, -summary.entries);
+    this.updateUsage(-summary.inlineBytes + retained, -summary.entries);
     // Recorded here rather than in `publishSubtreeRemoval`, which cannot
     // know whether it is publishing one path or a range, and which `move`
     // calls twice for what is a single change.
+    this.noteDirectoryChange(root);
     this.recordMutation(
       summary.entries > 1
         ? { op: "remove", path, subtree: { root: path } }
@@ -155,6 +162,50 @@ export abstract class SqlMove extends SqlMetadata {
     };
   }
 
+  private linkedIdentities(path: string, range: { lower: string; upper: string }): number[] {
+    if (!this.sharedInodes) return [];
+    return this.sql
+      .exec<SqlRow>(
+        "SELECT DISTINCT link_identity FROM vfs_entries WHERE link_identity IS NOT NULL AND (path = ? OR (path >= ? AND path < ?))",
+        path,
+        range.lower,
+        range.upper,
+      )
+      .toArray()
+      .map((row) => integerColumn(row, "link_identity"));
+  }
+  private markUnlinking(path: string, range: { lower: string; upper: string }, now: number): void {
+    if (this.sharedInodes)
+      this.sql.exec(
+        "UPDATE vfs_entries SET unlinking = 1, changed_at_ms = ?, revision = revision + 1, mutation_version = mutation_version + 1 WHERE link_identity IS NOT NULL AND (path = ? OR (path >= ? AND path < ?))",
+        now,
+        path,
+        range.lower,
+        range.upper,
+      );
+  }
+  private assertMoveKinds(
+    sourceEntry: EntryRow,
+    destination: EntryRow | null,
+    target: string,
+  ): void {
+    const directoryMismatch =
+      destination !== null &&
+      (destination.kind === "directory") !== (sourceEntry.kind === "directory");
+    if (directoryMismatch && destination !== null) {
+      throw new VfsError(
+        destination.kind === "directory" ? "EISDIR" : "ENOTDIR",
+        "source and destination kinds differ",
+        target,
+      );
+    }
+  }
+  private sameInode(source: EntryRow, destination: EntryRow | null): boolean {
+    return (
+      destination !== null &&
+      (source.linkIdentity ?? source.id) === (destination.linkIdentity ?? destination.id)
+    );
+  }
   async move(
     from: string,
     to: string,
@@ -225,6 +276,8 @@ export abstract class SqlMove extends SqlMetadata {
       this.assertStickyRemoval(sourceParent, sourceEntry, posix, source);
     }
     const destination = targetResolved ?? this.oneEntry(target);
+    if (this.sameInode(sourceEntry, destination))
+      return { from: source, to: target, moved: 1, replaced: false };
     if (destination !== null && posix !== undefined) {
       this.assertStickyRemoval(targetParent, destination, posix, target);
     }
@@ -233,24 +286,16 @@ export abstract class SqlMove extends SqlMetadata {
     // be replaced by anything and can replace anything that is not a
     // directory, because it is one entry holding text — `mv file link`
     // replaces the link, as it does elsewhere.
-    const directoryMismatch =
-      destination !== null &&
-      (destination.kind === "directory") !== (sourceEntry.kind === "directory");
-    if (directoryMismatch && destination !== null) {
-      throw new VfsError(
-        destination.kind === "directory" ? "EISDIR" : "ENOTDIR",
-        "source and destination kinds differ",
-        target,
-      );
-    }
+    this.assertMoveKinds(sourceEntry, destination, target);
     // A path's revision never goes backwards. What lands on an occupied path
     // takes one past whatever was there, so a holder of the old number
     // cannot see it come round again. Only the root of what arrives can land
     // on an occupied path -- a non-empty directory cannot be replaced, so
     // every descendant lands somewhere that was absent.
     const sourceRange = descendantRange(source);
+    const identities = this.linkedIdentities(source, sourceRange);
     const now = this.now();
-    if (destination !== null) state.queued += this.removeExact(target, now, false);
+    if (destination !== null) state.queued += this.removeExact(target, now, false, destination);
     const sourceChangeSeq = this.nextChangeSeq();
     this.publishSubtreeRemoval(source, sourceChangeSeq);
     this.sql.exec(
@@ -263,7 +308,7 @@ export abstract class SqlMove extends SqlMetadata {
          parent_path = CASE WHEN path = ? THEN ?
            ELSE ? || substr(parent_path, ?) END,
          name = CASE WHEN path = ? THEN ? ELSE name END,
-         modified_at_ms = CASE WHEN path = ? THEN ? ELSE modified_at_ms END,
+         changed_at_ms = CASE WHEN path = ? THEN ? ELSE COALESCE(changed_at_ms, modified_at_ms) END,
          revision = CASE WHEN path = ? THEN MAX(revision, ?) + 1 ELSE revision + 1 END
        WHERE path = ? OR (path >= ? AND path < ?)`,
       target,
@@ -286,11 +331,13 @@ export abstract class SqlMove extends SqlMetadata {
     );
     // Keep this immediately after the UPDATE: changes() reports that statement.
     const moved = integerColumn(this.sql.exec<SqlRow>("SELECT changes() AS value").one(), "value");
+    this.publishLinkedMetadata(identities);
     this.clearSubtreeTombstones(target);
     this.recordPresentSubtree(target, this.nextChangeSeq());
     // One change, though two ranges were republished. A move is a prefix
     // rename, so `root` and `to` are enough for a consumer to recompute
     // every path it holds without being told them.
+    this.noteDirectoryChange(sourceEntry);
     this.recordMutation({
       op: "move",
       path: source,

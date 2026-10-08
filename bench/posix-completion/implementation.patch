@@ -1,0 +1,2538 @@
+--- a/src/core/errors.ts
++++ b/src/core/errors.ts
+@@ -1,6 +1,8 @@
+ /** Every error code this package raises. */
+ export const VFS_ERROR_CODES = [
+   "EACCES",
++  "EBADF",
++  "EMFILE",
+   "EAGAIN",
+   "E2BIG",
+   "EEXIST",
+--- a/src/core/path.ts
++++ b/src/core/path.ts
+@@ -68,6 +68,13 @@
+   return absolute;
+ }
+ 
++/** Preserve filesystem operators and the final directory assertion for callers. */
++export function normalizeFileSystemPath(path: string, cwd = "/"): string {
++  if (hasDotSegments(path) || (!path.startsWith("/") && hasDotSegments(cwd)))
++    return normalizeResolutionPath(path, cwd);
++  return normalizePathPreservingTrailingSlash(path, cwd);
++}
++
+ export function pathRequiresDirectory(path: string): boolean {
+   return path.length > 1 && path.endsWith("/");
+ }
+--- a/src/fs/content.ts
++++ b/src/fs/content.ts
+@@ -1,5 +1,4 @@
+ import { isVfsError, VfsError } from "../core/errors.js";
+-import { hasDotSegments, normalizePath } from "../core/path.js";
+ import { utf8ByteLength } from "../core/unicode.js";
+ import { validatePositiveInteger } from "../vfs/config.js";
+ import { putOpaque } from "../vfs/opaque.js";
+@@ -14,6 +13,7 @@
+   type WriteFileOptions,
+   type WriteResult,
+ } from "../vfs/types.js";
++import { leasedStream } from "./leased-stream.js";
+ import type { FsContent } from "./read.js";
+ 
+ export interface TieredFileContentOptions {
+@@ -26,16 +26,6 @@
+ function bodySize(body: ByteBody): number | undefined {
+   if (typeof body === "string") return utf8ByteLength(body);
+   return body instanceof ReadableStream ? undefined : body.byteLength;
+-}
+-
+-function readFailure(error: unknown, path: string): VfsError {
+-  return isVfsError(error) ? error : new VfsError("EIO", "opaque content read failed", path);
+-}
+-
+-function checkSize(read: number, expected: number, path: string, complete = false): void {
+-  if (read > expected || (complete && read !== expected)) {
+-    throw new VfsError("EIO", "opaque body size does not match metadata", path);
+-  }
+ }
+ 
+ /** Streaming content capability. Namespace, CAS, quotas and GC stay in VFS. */
+@@ -85,7 +75,7 @@
+     }
+     return {
+       stat: lease.stat,
+-      stream: this.leasedStream(body, path, lease.leaseExpiresAtMs, selected.length),
++      stream: leasedStream(body, path, lease.leaseExpiresAtMs, selected.length, () => this.now()),
+     };
+   }
+ 
+@@ -104,55 +94,6 @@
+     }
+   }
+ 
+-  private leasedStream(
+-    body: ReadableStream<Uint8Array>,
+-    path: string,
+-    expires: number,
+-    expected: number,
+-  ): ReadableStream<Uint8Array> {
+-    const reader = body.getReader();
+-    let read = 0;
+-    let settled = false;
+-    const checkLease = () => {
+-      if (this.now() >= expires) throw new VfsError("EIO", "opaque read lease expired", path);
+-    };
+-    return new ReadableStream<Uint8Array>({
+-      pull: async (controller) => {
+-        if (settled) return;
+-        try {
+-          checkLease();
+-          const next = await reader.read();
+-          if (settled) return;
+-          checkLease();
+-          if (next.done) {
+-            checkSize(read, expected, path, true);
+-            settled = true;
+-            reader.releaseLock();
+-            controller.close();
+-            return;
+-          }
+-          read += next.value.byteLength;
+-          checkSize(read, expected, path);
+-          controller.enqueue(next.value);
+-        } catch (error) {
+-          if (settled) return;
+-          settled = true;
+-          await reader.cancel(error).catch(() => undefined);
+-          reader.releaseLock();
+-          controller.error(readFailure(error, path));
+-        }
+-      },
+-      cancel: async (reason) => {
+-        settled = true;
+-        try {
+-          await reader.cancel(reason);
+-        } finally {
+-          reader.releaseLock();
+-        }
+-      },
+-    });
+-  }
+-
+   async write(
+     path: string,
+     body: ByteBody,
+@@ -163,10 +104,6 @@
+       options.storage === "opaque" ||
+       (options.storage !== "inline" && size !== undefined && size > this.inlineBytes);
+     if (!opaque) return this.vfs.writeFile(path, body, options);
+-    // The existing upload protocol reserves a canonical path, not a traversal
+-    // chain (links or dot components). Decline that case rather than promise a guard it cannot enforce.
+-    if (hasDotSegments(path) || this.vfs.realpath(path) !== normalizePath(path))
+-      throw new VfsError("ENOTSUP", "opaque writes require a canonical path", path);
+     const token = options.ifMutationToken ?? this.vfs.getMutationToken(path);
+     this.assertDisposition(path, options.disposition);
+     return putOpaque(this.vfs, this.store, path, body, {
+@@ -175,6 +112,67 @@
+       ...(options.mode === undefined ? {} : { mode: options.mode }),
+       ...(size === undefined ? {} : { expectedSizeBytes: size }),
+     });
++  }
++
++  async append(path: string, body: string | Uint8Array): Promise<WriteResult | OpaqueFileStat> {
++    try {
++      return await this.vfs.appendFile(path, body);
++    } catch (error) {
++      if (!isVfsError(error) || error.code !== "ENOTSUP") throw error;
++    }
++    const suffix = typeof body === "string" ? new TextEncoder().encode(body) : body.slice();
++    const token = this.vfs.getMutationToken(path);
++    const opened = await this.open(path);
++    if (opened.stat.contentClass !== "opaque") {
++      await opened.stream.cancel();
++      throw new VfsError("EREVISION", "file changed storage tier", path);
++    }
++    if (suffix.byteLength === 0) {
++      await opened.stream.cancel();
++      return opened.stat;
++    }
++    const reader = opened.stream.getReader();
++    let ended = false;
++    const stream = new ReadableStream<Uint8Array>({
++      async pull(controller) {
++        try {
++          const chunk = await reader.read();
++          if (!chunk.done) {
++            controller.enqueue(chunk.value);
++            return;
++          }
++          reader.releaseLock();
++          ended = true;
++          controller.enqueue(suffix);
++          controller.close();
++        } catch (error) {
++          ended = true;
++          await reader.cancel(error).catch(() => undefined);
++          reader.releaseLock();
++          controller.error(error);
++        }
++      },
++      async cancel(reason) {
++        if (!ended) {
++          ended = true;
++          try {
++            await reader.cancel(reason);
++          } finally {
++            reader.releaseLock();
++          }
++        }
++      },
++    });
++    try {
++      return await this.write(path, stream, {
++        storage: "opaque",
++        disposition: "replace",
++        ifMutationToken: token,
++      });
++    } catch (error) {
++      await stream.cancel(error).catch(() => undefined);
++      throw error;
++    }
+   }
+ 
+   private assertDisposition(path: string, disposition: WriteFileOptions["disposition"]): void {
+--- /dev/null
++++ b/src/fs/file-handle.ts
+@@ -0,0 +1,157 @@
++import { VfsError } from "../core/errors.js";
++import { bytes, position } from "./handle-utils.js";
++import type { SqlFileHandles } from "./sql-file-handles.js";
++import type { FsStats } from "./stats.js";
++
++function writeBytes(
++  body: string | Uint8Array,
++  offset?: number | null,
++  length?: number | string,
++): Uint8Array {
++  if (typeof body === "string") {
++    if (typeof length === "string" && length !== "utf8" && length !== "utf-8")
++      throw new VfsError("ENOTSUP", "unsupported encoding");
++    return bytes(body);
++  }
++  const start = position(offset ?? 0);
++  const count = typeof length === "number" ? position(length) : body.byteLength - start;
++  if (start > body.byteLength || start + count > body.byteLength)
++    throw new VfsError("EINVAL", "write exceeds buffer");
++  return body.subarray(start, start + count);
++}
++/** A local descriptor references the inode, never a captured pathname or body. */
++export class FsFileHandle {
++  private cursor = 0;
++  private closed = false;
++  private queue: Promise<unknown> = Promise.resolve();
++  private closing: Promise<void> | undefined;
++  constructor(
++    private readonly owner: SqlFileHandles,
++    private readonly ino: number,
++    readonly fd: number,
++    private readonly readable: boolean,
++    private readonly writable: boolean,
++    private readonly append: boolean,
++  ) {}
++  private run<T>(operation: () => T | Promise<T>): Promise<T> {
++    if (this.closed) return Promise.reject(new VfsError("EBADF", "file handle is closed"));
++    const result = this.queue.then(operation);
++    this.queue = result.catch(() => undefined);
++    return result;
++  }
++  private readableHandle(): void {
++    if (!this.readable) throw new VfsError("EBADF", "handle is not readable");
++  }
++  private writableHandle(): void {
++    if (!this.writable) throw new VfsError("EBADF", "handle is not writable");
++  }
++  readFile(
++    options?: "utf8" | "utf-8" | { encoding?: "utf8" | "utf-8" | null },
++  ): Promise<string | Uint8Array> {
++    return this.run(async () => {
++      this.readableHandle();
++      const encoding = typeof options === "string" ? options : options?.encoding;
++      if (
++        encoding !== undefined &&
++        encoding !== null &&
++        encoding !== "utf8" &&
++        encoding !== "utf-8"
++      )
++        throw new VfsError("ENOTSUP", "unsupported encoding");
++      const size = this.owner.stat(this.ino).size;
++      const result = await this.owner.read(this.ino, this.cursor, Math.max(0, size - this.cursor));
++      this.cursor += result.byteLength;
++      return encoding ? new TextDecoder().decode(result) : result;
++    });
++  }
++  write(
++    body: string,
++    at?: number | null,
++    encoding?: "utf8" | "utf-8",
++  ): Promise<{ bytesWritten: number; buffer: string }>;
++  write(
++    body: Uint8Array,
++    offset?: number,
++    length?: number,
++    at?: number | null,
++  ): Promise<{ bytesWritten: number; buffer: Uint8Array }>;
++  write(
++    body: string | Uint8Array,
++    offset?: number | null,
++    length?: number | string,
++    at?: number | null,
++  ): Promise<{ bytesWritten: number; buffer: string | Uint8Array }> {
++    return this.run(() => {
++      this.writableHandle();
++      const explicit = typeof body === "string" ? offset : at;
++      const data = writeBytes(body, offset, length);
++      const end = this.owner.write(
++        this.ino,
++        data,
++        explicit == null ? this.cursor : position(explicit),
++        this.append,
++      );
++      if (explicit == null) this.cursor = end;
++      return { bytesWritten: data.byteLength, buffer: body };
++    });
++  }
++  writeFile(body: string | Uint8Array): Promise<void> {
++    return this.run(() => {
++      this.writableHandle();
++      this.cursor = this.owner.write(this.ino, bytes(body), this.cursor, this.append);
++    });
++  }
++  read(
++    buffer: Uint8Array,
++    offset = 0,
++    length = buffer.byteLength - offset,
++    at: number | null = null,
++  ) {
++    return this.run(async () => {
++      this.readableHandle();
++      position(offset);
++      position(length);
++      if (offset + length > buffer.byteLength) throw new VfsError("EINVAL", "read exceeds buffer");
++      const data = await this.owner.read(
++        this.ino,
++        at === null ? this.cursor : position(at),
++        length,
++      );
++      buffer.set(data, offset);
++      if (at === null) this.cursor += data.byteLength;
++      return { bytesRead: data.byteLength, buffer };
++    });
++  }
++  truncate(size = 0): Promise<void> {
++    return this.run(() => {
++      this.writableHandle();
++      this.owner.truncate(this.ino, position(size));
++    });
++  }
++  stat(): Promise<FsStats> {
++    return this.run(() => this.owner.stat(this.ino));
++  }
++  /** Waits for previous writes and the backing storage durability barrier. */
++  sync(): Promise<void> {
++    return this.run(() => this.owner.sync());
++  }
++  datasync(): Promise<void> {
++    return this.sync();
++  }
++  close(): Promise<void> {
++    if (this.closing !== undefined) return this.closing;
++    this.closed = true;
++    const closing = this.queue.then(async () => {
++      this.owner.release(this.ino);
++      await this.owner.maintenance();
++    });
++    this.closing = closing;
++    void closing.catch(() => {
++      this.closing = undefined;
++    });
++    return closing;
++  }
++  async [Symbol.asyncDispose](): Promise<void> {
++    await this.close();
++  }
++}
+--- /dev/null
++++ b/src/fs/handle-utils.ts
+@@ -0,0 +1,10 @@
++import { VfsError } from "../core/errors.js";
++
++export function bytes(body: string | Uint8Array): Uint8Array {
++  return typeof body === "string" ? new TextEncoder().encode(body) : body;
++}
++export function position(value: number): number {
++  if (!Number.isSafeInteger(value) || value < 0)
++    throw new VfsError("EINVAL", "invalid file position");
++  return value;
++}
+--- /dev/null
++++ b/src/fs/hard-links.ts
+@@ -0,0 +1,75 @@
++import type { SqlHandlePort } from "../vfs/handle-port.js";
++
++/** Installed only in a database which opts into hard links. Equality guards
++ * terminate propagation even when SQLite recursive_triggers is enabled. */
++export function installHardLinkTriggers(port: SqlHandlePort): void {
++  const columns = [
++    "kind",
++    "content_class",
++    "opaque_object_id",
++    "link_target",
++    "size_bytes",
++    "mode",
++    "uid",
++    "gid",
++    "created_at_ms",
++    "modified_at_ms",
++    "changed_at_ms",
++    "revision",
++    "mutation_version",
++    "body_digest",
++    "body_digest_revision",
++  ];
++  const metadata = columns.filter(
++    (column) =>
++      column !== "revision" &&
++      column !== "mutation_version" &&
++      column !== "body_digest" &&
++      column !== "body_digest_revision",
++  );
++  const watched = columns.filter(
++    (column) => column !== "body_digest" && column !== "body_digest_revision",
++  );
++  port.batch(`
++    CREATE TRIGGER IF NOT EXISTS vfs_hard_metadata AFTER UPDATE OF ${watched.join(", ")} ON vfs_entries
++    WHEN NEW.link_identity IS NOT NULL AND NEW.mirroring = 0 BEGIN
++      UPDATE vfs_entries SET mirroring = 1, ${metadata.map((column) => `${column} = NEW.${column}`).join(", ")},
++        body_digest = NULL, body_digest_revision = NULL, revision = revision + 1, mutation_version = mutation_version + 1
++      WHERE link_identity = NEW.link_identity AND id <> NEW.id;
++      UPDATE vfs_entries SET mirroring = 0 WHERE link_identity = NEW.link_identity AND mirroring <> 0;
++    END;
++    CREATE TRIGGER IF NOT EXISTS vfs_hard_new_name AFTER INSERT ON vfs_entries WHEN NEW.link_identity IS NOT NULL BEGIN
++      DELETE FROM vfs_inline_chunks WHERE entry_id IN (SELECT id FROM vfs_entries WHERE link_identity = NEW.link_identity AND id <> NEW.id);
++      UPDATE vfs_entries SET link_count = (SELECT COUNT(*) FROM vfs_entries WHERE link_identity = NEW.link_identity)
++      WHERE link_identity = NEW.link_identity;
++      UPDATE vfs_entries SET mirroring = 1, ${metadata.map((column) => `${column} = NEW.${column}`).join(", ")},
++        body_digest = NULL, body_digest_revision = NULL, revision = revision + 1, mutation_version = mutation_version + 1
++      WHERE link_identity = NEW.link_identity AND id <> NEW.id;
++      UPDATE vfs_entries SET mirroring = 0 WHERE link_identity = NEW.link_identity AND mirroring <> 0;
++    END;
++    CREATE TRIGGER IF NOT EXISTS vfs_hard_chunk_insert AFTER INSERT ON vfs_inline_chunks BEGIN
++      INSERT INTO vfs_inline_chunks(entry_id, chunk_index, body)
++      SELECT alias.id, NEW.chunk_index, NEW.body FROM vfs_entries source JOIN vfs_entries alias
++      ON alias.link_identity = source.link_identity AND alias.id <> source.id
++      WHERE source.id = NEW.entry_id AND source.link_identity IS NOT NULL AND source.unlinking = 0
++      ON CONFLICT(entry_id, chunk_index) DO UPDATE SET body = excluded.body WHERE body IS NOT excluded.body;
++    END;
++    CREATE TRIGGER IF NOT EXISTS vfs_hard_chunk_update AFTER UPDATE OF body ON vfs_inline_chunks BEGIN
++      INSERT INTO vfs_inline_chunks(entry_id, chunk_index, body)
++      SELECT alias.id, NEW.chunk_index, NEW.body FROM vfs_entries source JOIN vfs_entries alias
++      ON alias.link_identity = source.link_identity AND alias.id <> source.id
++      WHERE source.id = NEW.entry_id AND source.link_identity IS NOT NULL AND source.unlinking = 0
++      ON CONFLICT(entry_id, chunk_index) DO UPDATE SET body = excluded.body WHERE body IS NOT excluded.body;
++    END;
++    CREATE TRIGGER IF NOT EXISTS vfs_hard_chunk_delete AFTER DELETE ON vfs_inline_chunks BEGIN
++      DELETE FROM vfs_inline_chunks WHERE chunk_index = OLD.chunk_index AND entry_id IN (
++        SELECT alias.id FROM vfs_entries source JOIN vfs_entries alias ON alias.link_identity = source.link_identity
++        WHERE source.id = OLD.entry_id AND source.unlinking = 0 AND alias.id <> source.id
++      );
++    END;
++    CREATE TRIGGER IF NOT EXISTS vfs_hard_unlink AFTER DELETE ON vfs_entries WHEN OLD.link_identity IS NOT NULL BEGIN
++      UPDATE vfs_entries SET link_count = (SELECT COUNT(*) FROM vfs_entries WHERE link_identity = OLD.link_identity)
++      WHERE link_identity = OLD.link_identity;
++    END;
++  `);
++}
+--- a/src/fs/index.ts
++++ b/src/fs/index.ts
+@@ -1,3 +1,4 @@
++export { FsFileHandle } from "./file-handle.js";
+ export { createFsAdapter, type FsAdapterOptions } from "./promises.js";
+ export type { FsContent } from "./read.js";
+ export { FsDirent, FsStats } from "./stats.js";
+--- /dev/null
++++ b/src/fs/leased-stream.ts
+@@ -0,0 +1,61 @@
++import { isVfsError, VfsError } from "../core/errors.js";
++
++function readFailure(error: unknown, path: string): VfsError {
++  return isVfsError(error) ? error : new VfsError("EIO", "opaque content read failed", path);
++}
++
++function checkSize(read: number, expected: number, path: string, complete = false): void {
++  if (read > expected || (complete && read !== expected)) {
++    throw new VfsError("EIO", "opaque body size does not match metadata", path);
++  }
++}
++
++export function leasedStream(
++  body: ReadableStream<Uint8Array>,
++  path: string,
++  expires: number,
++  expected: number,
++  now: () => number,
++): ReadableStream<Uint8Array> {
++  const reader = body.getReader();
++  let read = 0;
++  let settled = false;
++  const checkLease = () => {
++    if (now() >= expires) throw new VfsError("EIO", "opaque read lease expired", path);
++  };
++  return new ReadableStream<Uint8Array>({
++    pull: async (controller) => {
++      if (settled) return;
++      try {
++        checkLease();
++        const next = await reader.read();
++        if (settled) return;
++        checkLease();
++        if (next.done) {
++          checkSize(read, expected, path, true);
++          settled = true;
++          reader.releaseLock();
++          controller.close();
++          return;
++        }
++        read += next.value.byteLength;
++        checkSize(read, expected, path);
++        controller.enqueue(next.value);
++      } catch (error) {
++        if (settled) return;
++        settled = true;
++        await reader.cancel(error).catch(() => undefined);
++        reader.releaseLock();
++        controller.error(readFailure(error, path));
++      }
++    },
++    cancel: async (reason) => {
++      settled = true;
++      try {
++        await reader.cancel(reason);
++      } finally {
++        reader.releaseLock();
++      }
++    },
++  });
++}
+--- a/src/fs/promises.ts
++++ b/src/fs/promises.ts
+@@ -1,18 +1,17 @@
+ import { VfsError } from "../core/errors.js";
+-import {
+-  hasDotSegments,
+-  normalizePathPreservingTrailingSlash,
+-  normalizeResolutionPath,
+-} from "../core/path.js";
++import { normalizeFileSystemPath } from "../core/path.js";
+ import { InFlightByteBudget } from "../vfs/buffering.js";
+ import { validatePositiveInteger } from "../vfs/config.js";
++import { installHandleFactory } from "../vfs/handle-port.js";
+ import {
+   MAX_INLINE_FILE_BYTES,
+   type VirtualFileSystem,
+   type WriteFileOptions,
+ } from "../vfs/types.js";
++import type { FsFileHandle } from "./file-handle.js";
+ import type { FsMetadataCache } from "./metadata.js";
+ import { type FsContent, materialize } from "./read.js";
++import { SqlFileHandles } from "./sql-file-handles.js";
+ import { FsDirent, FsStats } from "./stats.js";
+ 
+ export interface FsAdapterOptions {
+@@ -53,10 +52,7 @@
+   }
+ 
+   private path(path: string): string {
+-    const cwd = this.options.cwd ?? "/";
+-    if (hasDotSegments(path) || (!path.startsWith("/") && hasDotSegments(cwd)))
+-      return normalizeResolutionPath(path, cwd);
+-    return normalizePathPreservingTrailingSlash(path, cwd);
++    return normalizeFileSystemPath(path, this.options.cwd ?? "/");
+   }
+ 
+   async readFile(
+@@ -102,7 +98,8 @@
+ 
+   private async append(path: string, body: string | Uint8Array): Promise<boolean> {
+     try {
+-      await this.vfs.appendFile(path, body);
++      if (this.options.content?.append === undefined) await this.vfs.appendFile(path, body);
++      else await this.options.content.append(path, body);
+       return true;
+     } catch (error) {
+       if (error instanceof VfsError && error.code === "ENOENT") return false;
+@@ -128,6 +125,35 @@
+     } catch (error) {
+       if (error instanceof VfsError && error.code === "ENOENT") return 0o100000 | (mode & 0o7777);
+       throw error;
++    }
++  }
++
++  async open(path: string, flags = "r", mode = 0o666) {
++    installHandleFactory((port) => new SqlFileHandles(port));
++    if (!("openFileHandle" in this.vfs) || typeof this.vfs.openFileHandle !== "function")
++      throw new VfsError("ENOTSUP", "filesystem does not support inode handles", path);
++    const open = this.vfs.openFileHandle as (
++      path: string,
++      flags: string,
++      mode: number,
++    ) => FsFileHandle;
++    return open.call(this.vfs, this.path(path), flags, mode);
++  }
++
++  async link(from: string, to: string): Promise<void> {
++    installHandleFactory((port) => new SqlFileHandles(port));
++    if (!("linkFile" in this.vfs) || typeof this.vfs.linkFile !== "function")
++      throw new VfsError("ENOTSUP", "filesystem does not support hard links");
++    const link = this.vfs.linkFile as (from: string, to: string) => void;
++    link.call(this.vfs, this.path(from), this.path(to));
++  }
++
++  async truncate(path: string, size = 0): Promise<void> {
++    const handle = await this.open(path, "r+");
++    try {
++      await handle.truncate(size);
++    } finally {
++      await handle.close();
+     }
+   }
+ 
+@@ -226,6 +252,9 @@
+   const fs = new FsPromises(fileSystem, options);
+   return {
+     promises: {
++      open: fs.open.bind(fs),
++      link: fs.link.bind(fs),
++      truncate: fs.truncate.bind(fs),
+       readFile: fs.readFile.bind(fs),
+       writeFile: fs.writeFile.bind(fs),
+       stat: fs.stat.bind(fs),
+--- a/src/fs/read.ts
++++ b/src/fs/read.ts
+@@ -9,6 +9,7 @@
+ } from "../vfs/types.js";
+ 
+ export interface FsContent {
++  append?(path: string, body: string | Uint8Array): Promise<WriteResult | OpaqueFileStat>;
+   open(
+     path: string,
+   ): Promise<InlineReadResult | { stat: OpaqueFileStat; stream: ReadableStream<Uint8Array> }>;
+--- /dev/null
++++ b/src/fs/sql-file-handles.ts
+@@ -0,0 +1,445 @@
++import { VfsError } from "../core/errors.js";
++import { isDescendant } from "../core/path.js";
++import type { HandleProvider, SqlHandlePort } from "../vfs/handle-port.js";
++import {
++  blobColumn,
++  type EntryRow,
++  firstRow,
++  integerColumn,
++  parseEntry,
++  type SqlRow,
++  stringColumn,
++} from "../vfs/sql-model.js";
++import type { PosixAccessContext } from "../vfs/sql-posix.js";
++import { ENTRY_COLUMNS } from "../vfs/sql-schema.js";
++import { FsFileHandle } from "./file-handle.js";
++import { position } from "./handle-utils.js";
++import { installHardLinkTriggers } from "./hard-links.js";
++import { leasedStream } from "./leased-stream.js";
++import { materialize } from "./read.js";
++import { FsStats } from "./stats.js";
++
++function detachedRow(json: string): SqlRow {
++  const value: unknown = JSON.parse(json);
++  if (value === null || typeof value !== "object" || Array.isArray(value))
++    throw new VfsError("EIO", "invalid detached inode");
++  const row: Record<string, SqlStorageValue> = {};
++  for (const [key, field] of Object.entries(value)) {
++    if (field !== null && typeof field !== "number" && typeof field !== "string")
++      throw new VfsError("EIO", "invalid inode column");
++    row[key] = field;
++  }
++  return row;
++}
++
++/** One manager per SQL owner; all credential views share its inode pins. */
++export class SqlFileHandles implements HandleProvider {
++  private readonly pins = new Map<number, number>();
++  private nextDescriptor = 3;
++  constructor(private readonly port: SqlHandlePort) {
++    port.retain((path, recursive, root) => this.retain(path, recursive, root));
++  }
++  link(from: string, to: string, access?: PosixAccessContext): void {
++    installHardLinkTriggers(this.port);
++    this.port.transaction(() => {
++      const source = this.port.sourceEntry(from, access);
++      if (source.kind === "directory")
++        throw new VfsError("EPERM", "directories cannot be hard linked", from);
++      const destination = this.port.openEntry(to, false, false, true, true, 0o666, access);
++      const identity = source.linkIdentity ?? source.id;
++      const count = (source.linkCount ?? 1) + 1;
++      this.port.capacity(source.contentClass === "inline" ? source.sizeBytes : 0, to);
++      this.port.sql.exec(
++        "UPDATE vfs_entries SET link_identity = ?, link_count = ? WHERE id = ?",
++        identity,
++        count,
++        source.id,
++      );
++      this.port.sql.exec(
++        `UPDATE vfs_entries SET kind = ?, content_class = ?, opaque_object_id = ?, link_target = ?,
++        size_bytes = ?, mode = ?, uid = ?, gid = ?, created_at_ms = ?, modified_at_ms = ?, changed_at_ms = ?,
++        link_identity = ?, link_count = ?, revision = ?, mutation_version = ? WHERE id = ?`,
++        source.kind,
++        source.contentClass,
++        source.opaqueObjectId,
++        source.linkTarget,
++        source.sizeBytes,
++        source.mode,
++        source.uid,
++        source.gid,
++        source.createdAtMs,
++        source.modifiedAtMs,
++        this.port.now(),
++        identity,
++        count,
++        Math.max(source.revision, destination.revision) + 1,
++        Math.max(source.mutationVersion, destination.mutationVersion) + 1,
++        destination.id,
++      );
++      if (source.contentClass === "inline")
++        this.port.sql.exec(
++          "INSERT INTO vfs_inline_chunks SELECT ?, chunk_index, body FROM vfs_inline_chunks WHERE entry_id = ?",
++          destination.id,
++          source.id,
++        );
++      this.port.usage(source.contentClass === "inline" ? source.sizeBytes : 0);
++      this.port.linked();
++      this.port.publish(this.entry(identity));
++    });
++  }
++  open(path: string, flags: string, mode: number, access?: PosixAccessContext): FsFileHandle {
++    if (!/^(r|r\+|w|w\+|wx|wx\+|a|a\+|ax|ax\+)$/.test(flags))
++      throw new VfsError("EINVAL", "unsupported open flags", path);
++    if (this.count() >= 1024) throw new VfsError("EMFILE", "too many open handles");
++    const readable = flags.startsWith("r") || flags.endsWith("+");
++    const writable = !flags.startsWith("r") || flags.endsWith("+");
++    const entry = this.port.openEntry(
++      path,
++      readable,
++      writable,
++      !flags.startsWith("r"),
++      flags.includes("x"),
++      mode,
++      access,
++    );
++    const identity = entry.linkIdentity ?? entry.id;
++    this.pins.set(identity, (this.pins.get(identity) ?? 0) + 1);
++    try {
++      if (flags.startsWith("w")) this.truncate(identity, 0);
++      return new FsFileHandle(
++        this,
++        identity,
++        this.nextDescriptor++,
++        readable,
++        writable,
++        flags.startsWith("a"),
++      );
++    } catch (error) {
++      this.release(identity);
++      throw error;
++    }
++  }
++  private count(): number {
++    let count = 0;
++    for (const value of this.pins.values()) count += value;
++    return count;
++  }
++  private retained(ino: number): SqlRow | undefined {
++    return firstRow(
++      this.port.sql.exec<SqlRow>("SELECT entry_json FROM vfs_detached_inodes WHERE id = ?", ino),
++    );
++  }
++  entry(ino: number): EntryRow {
++    const row = firstRow(
++      this.port.sql.exec<SqlRow>(
++        `SELECT ${ENTRY_COLUMNS} FROM vfs_entries e WHERE id = ? OR link_identity = ? ORDER BY id LIMIT 1`,
++        ino,
++        ino,
++      ),
++    );
++    if (row !== undefined) return parseEntry(row, this.epoch(row));
++    const detached = this.retained(ino);
++    if (detached === undefined) throw new VfsError("EBADF", "inode is no longer open");
++    const columns = detachedRow(stringColumn(detached, "entry_json"));
++    return parseEntry(columns, this.epoch(columns));
++  }
++  // The epoch is immutable and read only on first handle use, not ordinary paths.
++  private mutationEpoch: string | undefined;
++  private epoch(_row: SqlRow): string {
++    this.mutationEpoch ??= stringColumn(
++      this.port.sql.exec<SqlRow>("SELECT mutation_epoch FROM vfs_state WHERE singleton = 1").one(),
++      "mutation_epoch",
++    );
++    return this.mutationEpoch;
++  }
++  private retain(path: string, recursive: boolean, root: EntryRow): number {
++    let retained = 0;
++    for (const ino of this.retainedCandidates(root, recursive)) {
++      const row = firstRow(
++        this.port.sql.exec<SqlRow>(
++          `SELECT ${ENTRY_COLUMNS} FROM vfs_entries e WHERE id = ? OR link_identity = ? ORDER BY id LIMIT 1`,
++          ino,
++          ino,
++        ),
++      );
++      if (row === undefined) continue;
++      const entry = parseEntry(row, this.epoch(row));
++      if (entry.path !== path && !(recursive && isDescendant(path, entry.path))) continue;
++      if (this.hasRemainingName(entry, path, recursive)) continue;
++      const inlineBytes = entry.contentClass === "inline" ? entry.sizeBytes : 0;
++      this.port.sql.exec(
++        "INSERT INTO vfs_detached_inodes(id, entry_json, inline_bytes, opaque_object_id) VALUES (?, ?, ?, ?)",
++        ino,
++        JSON.stringify({ ...row, id: ino, link_count: 0, changed_at_ms: this.port.now() }),
++        inlineBytes,
++        entry.opaqueObjectId,
++      );
++      if (entry.contentClass === "inline")
++        this.port.sql.exec(
++          "INSERT INTO vfs_detached_chunks SELECT ?, chunk_index, body FROM vfs_inline_chunks WHERE entry_id = ?",
++          ino,
++          entry.id,
++        );
++      retained += inlineBytes;
++    }
++    return retained;
++  }
++  private retainedCandidates(root: EntryRow, recursive: boolean): Iterable<number> {
++    if (recursive) return this.pins.keys();
++    const identity = root.linkIdentity ?? root.id;
++    return this.pins.has(identity) ? [identity] : [];
++  }
++  private hasRemainingName(entry: EntryRow, path: string, recursive: boolean): boolean {
++    if (entry.linkIdentity == null) return false;
++    return this.port.sql
++      .exec<SqlRow>("SELECT path FROM vfs_entries WHERE link_identity = ?", entry.linkIdentity)
++      .toArray()
++      .some((item) => {
++        const name = stringColumn(item, "path");
++        return name !== path && !(recursive && isDescendant(path, name));
++      });
++  }
++  release(ino: number): void {
++    const count = this.pins.get(ino);
++    if (count === undefined) return;
++    if (count > 1) {
++      this.pins.set(ino, count - 1);
++      return;
++    }
++    this.port.transaction(() => {
++      const detached = firstRow(
++        this.port.sql.exec<SqlRow>(
++          "SELECT inline_bytes, opaque_object_id FROM vfs_detached_inodes WHERE id = ?",
++          ino,
++        ),
++      );
++      if (detached === undefined) return;
++      this.port.sql.exec("DELETE FROM vfs_detached_chunks WHERE entry_id = ?", ino);
++      this.port.sql.exec("DELETE FROM vfs_detached_inodes WHERE id = ?", ino);
++      this.port.usage(-integerColumn(detached, "inline_bytes"));
++      if (typeof detached["opaque_object_id"] === "number")
++        this.port.reclaimObject(detached["opaque_object_id"]);
++    });
++    this.pins.delete(ino);
++  }
++  sync(): Promise<void> {
++    return this.port.sync();
++  }
++  maintenance(): Promise<void> {
++    return this.port.maintenance();
++  }
++  stat(ino: number): FsStats {
++    return new FsStats(this.port.stat(this.entry(ino)), this.entry(ino).linkCount ?? 1);
++  }
++  async read(ino: number, offset: number, length: number): Promise<Uint8Array> {
++    const entry = this.entry(ino);
++    const selected = Math.min(length, Math.max(0, entry.sizeBytes - offset));
++    if (selected === 0) return new Uint8Array();
++    if (entry.contentClass === "opaque") return this.readOpaque(entry, offset, selected);
++    const table = entry.linkCount !== 0 ? "vfs_inline_chunks" : "vfs_detached_chunks";
++    const first = this.port.sql
++      .exec<SqlRow>(
++        `SELECT length(body) AS size FROM ${table} WHERE entry_id = ? AND chunk_index = 0`,
++        entry.id,
++      )
++      .one();
++    const width = integerColumn(first, "size");
++    if (width <= 0) throw new VfsError("EIO", "invalid inode chunk width");
++    const begin = Math.floor(offset / width);
++    const end = Math.ceil((offset + selected) / width);
++    const reserved = Math.min(entry.sizeBytes, (end - begin) * width) + selected;
++    this.port.budget.acquire(reserved);
++    try {
++      const rows = this.port.sql
++        .exec<SqlRow>(
++          `SELECT chunk_index, body FROM ${table} WHERE entry_id = ? AND chunk_index >= ? AND chunk_index < ? ORDER BY chunk_index`,
++          entry.id,
++          begin,
++          end,
++        )
++        .toArray();
++      const output = new Uint8Array(selected);
++      let consumed = 0;
++      for (const row of rows) {
++        const base = integerColumn(row, "chunk_index") * width;
++        const body = new Uint8Array(blobColumn(row, "body"));
++        const from = Math.max(0, offset - base);
++        const to = Math.min(body.byteLength, offset + selected - base);
++        if (to > from) {
++          output.set(body.subarray(from, to), base + from - offset);
++          consumed += to - from;
++        }
++      }
++      if (consumed !== selected) throw new VfsError("EIO", "inode body does not match range");
++      return output;
++    } finally {
++      this.port.budget.release(reserved);
++    }
++  }
++  private async readOpaque(entry: EntryRow, offset: number, length: number): Promise<Uint8Array> {
++    const store = this.port.store;
++    if (store === undefined || entry.opaqueObjectId === null)
++      throw new VfsError("ENOTSUP", "opaque handle requires a store");
++    const expires = this.port.now() + 60_000;
++    const object = this.port.sql
++      .exec<SqlRow>(
++        "UPDATE vfs_opaque_objects SET retain_until_ms = MAX(retain_until_ms, ?) WHERE id = ? RETURNING r2_key",
++        expires,
++        entry.opaqueObjectId,
++      )
++      .one();
++    const stream = await store.getStream(stringColumn(object, "r2_key"), { offset, length });
++    if (stream === null) throw new VfsError("EIO", "opaque body is missing");
++    if (this.port.now() >= expires) {
++      await stream.cancel();
++      throw new VfsError("EIO", "opaque read lease expired", entry.path);
++    }
++    const stat = this.port.stat(entry);
++    if (stat.kind !== "file" || stat.contentClass !== "opaque")
++      throw new VfsError("EIO", "invalid open inode");
++    return materialize(
++      {
++        stat: { ...stat, sizeBytes: length },
++        stream: leasedStream(stream, entry.path, expires, length, () => this.port.now()),
++      },
++      this.port.maximum,
++      this.port.budget,
++    );
++  }
++  write(ino: number, body: Uint8Array, offset: number | null, append: boolean): number {
++    return this.port.transaction(() => {
++      const entry = this.entry(ino);
++      if (entry.contentClass !== "inline")
++        throw new VfsError("ENOTSUP", "random opaque writes require a content tier");
++      const start = append ? entry.sizeBytes : position(offset ?? 0);
++      if (body.byteLength === 0) return start;
++      const size = Math.max(entry.sizeBytes, start + body.byteLength);
++      this.validateSize(size, entry.path);
++      this.port.capacity((size - entry.sizeBytes) * Math.max(1, entry.linkCount ?? 1), entry.path);
++      const detached = entry.linkCount === 0;
++      const table = detached ? "vfs_detached_chunks" : "vfs_inline_chunks";
++      this.writeChunks(entry, body, start, size, table);
++      this.update(entry, size, detached);
++      return start + body.byteLength;
++    });
++  }
++  private writeChunks(
++    entry: EntryRow,
++    body: Uint8Array,
++    start: number,
++    size: number,
++    table: string,
++  ): void {
++    const first = firstRow(
++      this.port.sql.exec<SqlRow>(
++        `SELECT length(body) AS size FROM ${table} WHERE entry_id = ? AND chunk_index = 0`,
++        entry.id,
++      ),
++    );
++    const firstSize = first === undefined ? 0 : integerColumn(first, "size");
++    const chunkBytes =
++      firstSize < entry.sizeBytes ? firstSize : Math.max(firstSize, this.port.chunkBytes);
++    const begin = Math.floor(Math.min(start, entry.sizeBytes) / chunkBytes);
++    const end = Math.ceil((start + body.byteLength) / chunkBytes);
++    for (let index = begin; index < end; index++) {
++      const base = index * chunkBytes;
++      const old = firstRow(
++        this.port.sql.exec<SqlRow>(
++          `SELECT body FROM ${table} WHERE entry_id = ? AND chunk_index = ?`,
++          entry.id,
++          index,
++        ),
++      );
++      const chunk = new Uint8Array(Math.min(chunkBytes, size - base));
++      if (old !== undefined)
++        chunk.set(new Uint8Array(blobColumn(old, "body")).subarray(0, chunk.byteLength));
++      const from = Math.max(start, base);
++      const to = Math.min(start + body.byteLength, base + chunk.byteLength);
++      if (to > from) chunk.set(body.subarray(from - start, to - start), from - base);
++      this.port.sql.exec(
++        `INSERT INTO ${table}(entry_id, chunk_index, body) VALUES (?, ?, ?) ON CONFLICT(entry_id, chunk_index) DO UPDATE SET body = excluded.body`,
++        entry.id,
++        index,
++        chunk,
++      );
++    }
++  }
++  truncate(ino: number, size: number): void {
++    this.validateSize(size, "");
++    const entry = this.entry(ino);
++    if (entry.contentClass !== "inline")
++      throw new VfsError("ENOTSUP", "opaque truncate requires a content tier");
++    if (size > entry.sizeBytes) {
++      this.write(ino, new Uint8Array(size - entry.sizeBytes), entry.sizeBytes, false);
++      return;
++    }
++    this.port.transaction(() => {
++      const current = this.entry(ino);
++      const detached = entry.linkCount === 0;
++      const table = detached ? "vfs_detached_chunks" : "vfs_inline_chunks";
++      let remaining = size;
++      for (const row of this.port.sql
++        .exec<SqlRow>(
++          `SELECT chunk_index, length(body) AS size FROM ${table} WHERE entry_id = ? ORDER BY chunk_index`,
++          current.id,
++        )
++        .toArray()) {
++        const index = integerColumn(row, "chunk_index");
++        const length = integerColumn(row, "size");
++        if (remaining <= 0)
++          this.port.sql.exec(
++            `DELETE FROM ${table} WHERE entry_id = ? AND chunk_index = ?`,
++            entry.id,
++            index,
++          );
++        else if (remaining < length)
++          this.port.sql.exec(
++            `UPDATE ${table} SET body = substr(body, 1, ?) WHERE entry_id = ? AND chunk_index = ?`,
++            remaining,
++            current.id,
++            index,
++          );
++        remaining -= length;
++      }
++      this.update(current, size, detached);
++    });
++  }
++  private validateSize(size: number, path: string): void {
++    position(size);
++    if (size > this.port.maximum)
++      throw new VfsError("EFBIG", "inode exceeds inline file limit", path);
++  }
++  private update(entry: EntryRow, size: number, detached: boolean): void {
++    const now = this.port.now();
++    if (detached)
++      this.port.sql.exec(
++        `UPDATE vfs_detached_inodes SET inline_bytes = ?, entry_json = json_set(entry_json,
++      '$.size_bytes', ?, '$.modified_at_ms', ?, '$.changed_at_ms', ?, '$.revision', ?, '$.mutation_version', ?) WHERE id = ?`,
++        size,
++        size,
++        now,
++        now,
++        entry.revision + 1,
++        entry.mutationVersion + 1,
++        entry.id,
++      );
++    else {
++      this.port.sql.exec(
++        "UPDATE vfs_entries SET size_bytes = ?, modified_at_ms = ?, changed_at_ms = ?, body_digest = NULL, body_digest_revision = NULL, revision = revision + 1, mutation_version = mutation_version + 1 WHERE id = ?",
++        size,
++        now,
++        now,
++        entry.id,
++      );
++      this.port.publish({
++        ...entry,
++        sizeBytes: size,
++        modifiedAtMs: now,
++        changedAtMs: now,
++        revision: entry.revision + 1,
++        mutationVersion: entry.mutationVersion + 1,
++      });
++    }
++    this.port.usage((size - entry.sizeBytes) * Math.max(1, entry.linkCount ?? 1));
++  }
++}
+--- a/src/fs/stats.ts
++++ b/src/fs/stats.ts
+@@ -1,6 +1,6 @@
+ import type { VfsStat } from "../vfs/types.js";
+ 
+-/** Node-shaped metadata; ctime aliases mtime because VFS has no ctime column. */
++/** Node-shaped metadata with independent modification and change times. */
+ export class FsStats {
+   readonly size: number;
+   readonly mode: number;
+@@ -8,7 +8,7 @@
+   readonly uid: number;
+   readonly gid: number;
+   readonly dev = 0;
+-  readonly nlink = 1;
++  readonly nlink: number;
+   readonly mtimeMs: number;
+   readonly ctimeMs: number;
+   readonly birthtimeMs: number;
+@@ -18,14 +18,18 @@
+   readonly ctime: Date;
+   readonly birthtime: Date;
+ 
+-  constructor(private readonly entry: VfsStat) {
++  constructor(
++    private readonly entry: VfsStat,
++    nlink = 1,
++  ) {
++    this.nlink = entry.nlink ?? nlink;
+     this.size = entry.sizeBytes;
+     this.mode = entry.mode;
+     this.ino = entry.ino;
+     this.uid = entry.uid;
+     this.gid = entry.gid;
+     this.mtimeMs = entry.modifiedAtMs;
+-    this.ctimeMs = entry.modifiedAtMs;
++    this.ctimeMs = entry.changedAtMs ?? entry.modifiedAtMs;
+     this.birthtimeMs = entry.createdAtMs;
+     this.revision = entry.revision;
+     this.mutationToken = entry.mutationToken;
+--- a/src/shell/commands/core-inspect.ts
++++ b/src/shell/commands/core-inspect.ts
+@@ -5,7 +5,7 @@
+ } from "../../core/decimal-integer.js";
+ import { VfsError } from "../../core/errors.js";
+ import { isOneOf } from "../../core/literals.js";
+-import { normalizePathPreservingTrailingSlash } from "../../core/path.js";
++import { normalizeFileSystemPath } from "../../core/path.js";
+ import { type PosixPermission, shellModeAllows } from "../access.js";
+ import { identityLabel, resolveIdentityNames } from "../identity.js";
+ import type { ShellCommandContext } from "../types.js";
+@@ -78,7 +78,7 @@
+   predicate: FilePredicate,
+   operand: string,
+ ): boolean {
+-  const path = normalizePathPreservingTrailingSlash(operand, context.session.cwd);
++  const path = normalizeFileSystemPath(operand, context.session.cwd);
+   const link = predicate === "-L" || predicate === "-h";
+   const stat = link ? context.fileSystem.lstat(path) : context.fileSystem.stat(path);
+   if (link) return stat.kind === "symlink";
+--- a/src/shell/commands/fs-path.ts
++++ b/src/shell/commands/fs-path.ts
+@@ -1,5 +1,5 @@
+ import { VfsError } from "../../core/errors.js";
+-import { normalizePath } from "../../core/path.js";
++import { normalizeFileSystemPath } from "../../core/path.js";
+ import { type AppletSpec, appletUsageError, defineApplet } from "./applet.js";
+ import { commandPath, writeText } from "./helpers.js";
+ 
+@@ -63,7 +63,7 @@
+   async (context, argv, fds) => {
+     if (argv.length === 0) throw appletUsageError(REALPATH, "missing operand");
+     for (const path of argv) {
+-      const normalized = normalizePath(path, context.session.cwd);
++      const normalized = normalizeFileSystemPath(path, context.session.cwd);
+       const canonical = context.fileSystem.realpath(normalized);
+       context.fileSystem.stat(canonical);
+       await writeText(fds[1], `${canonical}\n`);
+--- a/src/shell/commands/helpers.ts
++++ b/src/shell/commands/helpers.ts
+@@ -1,6 +1,6 @@
+ import { VfsError } from "../../core/errors.js";
+ import { splitLinesPreservingEndings } from "../../core/lines.js";
+-import { basename, normalizePath } from "../../core/path.js";
++import { basename, normalizeFileSystemPath } from "../../core/path.js";
+ import { encodeUtf8, utf8ByteLength } from "../../core/unicode.js";
+ import type { ByteRange, EntryPage, InlineReadResult } from "../../vfs/types.js";
+ import { openContent } from "../content.js";
+@@ -12,7 +12,7 @@
+ }
+ 
+ export function commandPath(context: ShellCommandContext, path = "."): string {
+-  return normalizePath(path, context.session.cwd);
++  return normalizeFileSystemPath(path, context.session.cwd);
+ }
+ 
+ export async function writeBytes(sink: ShellSink, bytes: Uint8Array): Promise<void> {
+--- a/src/shell/expand-glob.ts
++++ b/src/shell/expand-glob.ts
+@@ -1,5 +1,5 @@
+ import { VfsError } from "../core/errors.js";
+-import { compareUtf8, normalizePath } from "../core/path.js";
++import { compareUtf8, normalizeFileSystemPath } from "../core/path.js";
+ import type { ShellBudget, ShellFileSystem, ShellSession } from "./types.js";
+ 
+ export function escapeGlob(value: string): string {
+@@ -74,7 +74,7 @@
+ }
+ 
+ function globSearch(pattern: string, cwd: string, fileSystem: ShellFileSystem): GlobSearch {
+-  const absolutePattern = normalizePath(pattern, cwd);
++  const absolutePattern = normalizeFileSystemPath(pattern, cwd);
+   const firstMeta = firstGlobMeta(absolutePattern);
+   const escapedPrefix = firstMeta < 0 ? absolutePattern : absolutePattern.slice(0, firstMeta);
+   const rootEnd = Math.max(escapedPrefix.lastIndexOf("/"), 0);
+@@ -120,7 +120,7 @@
+   const directoryEnd = pattern.lastIndexOf("/", relativeMeta);
+   if (directoryEnd < 0) return relativePath(cwd, path);
+   const lexicalDirectory = unescapeGlob(pattern.slice(0, directoryEnd + 1));
+-  const base = normalizePath(lexicalDirectory, cwd);
++  const base = normalizeFileSystemPath(lexicalDirectory, cwd);
+   return `${lexicalDirectory}${relativePath(base, path)}`;
+ }
+ 
+--- a/src/shell/redirection.ts
++++ b/src/shell/redirection.ts
+@@ -1,5 +1,5 @@
+ import { VfsError } from "../core/errors.js";
+-import { normalizePath } from "../core/path.js";
++import { normalizeFileSystemPath } from "../core/path.js";
+ import { bodyToStream } from "../vfs/streams.js";
+ import type { ByteBody } from "../vfs/types.js";
+ import type { OpaqueContentAccess, ShellContentReader } from "./content.js";
+@@ -94,7 +94,7 @@
+   if (values.length !== 1 || values[0] === undefined) {
+     throw new VfsError("EINVAL", "ambiguous redirection target");
+   }
+-  return normalizePath(values[0], session.cwd);
++  return normalizeFileSystemPath(values[0], session.cwd);
+ }
+ 
+ export interface AppliedRedirections {
+--- a/src/shell/shell-resolve.ts
++++ b/src/shell/shell-resolve.ts
+@@ -1,5 +1,5 @@
+ import { isVfsError, VfsError } from "../core/errors.js";
+-import { normalizePath } from "../core/path.js";
++import { normalizeFileSystemPath, normalizePath } from "../core/path.js";
+ import { readAllBytes } from "../vfs/streams.js";
+ import type { VfsStat } from "../vfs/types.js";
+ import { shellModeAllows } from "./access.js";
+@@ -93,7 +93,7 @@
+  * before that comparison.
+  */
+ function executableCandidates(name: string, session: ShellSession, runtime: Runtime): string[] {
+-  if (name.includes("/")) return [normalizePath(name, session.cwd)];
++  if (name.includes("/")) return [normalizeFileSystemPath(name, session.cwd)];
+   if (!runtime.pathLookup) return [];
+   const searchPath = session.env.get("PATH");
+   if (searchPath === undefined) return [];
+@@ -104,7 +104,12 @@
+     // from smuggling a stored file into an applet directory.
+     const directory = component === "" ? session.cwd : normalizePath(component);
+     if (runtime.commands.isAppletDirectory(directory)) continue;
+-    candidates.push(normalizePath(name, directory));
++    candidates.push(
++      normalizeFileSystemPath(
++        name,
++        component === "" ? session.cwd : normalizeFileSystemPath(component, session.cwd),
++      ),
++    );
+   }
+   return candidates;
+ }
+--- a/src/vfs/durable-object.ts
++++ b/src/vfs/durable-object.ts
+@@ -71,6 +71,7 @@
+   ) {
+     super(ctx, env);
+     this.fileSystem = new DurableObjectFileSystem(ctx.storage, options);
++    ctx.blockConcurrencyWhile(() => this.fileSystem.initialize());
+   }
+ 
+   stat(path: string): VfsStat {
+--- /dev/null
++++ b/src/vfs/handle-port.ts
+@@ -0,0 +1,52 @@
++import { VfsError } from "../core/errors.js";
++import type { FsFileHandle } from "../fs/file-handle.js";
++import type { InFlightByteBudget } from "./buffering.js";
++import type { EntryRow, VfsSqlStorage } from "./sql-model.js";
++import type { PosixAccessContext } from "./sql-posix.js";
++import type { OpaqueStore, VfsStat } from "./types.js";
++
++/** Internal port. Only the trusted SQL engine passes it to the installed factory. */
++export interface SqlHandlePort {
++  sql: VfsSqlStorage;
++  batch(query: string): void;
++  sourceEntry(path: string, access?: PosixAccessContext): EntryRow;
++  linked(): void;
++  budget: InFlightByteBudget;
++  chunkBytes: number;
++  maximum: number;
++  store: OpaqueStore | undefined;
++  transaction<T>(operation: () => T): T;
++  now(): number;
++  openEntry(
++    path: string,
++    read: boolean,
++    write: boolean,
++    create: boolean,
++    exclusive: boolean,
++    mode: number,
++    access?: PosixAccessContext,
++  ): EntryRow;
++  retain(callback: (path: string, recursive: boolean, root: EntryRow) => number): void;
++  capacity(delta: number, path: string): void;
++  usage(delta: number): void;
++  publish(entry: EntryRow): void;
++  reclaimObject(id: number): void;
++  sync(): Promise<void>;
++  maintenance(): Promise<void>;
++  stat(entry: EntryRow): VfsStat;
++}
++export interface HandleProvider {
++  link(from: string, to: string, access?: PosixAccessContext): void;
++  open(path: string, flags: string, mode: number, access?: PosixAccessContext): FsFileHandle;
++}
++type Factory = (port: SqlHandlePort) => HandleProvider;
++let factory: Factory | undefined;
++/** Called by the fs adapter when its optional open API is first used. */
++export function installHandleFactory(value: Factory): void {
++  factory ??= value;
++}
++export function createHandleProvider(port: SqlHandlePort): HandleProvider {
++  if (factory === undefined)
++    throw new VfsError("ENOTSUP", "load the promise filesystem adapter to use handles");
++  return factory(port);
++}
+--- a/src/vfs/sql-base.ts
++++ b/src/vfs/sql-base.ts
+@@ -2,7 +2,7 @@
+ import { descendantRange, dirname, normalizePath } from "../core/path.js";
+ import { InFlightByteBudget } from "./buffering.js";
+ import { resolveFileSystemLimits, validatePositiveInteger } from "./config.js";
+-import { emitVfsEvent, type VfsEventSink } from "./events.js";
++import { emitVfsEvent, type VfsEventSink, type VfsMutationOp } from "./events.js";
+ import { migrateSql } from "./sql-migrate.js";
+ import {
+   type EntryRow,
+@@ -43,6 +43,7 @@
+ }
+ 
+ export abstract class SqlBase {
++  protected recoveredDetached = false;
+   protected readonly storage: SqlFileSystemStorage;
+   protected readonly sql: VfsSqlStorage;
+   protected readonly chunkBytes: number;
+@@ -80,6 +81,51 @@
+    * allocates nothing rather than building events it will discard.
+    */
+   protected pendingMutations: PendingMutation[] = [];
++  protected pendingParents: Set<string> | undefined;
++  protected sharedInodes = false;
++  protected retainOpenInodes:
++    | ((path: string, recursive: boolean, root: EntryRow) => number)
++    | undefined;
++
++  protected abstract publishToken(
++    path: string,
++    version: number,
++    present: boolean,
++    op: VfsMutationOp,
++  ): string;
++
++  protected flushParentTimes(): void {
++    const parents = this.pendingParents;
++    this.pendingParents = undefined;
++    if (parents === undefined) return;
++    const now = this.now();
++    const paths = [...parents];
++    const direct = paths.length <= 2;
++    const predicate = direct
++      ? `path IN (${paths.map(() => "?").join(",")})`
++      : "path IN (SELECT value FROM json_each(?))";
++    const bindings = direct ? paths : [JSON.stringify(paths)];
++    const observed = this.onEvent !== undefined || this.recordChanges;
++    const rows = this.sql
++      .exec<SqlRow>(
++        `UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,
++      revision = revision + 1, mutation_version = mutation_version + 1,
++      link_count = 2 + (SELECT COUNT(*) FROM vfs_entries child INDEXED BY vfs_entries_child_directories WHERE child.parent_path = vfs_entries.path AND child.kind = 'directory' AND child.path <> '/')
++      WHERE ${predicate} AND kind = 'directory'
++      ${observed ? "RETURNING path, mutation_version" : ""}`,
++        now,
++        now,
++        ...bindings,
++      )
++      .toArray();
++    for (const row of rows)
++      this.publishToken(
++        stringColumn(row, "path"),
++        integerColumn(row, "mutation_version"),
++        true,
++        "metadata",
++      );
++  }
+   /**
+    * How many links exist, so a namespace without any pays nothing for them.
+    *
+@@ -156,6 +202,36 @@
+       now: () => this.now(),
+       newToken: () => this.newToken(),
+     });
++    // Handles are local to this owner/process. After re-instantiation none survive.
++    const detached = this.sql
++      .exec<SqlRow>(
++        "SELECT COUNT(*) AS count, COALESCE(SUM(inline_bytes), 0) AS bytes, EXISTS(SELECT 1 FROM vfs_entries WHERE link_identity IS NOT NULL) AS shared FROM vfs_detached_inodes",
++      )
++      .one();
++    this.sharedInodes = integerColumn(detached, "shared") !== 0;
++    if (integerColumn(detached, "count") !== 0) {
++      this.recoveredDetached = true;
++      this.transaction(() => {
++        const now = this.now();
++        this.sql.exec(
++          `INSERT INTO vfs_gc_queue(r2_key, not_before_ms, next_attempt_at_ms)
++        SELECT r2_key, MAX(?, retain_until_ms), MAX(?, retain_until_ms) FROM vfs_opaque_objects o
++        WHERE EXISTS (SELECT 1 FROM vfs_detached_inodes d WHERE d.opaque_object_id = o.id)
++        AND NOT EXISTS (SELECT 1 FROM vfs_entries e WHERE e.opaque_object_id = o.id)
++        ON CONFLICT(r2_key) DO NOTHING`,
++          now,
++          now,
++        );
++        this.sql.exec("DELETE FROM vfs_detached_chunks");
++        this.sql.exec("DELETE FROM vfs_detached_inodes");
++        this.sql.exec(
++          "UPDATE vfs_usage SET inline_bytes = inline_bytes - ? WHERE singleton = 1",
++          integerColumn(detached, "bytes"),
++        );
++        this.sql.exec(`DELETE FROM vfs_opaque_objects WHERE NOT EXISTS (SELECT 1 FROM vfs_entries e WHERE e.opaque_object_id = vfs_opaque_objects.id)
++        AND EXISTS (SELECT 1 FROM vfs_gc_queue q WHERE q.r2_key = vfs_opaque_objects.r2_key)`);
++      });
++    }
+     this.symlinkCount = this.countSymlinks();
+     // Read once per instance, beside the link count and for the same reason:
+     // paying it here keeps it off every operation that allocates an identity.
+@@ -409,7 +485,9 @@
+       const result = this.storage.transactionSync(() => {
+         this.transactionDepth += 1;
+         try {
+-          return callback();
++          const result = callback();
++          if (this.transactionDepth === 1) this.flushParentTimes();
++          return result;
+         } finally {
+           this.transactionDepth -= 1;
+           // A rollback discards the in-memory total along with the row it
+@@ -441,6 +519,7 @@
+     } catch (error) {
+       this.pendingUsage = undefined;
+       this.pendingMutations = [];
++      this.pendingParents = undefined;
+       const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+       if (/SQLITE_FULL|database or disk is full/iu.test(message)) {
+         throw new VfsError("ENOSPC", "SQLite database capacity is exhausted");
+--- a/src/vfs/sql-content-base.ts
++++ b/src/vfs/sql-content-base.ts
+@@ -90,8 +90,8 @@
+         `INSERT INTO vfs_entries (
+          id, path, parent_path, name, kind, content_class, opaque_object_id,
+          size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
+-         mutation_version
+-       ) VALUES (?, ?, ?, ?, 'directory', NULL, NULL, 0, ?, ?, ?, ?, ?, 1, ?)
++         mutation_version, link_count
++       ) VALUES (?, ?, ?, ?, 'directory', NULL, NULL, 0, ?, ?, ?, ?, ?, 1, ?, 2)
+        RETURNING id`,
+         this.allocateIno(),
+         path,
+@@ -114,6 +114,7 @@
+       parentPath: dirname(path),
+       name: basename(path),
+       kind: "directory",
++      linkCount: 2,
+       contentClass: null,
+       opaqueObjectId: null,
+       linkTarget: null,
+@@ -123,6 +124,7 @@
+       gid: owner.gid,
+       createdAtMs: now,
+       modifiedAtMs: now,
++      changedAtMs: now,
+       revision: 1,
+       mutationVersion,
+       mutationToken: token,
+--- a/src/vfs/sql-copy-base.ts
++++ b/src/vfs/sql-copy-base.ts
+@@ -18,6 +18,9 @@
+ import type { CopyOptions, CopyResult, SubtreeSummary } from "./types.js";
+ 
+ interface CopyPlan {
++  readonly preservedLinkIdentity: number | null;
++  readonly preservedLinkCount: number;
++  readonly extraInlineBytes: number;
+   readonly destination: EntryRow | null;
+   readonly now: number;
+   readonly targetParent: EntryRow | undefined;
+@@ -134,6 +137,12 @@
+   ): CopyPlan {
+     const parents = this.copyCreationParents(target, targetFollowed, options, posix);
+     const destination = targetResolved ?? this.oneEntry(target);
++    if (
++      destination !== null &&
++      (destination.linkIdentity ?? destination.id) === (sourceEntry.linkIdentity ?? sourceEntry.id)
++    ) {
++      throw new VfsError("EINVAL", "source and destination share an inode", target);
++    }
+     this.assertDestinationReplaceable(destination, target, options.replace ?? false);
+     const now = this.now();
+     const preparedParent = this.createCopyParent(
+@@ -152,13 +161,20 @@
+       targetParent === undefined ? { uid: 0, gid: 0 } : this.creationOwner(targetParent, posix);
+     const sourceRange = descendantRange(source);
+     const summary = this.aggregateSubtree(source);
+-    const replacedInlineBytes = destination?.contentClass === "inline" ? destination.sizeBytes : 0;
++    const {
++      preserve,
++      preservedLinkIdentity,
++      preservedLinkCount,
++      extraInlineBytes,
++      replacedInlineBytes,
++    } = this.copyLinks(sourceEntry, destination, summary);
+     this.assertCapacity(
+-      summary.inlineBytes - replacedInlineBytes,
++      summary.inlineBytes - replacedInlineBytes + extraInlineBytes,
+       summary.entries - (destination === null ? 0 : 1),
+       target,
+     );
+-    if (destination !== null) state.queued += this.removeExact(target, now, false);
++    if (destination !== null)
++      state.queued += this.removeExact(target, now, false, destination, preserve);
+     const changeSeq = this.nextChangeSeq();
+     // Copying one file over another keeps the destination's identity, the
+     // way `cp` keeps its inode: it opens the destination and writes through
+@@ -179,6 +195,9 @@
+     // the general rule collapses to one past what was there.
+     const rootRevision = (destination?.revision ?? 0) + 1;
+     return {
++      preservedLinkIdentity,
++      preservedLinkCount,
++      extraInlineBytes,
+       destination,
+       now,
+       targetParent,
+@@ -191,6 +210,20 @@
+     };
+   }
+ 
++  private copyLinks(source: EntryRow, destination: EntryRow | null, summary: SubtreeSummary) {
++    const replacedInlineBytes = destination?.contentClass === "inline" ? destination.sizeBytes : 0;
++    const preserve = destination?.kind === "file" && source.kind === "file";
++    const preservedLinkIdentity = preserve ? (destination.linkIdentity ?? null) : null;
++    const preservedLinkCount = preserve ? (destination.linkCount ?? 1) : 1;
++    const extraInlineBytes = (summary.inlineBytes - replacedInlineBytes) * (preservedLinkCount - 1);
++    return {
++      preserve,
++      preservedLinkIdentity,
++      preservedLinkCount,
++      extraInlineBytes,
++      replacedInlineBytes,
++    };
++  }
+   private copyCreationParents(
+     target: string,
+     followed: readonly string[],
+@@ -237,7 +270,7 @@
+       `INSERT INTO vfs_entries (
+          id, path, parent_path, name, kind, content_class, opaque_object_id,
+          link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
+-         mutation_version
++         mutation_version, link_identity, link_count
+        )
+        SELECT
+          ? + ROW_NUMBER() OVER (ORDER BY e.path),
+@@ -251,7 +284,7 @@
+          COALESCE((
+            SELECT version + 1 FROM vfs_path_tombstones
+            WHERE path = ? || substr(e.path, ?)
+-         ), 1)
++         ), 1), ?, CASE WHEN e.kind = 'directory' THEN e.link_count ELSE ? END
+        FROM vfs_entries e
+        WHERE e.path = ? OR (e.path >= ? AND e.path < ?)`,
+       plan.inoBase,
+@@ -269,6 +302,8 @@
+       plan.rootRevision,
+       target,
+       codePointLength(source) + 1,
++      plan.preservedLinkIdentity,
++      plan.preservedLinkCount,
+       source,
+       plan.sourceRange.lower,
+       plan.sourceRange.upper,
+@@ -287,11 +322,11 @@
+     this.sql.exec(
+       `WITH RECURSIVE copied (
+            path, parent_path, name, kind, content_class, opaque_object_id,
+-           link_target, size_bytes, copied_mode, copied_uid, copied_gid
++           link_target, size_bytes, link_count, copied_mode, copied_uid, copied_gid
+          ) AS (
+            SELECT
+              e.path, e.parent_path, e.name, e.kind, e.content_class,
+-             e.opaque_object_id, e.link_target, e.size_bytes,
++             e.opaque_object_id, e.link_target, e.size_bytes, e.link_count,
+              CASE WHEN e.kind = 'symlink' THEN e.mode ELSE
+                (e.mode & ?) |
+                CASE WHEN e.kind = 'directory' AND (? & ?) <> 0 THEN ? ELSE 0 END
+@@ -303,7 +338,7 @@
+            UNION ALL
+            SELECT
+              e.path, e.parent_path, e.name, e.kind, e.content_class,
+-             e.opaque_object_id, e.link_target, e.size_bytes,
++             e.opaque_object_id, e.link_target, e.size_bytes, e.link_count,
+              CASE WHEN e.kind = 'symlink' THEN e.mode ELSE
+                (e.mode & ?) |
+                CASE
+@@ -322,7 +357,7 @@
+          INSERT INTO vfs_entries (
+            id, path, parent_path, name, kind, content_class, opaque_object_id,
+            link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
+-           mutation_version
++           mutation_version, link_identity, link_count
+          )
+          SELECT
+            ? + ROW_NUMBER() OVER (ORDER BY copied.path),
+@@ -337,7 +372,7 @@
+            COALESCE((
+              SELECT version + 1 FROM vfs_path_tombstones
+              WHERE path = ? || substr(copied.path, ?)
+-           ), 1)
++           ), 1), CASE WHEN copied.path = ? THEN ? ELSE NULL END, CASE WHEN copied.kind = 'directory' THEN copied.link_count WHEN copied.path = ? THEN ? ELSE 1 END
+          FROM copied`,
+       ~posix.umask,
+       plan.targetParent?.mode ?? 0,
+@@ -367,6 +402,10 @@
+       plan.rootRevision,
+       target,
+       codePointLength(source) + 1,
++      source,
++      plan.preservedLinkIdentity,
++      source,
++      plan.preservedLinkCount,
+     );
+   }
+ 
+@@ -396,7 +435,7 @@
+     // predict the end state and subtract what the removal will give back;
+     // this runs after, and `removeExact` has already applied that half.
+     // Reusing the net delta here would subtract the destination twice.
+-    this.updateUsage(plan.summary.inlineBytes, plan.summary.entries);
++    this.updateUsage(plan.summary.inlineBytes + plan.extraInlineBytes, plan.summary.entries);
+     // A copy publishes entries at the destination and leaves the source
+     // alone, so what a consumer has to reflect is a create at `to`.
+     this.recordMutation(
+--- a/src/vfs/sql-metadata-base.ts
++++ b/src/vfs/sql-metadata-base.ts
+@@ -41,13 +41,16 @@
+       }
+       this.validateGuard(normalized, entry, options, written);
+       const mutationVersion = entry.mutationVersion + 1;
+-      const modifiedAtMs = options.modifiedAtMs ?? this.now();
++      const changedAtMs = this.now();
++      const modifiedAtMs =
++        options.modifiedAtMs ?? (options.mode === undefined ? changedAtMs : entry.modifiedAtMs);
+       this.sql.exec(
+-        `UPDATE vfs_entries SET mode = ?, modified_at_ms = ?, revision = revision + 1,
++        `UPDATE vfs_entries SET mode = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,
+            mutation_version = ?
+          WHERE id = ?`,
+         options.mode ?? entry.mode,
+         modifiedAtMs,
++        changedAtMs,
+         mutationVersion,
+         entry.id,
+       );
+@@ -56,6 +59,7 @@
+         ...entry,
+         mode: options.mode ?? entry.mode,
+         modifiedAtMs,
++        changedAtMs,
+         revision: entry.revision + 1,
+         mutationVersion,
+         mutationToken: token,
+@@ -99,19 +103,21 @@
+     }
+     this.validateGuard(path, entry, options, written);
+     const mutationVersion = entry.mutationVersion + 1;
+-    const modifiedAtMs = this.now();
++    const changedAtMs = this.now();
++    const modifiedAtMs = entry.modifiedAtMs;
+     const mode =
+       posix !== undefined && posix.credentials.uid !== 0 && (uid !== undefined || gid !== undefined)
+         ? entry.mode & ~0o6000
+         : entry.mode;
+     this.sql.exec(
+       `UPDATE vfs_entries
+-       SET uid = ?, gid = ?, mode = ?, modified_at_ms = ?, revision = revision + 1,
++       SET uid = ?, gid = ?, mode = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,
+            mutation_version = ? WHERE id = ?`,
+       uid ?? entry.uid,
+       gid ?? entry.gid,
+       mode,
+       modifiedAtMs,
++      changedAtMs,
+       mutationVersion,
+       entry.id,
+     );
+@@ -122,6 +128,7 @@
+       gid: gid ?? entry.gid,
+       mode,
+       modifiedAtMs,
++      changedAtMs,
+       revision: entry.revision + 1,
+       mutationVersion,
+       mutationToken: token,
+@@ -175,8 +182,8 @@
+         `INSERT INTO vfs_entries (
+          id, path, parent_path, name, kind, content_class, opaque_object_id,
+          size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
+-         mutation_version
+-       ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, 0, ?, ?, ?, ?, ?, 1, ?)
++         mutation_version, changed_at_ms
++       ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, 0, ?, ?, ?, ?, ?, 1, ?, ?)
+        RETURNING id`,
+         this.allocateIno(),
+         path,
+@@ -188,6 +195,7 @@
+         now,
+         options.modifiedAtMs ?? now,
+         mutationVersion,
++        now,
+       )
+       .one();
+     const token = this.publishToken(path, mutationVersion, true, "create");
+@@ -205,6 +213,7 @@
+       gid: owner.gid,
+       createdAtMs: now,
+       modifiedAtMs: options.modifiedAtMs ?? now,
++      changedAtMs: now,
+       revision: 1,
+       mutationToken: token,
+     };
+@@ -354,6 +363,7 @@
+       gid: owner.gid,
+       createdAtMs: now,
+       modifiedAtMs: now,
++      changedAtMs: now,
+       revision,
+       mutationVersion,
+       mutationToken: token,
+--- a/src/vfs/sql-migrate.ts
++++ b/src/vfs/sql-migrate.ts
+@@ -299,10 +299,8 @@
+     );
+     markMigrated();
+   }
+-  if (currentVersion < 8) {
+-    migrateMaintenanceIndexes(context, now);
+-    markMigrated();
+-  }
++  migrateMaintenance(context, currentVersion, now, markMigrated);
++  migrateInodeStorage(context, currentVersion, now, markMigrated);
+   return stringColumn(
+     context.sql.exec<SqlRow>("SELECT mutation_epoch FROM vfs_state WHERE singleton = 1").one(),
+     "mutation_epoch",
+@@ -318,3 +316,59 @@
+     `);
+   context.sql.exec("INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (8, ?)", now);
+ }
++
++function migrateInodeStorage(
++  context: SqlMigrationContext,
++  currentVersion: number,
++  now: number,
++  markMigrated: () => void,
++): void {
++  if (currentVersion < 9) {
++    context.execBatch(`ALTER TABLE vfs_entries ADD COLUMN changed_at_ms INTEGER;
++      ALTER TABLE vfs_upload_sessions ADD COLUMN written_path TEXT;
++      ALTER TABLE vfs_upload_sessions ADD COLUMN traversal_token TEXT;
++      CREATE TABLE vfs_detached_inodes (
++        id INTEGER PRIMARY KEY, entry_json TEXT NOT NULL,
++        inline_bytes INTEGER NOT NULL CHECK(inline_bytes >= 0), opaque_object_id INTEGER
++      );
++      CREATE INDEX vfs_detached_opaque ON vfs_detached_inodes(opaque_object_id) WHERE opaque_object_id IS NOT NULL;
++      CREATE TABLE vfs_detached_chunks (
++        entry_id INTEGER NOT NULL, chunk_index INTEGER NOT NULL, body BLOB NOT NULL,
++        PRIMARY KEY(entry_id, chunk_index)
++      ) WITHOUT ROWID;
++      CREATE TRIGGER vfs_detached_object_guard BEFORE DELETE ON vfs_opaque_objects
++      WHEN EXISTS (SELECT 1 FROM vfs_detached_inodes WHERE opaque_object_id = OLD.id)
++      BEGIN SELECT RAISE(ABORT, 'opaque object has an open inode'); END;
++    `);
++    context.sql.exec(
++      "INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (9, ?)",
++      now,
++    );
++    markMigrated();
++  }
++  if (currentVersion < 10) {
++    context.execBatch(`ALTER TABLE vfs_entries ADD COLUMN link_identity INTEGER;
++      ALTER TABLE vfs_entries ADD COLUMN link_count INTEGER NOT NULL DEFAULT 1;
++      ALTER TABLE vfs_entries ADD COLUMN unlinking INTEGER NOT NULL DEFAULT 0;
++      ALTER TABLE vfs_entries ADD COLUMN mirroring INTEGER NOT NULL DEFAULT 0;
++      CREATE INDEX vfs_entries_link_identity ON vfs_entries(link_identity) WHERE link_identity IS NOT NULL;
++      CREATE INDEX vfs_entries_child_directories ON vfs_entries(parent_path) WHERE kind = 'directory' AND path <> '/';
++      UPDATE vfs_entries SET link_count = 2 + (SELECT COUNT(*) FROM vfs_entries child WHERE child.parent_path = vfs_entries.path AND child.kind = 'directory' AND child.path <> '/') WHERE kind = 'directory';`);
++    context.sql.exec(
++      "INSERT INTO vfs_schema_migrations (version, applied_at_ms) VALUES (10, ?)",
++      now,
++    );
++    markMigrated();
++  }
++}
++
++function migrateMaintenance(
++  context: SqlMigrationContext,
++  version: number,
++  now: number,
++  mark: () => void,
++): void {
++  if (version >= 8) return;
++  migrateMaintenanceIndexes(context, now);
++  mark();
++}
+--- a/src/vfs/sql-model.ts
++++ b/src/vfs/sql-model.ts
+@@ -26,6 +26,7 @@
+ }
+ 
+ export interface SqlFileSystemStorage {
++  sync?(): Promise<void>;
+   readonly sql: VfsSqlStorage;
+   execBatch?(query: string): void;
+   transactionSync<Result>(callback: () => Result): Result;
+@@ -47,6 +48,9 @@
+   readonly gid: number;
+   readonly createdAtMs: number;
+   readonly modifiedAtMs: number;
++  readonly changedAtMs: number;
++  readonly linkIdentity?: number | null;
++  readonly linkCount?: number;
+   readonly revision: number;
+   readonly mutationVersion: number;
+   readonly mutationToken: string;
+@@ -157,6 +161,8 @@
+ }
+ 
+ export interface UploadRow {
++  writtenPath: string | null;
++  traversalToken: string | null;
+   id: string;
+   path: string;
+   expectedMutationToken: string;
+@@ -264,12 +270,16 @@
+     parentPath: receiptString(receipt, "parentPath", path),
+     name: receiptString(receipt, "name", path),
+     ino: receiptInteger(receipt, "ino", 1, path),
++    ...(receipt["nlink"] === undefined ? {} : { nlink: receiptInteger(receipt, "nlink", 0, path) }),
+     sizeBytes: receiptInteger(receipt, "sizeBytes", 0, path),
+     mode: receiptInteger(receipt, "mode", 0, path),
+     uid: receiptInteger(receipt, "uid", 0, path),
+     gid: receiptInteger(receipt, "gid", 0, path),
+     createdAtMs: receiptInteger(receipt, "createdAtMs", 0, path),
+     modifiedAtMs: receiptInteger(receipt, "modifiedAtMs", 0, path),
++    ...(receipt["changedAtMs"] === undefined
++      ? {}
++      : { changedAtMs: receiptInteger(receipt, "changedAtMs", 0, path) }),
+     revision: receiptInteger(receipt, "revision", 1, path),
+     mutationToken: receiptString(receipt, "mutationToken", path),
+     ...(contentType === undefined ? {} : { contentType }),
+@@ -314,6 +324,9 @@
+     gid: integerColumn(row, "gid"),
+     createdAtMs: integerColumn(row, "created_at_ms"),
+     modifiedAtMs: integerColumn(row, "modified_at_ms"),
++    changedAtMs: integerColumn(row, "changed_at_ms"),
++    linkIdentity: nullableIntegerColumn(row, "link_identity"),
++    linkCount: integerColumn(row, "link_count"),
+     revision: integerColumn(row, "revision"),
+     mutationVersion,
+     mutationToken: formatMutationToken(mutationEpoch, mutationVersion),
+@@ -365,13 +378,15 @@
+     name: row.name,
+     // Already on the row every entry query reads, so reporting it costs no
+     // column, no index, and no statement.
+-    ino: row.id,
++    ino: row.linkIdentity ?? row.id,
++    nlink: row.linkCount ?? 1,
+     sizeBytes: row.sizeBytes,
+     mode: row.mode,
+     uid: row.uid,
+     gid: row.gid,
+     createdAtMs: row.createdAtMs,
+     modifiedAtMs: row.modifiedAtMs,
++    changedAtMs: row.changedAtMs,
+     revision: row.revision,
+     mutationToken: row.mutationToken,
+   };
+@@ -407,6 +422,8 @@
+     expectedMutationToken: stringColumn(row, "expected_mutation_token"),
+     objectKey: stringColumn(row, "r2_key"),
+     state,
++    writtenPath: nullableStringColumn(row, "written_path"),
++    traversalToken: nullableStringColumn(row, "traversal_token"),
+     verificationToken: nullableStringColumn(row, "verification_token"),
+     expectedSizeBytes: nullableIntegerColumn(row, "expected_size_bytes"),
+     expiresAtMs: integerColumn(row, "expires_at_ms"),
+--- a/src/vfs/sql-move-base.ts
++++ b/src/vfs/sql-move-base.ts
+@@ -75,6 +75,9 @@
+             inlineBytes: root.contentClass === "inline" ? root.sizeBytes : 0,
+           };
+     const now = this.now();
++    const retained = this.retainOpenInodes?.(path, recursive, root) ?? 0;
++    const identities = this.linkedIdentities(path, range);
++    this.markUnlinking(path, range, now);
+     this.publishSubtreeRemoval(path);
+     this.sql.exec(
+       `INSERT INTO vfs_gc_queue (
+@@ -93,6 +96,7 @@
+          WHERE retained.opaque_object_id = o.id
+            AND NOT (retained.path = ? OR (retained.path >= ? AND retained.path < ?))
+        )
++       AND NOT EXISTS (SELECT 1 FROM vfs_detached_inodes d WHERE d.opaque_object_id = o.id)
+        ON CONFLICT(r2_key) DO UPDATE SET
+          not_before_ms = MAX(vfs_gc_queue.not_before_ms, excluded.not_before_ms),
+          next_attempt_at_ms = MAX(
+@@ -126,6 +130,7 @@
+       range.lower,
+       range.upper,
+     );
++    this.publishLinkedMetadata(identities);
+     // A set-based delete does not report what it removed, so the link count
+     // is recomputed on demand rather than tracked here.
+     this.symlinkCountStale = true;
+@@ -135,12 +140,13 @@
+          SELECT 1 FROM vfs_entries
+          WHERE opaque_object_id = vfs_opaque_objects.id
+        )
++       AND NOT EXISTS (SELECT 1 FROM vfs_detached_inodes d WHERE d.opaque_object_id = vfs_opaque_objects.id)
+        AND EXISTS (
+          SELECT 1 FROM vfs_gc_queue
+          WHERE r2_key = vfs_opaque_objects.r2_key
+        )`,
+     );
+-    this.updateUsage(-summary.inlineBytes, -summary.entries);
++    this.updateUsage(-summary.inlineBytes + retained, -summary.entries);
+     // Recorded here rather than in `publishSubtreeRemoval`, which cannot
+     // know whether it is publishing one path or a range, and which `move`
+     // calls twice for what is a single change.
+@@ -155,6 +161,50 @@
+     };
+   }
+ 
++  private linkedIdentities(path: string, range: { lower: string; upper: string }): number[] {
++    if (!this.sharedInodes) return [];
++    return this.sql
++      .exec<SqlRow>(
++        "SELECT DISTINCT link_identity FROM vfs_entries WHERE link_identity IS NOT NULL AND (path = ? OR (path >= ? AND path < ?))",
++        path,
++        range.lower,
++        range.upper,
++      )
++      .toArray()
++      .map((row) => integerColumn(row, "link_identity"));
++  }
++  private markUnlinking(path: string, range: { lower: string; upper: string }, now: number): void {
++    if (this.sharedInodes)
++      this.sql.exec(
++        "UPDATE vfs_entries SET unlinking = 1, changed_at_ms = ?, revision = revision + 1, mutation_version = mutation_version + 1 WHERE link_identity IS NOT NULL AND (path = ? OR (path >= ? AND path < ?))",
++        now,
++        path,
++        range.lower,
++        range.upper,
++      );
++  }
++  private assertMoveKinds(
++    sourceEntry: EntryRow,
++    destination: EntryRow | null,
++    target: string,
++  ): void {
++    const directoryMismatch =
++      destination !== null &&
++      (destination.kind === "directory") !== (sourceEntry.kind === "directory");
++    if (directoryMismatch && destination !== null) {
++      throw new VfsError(
++        destination.kind === "directory" ? "EISDIR" : "ENOTDIR",
++        "source and destination kinds differ",
++        target,
++      );
++    }
++  }
++  private sameInode(source: EntryRow, destination: EntryRow | null): boolean {
++    return (
++      destination !== null &&
++      (source.linkIdentity ?? source.id) === (destination.linkIdentity ?? destination.id)
++    );
++  }
+   async move(
+     from: string,
+     to: string,
+@@ -225,6 +275,8 @@
+       this.assertStickyRemoval(sourceParent, sourceEntry, posix, source);
+     }
+     const destination = targetResolved ?? this.oneEntry(target);
++    if (this.sameInode(sourceEntry, destination))
++      return { from: source, to: target, moved: 1, replaced: false };
+     if (destination !== null && posix !== undefined) {
+       this.assertStickyRemoval(targetParent, destination, posix, target);
+     }
+@@ -233,22 +285,14 @@
+     // be replaced by anything and can replace anything that is not a
+     // directory, because it is one entry holding text — `mv file link`
+     // replaces the link, as it does elsewhere.
+-    const directoryMismatch =
+-      destination !== null &&
+-      (destination.kind === "directory") !== (sourceEntry.kind === "directory");
+-    if (directoryMismatch && destination !== null) {
+-      throw new VfsError(
+-        destination.kind === "directory" ? "EISDIR" : "ENOTDIR",
+-        "source and destination kinds differ",
+-        target,
+-      );
+-    }
++    this.assertMoveKinds(sourceEntry, destination, target);
+     // A path's revision never goes backwards. What lands on an occupied path
+     // takes one past whatever was there, so a holder of the old number
+     // cannot see it come round again. Only the root of what arrives can land
+     // on an occupied path -- a non-empty directory cannot be replaced, so
+     // every descendant lands somewhere that was absent.
+     const sourceRange = descendantRange(source);
++    const identities = this.linkedIdentities(source, sourceRange);
+     const now = this.now();
+     if (destination !== null) state.queued += this.removeExact(target, now, false, destination);
+     const sourceChangeSeq = this.nextChangeSeq();
+@@ -263,7 +307,7 @@
+          parent_path = CASE WHEN path = ? THEN ?
+            ELSE ? || substr(parent_path, ?) END,
+          name = CASE WHEN path = ? THEN ? ELSE name END,
+-         modified_at_ms = CASE WHEN path = ? THEN ? ELSE modified_at_ms END,
++         changed_at_ms = CASE WHEN path = ? THEN ? ELSE COALESCE(changed_at_ms, modified_at_ms) END,
+          revision = CASE WHEN path = ? THEN MAX(revision, ?) + 1 ELSE revision + 1 END
+        WHERE path = ? OR (path >= ? AND path < ?)`,
+       target,
+@@ -286,6 +330,7 @@
+     );
+     // Keep this immediately after the UPDATE: changes() reports that statement.
+     const moved = integerColumn(this.sql.exec<SqlRow>("SELECT changes() AS value").one(), "value");
++    this.publishLinkedMetadata(identities);
+     this.clearSubtreeTombstones(target);
+     this.recordPresentSubtree(target, this.nextChangeSeq());
+     // One change, though two ranges were republished. A move is a prefix
+--- a/src/vfs/sql-opaque-commit-base.ts
++++ b/src/vfs/sql-opaque-commit-base.ts
+@@ -237,7 +237,10 @@
+       this.staleOpaqueCommit(uploadId, session);
+       return { kind: "expired", path: session.path };
+     }
+-    if (this.tokenFor(session.path) !== session.expectedMutationToken) {
++    if (
++      this.tokenFor(session.path) !== session.expectedMutationToken ||
++      !this.matchesUploadTraversal(session)
++    ) {
+       return this.staleOpaqueCommit(uploadId, session);
+     }
+     const existing = this.oneEntry(session.path);
+@@ -246,7 +249,7 @@
+     const now = this.now();
+     this.prepareParents(session.path, session.createParents, now, []);
+     this.assertCapacity(
+-      existing?.contentClass === "inline" ? -existing.sizeBytes : 0,
++      existing?.contentClass === "inline" ? -existing.sizeBytes * (existing.linkCount ?? 1) : 0,
+       existing === null ? 1 : 0,
+       session.path,
+     );
+@@ -256,6 +259,20 @@
+     const stat = this.publishOpaqueEntry(session, existing, metadata, written, now);
+     this.storeOpaqueReceipt(uploadId, stat, now);
+     return { kind: "committed", stat };
++  }
++
++  private matchesUploadTraversal(session: UploadRow): boolean {
++    if (session.writtenPath === null) return true;
++    try {
++      return (
++        this.resolveAccess(session.writtenPath).path === session.path &&
++        this.guardToken(session.writtenPath) === session.traversalToken
++      );
++    } catch (error) {
++      if (error instanceof VfsError && ["ENOENT", "ENOTDIR", "ELOOP"].includes(error.code))
++        return false;
++      throw error;
++    }
+   }
+ 
+   private requireVerificationLease(uploadId: string, lease: VerificationLease): UploadRow {
+@@ -335,7 +352,7 @@
+          ON CONFLICT(path) DO UPDATE SET
+            kind = 'file', content_class = 'opaque', opaque_object_id = excluded.opaque_object_id,
+            size_bytes = excluded.size_bytes, mode = excluded.mode,
+-           modified_at_ms = excluded.modified_at_ms,
++           modified_at_ms = excluded.modified_at_ms, changed_at_ms = excluded.modified_at_ms,
+            revision = vfs_entries.revision + 1,
+            mutation_version = excluded.mutation_version
+          RETURNING id, revision`,
+@@ -370,7 +387,7 @@
+       existing === null ? "create" : "write",
+     );
+     this.updateUsage(
+-      existing?.contentClass === "inline" ? -existing.sizeBytes : 0,
++      existing?.contentClass === "inline" ? -existing.sizeBytes * (existing.linkCount ?? 1) : 0,
+       existing === null ? 1 : 0,
+     );
+     this.queueReplacedOpaqueObject(existing, now);
+@@ -378,7 +395,8 @@
+     return {
+       path: session.path,
+       parentPath: written.parentPath,
+-      ino: integerColumn(written.row, "id"),
++      ino: existing?.linkIdentity ?? integerColumn(written.row, "id"),
++      nlink: existing?.linkCount ?? 1,
+       name: written.name,
+       kind: "file",
+       contentClass: "opaque",
+@@ -388,6 +406,7 @@
+       gid: written.gid,
+       createdAtMs: written.createdAtMs,
+       modifiedAtMs: now,
++      changedAtMs: now,
+       revision: integerColumn(written.row, "revision"),
+       mutationToken: token,
+       ...(contentType === undefined ? {} : { contentType }),
+--- a/src/vfs/sql-opaque-start-base.ts
++++ b/src/vfs/sql-opaque-start-base.ts
+@@ -13,7 +13,9 @@
+     if (this.opaqueStore === undefined) {
+       throw new VfsError("ENOTSUP", "opaque storage is not configured");
+     }
+-    const normalized = this.normalizeAccessPath(path);
++    const access = this.resolveAccess(path);
++    const normalized = access.path;
++    const traversal = access.followed.length !== 0;
+     const existing = this.oneEntry(normalized);
+     if (existing?.kind === "directory") throw new VfsError("EISDIR", "is a directory", normalized);
+     if (
+@@ -27,7 +29,8 @@
+     const reservation = this.transaction(() => {
+       this.assertCapacity(0, 0, normalized);
+       const token = this.tokenFor(normalized);
+-      if (options.ifMutationToken !== undefined && options.ifMutationToken !== token) {
++      const writtenToken = traversal ? this.guardToken(path) : token;
++      if (options.ifMutationToken !== undefined && options.ifMutationToken !== writtenToken) {
+         throw new VfsError("EREVISION", "path mutation token does not match", normalized);
+       }
+       const uploadId = this.createId();
+@@ -38,8 +41,8 @@
+            id, path, expected_mutation_token, r2_key, state,
+            verification_token, expected_size_bytes, expires_at_ms,
+            verification_lease_until_ms, create_parents, mode,
+-           content_type, receipt_json
+-         ) VALUES (?, ?, ?, ?, 'open', NULL, ?, ?, NULL, ?, ?, ?, NULL)`,
++           content_type, receipt_json, written_path, traversal_token
++         ) VALUES (?, ?, ?, ?, 'open', NULL, ?, ?, NULL, ?, ?, ?, NULL, ?, ?)`,
+         uploadId,
+         normalized,
+         token,
+@@ -49,6 +52,7 @@
+         options.createParents === true ? 1 : 0,
+         options.mode ?? null,
+         options.contentType ?? null,
++        ...this.traversalColumns(traversal, path, writtenToken),
+       );
+       return {
+         uploadId,
+@@ -70,6 +74,13 @@
+     return reservation;
+   }
+ 
++  private traversalColumns(
++    traversal: boolean,
++    path: string,
++    token: string,
++  ): [string | null, string | null] {
++    return traversal ? [path, token] : [null, null];
++  }
+   protected parseReceipt(value: string, path: string): OpaqueFileStat {
+     let parsed: unknown;
+     try {
+--- a/src/vfs/sql-path-base.ts
++++ b/src/vfs/sql-path-base.ts
+@@ -22,6 +22,7 @@
+   parseEntry,
+   type SqlRow,
+   type SymlinkEntryRow,
++  stringColumn,
+ } from "./sql-model.js";
+ import type { PosixAccessContext } from "./sql-posix.js";
+ import { ENTRY_COLUMNS } from "./sql-schema.js";
+@@ -74,7 +75,7 @@
+          WHERE e.path = ?
+          UNION ALL
+          SELECT NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+-                NULL, NULL, NULL, NULL, NULL, NULL, NULL, version
++                NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, version
+          FROM vfs_path_tombstones
+          WHERE path = ?
+          LIMIT 1`,
+@@ -440,9 +441,49 @@
+     this.recordPathChange(path, present);
+     const token = formatMutationToken(this.mutationEpoch, version);
+     this.recordMutation({ op, path, mutationToken: token });
++    if (this.sharedInodes && present && (op === "write" || op === "metadata")) {
++      for (const row of this.sql
++        .exec<SqlRow>(
++          `SELECT path, mutation_version FROM vfs_entries WHERE path <> ? AND link_identity = (SELECT link_identity FROM vfs_entries WHERE path = ?)`,
++          path,
++          path,
++        )
++        .toArray()) {
++        const alias = stringColumn(row, "path");
++        this.recordPathChange(alias, true);
++        this.recordMutation({
++          op,
++          path: alias,
++          mutationToken: formatMutationToken(
++            this.mutationEpoch,
++            integerColumn(row, "mutation_version"),
++          ),
++        });
++      }
++    }
+     return token;
+   }
+ 
++  protected publishLinkedMetadata(identities: readonly number[]): void {
++    if (identities.length === 0) return;
++    for (const row of this.sql
++      .exec<SqlRow>(
++        "SELECT path, mutation_version FROM vfs_entries WHERE link_identity IN (SELECT value FROM json_each(?))",
++        JSON.stringify(identities),
++      )
++      .toArray()) {
++      const path = stringColumn(row, "path");
++      this.recordPathChange(path, true);
++      this.recordMutation({
++        op: "metadata",
++        path,
++        mutationToken: formatMutationToken(
++          this.mutationEpoch,
++          integerColumn(row, "mutation_version"),
++        ),
++      });
++    }
++  }
+   /** Consumes an absent path's tombstone and returns its next live version. */
+   protected nextEntryVersion(path: string, previousVersion = 0): number {
+     const tombstone = firstRow(
+@@ -464,6 +505,11 @@
+    * workspace does not build an object it would only discard.
+    */
+   protected recordMutation(mutation: PendingMutation): void {
++    if (mutation.op === "create" || mutation.op === "remove" || mutation.op === "move") {
++      this.pendingParents ??= new Set();
++      this.pendingParents.add(dirname(mutation.path));
++      if (mutation.subtree?.to !== undefined) this.pendingParents.add(dirname(mutation.subtree.to));
++    }
+     if (this.onEvent === undefined) return;
+     this.pendingMutations.push(mutation);
+   }
+--- a/src/vfs/sql-query-base.ts
++++ b/src/vfs/sql-query-base.ts
+@@ -88,7 +88,8 @@
+       this.sql.exec<SqlRow>(
+         `SELECT ${ENTRY_COLUMNS}
+        FROM vfs_entries e
+-       WHERE e.id = ?`,
++       WHERE (e.id = ? AND e.link_identity IS NULL) OR e.link_identity = ? ORDER BY e.id LIMIT 1`,
++        ino,
+         ino,
+       ),
+     );
+--- a/src/vfs/sql-schema.ts
++++ b/src/vfs/sql-schema.ts
+@@ -108,5 +108,5 @@
+ export const ENTRY_COLUMNS = `
+   e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,
+   e.opaque_object_id, e.link_target, e.size_bytes, e.mode, e.uid, e.gid, e.created_at_ms,
+-  e.modified_at_ms, e.revision, e.mutation_version
++  e.link_identity, e.link_count, e.modified_at_ms, COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms, e.revision, e.mutation_version
+ `;
+--- a/src/vfs/sql-write-base.ts
++++ b/src/vfs/sql-write-base.ts
+@@ -228,14 +228,15 @@
+   ): WriteResult {
+     const sizeBytes = current.sizeBytes + suffixBytes;
+     this.assertAppendSize(current, path, sizeBytes);
+-    this.assertCapacity(suffixBytes, 0, path);
++    this.assertCapacity(suffixBytes * (current.linkCount ?? 1), 0, path);
+     const plan = this.appendChunkPlan(current, path, suffixChunks);
+     const now = this.now();
+     const mutationVersion = current.mutationVersion + 1;
+     const written = this.sql.exec<SqlRow>(
+-      `UPDATE vfs_entries SET size_bytes = ?, modified_at_ms = ?, revision = revision + 1,
++      `UPDATE vfs_entries SET size_bytes = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,
+          mutation_version = ? WHERE id = ? ${conditional ? "AND mutation_version = ? RETURNING id" : ""}`,
+       sizeBytes,
++      now,
+       now,
+       mutationVersion,
+       current.id,
+@@ -245,7 +246,7 @@
+       throw new VfsError("EREVISION", "path changed before append", path);
+     this.writeChunks(current.id, plan.firstChunkIndex, plan.chunks);
+     const token = this.publishToken(path, mutationVersion, true, "write");
+-    this.updateUsage(suffixBytes, 0);
++    this.updateUsage(suffixBytes * (current.linkCount ?? 1), 0);
+     return {
+       path,
+       revision: current.revision + 1,
+--- a/src/vfs/sql-write-plan-base.ts
++++ b/src/vfs/sql-write-plan-base.ts
+@@ -52,7 +52,7 @@
+         `SELECT id, path, expected_mutation_token, r2_key, state,
+               verification_token, expected_size_bytes, expires_at_ms,
+               verification_lease_until_ms, create_parents, mode,
+-              content_type, receipt_json
++              content_type, receipt_json, written_path, traversal_token
+        FROM vfs_upload_sessions WHERE id = ?`,
+         id,
+       ),
+@@ -84,7 +84,8 @@
+   protected queueObjectIfUnreferenced(objectId: number, now: number): boolean {
+     const object = firstRow(
+       this.sql.exec<SqlRow>(
+-        "DELETE FROM vfs_opaque_objects WHERE id=? AND NOT EXISTS(SELECT 1 FROM vfs_entries WHERE opaque_object_id=?) RETURNING r2_key,retain_until_ms",
++        "DELETE FROM vfs_opaque_objects WHERE id=? AND NOT EXISTS(SELECT 1 FROM vfs_entries WHERE opaque_object_id=?) AND NOT EXISTS(SELECT 1 FROM vfs_detached_inodes WHERE opaque_object_id=?) RETURNING r2_key,retain_until_ms",
++        objectId,
+         objectId,
+         objectId,
+       ),
+@@ -102,13 +103,28 @@
+    * own, so a caller that replaces an entry adds only what it inserted --
+    * subtracting the removal again double-counts it.
+    */
+-  protected removeExact(path: string, now: number, bumpPath = true, resolved?: EntryRow): number {
++  protected removeExact(
++    path: string,
++    now: number,
++    bumpPath = true,
++    resolved?: EntryRow,
++    preserveInode = false,
++  ): number {
+     const entry = resolved ?? this.oneEntry(path);
+     if (entry === null) return 0;
++    const retained = preserveInode ? 0 : (this.retainOpenInodes?.(path, false, entry) ?? 0);
++    if (entry.linkIdentity != null)
++      this.sql.exec(
++        "UPDATE vfs_entries SET unlinking = 1, changed_at_ms = ?, revision = revision + 1, mutation_version = mutation_version + 1 WHERE id = ?",
++        now,
++        entry.id,
++      );
+     if (entry.contentClass === "inline") {
+       this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", entry.id);
+     }
+     this.sql.exec("DELETE FROM vfs_entries WHERE id = ?", entry.id);
++    if (entry.linkIdentity != null && !preserveInode)
++      this.publishLinkedMetadata([entry.linkIdentity]);
+     if (entry.kind === "symlink") this.symlinkCountStale = true;
+     const mutationVersion = entry.mutationVersion + (bumpPath ? 1 : 0);
+     this.sql.exec(
+@@ -118,7 +134,7 @@
+       mutationVersion,
+     );
+     if (bumpPath) this.publishToken(path, mutationVersion, false, "remove");
+-    this.updateUsage(entry.contentClass === "inline" ? -entry.sizeBytes : 0, -1);
++    this.updateUsage((entry.contentClass === "inline" ? -entry.sizeBytes : 0) + retained, -1);
+     if (
+       entry.contentClass === "opaque" &&
+       entry.opaqueObjectId !== null &&
+@@ -344,7 +360,7 @@
+           : this.creationOwner(parent ?? this.requireDirectory(dirname(plan.path)), posix);
+     const mode = this.inlineWriteMode(plan, current, parent, posix);
+     const previousInlineBytes = current?.contentClass === "inline" ? current.sizeBytes : 0;
+-    const inlineDelta = sizeBytes - previousInlineBytes;
++    const inlineDelta = (sizeBytes - previousInlineBytes) * (current?.linkCount ?? 1);
+     const entryDelta = current === null ? 1 : 0;
+     if (!deferCapacity) this.assertCapacity(inlineDelta, entryDelta, plan.path);
+     const mutationVersion =
+@@ -380,12 +396,13 @@
+       return firstRow(
+         this.sql.exec<SqlRow>(
+           `UPDATE vfs_entries SET
+-             size_bytes = ?, mode = ?, modified_at_ms = ?, revision = revision + 1,
++             size_bytes = ?, mode = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,
+              body_digest = ?, body_digest_revision = revision + 1, mutation_version = ?
+            WHERE id = ? AND mutation_version = ?
+            RETURNING id, revision`,
+           sizeBytes,
+           mutation.mode,
++          now,
+           now,
+           digest ?? null,
+           mutation.mutationVersion,
+@@ -404,7 +421,7 @@
+          ON CONFLICT(path) DO UPDATE SET
+            kind = 'file', content_class = 'inline', opaque_object_id = NULL,
+            size_bytes = excluded.size_bytes, mode = excluded.mode,
+-           modified_at_ms = excluded.modified_at_ms,
++           modified_at_ms = excluded.modified_at_ms, changed_at_ms = excluded.modified_at_ms,
+            revision = vfs_entries.revision + 1,
+            body_digest = excluded.body_digest,
+            body_digest_revision = vfs_entries.revision + 1,
+--- a/src/vfs/sql.ts
++++ b/src/vfs/sql.ts
+@@ -1,11 +1,14 @@
+ import { VfsError } from "../core/errors.js";
++import { createHandleProvider, type HandleProvider, type SqlHandlePort } from "./handle-port.js";
+ import { SqlGc } from "./sql-gc-base.js";
++import { type EntryRow, rowToStat } from "./sql-model.js";
+ import {
+   type PosixAccessContext,
+   type PosixMutationOperation,
+   posixContext,
+   posixPermissions,
+   READ_PERMISSION,
++  WRITE_PERMISSION,
+ } from "./sql-posix.js";
+ import type {
+   AppendFileOptions,
+@@ -53,6 +56,89 @@
+ } from "./sql-model.js";
+ 
+ export class SqlFileSystem extends SqlGc implements PosixVirtualFileSystem {
++  private handles: HandleProvider | undefined;
++  /** Hosts await this at startup to arm recovery maintenance before serving work. */
++  async initialize(): Promise<void> {
++    if (!this.recoveredDetached) return;
++    await this.scheduleGarbageAlarm();
++    this.recoveredDetached = false;
++  }
++  openFileHandle(path: string, flags = "r", mode = 0o666, access?: PosixAccessContext) {
++    this.handles ??= createHandleProvider(this.handlePort());
++    return this.handles.open(path, flags, mode, access);
++  }
++  linkFile(from: string, to: string, access?: PosixAccessContext): void {
++    this.handles ??= createHandleProvider(this.handlePort());
++    this.handles.link(from, to, access);
++  }
++  private handlePort(): SqlHandlePort {
++    return {
++      sql: this.sql,
++      batch: (query) => this.execBatch(query),
++      linked: () => {
++        this.sharedInodes = true;
++      },
++      sourceEntry: (path, access) => {
++        const resolved = this.resolveAccess(path, false, false);
++        this.assertTraverse(resolved.path, resolved.followed, access);
++        return resolved.row ?? this.requireEntry(resolved.path, false);
++      },
++      budget: this.inFlightBytes,
++      chunkBytes: this.chunkBytes,
++      maximum: this.maxInlineFileBytes,
++      store: this.opaqueStore,
++      transaction: (callback) => this.transaction(callback),
++      now: () => this.now(),
++      openEntry: (...args) => this.openHandleEntry(...args),
++      retain: (callback) => {
++        this.retainOpenInodes = callback;
++      },
++      capacity: (delta, path) => this.assertCapacity(delta, 0, path),
++      usage: (delta) => this.updateUsage(delta, 0),
++      publish: (entry) => {
++        this.publishToken(entry.path, entry.mutationVersion, true, "write");
++      },
++      reclaimObject: (id) => {
++        this.queueObjectIfUnreferenced(id, this.now());
++      },
++      sync: () => this.storage.sync?.() ?? Promise.resolve(),
++      maintenance: () => this.scheduleGarbageAlarm(),
++      stat: rowToStat,
++    };
++  }
++  private openHandleEntry(
++    path: string,
++    read: boolean,
++    write: boolean,
++    create: boolean,
++    exclusive: boolean,
++    mode: number,
++    access?: PosixAccessContext,
++  ): EntryRow {
++    if (exclusive) {
++      const named = this.resolveAccess(path, false, false);
++      if ((named.row ?? this.oneEntry(named.path)) !== null)
++        throw new VfsError("EEXIST", "entry exists", path);
++    }
++    const resolved = this.resolveAccess(path);
++    this.assertTraverse(resolved.path, resolved.followed, access);
++    let entry = resolved.row ?? this.oneEntry(resolved.path);
++    const created = entry === null && create;
++    if (created) {
++      this.touch(path, { mode: 0o100000 | (mode & 0o7777) }, access);
++      entry = this.requireEntry(resolved.path);
++    }
++    if (entry === null) throw new VfsError("ENOENT", "file does not exist", path);
++    if (entry.kind !== "file") throw new VfsError("EISDIR", "not a regular file", path);
++    if (!created)
++      this.assertPermission(
++        entry,
++        access,
++        (read ? READ_PERMISSION : 0) | (write ? WRITE_PERMISSION : 0),
++        path,
++      );
++    return entry;
++  }
+   forCredentials(credentials: PosixCredentials, options: PosixViewOptions = {}): VirtualFileSystem {
+     return new PosixFileSystemView(this, posixContext(credentials, options));
+   }
+@@ -64,6 +150,14 @@
+     private readonly inner: SqlFileSystem,
+     private readonly access: PosixAccessContext,
+   ) {}
++
++  linkFile(from: string, to: string): void {
++    this.inner.linkFile(from, to, this.access);
++  }
++
++  openFileHandle(path: string, flags = "r", mode = 0o666) {
++    return this.inner.openFileHandle(path, flags, mode, this.access);
++  }
+ 
+   getMutationToken(path: string, options?: MutationTokenOptions): string {
+     return this.inner.getMutationToken(path, options, this.access);
+--- a/src/vfs/types.ts
++++ b/src/vfs/types.ts
+@@ -70,12 +70,15 @@
+    * an identity: a path is unique and an entry stores the one it lives at.
+    */
+   ino: number;
++  nlink?: number;
+   sizeBytes: number;
+   mode: number;
+   uid: number;
+   gid: number;
+   createdAtMs: number;
+   modifiedAtMs: number;
++  /** Metadata change time, independently persisted from content modification time. */
++  changedAtMs?: number;
+   revision: number;
+   mutationToken: string;
+ }

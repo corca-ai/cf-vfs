@@ -300,6 +300,10 @@ function openOver(database: DatabaseSync, recordChanges = false): SqlFileSystem 
       };
     },
   };
+  if (
+    database.prepare("SELECT 1 FROM sqlite_master WHERE name = 'vfs_entries'").get() !== undefined
+  )
+    database.exec("CREATE TABLE IF NOT EXISTS vfs_opaque_objects (id INTEGER PRIMARY KEY)");
   let open = false;
   const storage: SqlFileSystemStorage = {
     sql,
@@ -401,7 +405,7 @@ it("migrates a version-2 database to root-owned entries in place", () => {
     database
       .prepare("SELECT GROUP_CONCAT(version, ',') AS versions FROM vfs_schema_migrations")
       .get()?.["versions"],
-  ).toBe("1,2,3,4,5,6,7,8");
+  ).toBe("1,2,3,4,5,6,7,8,9,10");
   // The version-6 columns exist on a migrated database and carry nothing:
   // the digest cache is filled by use rather than backfilled by a migration.
   expect(

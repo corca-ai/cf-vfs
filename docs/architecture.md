@@ -40,6 +40,9 @@ automatic size crossover.
   reusing the ordinary shell executor.
 - `src/shell/commands` contains argv-based built-ins and utilities. The full
   registry is a separate module.
+- `src/fs` contains an optional promise filesystem adapter, event-invalidated
+  metadata cache, and separately imported immutable content tier. None are
+  reachable from the VFS or shell presets. See [FS adapter](fs.md).
 - `src/storage/r2.ts` is the immutable `R2OpaqueStore` adapter.
 - `src/testing/node.ts` adapts Node 24's built-in in-memory SQLite to the same
   SQL VFS for local tests and tools. `src/testing/opaque-store.ts` is the
@@ -147,7 +150,19 @@ The schema also contains:
 - `vfs_upload_sessions` with `open`, `verifying`, `committed`, and `garbage`
   states plus CAS token/lease and idempotent receipt;
 - `vfs_gc_queue` with due time, attempts, retry time, and last error;
-- `vfs_usage` for atomic logical-byte and entry quotas.
+- `vfs_usage` for atomic logical-byte and entry quotas;
+- `vfs_detached_inodes` and `vfs_detached_chunks` retain last-unlinked local
+  descriptors until close and recover their quota on owner restart.
+
+Entry metadata stores separate content modification and inode change times.
+Namespace mutations update affected parent directory metadata once per
+transaction, using indexed parent lookups. Optional hard links share published
+inode identity and metadata; inline chunks are currently replicated per name
+with SQL triggers installed on first hard-link use. Their storage counts against
+inline quota. Mutation tokens remain monotonic per path and alias changes are
+included in the change feed. Positional descriptor operations touch only the
+selected chunks. Custom hosts await `initialize()` during startup to schedule
+recovered opaque garbage; `VfsDurableObject` supplies that barrier.
 
 Checks and triggers reject invalid directory/content/link combinations,
 dangling opaque references, orphan inline chunks, and deletion of referenced

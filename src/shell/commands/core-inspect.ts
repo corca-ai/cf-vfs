@@ -5,7 +5,7 @@ import {
 } from "../../core/decimal-integer.js";
 import { VfsError } from "../../core/errors.js";
 import { isOneOf } from "../../core/literals.js";
-import { normalizePathPreservingTrailingSlash } from "../../core/path.js";
+import { normalizeFileSystemPath } from "../../core/path.js";
 import { type PosixPermission, shellModeAllows } from "../access.js";
 import { identityLabel, resolveIdentityNames } from "../identity.js";
 import type { ShellCommandContext } from "../types.js";
@@ -78,7 +78,7 @@ function statPredicate(
   predicate: FilePredicate,
   operand: string,
 ): boolean {
-  const path = normalizePathPreservingTrailingSlash(operand, context.session.cwd);
+  const path = normalizeFileSystemPath(operand, context.session.cwd);
   const link = predicate === "-L" || predicate === "-h";
   const stat = link ? context.fileSystem.lstat(path) : context.fileSystem.stat(path);
   if (link) return stat.kind === "symlink";

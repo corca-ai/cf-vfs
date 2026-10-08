@@ -1,0 +1,24 @@
+--- a/src/vfs/sql-write-plan-base.ts
++++ b/src/vfs/sql-write-plan-base.ts
+@@ -102,8 +102,8 @@
+    * own, so a caller that replaces an entry adds only what it inserted --
+    * subtracting the removal again double-counts it.
+    */
+-  protected removeExact(path: string, now: number, bumpPath = true): number {
+-    const entry = this.oneEntry(path);
++  protected removeExact(path: string, now: number, bumpPath = true, resolved?: EntryRow): number {
++    const entry = resolved ?? this.oneEntry(path);
+     if (entry === null) return 0;
+     if (entry.contentClass === "inline") {
+       this.sql.exec("DELETE FROM vfs_inline_chunks WHERE entry_id = ?", entry.id);
+--- a/src/vfs/sql-move-base.ts
++++ b/src/vfs/sql-move-base.ts
+@@ -250,7 +250,7 @@
+     // every descendant lands somewhere that was absent.
+     const sourceRange = descendantRange(source);
+     const now = this.now();
+-    if (destination !== null) state.queued += this.removeExact(target, now, false);
++    if (destination !== null) state.queued += this.removeExact(target, now, false, destination);
+     const sourceChangeSeq = this.nextChangeSeq();
+     this.publishSubtreeRemoval(source, sourceChangeSeq);
+     this.sql.exec(

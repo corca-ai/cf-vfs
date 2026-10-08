@@ -1,5 +1,5 @@
 import { VfsError } from "../core/errors.js";
-import { normalizePath } from "../core/path.js";
+import { normalizeFileSystemPath } from "../core/path.js";
 import { bodyToStream } from "../vfs/streams.js";
 import type { ByteBody } from "../vfs/types.js";
 import type { OpaqueContentAccess, ShellContentReader } from "./content.js";
@@ -94,7 +94,7 @@ async function targetPath(
   if (values.length !== 1 || values[0] === undefined) {
     throw new VfsError("EINVAL", "ambiguous redirection target");
   }
-  return normalizePath(values[0], session.cwd);
+  return normalizeFileSystemPath(values[0], session.cwd);
 }
 
 export interface AppliedRedirections {

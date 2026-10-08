@@ -1,5 +1,5 @@
 import { isVfsError, VfsError } from "../core/errors.js";
-import { normalizePath } from "../core/path.js";
+import { normalizeFileSystemPath, normalizePath } from "../core/path.js";
 import { readAllBytes } from "../vfs/streams.js";
 import type { VfsStat } from "../vfs/types.js";
 import { shellModeAllows } from "./access.js";
@@ -93,7 +93,7 @@ function findAppletPath(
  * before that comparison.
  */
 function executableCandidates(name: string, session: ShellSession, runtime: Runtime): string[] {
-  if (name.includes("/")) return [normalizePath(name, session.cwd)];
+  if (name.includes("/")) return [normalizeFileSystemPath(name, session.cwd)];
   if (!runtime.pathLookup) return [];
   const searchPath = session.env.get("PATH");
   if (searchPath === undefined) return [];
@@ -104,7 +104,12 @@ function executableCandidates(name: string, session: ShellSession, runtime: Runt
     // from smuggling a stored file into an applet directory.
     const directory = component === "" ? session.cwd : normalizePath(component);
     if (runtime.commands.isAppletDirectory(directory)) continue;
-    candidates.push(normalizePath(name, directory));
+    candidates.push(
+      normalizeFileSystemPath(
+        name,
+        component === "" ? session.cwd : normalizeFileSystemPath(component, session.cwd),
+      ),
+    );
   }
   return candidates;
 }

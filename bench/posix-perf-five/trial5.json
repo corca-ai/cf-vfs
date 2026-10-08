@@ -1,0 +1,705 @@
+{
+  "method": "isolated processes, warmup per workload, alternating AB/BA",
+  "node": "v24.18.0",
+  "platform": "linux",
+  "results": [
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "before": {
+        "ms": {
+          "median": 32.30001299999999,
+          "p10": 31.2459728,
+          "p90": 35.72875880000001
+        },
+        "sql": 5000,
+        "returnedRows": 2000,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 32.20634299999999,
+          "p10": 31.643829800000006,
+          "p90": 34.310112600000004
+        },
+        "sql": 5000,
+        "returnedRows": 2000,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 1.0144295010892805,
+        "p10": 0.9007212456889593,
+        "p90": 1.0692091262644394,
+        "ci95": [
+          0.980341481168642,
+          1.0613821031346118
+        ]
+      }
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "before": {
+        "ms": {
+          "median": 33.622675000000015,
+          "p10": 33.03433199999999,
+          "p90": 34.5031042
+        },
+        "sql": 6000,
+        "returnedRows": 2000,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 31.171960999999982,
+          "p10": 30.242444999999996,
+          "p90": 34.4953966
+        },
+        "sql": 5000,
+        "returnedRows": 2000,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.9359034172248595,
+        "p10": 0.9051546066053878,
+        "p90": 1.045542001651201,
+        "ci95": [
+          0.9122688789275126,
+          1.034902161558389
+        ]
+      }
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "before": {
+        "ms": {
+          "median": 19.202560999999946,
+          "p10": 18.5894506,
+          "p90": 20.76349620000004
+        },
+        "sql": 1800,
+        "returnedRows": 900,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 19.677682000000004,
+          "p10": 18.04111359999998,
+          "p90": 20.944765200000006
+        },
+        "sql": 1500,
+        "returnedRows": 900,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.9831957646451719,
+        "p10": 0.9426811571523399,
+        "p90": 1.101943568829553,
+        "ci95": [
+          0.9482131055331646,
+          1.1019354328812392
+        ]
+      }
+    }
+  ],
+  "raw": [
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 31.365261000000004,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 33.184393,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 18.31000899999998,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 32.366173,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 30.273089,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 17.373087999999996,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 31.957461999999992,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 31.171960999999982,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 19.677682000000004,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 31.502891000000005,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 33.622675000000015,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 20.014002000000005,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 32.02878200000001,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 33.750883999999985,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 19.202560999999946,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 33.994776,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 30.974981000000014,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 18.20811999999998,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 32.322402,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 31.108351000000027,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 19.91340199999999,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 47.514498,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 33.079203999999976,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 20.569394000000045,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 32.510023000000004,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 34.356055999999995,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 18.731460999999967,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 31.891351999999983,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 30.119868999999994,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 19.396660999999995,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 31.83641200000001,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 35.959959,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 22.475366000000008,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 30.76881999999999,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 33.04835399999999,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 20.396263999999974,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 32.30001299999999,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 32.97824400000002,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 18.70428099999998,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 30.87350099999999,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 34.129256,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 19.30962199999999,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 32.20634299999999,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 33.03646499999999,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 19.828632000000027,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 32.782324,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 35.027817,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 21.539905000000033,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 32.322492,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 34.371926,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 18.659311000000002,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 35.571459000000004,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 32.168803,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 20.562115000000006,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    }
+  ]
+}

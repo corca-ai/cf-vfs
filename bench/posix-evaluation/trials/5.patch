@@ -1,0 +1,24 @@
+--- a/src/testing/node.ts
++++ b/src/testing/node.ts
+@@ -58,6 +58,7 @@
+ }
+ 
+ class NodeSqlStorage implements VfsSqlStorage {
++  private readonly statements = new Map<string, ReturnType<DatabaseSync["prepare"]>>();
+   constructor(
+     private readonly database: DatabaseSync,
+     private readonly observe: SqlStatementObserver | undefined,
+@@ -68,7 +69,12 @@
+   }
+ 
+   exec<Row extends VfsSqlRow>(query: string, ...bindings: VfsSqlBinding[]): VfsSqlCursor<Row> {
+-    const statement = this.database.prepare(query);
++    let statement = this.statements.get(query);
++    if (statement === undefined) {
++      statement = this.database.prepare(query);
++      if (this.statements.size >= 256) this.statements.clear();
++      this.statements.set(query, statement);
++    }
+     // The SQL string is the schema for `Row`; SQLite exposes no metadata from
+     // which that caller-owned generic can be reconstructed at runtime.
+     const rows = statement.all(...bindings.map(inputValue)).map(outputRow) as Row[];

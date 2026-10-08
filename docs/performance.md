@@ -370,3 +370,54 @@ limits](https://developers.cloudflare.com/durable-objects/platform/limits/),
 [Workers limits](https://developers.cloudflare.com/workers/platform/limits/),
 and [R2 limits](https://developers.cloudflare.com/r2/platform/limits/) before
 deployment.
+
+## POSIX performance experiments
+
+The [POSIX experiment report](../bench/posix-evaluation-2026-10-08.md) compares
+native Linux files with the VFS, records all ten independent trials, and keeps
+their raw measurements and rejected prototypes. Run `npm run bench:posix` for
+fresh profiles and `npm run test:posix` for the recorded Linux semantic oracle.
+The oracle checks return values, error codes, and post-operation namespace and
+content. The completion work removed the six recorded differences; the current
+oracle covers 46 traces. It is part of `npm run check`.
+
+Credential-bound stat combines target and ancestor metadata into one SQL
+statement when no symlinks exist. It preserves search permission checks and
+uses the existing path for symlinks and trailing slashes. This reduces statement
+and cursor overhead; it does not reduce SQLite's billed rows. Replacement
+rename reuses the destination row already read in its synchronous transaction.
+The Node testing adapter additionally reuses at most 256 prepared statements
+per database; its latency gains do not describe Cloudflare's SQL implementation.
+The workerd cost guards run under `npm run bench:check`.
+
+The [path resolution follow-up](../bench/posix-path-fix-2026-10-08.md) fixes dot
+components in direct VFS and promise-FS paths without a storage migration.
+Paired profiling alternates two builds in separate processes to avoid
+module identity and allocator bias. `POSIX_REPEAT_FACTOR=10` lengthens repeated
+operations; one-shot operations retain their original repetition count:
+
+```sh
+POSIX_COMPARE_LIBRARY=/path/to/baseline/dist POSIX_TRIALS=15 npm run bench:posix
+```
+
+The [POSIX completion evaluation](../bench/posix-completion-2026-10-08.md)
+adds shared inode handles, hard links, ctime and parent timestamp semantics.
+Namespace transactions now pay one indexed parent metadata UPDATE; batching
+amortizes it. The report separates this required cost from read/overwrite
+profiles, and records independent review fixes and immutable-store limits.
+
+
+The [five-trial follow-up](../bench/posix-perf-five-2026-10-08.md) retains POSIX
+semantics while removing repeated inode reads, per-chunk shrinking deletes,
+discarded full-chunk reads, unnecessary parent nlink recounts and unshared alias
+lookups. Inode rows are reused only inside an operation, not cached between
+operations. Transactions containing directory namespace changes conservatively
+keep parent nlink recounting; file-only namespace transactions skip it.
+
+`bench/posix-perf-five.mjs` measures dedicated workloads in alternating isolated
+processes. `PERF_BEFORE=/path/to/baseline/dist PERF_LIBRARY=dist PERF_TRIALS=9
+PERF_OUTPUT=/tmp/five.json node bench/posix-perf-five.mjs` records timings, paired
+ratios and returned rows/BLOB bytes. These are Node adapter measurements; the
+workerd benchmark separately guards statements and billed rows under
+`npm run bench:check`. Truncate still deletes every removed storage row, and
+partial boundary writes still read the bytes they must preserve.

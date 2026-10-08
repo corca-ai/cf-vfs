@@ -26,6 +26,7 @@ export interface VfsSqlStorage {
 }
 
 export interface SqlFileSystemStorage {
+  sync?(): Promise<void>;
   readonly sql: VfsSqlStorage;
   execBatch?(query: string): void;
   transactionSync<Result>(callback: () => Result): Result;
@@ -47,6 +48,9 @@ interface EntryRowCommon {
   readonly gid: number;
   readonly createdAtMs: number;
   readonly modifiedAtMs: number;
+  readonly changedAtMs: number;
+  readonly linkIdentity?: number | null;
+  readonly linkCount?: number;
   readonly revision: number;
   readonly mutationVersion: number;
   readonly mutationToken: string;
@@ -157,6 +161,8 @@ export interface OpaqueObjectRow {
 }
 
 export interface UploadRow {
+  writtenPath: string | null;
+  traversalToken: string | null;
   id: string;
   path: string;
   expectedMutationToken: string;
@@ -264,12 +270,16 @@ export function parseOpaqueReceipt(value: unknown, path: string): OpaqueFileStat
     parentPath: receiptString(receipt, "parentPath", path),
     name: receiptString(receipt, "name", path),
     ino: receiptInteger(receipt, "ino", 1, path),
+    ...(receipt["nlink"] === undefined ? {} : { nlink: receiptInteger(receipt, "nlink", 0, path) }),
     sizeBytes: receiptInteger(receipt, "sizeBytes", 0, path),
     mode: receiptInteger(receipt, "mode", 0, path),
     uid: receiptInteger(receipt, "uid", 0, path),
     gid: receiptInteger(receipt, "gid", 0, path),
     createdAtMs: receiptInteger(receipt, "createdAtMs", 0, path),
     modifiedAtMs: receiptInteger(receipt, "modifiedAtMs", 0, path),
+    ...(receipt["changedAtMs"] === undefined
+      ? {}
+      : { changedAtMs: receiptInteger(receipt, "changedAtMs", 0, path) }),
     revision: receiptInteger(receipt, "revision", 1, path),
     mutationToken: receiptString(receipt, "mutationToken", path),
     ...(contentType === undefined ? {} : { contentType }),
@@ -314,6 +324,9 @@ export function parseEntry(row: SqlRow, mutationEpoch: string): EntryRow {
     gid: integerColumn(row, "gid"),
     createdAtMs: integerColumn(row, "created_at_ms"),
     modifiedAtMs: integerColumn(row, "modified_at_ms"),
+    changedAtMs: integerColumn(row, "changed_at_ms"),
+    linkIdentity: nullableIntegerColumn(row, "link_identity"),
+    linkCount: integerColumn(row, "link_count"),
     revision: integerColumn(row, "revision"),
     mutationVersion,
     mutationToken: formatMutationToken(mutationEpoch, mutationVersion),
@@ -365,13 +378,15 @@ export function rowToStat(row: EntryRow): VfsStat {
     name: row.name,
     // Already on the row every entry query reads, so reporting it costs no
     // column, no index, and no statement.
-    ino: row.id,
+    ino: row.linkIdentity ?? row.id,
+    nlink: row.linkCount ?? 1,
     sizeBytes: row.sizeBytes,
     mode: row.mode,
     uid: row.uid,
     gid: row.gid,
     createdAtMs: row.createdAtMs,
     modifiedAtMs: row.modifiedAtMs,
+    changedAtMs: row.changedAtMs,
     revision: row.revision,
     mutationToken: row.mutationToken,
   };
@@ -407,6 +422,8 @@ export function parseUpload(row: SqlRow): UploadRow {
     expectedMutationToken: stringColumn(row, "expected_mutation_token"),
     objectKey: stringColumn(row, "r2_key"),
     state,
+    writtenPath: nullableStringColumn(row, "written_path"),
+    traversalToken: nullableStringColumn(row, "traversal_token"),
     verificationToken: nullableStringColumn(row, "verification_token"),
     expectedSizeBytes: nullableIntegerColumn(row, "expected_size_bytes"),
     expiresAtMs: integerColumn(row, "expires_at_ms"),

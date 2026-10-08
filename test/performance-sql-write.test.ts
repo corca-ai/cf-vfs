@@ -166,11 +166,11 @@ it("keeps batch aggregation cheaper than separate writes", async () => {
   // A string write can prove that collection runs no caller code; a batch
   // must revalidate because an entry getter can. That one-statement safety
   // cost is paid once per batch entry and does not erase aggregation's gain.
-  expect(single).toEqual({ statements: 8, rows: 2 });
-  expect(batchOfOne).toEqual({ statements: 9, rows: 2 });
+  expect(single).toEqual({ statements: 9, rows: 2 });
+  expect(batchOfOne).toEqual({ statements: 10, rows: 2 });
   // A set shares the transaction, usage read, and usage UPDATE across entries.
-  expect(batchOfThree).toEqual({ statements: 19, rows: 4 });
-  expect(threeWrites).toEqual({ statements: 24, rows: 6 });
+  expect(batchOfThree).toEqual({ statements: 20, rows: 4 });
+  expect(threeWrites).toEqual({ statements: 27, rows: 6 });
 });
 
 it("skips subtree summaries without slowing a rejected directory removal", async () => {
@@ -201,9 +201,9 @@ it("skips subtree summaries without slowing a rejected directory removal", async
       true,
     ),
   }).toEqual({
-    file: 10,
-    emptyDirectory: 11,
-    recursiveDirectory: 11,
+    file: 11,
+    emptyDirectory: 12,
+    recursiveDirectory: 12,
     rejectedDirectory: 4,
   });
 });
@@ -229,8 +229,8 @@ it("does not touch the change table while its cursor is disabled", async () => {
   // no statement against that table at all.
   const off = await statements(false);
   const on = await statements(true);
-  expect(off).toBe(41);
-  expect(on).toBe(47);
+  expect(off).toBe(44);
+  expect(on).toBe(53);
 });
 
 it("reads a catch-up page with one indexed query", async () => {

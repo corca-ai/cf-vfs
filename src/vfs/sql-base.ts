@@ -1,8 +1,8 @@
 import { VfsError } from "../core/errors.js";
-import { descendantRange, dirname } from "../core/path.js";
+import { descendantRange, dirname, normalizePath } from "../core/path.js";
 import { InFlightByteBudget } from "./buffering.js";
 import { resolveFileSystemLimits, validatePositiveInteger } from "./config.js";
-import { emitVfsEvent, type VfsEventSink } from "./events.js";
+import { emitVfsEvent, type VfsEventSink, type VfsMutationOp } from "./events.js";
 import { migrateSql } from "./sql-migrate.js";
 import {
   type EntryRow,
@@ -29,7 +29,21 @@ import type { OpaqueStore } from "./types.js";
 const DEFAULT_MAX_DATABASE_BYTES = 10_000_000_000;
 const DEFAULT_DATABASE_HEADROOM_BYTES = 64 * 1024 * 1024;
 
+function traversalAncestors(path: string, followed: readonly string[]): string[] {
+  const ancestors = new Set<string>();
+  for (const candidate of [path, ...followed]) {
+    const first = candidate.endsWith("/") ? normalizePath(candidate) : dirname(candidate);
+    for (let parent = first; ; parent = dirname(parent)) {
+      ancestors.add(parent);
+      if (parent === "/") break;
+    }
+  }
+  if (path === "/" && followed.length === 0) ancestors.delete("/");
+  return [...ancestors];
+}
+
 export abstract class SqlBase {
+  protected recoveredDetached = false;
   protected readonly storage: SqlFileSystemStorage;
   protected readonly sql: VfsSqlStorage;
   protected readonly chunkBytes: number;
@@ -67,6 +81,61 @@ export abstract class SqlBase {
    * allocates nothing rather than building events it will discard.
    */
   protected pendingMutations: PendingMutation[] = [];
+  protected pendingParents: Set<string> | undefined;
+  /** Only directory namespace changes can alter a parent's nlink. */
+  protected directoryParentsChanged = false;
+  protected sharedInodes = false;
+  protected retainOpenInodes:
+    | ((path: string, recursive: boolean, root: EntryRow) => number)
+    | undefined;
+
+  protected noteDirectoryChange(entry: EntryRow): void {
+    if (entry.kind === "directory") this.directoryParentsChanged = true;
+  }
+
+  protected abstract publishToken(
+    path: string,
+    version: number,
+    present: boolean,
+    op: VfsMutationOp,
+    knownEntry?: EntryRow | null,
+  ): string;
+
+  protected flushParentTimes(): void {
+    const parents = this.pendingParents;
+    this.pendingParents = undefined;
+    if (parents === undefined) return;
+    const recount = this.directoryParentsChanged;
+    this.directoryParentsChanged = false;
+    const now = this.now();
+    const paths = [...parents];
+    const direct = paths.length <= 2;
+    const predicate = direct
+      ? `path IN (${paths.map(() => "?").join(",")})`
+      : "path IN (SELECT value FROM json_each(?))";
+    const bindings = direct ? paths : [JSON.stringify(paths)];
+    const observed = this.onEvent !== undefined || this.recordChanges;
+    const rows = this.sql
+      .exec<SqlRow>(
+        `UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,
+      revision = revision + 1, mutation_version = mutation_version + 1,
+      link_count = ${recount ? "2 + (SELECT COUNT(*) FROM vfs_entries child INDEXED BY vfs_entries_child_directories WHERE child.parent_path = vfs_entries.path AND child.kind = 'directory' AND child.path <> '/')" : "link_count"}
+      WHERE ${predicate} AND kind = 'directory'
+      ${observed ? "RETURNING path, mutation_version" : ""}`,
+        now,
+        now,
+        ...bindings,
+      )
+      .toArray();
+    for (const row of rows)
+      this.publishToken(
+        stringColumn(row, "path"),
+        integerColumn(row, "mutation_version"),
+        true,
+        "metadata",
+        null,
+      );
+  }
   /**
    * How many links exist, so a namespace without any pays nothing for them.
    *
@@ -143,6 +212,36 @@ export abstract class SqlBase {
       now: () => this.now(),
       newToken: () => this.newToken(),
     });
+    // Handles are local to this owner/process. After re-instantiation none survive.
+    const detached = this.sql
+      .exec<SqlRow>(
+        "SELECT COUNT(*) AS count, COALESCE(SUM(inline_bytes), 0) AS bytes, EXISTS(SELECT 1 FROM vfs_entries WHERE link_identity IS NOT NULL) AS shared FROM vfs_detached_inodes",
+      )
+      .one();
+    this.sharedInodes = integerColumn(detached, "shared") !== 0;
+    if (integerColumn(detached, "count") !== 0) {
+      this.recoveredDetached = true;
+      this.transaction(() => {
+        const now = this.now();
+        this.sql.exec(
+          `INSERT INTO vfs_gc_queue(r2_key, not_before_ms, next_attempt_at_ms)
+        SELECT r2_key, MAX(?, retain_until_ms), MAX(?, retain_until_ms) FROM vfs_opaque_objects o
+        WHERE EXISTS (SELECT 1 FROM vfs_detached_inodes d WHERE d.opaque_object_id = o.id)
+        AND NOT EXISTS (SELECT 1 FROM vfs_entries e WHERE e.opaque_object_id = o.id)
+        ON CONFLICT(r2_key) DO NOTHING`,
+          now,
+          now,
+        );
+        this.sql.exec("DELETE FROM vfs_detached_chunks");
+        this.sql.exec("DELETE FROM vfs_detached_inodes");
+        this.sql.exec(
+          "UPDATE vfs_usage SET inline_bytes = inline_bytes - ? WHERE singleton = 1",
+          integerColumn(detached, "bytes"),
+        );
+        this.sql.exec(`DELETE FROM vfs_opaque_objects WHERE NOT EXISTS (SELECT 1 FROM vfs_entries e WHERE e.opaque_object_id = vfs_opaque_objects.id)
+        AND EXISTS (SELECT 1 FROM vfs_gc_queue q WHERE q.r2_key = vfs_opaque_objects.r2_key)`);
+      });
+    }
     this.symlinkCount = this.countSymlinks();
     // Read once per instance, beside the link count and for the same reason:
     // paying it here keeps it off every operation that allocates an identity.
@@ -235,16 +334,8 @@ export abstract class SqlBase {
     access: PosixAccessContext | undefined,
   ): void {
     if (access === undefined) return;
-    const ancestors = new Set<string>();
-    for (const candidate of [path, ...followed]) {
-      for (let parent = dirname(candidate); ; parent = dirname(parent)) {
-        ancestors.add(parent);
-        if (parent === "/") break;
-      }
-    }
-    if (path === "/") ancestors.delete("/");
-    if (ancestors.size === 0) return;
-    const ordered = [...ancestors];
+    const ordered = traversalAncestors(path, followed);
+    if (ordered.length === 0) return;
     const rows = this.sql
       .exec<SqlRow>(
         `SELECT path, kind, mode, uid, gid
@@ -404,7 +495,9 @@ export abstract class SqlBase {
       const result = this.storage.transactionSync(() => {
         this.transactionDepth += 1;
         try {
-          return callback();
+          const result = callback();
+          if (this.transactionDepth === 1) this.flushParentTimes();
+          return result;
         } finally {
           this.transactionDepth -= 1;
           // A rollback discards the in-memory total along with the row it
@@ -436,6 +529,8 @@ export abstract class SqlBase {
     } catch (error) {
       this.pendingUsage = undefined;
       this.pendingMutations = [];
+      this.pendingParents = undefined;
+      this.directoryParentsChanged = false;
       const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       if (/SQLITE_FULL|database or disk is full/iu.test(message)) {
         throw new VfsError("ENOSPC", "SQLite database capacity is exhausted");

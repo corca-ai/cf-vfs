@@ -1,0 +1,937 @@
+{
+  "method": "isolated processes, warmup per workload, alternating AB/BA",
+  "node": "v24.18.0",
+  "platform": "linux",
+  "results": [
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "before": {
+        "ms": {
+          "median": 31.345190000000017,
+          "p10": 29.683532399999994,
+          "p90": 34.385889399999996
+        },
+        "sql": 3500,
+        "returnedRows": 1500,
+        "blobBytes": 4096000
+      },
+      "after": {
+        "ms": {
+          "median": 26.15319199999999,
+          "p10": 23.0982872,
+          "p90": 28.114942200000012
+        },
+        "sql": 3000,
+        "returnedRows": 1000,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.8212750271611375,
+        "p10": 0.7233761582152478,
+        "p90": 0.9264933930626108,
+        "ci95": [
+          0.7478767236695645,
+          0.8478671692084448
+        ]
+      }
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "before": {
+        "ms": {
+          "median": 90.949863,
+          "p10": 88.386814,
+          "p90": 101.94333979999999
+        },
+        "sql": 2760,
+        "returnedRows": 1360,
+        "blobBytes": 41943040
+      },
+      "after": {
+        "ms": {
+          "median": 53.847116,
+          "p10": 43.72757859999998,
+          "p90": 67.8700806
+        },
+        "sql": 1480,
+        "returnedRows": 80,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.5719582535435636,
+        "p10": 0.47178788475683975,
+        "p90": 0.7479964711602114,
+        "ci95": [
+          0.4719967539106459,
+          0.7330696604416027
+        ]
+      }
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "before": {
+        "ms": {
+          "median": 93.04778900000008,
+          "p10": 87.60046919999998,
+          "p90": 94.92051860000007
+        },
+        "sql": 2842,
+        "returnedRows": 1400,
+        "blobBytes": 41943079
+      },
+      "after": {
+        "ms": {
+          "median": 38.61592200000001,
+          "p10": 33.93581399999998,
+          "p90": 44.57509539999997
+        },
+        "sql": 1562,
+        "returnedRows": 121,
+        "blobBytes": 1310720
+      },
+      "ratio": {
+        "median": 0.4145212621841547,
+        "p10": 0.3673485696142956,
+        "p90": 0.48716015872303503,
+        "ci95": [
+          0.37722750944333433,
+          0.47948968216975735
+        ]
+      }
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "before": {
+        "ms": {
+          "median": 101.124191,
+          "p10": 96.59172920000003,
+          "p90": 112.43359740000002
+        },
+        "sql": 7000,
+        "returnedRows": 3000,
+        "blobBytes": 32768000
+      },
+      "after": {
+        "ms": {
+          "median": 103.69999399999995,
+          "p10": 91.46417839999998,
+          "p90": 124.26685519999997
+        },
+        "sql": 7000,
+        "returnedRows": 3000,
+        "blobBytes": 32768000
+      },
+      "ratio": {
+        "median": 0.9354550017063271,
+        "p10": 0.8679176924079958,
+        "p90": 1.249896515325445,
+        "ci95": [
+          0.8735577732679238,
+          1.219255075398028
+        ]
+      }
+    }
+  ],
+  "raw": [
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 34.298722999999995,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 106.97918700000002,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 85.936914,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 100.40202700000009,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 28.464415000000002,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 50.49382899999998,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 44.50174899999996,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 122.41568099999995,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 26.027370999999988,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 43.95120899999998,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 31.81313,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 113.22136699999999,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 31.691418999999996,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 88.15769799999998,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 88.11565799999994,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 96.75511300000005,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 30.110486999999992,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 100.68437799999998,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 88.01635799999997,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 98.91375499999992,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 27.32988300000001,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 57.587260999999984,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 40.35187400000001,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 113.36335899999995,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 28.027574000000016,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 42.833057,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 35.212064999999996,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 103.69999399999995,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 27.975713999999996,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 90.949863,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 89.66143199999999,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 113.48219099999994,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 31.345190000000017,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 89.28231199999999,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 93.57548800000006,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 101.124191,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 23.442338000000007,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 72.11365500000002,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 44.868480999999974,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 92.03053699999998,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 26.15319199999999,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 53.847116,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 37.836161000000004,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 94.82496100000003,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 30.845859999999988,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 93.22926799999999,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 100.30064100000004,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 112.17144900000005,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 30.610658,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 91.77405599999997,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 93.04778900000008,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 95.93819399999995,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 24.532930000000007,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 66.80918699999998,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 40.647775000000024,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 131.67155200000002,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 26.949894,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 65.02906500000003,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 38.61592200000001,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 95.21613300000001,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 32.91828300000002,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 88.70789300000001,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 93.15787999999998,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 101.78590399999996,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 34.734555,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 88.44409300000001,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 93.423811,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 102.10972499999991,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 21.72208399999998,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 44.819312999999994,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 34.46648499999998,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 89.19874399999998,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 8
+    }
+  ]
+}

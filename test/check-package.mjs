@@ -22,6 +22,9 @@ try {
   for (const path of [
     "dist/index.js",
     "dist/vfs/index.js",
+    "dist/fs/index.js",
+    "dist/fs/metadata.js",
+    "dist/fs/content.js",
     "dist/vfs/do-sql.js",
     "dist/vfs/sql.js",
     "dist/shell/index.js",
@@ -95,6 +98,9 @@ try {
     import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
     import { MemoryOpaqueStore } from "@corca-ai/cf-vfs/testing";
     import { NodeSqlFileSystem } from "@corca-ai/cf-vfs/testing/node";
+    import { createFsAdapter } from "@corca-ai/cf-vfs/fs";
+    import { FsMetadataCache } from "@corca-ai/cf-vfs/fs/metadata";
+    import { TieredFileContent } from "@corca-ai/cf-vfs/fs/content";
     if (MAX_INLINE_FILE_BYTES !== 8 * 1024 * 1024) throw new Error("inline limit");
     if (BASH_COMPATIBILITY_VERSION !== 5) throw new Error("language version");
     if (lsCommand.name !== "ls") throw new Error("ls export");
@@ -131,6 +137,10 @@ try {
     }
     if (typeof MemoryOpaqueStore !== "function") throw new Error("testing export");
     const fileSystem = new NodeSqlFileSystem();
+    const fs = createFsAdapter(fileSystem);
+    await fs.promises.writeFile("/package-fs", "fs");
+    if (await fs.promises.readFile("/package-fs", "utf8") !== "fs") throw new Error("fs adapter");
+    if (typeof FsMetadataCache !== "function" || typeof TieredFileContent !== "function") throw new Error("fs capability exports");
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });
     const result = await shell.executeText({ script: 'X=$(printf ok); printf "package-%s" "$X"' });
     if (result.stdout !== "package-ok") throw new Error("shell execution");
@@ -175,7 +185,14 @@ try {
     } from "@corca-ai/cf-vfs/shell/interactive";
     import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
     import { NodeSqlFileSystem } from "@corca-ai/cf-vfs/testing/node";
+    import { createFsAdapter } from "@corca-ai/cf-vfs/fs";
+    import { FsMetadataCache } from "@corca-ai/cf-vfs/fs/metadata";
+    import { TieredFileContent } from "@corca-ai/cf-vfs/fs/content";
     const fileSystem = new NodeSqlFileSystem();
+    const fs = createFsAdapter(fileSystem);
+    await fs.promises.writeFile("/package-fs", "fs");
+    if (await fs.promises.readFile("/package-fs", "utf8") !== "fs") throw new Error("fs adapter");
+    if (typeof FsMetadataCache !== "function" || typeof TieredFileContent !== "function") throw new Error("fs capability exports");
     const shell = new Shell({ fileSystem, commands: defaultShellCommands });
     const text: Promise<ExecuteTextResult> = shell.executeText({ script: "printf text" });
     const bytes: Promise<ExecuteBytesResult> = shell.executeBytes({ script: "printf bytes" });

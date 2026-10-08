@@ -1,0 +1,3721 @@
+{
+  "method": "isolated processes, warmup per workload, alternating AB/BA",
+  "node": "v24.18.0",
+  "platform": "linux",
+  "results": [
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "before": {
+        "ms": {
+          "median": 31.30662500000001,
+          "p10": 31.037088200000014,
+          "p90": 32.2776534
+        },
+        "sql": 3000,
+        "returnedRows": 3000,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 16.997366,
+          "p10": 16.6848172,
+          "p90": 17.595436199999995
+        },
+        "sql": 1500,
+        "returnedRows": 1500,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.5381678351480247,
+        "p10": 0.530037581298698,
+        "p90": 0.5564717692183534,
+        "ci95": [
+          0.535211547228517,
+          0.55588300205075
+        ]
+      }
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "before": {
+        "ms": {
+          "median": 18.481848999999954,
+          "p10": 16.594779000000017,
+          "p90": 19.988215000000014
+        },
+        "sql": 1000,
+        "returnedRows": 1000,
+        "blobBytes": 1638400
+      },
+      "after": {
+        "ms": {
+          "median": 10.473488000000003,
+          "p10": 9.544354000000004,
+          "p90": 10.898025999999993
+        },
+        "sql": 600,
+        "returnedRows": 600,
+        "blobBytes": 1638400
+      },
+      "ratio": {
+        "median": 0.5624236167976503,
+        "p10": 0.5202272882612162,
+        "p90": 0.6348477661444374,
+        "ci95": [
+          0.524752247098743,
+          0.63101543891901
+        ]
+      }
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "before": {
+        "ms": {
+          "median": 11.969001999999989,
+          "p10": 10.185883800000022,
+          "p90": 13.976765199999988
+        },
+        "sql": 1600,
+        "returnedRows": 1000,
+        "blobBytes": 1638400
+      },
+      "after": {
+        "ms": {
+          "median": 6.972647999999992,
+          "p10": 6.536457600000017,
+          "p90": 7.587610200000017
+        },
+        "sql": 800,
+        "returnedRows": 600,
+        "blobBytes": 1638400
+      },
+      "ratio": {
+        "median": 0.5887898852269704,
+        "p10": 0.4907050320924859,
+        "p90": 0.694778562321265,
+        "ci95": [
+          0.5117728787702378,
+          0.6937977187981862
+        ]
+      }
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "before": {
+        "ms": {
+          "median": 28.015417000000014,
+          "p10": 25.717010400000003,
+          "p90": 30.816648799999985
+        },
+        "sql": 3000,
+        "returnedRows": 900,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 24.794506000000013,
+          "p10": 24.429468000000043,
+          "p90": 26.52531939999999
+        },
+        "sql": 3000,
+        "returnedRows": 900,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.893971673371501,
+        "p10": 0.8077592403701456,
+        "p90": 0.9869052054666568,
+        "ci95": [
+          0.8129860676429698,
+          0.9752328306424626
+        ]
+      }
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "before": {
+        "ms": {
+          "median": 38.16502400000002,
+          "p10": 36.24915899999996,
+          "p90": 39.93259879999998
+        },
+        "sql": 3000,
+        "returnedRows": 900,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 24.7749849999999,
+          "p10": 23.71827040000003,
+          "p90": 25.444109000000072
+        },
+        "sql": 3000,
+        "returnedRows": 900,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.636543202228809,
+        "p10": 0.5904620272656695,
+        "p90": 0.6982092294676652,
+        "ci95": [
+          0.5935264018191714,
+          0.6864294206751785
+        ]
+      }
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "before": {
+        "ms": {
+          "median": 154.05239899999992,
+          "p10": 150.04536060000015,
+          "p90": 157.83944920000005
+        },
+        "sql": 5000,
+        "returnedRows": 1500,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 130.31730199999993,
+          "p10": 128.42290480000005,
+          "p90": 134.12905080000004
+        },
+        "sql": 5000,
+        "returnedRows": 1500,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.8540665974362951,
+        "p10": 0.8136416016214416,
+        "p90": 0.8862528436203342,
+        "ci95": [
+          0.8154840060343377,
+          0.8783320039598947
+        ]
+      }
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "before": {
+        "ms": {
+          "median": 29.141967000000022,
+          "p10": 27.668445399999882,
+          "p90": 32.75365519999991
+        },
+        "sql": 1560,
+        "returnedRows": 1360,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 12.15579200000002,
+          "p10": 11.569259799999873,
+          "p90": 14.436916400000063
+        },
+        "sql": 280,
+        "returnedRows": 80,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.4151583522141825,
+        "p10": 0.381805927529654,
+        "p90": 0.4853119544631121,
+        "ci95": [
+          0.4077599319834503,
+          0.47716101851570675
+        ]
+      }
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "before": {
+        "ms": {
+          "median": 23.129672000000028,
+          "p10": 22.246403799999825,
+          "p90": 24.12348379999994
+        },
+        "sql": 1520,
+        "returnedRows": 1360,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 13.421076999999968,
+          "p10": 13.240023800000063,
+          "p90": 13.90661700000005
+        },
+        "sql": 360,
+        "returnedRows": 120,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.5854678454473312,
+        "p10": 0.5673671642887466,
+        "p90": 0.6017540567441132,
+        "ci95": [
+          0.5744566265315547,
+          0.6009683519850031
+        ]
+      }
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "before": {
+        "ms": {
+          "median": 58.74663600000031,
+          "p10": 55.837949800000025,
+          "p90": 62.50956559999995
+        },
+        "sql": 3156,
+        "returnedRows": 3096,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 25.270156999999926,
+          "p10": 23.700867799999923,
+          "p90": 26.130699600000163
+        },
+        "sql": 84,
+        "returnedRows": 24,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.41274870818797416,
+        "p10": 0.4063452173680033,
+        "p90": 0.45216395189118413,
+        "ci95": [
+          0.40754329267166406,
+          0.4188026585091193
+        ]
+      }
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "before": {
+        "ms": {
+          "median": 28.310934999999972,
+          "p10": 25.709023799999887,
+          "p90": 36.73963379999996
+        },
+        "sql": 3500,
+        "returnedRows": 1500,
+        "blobBytes": 4096000
+      },
+      "after": {
+        "ms": {
+          "median": 23.01104200000009,
+          "p10": 20.428554200000143,
+          "p90": 24.60522480000018
+        },
+        "sql": 3000,
+        "returnedRows": 1000,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.7346515557149447,
+        "p10": 0.591640714485267,
+        "p90": 0.9471554609433018,
+        "ci95": [
+          0.5972505363022732,
+          0.9455914244856652
+        ]
+      }
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "before": {
+        "ms": {
+          "median": 79.7553899999998,
+          "p10": 72.65672700000005,
+          "p90": 92.0289968000001
+        },
+        "sql": 2760,
+        "returnedRows": 1360,
+        "blobBytes": 41943040
+      },
+      "after": {
+        "ms": {
+          "median": 31.626094000000194,
+          "p10": 29.717535999999928,
+          "p90": 38.25835679999991
+        },
+        "sql": 1480,
+        "returnedRows": 80,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.39653864146360857,
+        "p10": 0.3458696904945351,
+        "p90": 0.48922784306360423,
+        "ci95": [
+          0.3470494864444805,
+          0.4813341196665871
+        ]
+      }
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "before": {
+        "ms": {
+          "median": 82.11732200000006,
+          "p10": 78.94715320000005,
+          "p90": 93.10746819999994
+        },
+        "sql": 2842,
+        "returnedRows": 1400,
+        "blobBytes": 41943079
+      },
+      "after": {
+        "ms": {
+          "median": 40.03304600000001,
+          "p10": 36.76539439999988,
+          "p90": 44.262125399999874
+        },
+        "sql": 1562,
+        "returnedRows": 121,
+        "blobBytes": 1310720
+      },
+      "ratio": {
+        "median": 0.48800947358286373,
+        "p10": 0.42448045255422917,
+        "p90": 0.5279191994139957,
+        "ci95": [
+          0.4390708591348764,
+          0.525396747111732
+        ]
+      }
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "before": {
+        "ms": {
+          "median": 98.35815700000012,
+          "p10": 94.43141639999995,
+          "p90": 102.02576780000008
+        },
+        "sql": 7000,
+        "returnedRows": 3000,
+        "blobBytes": 32768000
+      },
+      "after": {
+        "ms": {
+          "median": 96.148142,
+          "p10": 90.7332502000003,
+          "p90": 98.6902447999998
+        },
+        "sql": 7000,
+        "returnedRows": 3000,
+        "blobBytes": 32768000
+      },
+      "ratio": {
+        "median": 0.97974729964163,
+        "p10": 0.9347844238844363,
+        "p90": 0.9965083233360474,
+        "ci95": [
+          0.9464083899922864,
+          0.9963572721274114
+        ]
+      }
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "before": {
+        "ms": {
+          "median": 29.34544900000037,
+          "p10": 28.937016399999813,
+          "p90": 32.18548099999989
+        },
+        "sql": 5000,
+        "returnedRows": 2000,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 29.712209999999686,
+          "p10": 28.94861359999977,
+          "p90": 30.086088799999924
+        },
+        "sql": 5000,
+        "returnedRows": 2000,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 1.0121379389280791,
+        "p10": 0.9171676831867056,
+        "p90": 1.037667197805472,
+        "ci95": [
+          0.9716559288054778,
+          1.0331605475899643
+        ]
+      }
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "before": {
+        "ms": {
+          "median": 33.46295800000007,
+          "p10": 31.947485400000005,
+          "p90": 37.238465199999794
+        },
+        "sql": 6000,
+        "returnedRows": 2000,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 30.487232999999833,
+          "p10": 29.793836999999986,
+          "p90": 31.2403081999998
+        },
+        "sql": 5000,
+        "returnedRows": 2000,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.9219851931167636,
+        "p10": 0.7982425793023864,
+        "p90": 0.9494800622670265,
+        "ci95": [
+          0.7994394286911132,
+          0.9470699447085118
+        ]
+      }
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "before": {
+        "ms": {
+          "median": 17.167397000000165,
+          "p10": 16.461307999999825,
+          "p90": 17.730687399999717
+        },
+        "sql": 1800,
+        "returnedRows": 900,
+        "blobBytes": 0
+      },
+      "after": {
+        "ms": {
+          "median": 16.832884999999806,
+          "p10": 16.3476772,
+          "p90": 18.31146599999993
+        },
+        "sql": 1500,
+        "returnedRows": 900,
+        "blobBytes": 0
+      },
+      "ratio": {
+        "median": 0.9856741042735919,
+        "p10": 0.9349877887798691,
+        "p90": 1.0854076196664535,
+        "ci95": [
+          0.9390262055894856,
+          1.077683566193889
+        ]
+      }
+    }
+  ],
+  "raw": [
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 31.443292999999983,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 20.440022999999997,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 12.34193300000004,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 32.090963999999985,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 41.74201000000005,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 158.83675799999992,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 29.141967000000022,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 23.929472999999916,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 61.926532999999836,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 29.550047000000177,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 79.7553899999998,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 80.3331619999999,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 94.78454899999997,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 30.08466899999985,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 33.46295800000007,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 17.634996999999657,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 0
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 17.571355999999994,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 10.725947999999988,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 7.783811000000014,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 25.25083699999999,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 24.7749849999999,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 128.06562800000006,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 12.098531000000094,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 14.009937000000036,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 25.270156999999926,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 21.708987999999863,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 31.626094000000194,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 42.20678199999975,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 91.24413100000038,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 29.23194700000022,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 30.55931099999998,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 17.08060499999965,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 0
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 16.988863999999992,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 9.780786000000006,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 6.972647999999992,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 24.625695000000007,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 24.045063000000027,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 129.89029400000004,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 12.186052000000018,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 13.783486000000039,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 23.5898830000001,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 20.48732400000017,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 28.98687599999994,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 36.85009799999989,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 92.8730559999999,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 29.908320000000003,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 30.228830000000016,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 16.832884999999806,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 1
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 31.69118400000002,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 19.478692000000024,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 17.155686000000003,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 27.304613000000018,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 37.77444000000003,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 152.08450300000004,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 29.50181900000007,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 23.908782999999858,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 58.74663600000031,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 28.310934999999972,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 73.27282400000013,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 75.51103000000012,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 93.67435800000021,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 28.948375999999826,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 32.21099600000025,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 17.077535999999782,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 1
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 31.826403999999997,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 19.22709100000003,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 13.182034999999985,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 30.498069999999984,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 39.228474000000006,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 154.05239899999992,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 27.814532999999983,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 22.998661999999968,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 58.57900600000039,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 40.87758900000017,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 73.165614,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 80.2216440000002,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 94.62068099999988,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 29.179227999999966,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 31.96603499999992,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 16.48260399999981,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 2
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 17.691756999999996,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 10.536729000000008,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 6.746208000000024,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 24.794506000000013,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 24.297784999999976,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 129.7662560000001,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 12.262992999999824,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 13.821468000000095,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 26.0512090000002,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 23.267581999999948,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 38.10485199999994,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 40.03304600000001,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 88.68972699999995,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 29.090707999999722,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 30.274071000000276,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 16.367392999999993,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 2
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 17.359716000000006,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 11.159690000000012,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 6.896509000000037,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 26.47159099999999,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 22.411100000000033,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 128.51222400000006,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 12.15579200000002,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 13.880787000000055,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 25.329407999999603,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 23.01104200000009,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 33.51829899999984,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 40.283668000000034,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 94.10160199999973,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 28.380235999999968,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 28.630137000000104,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 16.663845000000038,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 3
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 34.082651,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 18.481848999999954,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 11.969001999999989,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 29.611219000000006,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 38.759814000000006,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 157.59012200000006,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 29.429409000000078,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 23.696772999999894,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 52.556861000000026,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 24.135475000000042,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 70.62117900000021,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 79.80618400000003,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 101.77023300000019,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 40.58872900000006,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 36.082866000000195,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 17.287536000000273,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 3
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 31.297104000000004,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 19.875263000000018,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 12.162961999999993,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 27.145853000000045,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 39.480245999999966,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 151.95237800000018,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 27.20692299999996,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 24.899527000000035,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 56.65822200000002,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 35.7051449999999,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 95.75478800000019,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 91.51086699999996,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 103.04790699999967,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 28.891577999999754,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 37.63232199999993,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 18.113448999999946,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 4
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 17.095405999999997,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 10.473488000000003,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 7.161428999999998,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 24.23143600000003,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 25.05246800000009,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 130.31730199999993,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 11.776601999999912,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 13.421076999999968,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 23.72861399999988,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 21.32491700000037,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 33.23165000000017,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 44.59119099999998,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 101.45176399999991,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 29.578919999999925,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 30.084761999999955,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 16.643254999999954,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 4
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 16.704425,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 10.304378000000014,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 7.538560000000018,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 24.593097,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 25.005058000000076,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 137.91240200000016,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 14.409738000000061,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 13.411466000000019,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 25.519248999999945,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 24.682216000000153,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 29.900200999999925,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 44.17985899999985,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 97.99986499999977,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 29.833871000000272,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 31.576204999999845,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 18.28072999999995,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 5
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 31.039434000000014,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 16.329835000000003,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 10.789378999999997,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 29.41537999999997,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 36.89346999999998,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 150.2418160000002,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 27.822554999999966,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 23.129672000000028,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 61.17283499999985,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 26.102410999999847,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 82.7543740000001,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 82.11732200000006,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 98.35815700000012,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 29.34544900000037,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 37.14000099999976,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 16.37612399999989,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 5
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 31.24964399999999,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 16.66101500000002,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 11.170540000000017,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 25.10064799999998,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 38.16502400000002,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 155.20160099999998,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 41.83350399999995,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 22.111730999999963,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 64.84169600000041,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 28.252737000000252,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 78.38033300000006,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 86.42603400000007,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 101.5926559999998,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 29.355890000000272,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 33.79266200000029,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 17.325196999999662,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 6
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 16.765005000000002,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 10.832609999999988,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 6.169895999999994,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 24.478976000000046,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 24.363526999999976,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 132.90150100000005,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 11.62929199999985,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 13.375316999999995,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 26.448662000000013,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 24.585977000000184,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 31.310856000000058,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 37.94715300000007,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 96.148142,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 29.712209999999686,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 31.156333999999788,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 16.26881400000002,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 6
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 16.997366,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 9.447425999999979,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 6.628098000000023,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 25.17741799999999,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 27.010672999999997,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 133.18321300000002,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 14.545630000000074,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 13.350296000000071,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 24.330617000000075,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 20.193475000000035,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 31.07797500000015,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 36.42657999999983,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 97.43412500000022,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 30.79716399999961,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 30.487232999999833,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 18.434409999999843,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 7
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 31.30662500000001,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 16.797705000000008,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 9.985387000000003,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 28.015417000000014,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 36.239959,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 156.61095799999998,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 30.483692999999903,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 22.34373100000016,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 59.700692999999774,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 30.498443999999836,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 91.09754900000007,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 99.4938729999999,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 97.71627799999987,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 29.172439999999824,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 32.31958799999984,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 17.105587000000014,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 7
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 31.02770500000001,
+      "sql": 3000,
+      "returnedRows": 3000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 16.880086000000034,
+      "sql": 1000,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 10.236008000000027,
+      "sql": 1600,
+      "returnedRows": 1000,
+      "blobBytes": 1638400,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 25.87110100000001,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 36.251458999999954,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 149.2595389999999,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 27.783825999999863,
+      "sql": 1560,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 22.28007199999979,
+      "sql": 1520,
+      "returnedRows": 1360,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 58.54953999999998,
+      "sql": 3156,
+      "returnedRows": 3096,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 28.01494700000012,
+      "sql": 3500,
+      "returnedRows": 1500,
+      "blobBytes": 4096000,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 80.75965199999973,
+      "sql": 2760,
+      "returnedRows": 1360,
+      "blobBytes": 41943040,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 82.52873700000009,
+      "sql": 2842,
+      "returnedRows": 1400,
+      "blobBytes": 41943079,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 99.37366199999997,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 29.387400999999954,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 31.873287000000346,
+      "sql": 6000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 17.167397000000165,
+      "sql": 1800,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "before",
+      "trial": 8
+    },
+    {
+      "name": "fstat",
+      "size": 80,
+      "count": 1500,
+      "ms": 16.606386,
+      "sql": 1500,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "fd-read",
+      "size": 8192,
+      "count": 200,
+      "ms": 9.56858600000001,
+      "sql": 600,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "fd-read-detached",
+      "size": 8192,
+      "count": 200,
+      "ms": 7.101719000000003,
+      "sql": 800,
+      "returnedRows": 600,
+      "blobBytes": 1638400,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "create-wide",
+      "size": 0,
+      "count": 300,
+      "ms": 26.74023299999999,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "create-wide",
+      "size": 1000,
+      "count": 300,
+      "ms": 24.884067999999957,
+      "sql": 3000,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "rename-wide",
+      "size": 1000,
+      "count": 500,
+      "ms": 131.09942999999998,
+      "sql": 5000,
+      "returnedRows": 1500,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "truncate-zero",
+      "size": 1048576,
+      "count": 40,
+      "ms": 11.329130999999961,
+      "sql": 280,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "truncate-boundary",
+      "size": 1048576,
+      "count": 40,
+      "ms": 12.798935000000029,
+      "sql": 360,
+      "returnedRows": 120,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "truncate-zero",
+      "size": 8388608,
+      "count": 12,
+      "ms": 24.166247000000112,
+      "sql": 84,
+      "returnedRows": 24,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "write-full",
+      "size": 8192,
+      "count": 500,
+      "ms": 23.508734000000004,
+      "sql": 3000,
+      "returnedRows": 1000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "write-full",
+      "size": 1048576,
+      "count": 40,
+      "ms": 38.872375999999804,
+      "sql": 1480,
+      "returnedRows": 80,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "write-unaligned",
+      "size": 1048576,
+      "count": 40,
+      "ms": 39.14065800000026,
+      "sql": 1562,
+      "returnedRows": 121,
+      "blobBytes": 1310720,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "write-byte",
+      "size": 1048576,
+      "count": 1000,
+      "ms": 97.36107700000002,
+      "sql": 7000,
+      "returnedRows": 3000,
+      "blobBytes": 32768000,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "alias-chmod",
+      "size": 0,
+      "count": 1000,
+      "ms": 29.72711100000015,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "alias-chmod",
+      "size": 1,
+      "count": 1000,
+      "ms": 30.570324000000255,
+      "sql": 5000,
+      "returnedRows": 2000,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    },
+    {
+      "name": "alias-write",
+      "size": 1,
+      "count": 300,
+      "ms": 17.713749000000007,
+      "sql": 1500,
+      "returnedRows": 900,
+      "blobBytes": 0,
+      "variant": "after",
+      "trial": 8
+    }
+  ]
+}

@@ -7,7 +7,11 @@ function observed(options: Parameters<typeof createTestFileSystem>[0] = {}) {
   const fileSystem = createTestFileSystem({
     ...options,
     onEvent: (event) => {
-      if (event.type === "vfs.mutation") mutations.push(event);
+      if (
+        event.type === "vfs.mutation" &&
+        !(event.op === "metadata" && fileSystem.stat(event.path).kind === "directory")
+      )
+        mutations.push(event);
     },
   });
   return { fileSystem, mutations };
@@ -121,6 +125,7 @@ it("catches a caller up on what changed while it was away", async () => {
     { path: "/a", present: true },
     { path: "/c", present: true },
     { path: "/b", present: false },
+    { path: "/", present: true },
   ]);
   // Resuming from the reported cursor reports nothing further, and the
   // cursor stands still rather than rewinding.
@@ -133,11 +138,9 @@ it("reports from zero only what changed after recording began", async () => {
   const fileSystem = createTestFileSystem({ recordChanges: true });
   await fileSystem.writeFile("/a/b", "x", { createParents: true });
   const paths = fileSystem.changesSince(0).changes.map((change) => change.path);
-  expect(paths).toEqual(["/a", "/a/b"]);
-  // The root predates the cursor and is not reported, which is why a
-  // caller takes a cursor first and then reads the namespace: anything
-  // that changes during that read is replayed from the cursor.
-  expect(paths).not.toContain("/");
+  expect(paths).toEqual(["/a/b", "/", "/a"]);
+  // Creating a child now changes its parent metadata, including the root.
+  expect(paths).toContain("/");
 });
 
 it("collapses repeated changes to one entry per path", async () => {
@@ -177,6 +180,7 @@ it("gives every path a set-based change the same sequence", async () => {
     "/moved/inner/f1",
     "/moved/inner/f2",
     "/moved/inner/f3",
+    "/",
   ]);
 });
 
@@ -203,6 +207,7 @@ it("does not lose paths when a page limit cuts through a set-based change", asyn
     { path: "/moved", present: true },
     { path: "/moved/a", present: true },
     { path: "/moved/b", present: true },
+    { path: "/", present: true },
   ]);
 });
 
@@ -219,8 +224,8 @@ it("pages a large catch-up rather than materializing it", async () => {
     cursor = page.cursor;
     if (!page.more) break;
   }
-  expect(collected).toHaveLength(30);
-  expect(new Set(collected).size).toBe(30);
+  expect(collected).toHaveLength(31);
+  expect(new Set(collected).size).toBe(31);
 });
 
 it("refuses the feed when it was not enabled, and to a bound view", async () => {

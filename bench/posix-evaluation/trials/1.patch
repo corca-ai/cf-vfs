@@ -1,0 +1,58 @@
+--- a/src/vfs/sql-query-base.ts
++++ b/src/vfs/sql-query-base.ts
+@@ -125,8 +125,10 @@
+   }
+ 
+   protected statEntry(path: string, follow: boolean, posix?: PosixAccessContext): VfsStat {
+-    const access = this.accessEntry(path, follow);
+-    this.assertTraverse(access.path, access.followed, posix);
++    const access = posix !== undefined && !pathRequiresDirectory(path) && this.links() === 0
++      ? this.plainPosixEntry(path, posix)
++      : { ...this.accessEntry(path, follow), traversed: false };
++    if (!access.traversed) this.assertTraverse(access.path, access.followed, posix);
+     if (access.row === null) {
+       throw new VfsError("ENOENT", "no such file or directory", access.path);
+     }
+@@ -142,8 +144,42 @@
+       ...(object.contentType === null ? {} : { contentType: object.contentType }),
+       ...(object.verifiedSha256 === null ? {} : { verifiedSha256: object.verifiedSha256 }),
+     };
++  }
++
++  private plainPosixEntry(path: string, posix: PosixAccessContext) {
++    const normalized = normalizePath(path);
++    const ancestors: string[] = [];
++    if (normalized !== "/") {
++      for (let parent = dirname(normalized); ; parent = dirname(parent)) {
++        ancestors.push(parent);
++        if (parent === "/") break;
++      }
++    }
++    const row = this.sql.exec<SqlRow>(
++      `SELECT ${ENTRY_COLUMNS},
++          (SELECT json_group_array(json_array(path,kind,mode,uid,gid))
++             FROM vfs_entries INDEXED BY vfs_entries_path
++             WHERE path IN (SELECT value FROM json_each(?))) AS parents
++       FROM (SELECT 1) seed
++       LEFT JOIN vfs_entries e INDEXED BY vfs_entries_path ON e.path = ?`,
++      JSON.stringify(ancestors), normalized,
++    ).one();
++    const parents: unknown = JSON.parse(stringColumn(row, "parents"));
++    if (!Array.isArray(parents) || parents.length !== ancestors.length)
++      throw new VfsError("ENOENT", "an ancestor directory does not exist", normalized);
++    for (const parent of parents) this.checkPlainParent(parent, normalized, posix);
++    return { path: normalized, row: row["id"] === null ? null : parseEntry(row, this.mutationEpoch), followed: [], traversed: true };
+   }
+ 
++  private checkPlainParent(value: unknown, path: string, posix: PosixAccessContext): void {
++    if (!Array.isArray(value) || typeof value[0] !== "string" || typeof value[1] !== "string" ||
++        !Number.isSafeInteger(value[2]) || !Number.isSafeInteger(value[3]) || !Number.isSafeInteger(value[4]))
++      throw new VfsError("EIO", "invalid ancestor metadata", path);
++    const [parent, kind, mode, uid, gid] = value;
++    if (kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", parent);
++    this.assertPermission({ path: parent, kind: "directory", mode, uid, gid }, posix, EXECUTE_PERMISSION, path);
++  }
++
+   getMutationToken(
+     path: string,
+     options: MutationTokenOptions = {},

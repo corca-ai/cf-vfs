@@ -1,0 +1,46 @@
+--- a/src/vfs/sql-read-base.ts
++++ b/src/vfs/sql-read-base.ts
+@@ -139,7 +139,9 @@
+     const access = this.resolveAccess(path);
+     const normalized = access.path;
+     this.assertTraverse(normalized, access.followed, posix);
+-    const entry = access.row ?? this.requireEntry(normalized);
++    const small = access.row === null && posix === undefined && options.range === undefined
++      ? this.readSmallEntry(normalized) : undefined;
++    const entry = small?.entry ?? access.row ?? this.requireEntry(normalized);
+     if (entry.kind === "directory") {
+       throw new VfsError("EISDIR", "is a directory", normalized);
+     }
+@@ -156,7 +158,9 @@
+       options.range === undefined ||
+       (selected.offset === 0 && selected.length === entry.sizeBytes) ||
+       (entry.sizeBytes <= MIN_INLINE_SQL_RANGE_BYTES && entry.sizeBytes <= this.chunkBytes);
+-    const rows = this.readInlineRows(entry, selected, readWholeBody, normalized);
++    const rows = small?.body !== undefined
++      ? [{ body: small.body }]
++      : this.readInlineRows(entry, selected, readWholeBody, normalized);
+     const materialized = rows.map((row) => new Uint8Array(blobColumn(row, "body")));
+     const chunks =
+       readWholeBody && options.range !== undefined && selected.length < entry.sizeBytes
+@@ -173,6 +177,21 @@
+     };
+   }
+ 
++  private readSmallEntry(path: string): { entry: EntryRow; body?: ArrayBuffer } | undefined {
++    const row = firstRow(this.sql.exec<SqlRow>(
++      `SELECT ${ENTRY_COLUMNS},
++         CASE WHEN e.content_class = 'inline' AND e.size_bytes BETWEEN 1 AND 16384
++           THEN (SELECT body FROM vfs_inline_chunks WHERE entry_id = e.id AND chunk_index = 0)
++           ELSE NULL END AS body
++       FROM vfs_entries e INDEXED BY vfs_entries_path WHERE e.path = ?`, path,
++    ));
++    if (row === undefined) return undefined;
++    const entry = parseEntry(row, this.mutationEpoch);
++    const body = row["body"];
++    return body instanceof ArrayBuffer && body.byteLength === entry.sizeBytes
++      ? { entry, body } : { entry };
++  }
++
+   private readInlineRows(
+     entry: InlineEntryRow,
+     selected: { offset: number; length: number },

@@ -13,7 +13,9 @@ export abstract class SqlOpaqueStart extends SqlCopy {
     if (this.opaqueStore === undefined) {
       throw new VfsError("ENOTSUP", "opaque storage is not configured");
     }
-    const normalized = this.normalizeAccessPath(path);
+    const access = this.resolveAccess(path);
+    const normalized = access.path;
+    const traversal = access.followed.length !== 0;
     const existing = this.oneEntry(normalized);
     if (existing?.kind === "directory") throw new VfsError("EISDIR", "is a directory", normalized);
     if (
@@ -27,7 +29,8 @@ export abstract class SqlOpaqueStart extends SqlCopy {
     const reservation = this.transaction(() => {
       this.assertCapacity(0, 0, normalized);
       const token = this.tokenFor(normalized);
-      if (options.ifMutationToken !== undefined && options.ifMutationToken !== token) {
+      const writtenToken = traversal ? this.guardToken(path) : token;
+      if (options.ifMutationToken !== undefined && options.ifMutationToken !== writtenToken) {
         throw new VfsError("EREVISION", "path mutation token does not match", normalized);
       }
       const uploadId = this.createId();
@@ -38,8 +41,8 @@ export abstract class SqlOpaqueStart extends SqlCopy {
            id, path, expected_mutation_token, r2_key, state,
            verification_token, expected_size_bytes, expires_at_ms,
            verification_lease_until_ms, create_parents, mode,
-           content_type, receipt_json
-         ) VALUES (?, ?, ?, ?, 'open', NULL, ?, ?, NULL, ?, ?, ?, NULL)`,
+           content_type, receipt_json, written_path, traversal_token
+         ) VALUES (?, ?, ?, ?, 'open', NULL, ?, ?, NULL, ?, ?, ?, NULL, ?, ?)`,
         uploadId,
         normalized,
         token,
@@ -49,6 +52,7 @@ export abstract class SqlOpaqueStart extends SqlCopy {
         options.createParents === true ? 1 : 0,
         options.mode ?? null,
         options.contentType ?? null,
+        ...this.traversalColumns(traversal, path, writtenToken),
       );
       return {
         uploadId,
@@ -70,6 +74,13 @@ export abstract class SqlOpaqueStart extends SqlCopy {
     return reservation;
   }
 
+  private traversalColumns(
+    traversal: boolean,
+    path: string,
+    token: string,
+  ): [string | null, string | null] {
+    return traversal ? [path, token] : [null, null];
+  }
   protected parseReceipt(value: string, path: string): OpaqueFileStat {
     let parsed: unknown;
     try {

@@ -228,14 +228,15 @@ export abstract class SqlWrite extends SqlWritePlan {
   ): WriteResult {
     const sizeBytes = current.sizeBytes + suffixBytes;
     this.assertAppendSize(current, path, sizeBytes);
-    this.assertCapacity(suffixBytes, 0, path);
+    this.assertCapacity(suffixBytes * (current.linkCount ?? 1), 0, path);
     const plan = this.appendChunkPlan(current, path, suffixChunks);
     const now = this.now();
     const mutationVersion = current.mutationVersion + 1;
     const written = this.sql.exec<SqlRow>(
-      `UPDATE vfs_entries SET size_bytes = ?, modified_at_ms = ?, revision = revision + 1,
+      `UPDATE vfs_entries SET size_bytes = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,
          mutation_version = ? WHERE id = ? ${conditional ? "AND mutation_version = ? RETURNING id" : ""}`,
       sizeBytes,
+      now,
       now,
       mutationVersion,
       current.id,
@@ -244,8 +245,8 @@ export abstract class SqlWrite extends SqlWritePlan {
     if (conditional && firstRow(written) === undefined)
       throw new VfsError("EREVISION", "path changed before append", path);
     this.writeChunks(current.id, plan.firstChunkIndex, plan.chunks);
-    const token = this.publishToken(path, mutationVersion, true, "write");
-    this.updateUsage(suffixBytes, 0);
+    const token = this.publishToken(path, mutationVersion, true, "write", current);
+    this.updateUsage(suffixBytes * (current.linkCount ?? 1), 0);
     return {
       path,
       revision: current.revision + 1,

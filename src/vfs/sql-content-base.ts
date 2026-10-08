@@ -90,8 +90,8 @@ export abstract class SqlContent extends SqlMutation {
         `INSERT INTO vfs_entries (
          id, path, parent_path, name, kind, content_class, opaque_object_id,
          size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,
-         mutation_version
-       ) VALUES (?, ?, ?, ?, 'directory', NULL, NULL, 0, ?, ?, ?, ?, ?, 1, ?)
+         mutation_version, link_count
+       ) VALUES (?, ?, ?, ?, 'directory', NULL, NULL, 0, ?, ?, ?, ?, ?, 1, ?, 2)
        RETURNING id`,
         this.allocateIno(),
         path,
@@ -105,6 +105,7 @@ export abstract class SqlContent extends SqlMutation {
         mutationVersion,
       )
       .one();
+    this.directoryParentsChanged = true;
     const token = this.publishToken(path, mutationVersion, true, "create");
     const id = integerColumn(inserted, "id");
     this.updateUsage(0, 1);
@@ -114,6 +115,7 @@ export abstract class SqlContent extends SqlMutation {
       parentPath: dirname(path),
       name: basename(path),
       kind: "directory",
+      linkCount: 2,
       contentClass: null,
       opaqueObjectId: null,
       linkTarget: null,
@@ -123,6 +125,7 @@ export abstract class SqlContent extends SqlMutation {
       gid: owner.gid,
       createdAtMs: now,
       modifiedAtMs: now,
+      changedAtMs: now,
       revision: 1,
       mutationVersion,
       mutationToken: token,

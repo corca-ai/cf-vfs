@@ -1,0 +1,103 @@
+--- a/src/vfs/sql-metadata-base.ts
++++ b/src/vfs/sql-metadata-base.ts
+@@ -54,7 +54,7 @@
+         mutationVersion,
+         entry.id,
+       );
+-      const token = this.publishToken(normalized, mutationVersion, true, "metadata");
++      const token = this.publishToken(normalized, mutationVersion, true, "metadata", entry.linkIdentity ?? null);
+       return rowToStat({
+         ...entry,
+         mode: options.mode ?? entry.mode,
+@@ -121,7 +121,7 @@
+       mutationVersion,
+       entry.id,
+     );
+-    const token = this.publishToken(path, mutationVersion, true, "metadata");
++    const token = this.publishToken(path, mutationVersion, true, "metadata", entry.linkIdentity ?? null);
+     return rowToStat({
+       ...entry,
+       uid: uid ?? entry.uid,
+--- a/src/vfs/sql-path-base.ts
++++ b/src/vfs/sql-path-base.ts
+@@ -437,16 +437,17 @@
+     version: number,
+     present: boolean,
+     op: VfsMutationOp,
++    linkIdentity?: number | null,
+   ): string {
+     this.recordPathChange(path, present);
+     const token = formatMutationToken(this.mutationEpoch, version);
+     this.recordMutation({ op, path, mutationToken: token });
+-    if (this.sharedInodes && present && (op === "write" || op === "metadata")) {
++    if (this.sharedInodes && linkIdentity !== null && present && (op === "write" || op === "metadata")) {
+       for (const row of this.sql
+         .exec<SqlRow>(
+-          `SELECT path, mutation_version FROM vfs_entries WHERE path <> ? AND link_identity = (SELECT link_identity FROM vfs_entries WHERE path = ?)`,
++          `SELECT path, mutation_version FROM vfs_entries WHERE path <> ? AND link_identity = ${linkIdentity === undefined ? "(SELECT link_identity FROM vfs_entries WHERE path = ?)" : "?"}`,
+           path,
+-          path,
++          linkIdentity ?? path,
+         )
+         .toArray()) {
+         const alias = stringColumn(row, "path");
+--- a/src/vfs/sql.ts
++++ b/src/vfs/sql.ts
+@@ -96,7 +96,7 @@
+       capacity: (delta, path) => this.assertCapacity(delta, 0, path),
+       usage: (delta) => this.updateUsage(delta, 0),
+       publish: (entry) => {
+-        this.publishToken(entry.path, entry.mutationVersion, true, "write");
++        this.publishToken(entry.path, entry.mutationVersion, true, "write", entry.linkIdentity ?? null);
+       },
+       reclaimObject: (id) => {
+         this.queueObjectIfUnreferenced(id, this.now());
+--- a/src/vfs/sql-base.ts
++++ b/src/vfs/sql-base.ts
+@@ -92,6 +92,7 @@
+     version: number,
+     present: boolean,
+     op: VfsMutationOp,
++    linkIdentity?: number | null,
+   ): string;
+ 
+   protected flushParentTimes(): void {
+@@ -124,6 +125,7 @@
+         integerColumn(row, "mutation_version"),
+         true,
+         "metadata",
++        null,
+       );
+   }
+   /**
+--- a/src/vfs/sql-write-plan-base.ts
++++ b/src/vfs/sql-write-plan-base.ts
+@@ -457,6 +457,7 @@
+       mutation.mutationVersion,
+       true,
+       current === null ? "create" : "write",
++      current?.linkIdentity ?? null,
+     );
+     this.writeChunks(
+       integerColumn(written, "id"),
+--- a/src/vfs/sql-opaque-commit-base.ts
++++ b/src/vfs/sql-opaque-commit-base.ts
+@@ -385,6 +385,7 @@
+       written.mutationVersion,
+       true,
+       existing === null ? "create" : "write",
++      existing?.linkIdentity ?? null,
+     );
+     this.updateUsage(
+       existing?.contentClass === "inline" ? -existing.sizeBytes * (existing.linkCount ?? 1) : 0,
+--- a/src/vfs/sql-write-base.ts
++++ b/src/vfs/sql-write-base.ts
+@@ -245,7 +245,7 @@
+     if (conditional && firstRow(written) === undefined)
+       throw new VfsError("EREVISION", "path changed before append", path);
+     this.writeChunks(current.id, plan.firstChunkIndex, plan.chunks);
+-    const token = this.publishToken(path, mutationVersion, true, "write");
++    const token = this.publishToken(path, mutationVersion, true, "write", current.linkIdentity ?? null);
+     this.updateUsage(suffixBytes * (current.linkCount ?? 1), 0);
+     return {
+       path,

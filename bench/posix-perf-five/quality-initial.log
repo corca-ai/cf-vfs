@@ -1,0 +1,39 @@
+
+> @corca-ai/cf-vfs@0.4.1 test:quality
+> biome lint --config-path biome.quality.jsonc --max-diagnostics=none src test
+
+src/vfs/sql-metadata-base.ts:90:11 lint/complexity/noExcessiveCognitiveComplexity ━━━━━━━━━━━━━━━━━━
+
+  × Excessive complexity of 16 detected (max: 15).
+  
+    88 │   }
+    89 │ 
+  > 90 │   private commitOwnership(
+       │           ^^^^^^^^^^^^^^^
+    91 │     path: string,
+    92 │     followed: readonly string[],
+  
+  i Please refactor this function to reduce its complexity score from 16 to the max allowed complexity 15.
+  
+
+src/vfs/sql-move-base.ts:34:11 lint/complexity/noExcessiveCognitiveComplexity ━━━━━━━━━━━━━━━━━━━━━━
+
+  × Excessive complexity of 16 detected (max: 15).
+  
+    32 │   }
+    33 │ 
+  > 34 │   private commitRemove(
+       │           ^^^^^^^^^^^^
+    35 │     path: string,
+    36 │     resolved: EntryRow | null,
+  
+  i Please refactor this function to reduce its complexity score from 16 to the max allowed complexity 15.
+  
+
+Checked 286 files in 17ms. No fixes applied.
+Found 2 errors.
+lint ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Some errors were emitted while running checks.
+  
+

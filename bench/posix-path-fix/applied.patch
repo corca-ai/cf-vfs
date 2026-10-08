@@ -1,0 +1,351 @@
+--- a/src/core/path.ts
++++ b/src/core/path.ts
+@@ -3,6 +3,7 @@
+ 
+ const MAX_PATH_BYTES = 4096;
+ const MAX_NAME_BYTES = 255;
++const DOT_COMPONENT = /(?:^|\/)\.{1,2}(?:\/|$)/u;
+ 
+ export function compareUtf8(left: string, right: string): number {
+   const leftBytes = encodeUtf8(left);
+@@ -54,6 +55,19 @@
+   return normalized;
+ }
+ 
++/** Dot components must survive until filesystem links have been resolved. */
++export function hasDotSegments(path: string): boolean {
++  return (path.includes("/.") || path.startsWith(".")) && DOT_COMPONENT.test(path);
++}
++
++export function normalizeResolutionPath(path: string, cwd = "/"): string {
++  const normalized = normalizePath(path, cwd);
++  const absolute = path.startsWith("/") ? path : `${cwd}/${path}`;
++  if (!hasDotSegments(absolute)) return normalized;
++  validatePath(absolute);
++  return absolute;
++}
++
+ export function pathRequiresDirectory(path: string): boolean {
+   return path.length > 1 && path.endsWith("/");
+ }
+--- a/src/fs/content.ts
++++ b/src/fs/content.ts
+@@ -1,5 +1,5 @@
+ import { isVfsError, VfsError } from "../core/errors.js";
+-import { normalizePath } from "../core/path.js";
++import { hasDotSegments, normalizePath } from "../core/path.js";
+ import { utf8ByteLength } from "../core/unicode.js";
+ import { validatePositiveInteger } from "../vfs/config.js";
+ import { putOpaque } from "../vfs/opaque.js";
+@@ -163,9 +163,9 @@
+       options.storage === "opaque" ||
+       (options.storage !== "inline" && size !== undefined && size > this.inlineBytes);
+     if (!opaque) return this.vfs.writeFile(path, body, options);
+-    // The existing upload protocol reserves a canonical path, not a symlink
+-    // chain. Decline that case rather than promise a guard it cannot enforce.
+-    if (this.vfs.realpath(path) !== normalizePath(path))
++    // The existing upload protocol reserves a canonical path, not a traversal
++    // chain (links or dot components). Decline that case rather than promise a guard it cannot enforce.
++    if (hasDotSegments(path) || this.vfs.realpath(path) !== normalizePath(path))
+       throw new VfsError("ENOTSUP", "opaque writes require a canonical path", path);
+     const token = options.ifMutationToken ?? this.vfs.getMutationToken(path);
+     this.assertDisposition(path, options.disposition);
+--- a/src/fs/metadata.ts
++++ b/src/fs/metadata.ts
+@@ -1,5 +1,5 @@
+ import { VfsError } from "../core/errors.js";
+-import { normalizePath, pathRequiresDirectory } from "../core/path.js";
++import { hasDotSegments, normalizePath, pathRequiresDirectory } from "../core/path.js";
+ import type { VfsEvent } from "../vfs/events.js";
+ import type { VfsStat, VirtualFileSystem } from "../vfs/types.js";
+ 
+@@ -48,7 +48,10 @@
+   stat(fileSystem: VirtualFileSystem, path: string, follow: boolean): VfsStat {
+     this.bind(fileSystem);
+     const normalized = normalizePath(path);
+-    const cached = pathRequiresDirectory(path) ? undefined : this.entries.get(normalized);
++    const cached =
++      pathRequiresDirectory(path) || hasDotSegments(path)
++        ? undefined
++        : this.entries.get(normalized);
+     if (cached !== undefined && (!follow || cached.kind !== "symlink")) {
+       this.entries.delete(normalized);
+       this.entries.set(normalized, cached);
+--- a/src/fs/promises.ts
++++ b/src/fs/promises.ts
+@@ -1,5 +1,9 @@
+ import { VfsError } from "../core/errors.js";
+-import { normalizePathPreservingTrailingSlash } from "../core/path.js";
++import {
++  hasDotSegments,
++  normalizePathPreservingTrailingSlash,
++  normalizeResolutionPath,
++} from "../core/path.js";
+ import { InFlightByteBudget } from "../vfs/buffering.js";
+ import { validatePositiveInteger } from "../vfs/config.js";
+ import {
+@@ -49,7 +53,10 @@
+   }
+ 
+   private path(path: string): string {
+-    return normalizePathPreservingTrailingSlash(path, this.options.cwd ?? "/");
++    const cwd = this.options.cwd ?? "/";
++    if (hasDotSegments(path) || (!path.startsWith("/") && hasDotSegments(cwd)))
++      return normalizeResolutionPath(path, cwd);
++    return normalizePathPreservingTrailingSlash(path, cwd);
+   }
+ 
+   async readFile(
+--- a/src/vfs/sql-base.ts
++++ b/src/vfs/sql-base.ts
+@@ -1,5 +1,5 @@
+ import { VfsError } from "../core/errors.js";
+-import { descendantRange, dirname } from "../core/path.js";
++import { descendantRange, dirname, normalizePath } from "../core/path.js";
+ import { InFlightByteBudget } from "./buffering.js";
+ import { resolveFileSystemLimits, validatePositiveInteger } from "./config.js";
+ import { emitVfsEvent, type VfsEventSink } from "./events.js";
+@@ -29,6 +29,19 @@
+ const DEFAULT_MAX_DATABASE_BYTES = 10_000_000_000;
+ const DEFAULT_DATABASE_HEADROOM_BYTES = 64 * 1024 * 1024;
+ 
++function traversalAncestors(path: string, followed: readonly string[]): string[] {
++  const ancestors = new Set<string>();
++  for (const candidate of [path, ...followed]) {
++    const first = candidate.endsWith("/") ? normalizePath(candidate) : dirname(candidate);
++    for (let parent = first; ; parent = dirname(parent)) {
++      ancestors.add(parent);
++      if (parent === "/") break;
++    }
++  }
++  if (path === "/" && followed.length === 0) ancestors.delete("/");
++  return [...ancestors];
++}
++
+ export abstract class SqlBase {
+   protected readonly storage: SqlFileSystemStorage;
+   protected readonly sql: VfsSqlStorage;
+@@ -235,16 +248,8 @@
+     access: PosixAccessContext | undefined,
+   ): void {
+     if (access === undefined) return;
+-    const ancestors = new Set<string>();
+-    for (const candidate of [path, ...followed]) {
+-      for (let parent = dirname(candidate); ; parent = dirname(parent)) {
+-        ancestors.add(parent);
+-        if (parent === "/") break;
+-      }
+-    }
+-    if (path === "/") ancestors.delete("/");
+-    if (ancestors.size === 0) return;
+-    const ordered = [...ancestors];
++    const ordered = traversalAncestors(path, followed);
++    if (ordered.length === 0) return;
+     const rows = this.sql
+       .exec<SqlRow>(
+         `SELECT path, kind, mode, uid, gid
+--- a/src/vfs/sql-path-base.ts
++++ b/src/vfs/sql-path-base.ts
+@@ -1,5 +1,11 @@
+ import { VfsError } from "../core/errors.js";
+-import { dirname, normalizePath, pathRequiresDirectory } from "../core/path.js";
++import {
++  dirname,
++  hasDotSegments,
++  normalizePath,
++  normalizeResolutionPath,
++  pathRequiresDirectory,
++} from "../core/path.js";
+ import { NEVER_MUTATED_TOKEN } from "./config.js";
+ import type { VfsMutationOp } from "./events.js";
+ import { SqlBase } from "./sql-base.js";
+@@ -21,6 +27,15 @@
+ import { ENTRY_COLUMNS } from "./sql-schema.js";
+ import { MAX_SYMLINK_HOPS } from "./types.js";
+ 
++function followsTerminalLink(row: EntryRow, follow: boolean): row is SymlinkEntryRow {
++  return follow && row.kind === "symlink";
++}
++
++interface PathResolution {
++  readonly followed: string[];
++  hops: number;
++}
++
+ export abstract class SqlPath extends SqlBase {
+   protected rows(query: string, ...bindings: SqlStorageValue[]): EntryRow[] {
+     return this.sql
+@@ -89,9 +104,10 @@
+    * the same thing wherever it is read from.
+    */
+   protected linkDestination(row: SymlinkEntryRow): string {
+-    return row.linkTarget.startsWith("/")
+-      ? normalizePath(row.linkTarget)
+-      : normalizePath(row.linkTarget, row.parentPath);
++    return normalizeResolutionPath(
++      pathRequiresDirectory(row.linkTarget) ? `${row.linkTarget}.` : row.linkTarget,
++      row.parentPath,
++    );
+   }
+ 
+   /**
+@@ -143,28 +159,57 @@
+   protected resolveEntry(
+     input: string,
+     follow: boolean,
++    context?: PathResolution,
+   ): { path: string; row: EntryRow | null; followed: string[] } {
+     let path = input;
+     // The links crossed on the way, so a guard can cover the whole chain
+     // rather than only where it currently ends.
+-    const followed: string[] = [];
+-    for (let hops = 0; hops <= MAX_SYMLINK_HOPS; hops += 1) {
++    const followed = context?.followed ?? [];
++    for (let hops = context?.hops ?? 0; hops <= MAX_SYMLINK_HOPS; hops += 1) {
++      if (context !== undefined) context.hops = hops;
++      if (hasDotSegments(path))
++        return this.resolveDottedEntry(path, follow, context ?? { followed, hops });
+       const row = this.oneEntry(path);
+       if (row === null) {
+-        if (this.links() === 0) return { path, row: null, followed };
+-        const ancestor = this.linkAncestor(path);
++        const ancestor = this.missingAncestorLink(path);
+         if (ancestor === null) return { path, row: null, followed };
+         followed.push(ancestor.path);
+-        path = normalizePath(
++        path = normalizeResolutionPath(
+           `${this.linkDestination(ancestor)}/${path.slice(ancestor.path.length)}`,
+         );
+         continue;
+       }
+-      if (row.kind !== "symlink" || !follow) return { path, row, followed };
++      if (!followsTerminalLink(row, follow)) return { path, row, followed };
+       followed.push(row.path);
+       path = this.linkDestination(row);
+     }
+     throw new VfsError("ELOOP", "too many levels of symbolic links", input);
++  }
++
++  private missingAncestorLink(path: string): SymlinkEntryRow | null {
++    return this.links() === 0 ? null : this.linkAncestor(path);
++  }
++
++  private resolveDottedEntry(input: string, follow: boolean, context: PathResolution) {
++    let path = "/";
++    for (const segment of input.split("/").filter(Boolean)) {
++      if (segment !== "." && segment !== "..") {
++        path = `${path}/${segment}`;
++        continue;
++      }
++      if (path === "/") {
++        context.followed.push("/");
++        continue;
++      }
++      const prefix = this.resolveEntry(normalizePath(path), true, context);
++      if (prefix.row === null) throw new VfsError("ENOENT", "no such directory", prefix.path);
++      if (prefix.row.kind !== "directory")
++        throw new VfsError("ENOTDIR", "not a directory", prefix.path);
++      // A trailing slash marks a directory whose own search permission matters.
++      context.followed.push(`${prefix.path}/`);
++      path = segment === ".." ? dirname(prefix.path) : prefix.path;
++    }
++    return this.resolveEntry(normalizePath(path), follow, context);
+   }
+ 
+   /**
+@@ -190,15 +235,20 @@
+    * exists to catch.
+    */
+   protected guardToken(path: string, entry?: EntryRow | null): string {
+-    const normalized = normalizePath(path);
++    const normalized = normalizeResolutionPath(path);
+     // With no links the guard is the named path's own token, which is what a
+     // row resolved for that same path holds. With links it also covers every
+     // one crossed, and those have no row here.
+-    if (this.links() === 0) return this.tokenOf(normalized, entry);
++    if (this.links() === 0 && !hasDotSegments(normalized)) return this.tokenOf(normalized, entry);
+     const resolved = this.resolveEntry(normalized, true);
+     const base = this.tokenFor(resolved.path);
+     if (resolved.followed.length === 0) return base;
+-    return [base, ...resolved.followed.map((link) => this.tokenFor(link))].join("|");
++    return [
++      base,
++      ...resolved.followed.map((link) =>
++        this.tokenFor(link.endsWith("/") ? normalizePath(link) : link),
++      ),
++    ].join("|");
+   }
+ 
+   /**
+@@ -209,8 +259,8 @@
+    * whether the file happened to be there already.
+    */
+   realpath(path: string, options: { follow?: boolean } = {}, access?: PosixAccessContext): string {
+-    const normalized = normalizePath(path);
+-    if (this.links() === 0) {
++    const normalized = normalizeResolutionPath(path);
++    if (this.links() === 0 && !hasDotSegments(normalized)) {
+       this.assertTraverse(normalized, [], access);
+       return normalized;
+     }
+@@ -230,7 +280,10 @@
+   }
+ 
+   protected requireEntry(path: string, follow = true): EntryRow {
+-    const row = this.oneResolved(path, follow);
++    const row =
++      this.symlinkCount === 0 && !this.symlinkCountStale && !hasDotSegments(path)
++        ? this.oneEntry(path)
++        : this.oneResolved(path, follow);
+     if (row === null) throw new VfsError("ENOENT", "no such file or directory", path);
+     return row;
+   }
+@@ -283,11 +336,12 @@
+     // followed even when the caller asked not to follow one: `rm dirlink/` is
+     // a question about the directory, not about the link.
+     const requiresDirectory = pathRequiresDirectory(path);
+-    const normalized = normalizePath(path);
++    const dotted = hasDotSegments(path);
++    const normalized = dotted ? normalizeResolutionPath(path) : normalizePath(path);
+     // With no links there is nothing to resolve and no row to fetch, so this
+     // costs exactly what it did before links existed: nothing.
+     const resolved =
+-      this.links() === 0
++      this.links() === 0 && !dotted
+         ? { path: normalized, row: null, followed: [] }
+         : this.resolveEntry(normalized, followTerminal || requiresDirectory);
+     if (requiresDirectory && resolved.row === null && resolved.path !== "/") {
+--- a/src/vfs/sql-query-base.ts
++++ b/src/vfs/sql-query-base.ts
+@@ -4,7 +4,9 @@
+   depthFrom,
+   descendantRange,
+   dirname,
++  hasDotSegments,
+   normalizePath,
++  normalizeResolutionPath,
+   pathRequiresDirectory,
+ } from "../core/path.js";
+ import { utf8ByteLength } from "../core/unicode.js";
+@@ -117,7 +119,8 @@
+     follow: boolean,
+   ): { path: string; row: EntryRow | null; followed: string[] } {
+     const requiresDirectory = pathRequiresDirectory(path);
+-    const resolved = this.resolveEntry(normalizePath(path), follow || requiresDirectory);
++    const normalized = hasDotSegments(path) ? normalizeResolutionPath(path) : normalizePath(path);
++    const resolved = this.resolveEntry(normalized, follow || requiresDirectory);
+     if (requiresDirectory && resolved.row !== null && resolved.row.kind !== "directory") {
+       throw new VfsError("ENOTDIR", "not a directory", resolved.path);
+     }
+@@ -126,7 +129,10 @@
+ 
+   protected statEntry(path: string, follow: boolean, posix?: PosixAccessContext): VfsStat {
+     const checked =
+-      posix !== undefined && !pathRequiresDirectory(path) && this.links() === 0
++      posix !== undefined &&
++      !pathRequiresDirectory(path) &&
++      !hasDotSegments(path) &&
++      this.links() === 0
+         ? this.plainPosixEntry(path, posix)
+         : null;
+     const access = checked ?? this.accessEntry(path, follow);

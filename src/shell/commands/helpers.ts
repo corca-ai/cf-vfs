@@ -1,6 +1,6 @@
 import { VfsError } from "../../core/errors.js";
 import { splitLinesPreservingEndings } from "../../core/lines.js";
-import { basename, normalizePath } from "../../core/path.js";
+import { basename, normalizeFileSystemPath } from "../../core/path.js";
 import { encodeUtf8, utf8ByteLength } from "../../core/unicode.js";
 import type { ByteRange, EntryPage, InlineReadResult } from "../../vfs/types.js";
 import { openContent } from "../content.js";
@@ -12,7 +12,7 @@ export interface BufferLease<T> {
 }
 
 export function commandPath(context: ShellCommandContext, path = "."): string {
-  return normalizePath(path, context.session.cwd);
+  return normalizeFileSystemPath(path, context.session.cwd);
 }
 
 export async function writeBytes(sink: ShellSink, bytes: Uint8Array): Promise<void> {
