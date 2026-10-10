@@ -1,0 +1,56 @@
+diff --git a/src/vfs/sql-query-base.ts b/src/vfs/sql-query-base.ts
+index bba62b1..15ddf01 100644
+--- a/src/vfs/sql-query-base.ts
++++ b/src/vfs/sql-query-base.ts
+@@ -164,6 +164,7 @@ export abstract class SqlQuery extends SqlContent {
+         if (parent === "/") break;
+       }
+     }
++    if (ancestors.length > 4) return this.deepPlainPosixEntry(normalized, ancestors, posix);
+     // Return one envelope while SQLite still checks the same indexed ancestors.
+     // Combining statements saves boundary work, not billed rows.
+     const row = this.sql
+@@ -189,6 +190,43 @@ export abstract class SqlQuery extends SqlContent {
+     };
+   }
+
++  private deepPlainPosixEntry(
++    path: string,
++    ancestors: readonly string[],
++    posix: PosixAccessContext,
++  ) {
++    const expression = this.permissionExpression("parent", posix);
++    const allowed = posix.credentials.uid === 0 ? "1" : `((${expression.sql}) & 1)`;
++    const row = this.sql
++      .exec<SqlRow>(
++        `WITH parents AS (
++         SELECT COUNT(*) AS parent_count,
++           MIN(CASE WHEN kind <> 'directory' OR ${allowed} = 0 THEN path END) AS invalid,
++           MIN(CASE WHEN kind <> 'directory' THEN path END) AS nondirectory
++         FROM vfs_entries parent INDEXED BY vfs_entries_path
++         WHERE path IN (SELECT value FROM json_each(?))
++       )
++       SELECT ${ENTRY_COLUMNS}, parents.parent_count, parents.invalid, parents.nondirectory
++       FROM parents LEFT JOIN vfs_entries e INDEXED BY vfs_entries_path ON e.path = ?`,
++        ...(posix.credentials.uid === 0 ? [] : expression.bindings),
++        JSON.stringify(ancestors),
++        path,
++      )
++      .one();
++    if (integerColumn(row, "parent_count") !== ancestors.length)
++      throw new VfsError("ENOENT", "an ancestor directory does not exist", path);
++    if (row.invalid !== null) {
++      const invalid = stringColumn(row, "invalid");
++      if (row.nondirectory === invalid) throw new VfsError("ENOTDIR", "not a directory", invalid);
++      throw new VfsError("EACCES", "permission denied", path);
++    }
++    return {
++      path,
++      row: row.id === null ? null : parseEntry(row, this.mutationEpoch),
++      followed: [],
++    };
++  }
++
+   private checkPlainParent(value: unknown, path: string, posix: PosixAccessContext): void {
+     if (
+       !Array.isArray(value) ||

@@ -509,3 +509,9 @@ compare bounded one-serialization engine staging, loose-object `writeFiles`
 and multi-path metadata queries. Only object batching is retained, with advisory
 backend buffer headroom and small-set fallback. The new capacity property is
 optional; it does not alter POSIX operations, atomic write semantics or quotas.
+
+The [POSIX API follow-up](../bench/posix-api-2026-10-10/report.md) compares deep
+permission checks, small append, parent link-count maintenance and empty
+directory removal against `6ced964`, with local and actual CF measurements.
+Public API and persisted schemas stay unchanged; ordinary stat, overwrite,
+and rename remain controls; deep traversal candidates were rejected.

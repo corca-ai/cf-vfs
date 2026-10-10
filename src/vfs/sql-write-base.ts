@@ -265,7 +265,14 @@ export abstract class SqlWrite extends SqlWritePlan {
     );
     if (conditional && firstRow(written) === undefined)
       throw new VfsError("EREVISION", "path changed before append", path);
-    this.writeChunks(current.id, plan.firstChunkIndex, plan.chunks);
+    if (plan.tailSuffix !== undefined)
+      this.sql.exec(
+        "UPDATE vfs_inline_chunks SET body = CAST(body || ? AS BLOB) WHERE entry_id = ? AND chunk_index = ?",
+        plan.tailSuffix,
+        current.id,
+        plan.firstChunkIndex,
+      );
+    else this.writeChunks(current.id, plan.firstChunkIndex, plan.chunks);
     const token = this.publishToken(path, mutationVersion, true, "write", current);
     this.updateUsage(suffixBytes * (current.linkCount ?? 1), 0);
     return {
@@ -298,10 +305,16 @@ export abstract class SqlWrite extends SqlWritePlan {
     current: InlineEntryRow,
     path: string,
     suffixChunks: readonly Uint8Array[],
-  ): { firstChunkIndex: number; chunks: readonly Uint8Array[] } {
+  ): { firstChunkIndex: number; chunks: readonly Uint8Array[]; tailSuffix?: Uint8Array } {
+    const suffix = suffixChunks[0];
+    const compact =
+      current.sizeBytes > 0 &&
+      suffixChunks.length === 1 &&
+      suffix !== undefined &&
+      current.sizeBytes + suffix.byteLength <= this.chunkBytes;
     const lastChunk = firstRow(
       this.sql.exec<SqlRow>(
-        `SELECT chunk_index, body FROM vfs_inline_chunks
+        `SELECT chunk_index, ${compact ? "length(body) AS tail_bytes" : "body"} FROM vfs_inline_chunks
          WHERE entry_id = ? ORDER BY chunk_index DESC LIMIT 1`,
         current.id,
       ),
@@ -312,6 +325,37 @@ export abstract class SqlWrite extends SqlWritePlan {
       }
       return { firstChunkIndex: 0, chunks: suffixChunks };
     }
+    const index = integerColumn(lastChunk, "chunk_index");
+    if (compact && index === 0 && integerColumn(lastChunk, "tail_bytes") === current.sizeBytes)
+      return { firstChunkIndex: 0, chunks: [], tailSuffix: suffix };
+    if (compact) {
+      // A different stored chunk width needs the general normalization path.
+      return this.appendStoredChunks(current, path, suffixChunks);
+    }
+    return this.appendTail(current, path, suffixChunks, lastChunk);
+  }
+
+  private appendStoredChunks(
+    current: InlineEntryRow,
+    path: string,
+    suffixChunks: readonly Uint8Array[],
+  ) {
+    const lastChunk = this.sql
+      .exec<SqlRow>(
+        `SELECT chunk_index, body FROM vfs_inline_chunks
+      WHERE entry_id = ? ORDER BY chunk_index DESC LIMIT 1`,
+        current.id,
+      )
+      .one();
+    return this.appendTail(current, path, suffixChunks, lastChunk);
+  }
+
+  private appendTail(
+    current: InlineEntryRow,
+    path: string,
+    suffixChunks: readonly Uint8Array[],
+    lastChunk: SqlRow,
+  ) {
     const index = integerColumn(lastChunk, "chunk_index");
     const tail = new Uint8Array(blobColumn(lastChunk, "body"));
     let width = this.chunkBytes;

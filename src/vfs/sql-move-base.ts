@@ -48,17 +48,7 @@ export abstract class SqlMove extends SqlMetadata {
       this.assertPermission(parent, posix, WRITE_PERMISSION | EXECUTE_PERMISSION, path);
       this.assertStickyRemoval(parent, root, posix, path);
     }
-    if (root.kind !== "directory") {
-      state.queued = this.removeExact(path, this.now(), false, root);
-      this.sql.exec(
-        "UPDATE vfs_path_tombstones SET version = MAX(version, ?) WHERE path = ?",
-        root.mutationVersion + 1,
-        path,
-      );
-      this.recordPathChange(path, false);
-      this.recordMutation({ op: "remove", path });
-      return { removed: 1, opaqueObjectsQueuedForDeletion: state.queued };
-    }
+    if (root.kind !== "directory") return this.removeSingle(path, root, state);
     const range = descendantRange(path);
     const recursive = options.recursive ?? false;
     if (!recursive) {
@@ -73,6 +63,7 @@ export abstract class SqlMove extends SqlMetadata {
       if (hasDescendants !== undefined) {
         throw new VfsError("ENOTEMPTY", "directory is not empty", path);
       }
+      return this.removeSingle(path, root, state);
     }
     if (recursive) {
       this.assertSubtreePermissions(path, posix, 0, WRITE_PERMISSION | EXECUTE_PERMISSION);
@@ -165,6 +156,13 @@ export abstract class SqlMove extends SqlMetadata {
       removed: summary.entries,
       opaqueObjectsQueuedForDeletion: state.queued,
     };
+  }
+
+  private removeSingle(path: string, root: EntryRow, state: { queued: number }): RemoveResult {
+    state.queued = this.removeExact(path, this.now(), true, root);
+    this.recordPathChange(path, false);
+    this.recordMutation({ op: "remove", path });
+    return { removed: 1, opaqueObjectsQueuedForDeletion: state.queued };
   }
 
   private linkedIdentities(path: string, range: { lower: string; upper: string }): number[] {

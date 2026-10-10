@@ -16,6 +16,9 @@ included.
 
 ## [Unreleased]
 
+- Reduce append body copying and directory
+  bookkeeping without changing POSIX APIs, permissions or transaction semantics.
+
 - Add public benchmark sparklines for the latest ten distinct commits, retaining
   existing identifiable runs and replacing repeated measurements of a commit.
 

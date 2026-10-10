@@ -221,8 +221,8 @@ it("skips subtree summaries without slowing a rejected directory removal", async
       true,
     ),
   }).toEqual({
-    file: 9,
-    emptyDirectory: 12,
+    file: 8,
+    emptyDirectory: 8,
     recursiveDirectory: 12,
     rejectedDirectory: 4,
   });

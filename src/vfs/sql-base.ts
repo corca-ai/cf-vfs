@@ -84,6 +84,8 @@ export abstract class SqlBase {
   protected pendingParents: Set<string> | undefined;
   /** Only directory namespace changes can alter a parent's nlink. */
   protected directoryParentsChanged = false;
+  /** Exact single-directory changes; subtree and wide parent sets still recount. */
+  private directoryParentDeltas: Map<string, number> | undefined;
   protected sharedInodes = false;
   protected retainOpenInodes:
     | ((path: string, recursive: boolean, root: EntryRow) => number)
@@ -91,6 +93,11 @@ export abstract class SqlBase {
 
   protected noteDirectoryChange(entry: EntryRow): void {
     if (entry.kind === "directory") this.directoryParentsChanged = true;
+  }
+
+  protected noteDirectoryDelta(parent: string, delta: number): void {
+    this.directoryParentDeltas ??= new Map();
+    this.directoryParentDeltas.set(parent, (this.directoryParentDeltas.get(parent) ?? 0) + delta);
   }
 
   protected abstract publishToken(
@@ -102,6 +109,8 @@ export abstract class SqlBase {
   ): string;
 
   protected flushParentTimes(): void {
+    const deltas = this.directoryParentDeltas;
+    this.directoryParentDeltas = undefined;
     const parents = this.pendingParents;
     this.pendingParents = undefined;
     if (parents === undefined) return;
@@ -114,16 +123,18 @@ export abstract class SqlBase {
       ? `path IN (${paths.map(() => "?").join(",")})`
       : "path IN (SELECT value FROM json_each(?))";
     const bindings = direct ? paths : [JSON.stringify(paths)];
+    const linkCount = this.parentLinkCount(recount, deltas);
     const observed = this.onEvent !== undefined || this.recordChanges;
     const rows = this.sql
       .exec<SqlRow>(
         `UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,
       revision = revision + 1, mutation_version = mutation_version + 1,
-      link_count = ${recount ? "2 + (SELECT COUNT(*) FROM vfs_entries child INDEXED BY vfs_entries_child_directories WHERE child.parent_path = vfs_entries.path AND child.kind = 'directory' AND child.path <> '/')" : "link_count"}
+      link_count = ${linkCount.sql}
       WHERE ${predicate} AND kind = 'directory'
       ${observed ? "RETURNING path, mutation_version" : ""}`,
         now,
         now,
+        ...linkCount.bindings,
         ...bindings,
       )
       .toArray();
@@ -136,6 +147,20 @@ export abstract class SqlBase {
         null,
       );
   }
+  private parentLinkCount(recount: boolean, deltas: ReadonlyMap<string, number> | undefined) {
+    if (recount || (deltas?.size ?? 0) > 2)
+      return {
+        sql: "2 + (SELECT COUNT(*) FROM vfs_entries child INDEXED BY vfs_entries_child_directories WHERE child.parent_path = vfs_entries.path AND child.kind = 'directory' AND child.path <> '/')",
+        bindings: [],
+      };
+    if (deltas === undefined || deltas.size === 0) return { sql: "link_count", bindings: [] };
+    const entries = [...deltas];
+    return {
+      sql: `link_count + CASE path ${entries.map(() => "WHEN ? THEN ?").join(" ")} ELSE 0 END`,
+      bindings: entries.flat(),
+    };
+  }
+
   /**
    * How many links exist, so a namespace without any pays nothing for them.
    *
@@ -531,6 +556,7 @@ export abstract class SqlBase {
       this.pendingMutations = [];
       this.pendingParents = undefined;
       this.directoryParentsChanged = false;
+      this.directoryParentDeltas = undefined;
       const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       if (/SQLITE_FULL|database or disk is full/iu.test(message)) {
         throw new VfsError("ENOSPC", "SQLite database capacity is exhausted");

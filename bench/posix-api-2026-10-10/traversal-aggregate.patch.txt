@@ -1,0 +1,54 @@
+diff --git a/src/vfs/sql-base.ts b/src/vfs/sql-base.ts
+index 9451643..e7308e6 100644
+--- a/src/vfs/sql-base.ts
++++ b/src/vfs/sql-base.ts
+@@ -336,33 +336,24 @@ export abstract class SqlBase {
+     if (access === undefined) return;
+     const ordered = traversalAncestors(path, followed);
+     if (ordered.length === 0) return;
+-    const rows = this.sql
+-      .exec<SqlRow>(
+-        `SELECT path, kind, mode, uid, gid
+-         FROM vfs_entries INDEXED BY vfs_entries_path
+-         WHERE path IN (SELECT value FROM json_each(?))`,
+-        JSON.stringify(ordered),
+-      )
+-      .toArray();
+-    if (rows.length !== ordered.length) {
++    const expression = this.permissionExpression("e", access);
++    const allowed = access.credentials.uid === 0 ? "1" : `((${expression.sql}) & 1)`;
++    const row = this.sql.exec<SqlRow>(
++      `SELECT COUNT(*) AS count,
++         MIN(CASE WHEN kind <> 'directory' OR ${allowed} = 0 THEN path END) AS invalid,
++         MIN(CASE WHEN kind <> 'directory' THEN path END) AS nondirectory
++       FROM vfs_entries e INDEXED BY vfs_entries_path
++       WHERE path IN (SELECT value FROM json_each(?))`,
++      ...(access.credentials.uid === 0 ? [] : expression.bindings),
++      JSON.stringify(ordered),
++    ).one();
++    if (integerColumn(row, "count") !== ordered.length)
+       throw new VfsError("ENOENT", "an ancestor directory does not exist", path);
+-    }
+-    for (const row of rows) {
+-      const kind = stringColumn(row, "kind");
+-      const parent = stringColumn(row, "path");
+-      if (kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", parent);
+-      this.assertPermission(
+-        {
+-          path: parent,
+-          kind: "directory",
+-          mode: integerColumn(row, "mode"),
+-          uid: integerColumn(row, "uid"),
+-          gid: integerColumn(row, "gid"),
+-        },
+-        access,
+-        EXECUTE_PERMISSION,
+-        path,
+-      );
++    if (row.invalid !== null) {
++      const invalid = stringColumn(row, "invalid");
++      if (row.nondirectory === invalid)
++        throw new VfsError("ENOTDIR", "not a directory", invalid);
++      throw new VfsError("EACCES", "permission denied", path);
+     }
+   }

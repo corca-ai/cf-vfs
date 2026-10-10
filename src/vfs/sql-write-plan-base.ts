@@ -99,20 +99,21 @@ export abstract class SqlWritePlan extends SqlRead {
   }
 
   /**
-   * Deletes one entry and accounts for it. The usage write is this method's
+   * Deletes one entry and accounts for it; the caller publishes its logical operation.
+   * The usage write is this method's
    * own, so a caller that replaces an entry adds only what it inserted --
    * subtracting the removal again double-counts it.
    */
   protected removeExact(
     path: string,
     now: number,
-    bumpPath = true,
+    advanceVersion = true,
     resolved?: EntryRow,
     preserveInode = false,
   ): number {
     const entry = resolved ?? this.oneEntry(path);
     if (entry === null) return 0;
-    this.noteDirectoryChange(entry);
+    if (entry.kind === "directory") this.noteDirectoryDelta(entry.parentPath, -1);
     const retained = preserveInode ? 0 : (this.retainOpenInodes?.(path, false, entry) ?? 0);
     if (entry.linkIdentity != null)
       this.sql.exec(
@@ -127,14 +128,13 @@ export abstract class SqlWritePlan extends SqlRead {
     if (entry.linkIdentity != null && !preserveInode)
       this.publishLinkedMetadata([entry.linkIdentity]);
     if (entry.kind === "symlink") this.symlinkCountStale = true;
-    const mutationVersion = entry.mutationVersion + (bumpPath ? 1 : 0);
+    const mutationVersion = entry.mutationVersion + (advanceVersion ? 1 : 0);
     this.sql.exec(
       `INSERT INTO vfs_path_tombstones (path, version) VALUES (?, ?)
        ON CONFLICT(path) DO UPDATE SET version = MAX(version, excluded.version)`,
       path,
       mutationVersion,
     );
-    if (bumpPath) this.publishToken(path, mutationVersion, false, "remove");
     this.updateUsage((entry.contentClass === "inline" ? -entry.sizeBytes : 0) + retained, -1);
     if (
       entry.contentClass === "opaque" &&

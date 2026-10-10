@@ -109,7 +109,7 @@ export abstract class SqlContent extends SqlMutation {
         mutationVersion,
       )
       .one();
-    this.directoryParentsChanged = true;
+    this.noteDirectoryDelta(dirname(path), 1);
     const token = this.publishToken(path, mutationVersion, true, "create");
     const id = integerColumn(inserted, "id");
     this.updateUsage(0, 1);
