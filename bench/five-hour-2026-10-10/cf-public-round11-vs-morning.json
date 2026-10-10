@@ -1,0 +1,2665 @@
+{
+  "baseline": "08b8e0b77759ca30539a1e369921b594a48c0aae",
+  "candidate": "6520dbe660f0a5a91a5c9f1c6e21c8c293355260",
+  "note": "Descriptive screening; any >5% slowdown or unresolved zero needs investigation. Not statistical proof of improvement.",
+  "threshold": 0.05,
+  "costRegressions": [],
+  "workloads": 190,
+  "comparable": 190,
+  "sqlCoverage": 0,
+  "unresolved": [],
+  "regressions": [
+    {
+      "row": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": false,
+        "iterations": 100,
+        "samplesMs": [
+          74,
+          52,
+          70
+        ],
+        "medianMs": 70,
+        "minMs": 52,
+        "maxMs": 74
+      },
+      "ratio": 1.1666666666666667
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": false,
+        "iterations": 100,
+        "samplesMs": [
+          4,
+          2,
+          3
+        ],
+        "medianMs": 3,
+        "minMs": 2,
+        "maxMs": 4
+      },
+      "ratio": 1.5
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": false,
+        "iterations": 100,
+        "samplesMs": [
+          62,
+          46,
+          60
+        ],
+        "medianMs": 60,
+        "minMs": 46,
+        "maxMs": 62
+      },
+      "ratio": 1.1111111111111112
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": false,
+        "iterations": 10,
+        "samplesMs": [
+          8,
+          5,
+          8
+        ],
+        "medianMs": 8,
+        "minMs": 5,
+        "maxMs": 8
+      },
+      "ratio": 2.6666666666666665
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": false,
+        "iterations": 100,
+        "samplesMs": [
+          68,
+          52,
+          63
+        ],
+        "medianMs": 63,
+        "minMs": 52,
+        "maxMs": 68
+      },
+      "ratio": 1.1454545454545455
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": false,
+        "iterations": 100,
+        "samplesMs": [
+          66,
+          55,
+          67
+        ],
+        "medianMs": 66,
+        "minMs": 55,
+        "maxMs": 67
+      },
+      "ratio": 1.2
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          68,
+          53,
+          64
+        ],
+        "medianMs": 64,
+        "minMs": 53,
+        "maxMs": 68
+      },
+      "ratio": 1.103448275862069
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          62,
+          50,
+          60
+        ],
+        "medianMs": 60,
+        "minMs": 50,
+        "maxMs": 62
+      },
+      "ratio": 1.1320754716981132
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          61,
+          49,
+          64
+        ],
+        "medianMs": 61,
+        "minMs": 49,
+        "maxMs": 64
+      },
+      "ratio": 1.0701754385964912
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": false,
+        "iterations": 100,
+        "samplesMs": [
+          66,
+          52,
+          60
+        ],
+        "medianMs": 60,
+        "minMs": 52,
+        "maxMs": 66
+      },
+      "ratio": 1.1320754716981132
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          278,
+          376,
+          287
+        ],
+        "medianMs": 287,
+        "minMs": 278,
+        "maxMs": 376
+      },
+      "ratio": 1.103846153846154
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          175,
+          143,
+          173
+        ],
+        "medianMs": 173,
+        "minMs": 143,
+        "maxMs": 175
+      },
+      "ratio": 1.1768707482993197
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          3,
+          2,
+          3
+        ],
+        "medianMs": 3,
+        "minMs": 2,
+        "maxMs": 3
+      },
+      "ratio": 1.5
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          61,
+          49,
+          58
+        ],
+        "medianMs": 58,
+        "minMs": 49,
+        "maxMs": 61
+      },
+      "ratio": 1.16
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          3,
+          2,
+          3
+        ],
+        "medianMs": 3,
+        "minMs": 2,
+        "maxMs": 3
+      },
+      "ratio": 1.5
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          57,
+          50,
+          58
+        ],
+        "medianMs": 57,
+        "minMs": 50,
+        "maxMs": 58
+      },
+      "ratio": 1.163265306122449
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          165,
+          140,
+          166
+        ],
+        "medianMs": 165,
+        "minMs": 140,
+        "maxMs": 166
+      },
+      "ratio": 1.1785714285714286
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          3,
+          2,
+          3
+        ],
+        "medianMs": 3,
+        "minMs": 2,
+        "maxMs": 3
+      },
+      "ratio": 1.5
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          55,
+          47,
+          55
+        ],
+        "medianMs": 55,
+        "minMs": 47,
+        "maxMs": 55
+      },
+      "ratio": 1.1702127659574468
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          55,
+          48,
+          55
+        ],
+        "medianMs": 55,
+        "minMs": 48,
+        "maxMs": 55
+      },
+      "ratio": 1.1
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          55,
+          47,
+          60
+        ],
+        "medianMs": 55,
+        "minMs": 47,
+        "maxMs": 60
+      },
+      "ratio": 1.1702127659574468
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "init",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          59,
+          49,
+          57
+        ],
+        "medianMs": 57,
+        "minMs": 49,
+        "maxMs": 59
+      },
+      "ratio": 1.14
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "populate",
+        "files": 100,
+        "cache": false,
+        "iterations": 100,
+        "samplesMs": [
+          58,
+          52,
+          58
+        ],
+        "medianMs": 58,
+        "minMs": 52,
+        "maxMs": 58
+      },
+      "ratio": 1.183673469387755
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-all",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          178,
+          63,
+          42
+        ],
+        "medianMs": 63,
+        "minMs": 42,
+        "maxMs": 178
+      },
+      "ratio": 1.0862068965517242
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "commit",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          162,
+          150,
+          168
+        ],
+        "medianMs": 162,
+        "minMs": 150,
+        "maxMs": 168
+      },
+      "ratio": 1.1172413793103448
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "clone-bare",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          65,
+          56,
+          63
+        ],
+        "medianMs": 63,
+        "minMs": 56,
+        "maxMs": 65
+      },
+      "ratio": 1.1886792452830188
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "clone-worktree",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          68,
+          66,
+          71
+        ],
+        "medianMs": 68,
+        "minMs": 66,
+        "maxMs": 71
+      },
+      "ratio": 1.0793650793650793
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "fetch-unchanged",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          59,
+          56,
+          62
+        ],
+        "medianMs": 59,
+        "minMs": 56,
+        "maxMs": 62
+      },
+      "ratio": 1.18
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "pull-unchanged",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          63,
+          56,
+          66
+        ],
+        "medianMs": 63,
+        "minMs": 56,
+        "maxMs": 66
+      },
+      "ratio": 1.2115384615384615
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-unchanged",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          9,
+          9,
+          4
+        ],
+        "medianMs": 9,
+        "minMs": 4,
+        "maxMs": 9
+      },
+      "ratio": 1.125
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "change-one",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          60,
+          56,
+          61
+        ],
+        "medianMs": 60,
+        "minMs": 56,
+        "maxMs": 61
+      },
+      "ratio": 1.2
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-one",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          60,
+          212,
+          69
+        ],
+        "medianMs": 69,
+        "minMs": 60,
+        "maxMs": 212
+      },
+      "ratio": 1.38
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          170,
+          158,
+          173
+        ],
+        "medianMs": 170,
+        "minMs": 158,
+        "maxMs": 173
+      },
+      "ratio": 1.1888111888111887
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "push-one",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          59,
+          55,
+          61
+        ],
+        "medianMs": 59,
+        "minMs": 55,
+        "maxMs": 61
+      },
+      "ratio": 1.18
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "pull-one",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          75,
+          63,
+          75
+        ],
+        "medianMs": 75,
+        "minMs": 63,
+        "maxMs": 75
+      },
+      "ratio": 1.25
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "change-all",
+        "files": 100,
+        "cache": false,
+        "iterations": 100,
+        "samplesMs": [
+          61,
+          57,
+          63
+        ],
+        "medianMs": 61,
+        "minMs": 57,
+        "maxMs": 63
+      },
+      "ratio": 1.150943396226415
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-changed",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          81,
+          74,
+          81
+        ],
+        "medianMs": 81,
+        "minMs": 74,
+        "maxMs": 81
+      },
+      "ratio": 1.2272727272727273
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-removals-repeat",
+        "files": 100,
+        "cache": false,
+        "iterations": 20,
+        "samplesMs": [
+          89,
+          82,
+          87
+        ],
+        "medianMs": 87,
+        "minMs": 82,
+        "maxMs": 89
+      },
+      "ratio": 1.2083333333333333
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-removals",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          66,
+          63,
+          69
+        ],
+        "medianMs": 66,
+        "minMs": 63,
+        "maxMs": 69
+      },
+      "ratio": 1.2
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "iterations": 100,
+        "samplesMs": [
+          77,
+          64,
+          75
+        ],
+        "medianMs": 75,
+        "minMs": 64,
+        "maxMs": 77
+      },
+      "ratio": 1.271186440677966
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "iterations": 100,
+        "samplesMs": [
+          4,
+          3,
+          2
+        ],
+        "medianMs": 3,
+        "minMs": 2,
+        "maxMs": 4
+      },
+      "ratio": 3
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "iterations": 100,
+        "samplesMs": [
+          62,
+          49,
+          66
+        ],
+        "medianMs": 62,
+        "minMs": 49,
+        "maxMs": 66
+      },
+      "ratio": 1.2156862745098038
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "iterations": 10,
+        "samplesMs": [
+          4,
+          4,
+          8
+        ],
+        "medianMs": 4,
+        "minMs": 4,
+        "maxMs": 8
+      },
+      "ratio": 1.3333333333333333
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "iterations": 100,
+        "samplesMs": [
+          66,
+          51,
+          67
+        ],
+        "medianMs": 66,
+        "minMs": 51,
+        "maxMs": 67
+      },
+      "ratio": 1.2452830188679245
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "iterations": 100,
+        "samplesMs": [
+          70,
+          52,
+          68
+        ],
+        "medianMs": 68,
+        "minMs": 52,
+        "maxMs": 70
+      },
+      "ratio": 1.1333333333333333
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          68,
+          55,
+          69
+        ],
+        "medianMs": 68,
+        "minMs": 55,
+        "maxMs": 69
+      },
+      "ratio": 1.2363636363636363
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          62,
+          51,
+          65
+        ],
+        "medianMs": 62,
+        "minMs": 51,
+        "maxMs": 65
+      },
+      "ratio": 1.2156862745098038
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          63,
+          50,
+          65
+        ],
+        "medianMs": 63,
+        "minMs": 50,
+        "maxMs": 65
+      },
+      "ratio": 1.26
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "iterations": 100,
+        "samplesMs": [
+          62,
+          52,
+          65
+        ],
+        "medianMs": 62,
+        "minMs": 52,
+        "maxMs": 65
+      },
+      "ratio": 1.24
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          990,
+          250,
+          281
+        ],
+        "medianMs": 281,
+        "minMs": 250,
+        "maxMs": 990
+      },
+      "ratio": 1.2889908256880733
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          3,
+          2,
+          3
+        ],
+        "medianMs": 3,
+        "minMs": 2,
+        "maxMs": 3
+      },
+      "ratio": 1.5
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          52,
+          53,
+          59
+        ],
+        "medianMs": 53,
+        "minMs": 52,
+        "maxMs": 59
+      },
+      "ratio": 1.1041666666666667
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          3,
+          2,
+          3
+        ],
+        "medianMs": 3,
+        "minMs": 2,
+        "maxMs": 3
+      },
+      "ratio": 1.5
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          53,
+          50,
+          62
+        ],
+        "medianMs": 53,
+        "minMs": 50,
+        "maxMs": 62
+      },
+      "ratio": 1.127659574468085
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          146,
+          167,
+          168
+        ],
+        "medianMs": 167,
+        "minMs": 146,
+        "maxMs": 168
+      },
+      "ratio": 1.237037037037037
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          50,
+          47,
+          56
+        ],
+        "medianMs": 50,
+        "minMs": 47,
+        "maxMs": 56
+      },
+      "ratio": 1.0869565217391304
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          50,
+          47,
+          56
+        ],
+        "medianMs": 50,
+        "minMs": 47,
+        "maxMs": 56
+      },
+      "ratio": 1.0869565217391304
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          51,
+          50,
+          57
+        ],
+        "medianMs": 51,
+        "minMs": 50,
+        "maxMs": 57
+      },
+      "ratio": 1.108695652173913
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          138,
+          115,
+          354
+        ],
+        "medianMs": 138,
+        "minMs": 115,
+        "maxMs": 354
+      },
+      "ratio": 1.3529411764705883
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          77,
+          8,
+          8
+        ],
+        "medianMs": 8,
+        "minMs": 8,
+        "maxMs": 77
+      },
+      "ratio": 1.3333333333333333
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          102,
+          81,
+          91
+        ],
+        "medianMs": 91,
+        "minMs": 81,
+        "maxMs": 102
+      },
+      "ratio": 1.625
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "iterations": 10,
+        "samplesMs": [
+          11,
+          13,
+          898
+        ],
+        "medianMs": 13,
+        "minMs": 11,
+        "maxMs": 898
+      },
+      "ratio": 2.1666666666666665
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          141,
+          105,
+          84
+        ],
+        "medianMs": 105,
+        "minMs": 84,
+        "maxMs": 141
+      },
+      "ratio": 1.7796610169491525
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          121,
+          120,
+          92
+        ],
+        "medianMs": 120,
+        "minMs": 92,
+        "maxMs": 121
+      },
+      "ratio": 1.7142857142857142
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          90,
+          76,
+          66
+        ],
+        "medianMs": 76,
+        "minMs": 66,
+        "maxMs": 90
+      },
+      "ratio": 1.4339622641509433
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "init",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          94,
+          87,
+          78
+        ],
+        "medianMs": 87,
+        "minMs": 78,
+        "maxMs": 94
+      },
+      "ratio": 1.5263157894736843
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "populate",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          1174,
+          1739,
+          105
+        ],
+        "medianMs": 1174,
+        "minMs": 105,
+        "maxMs": 1739
+      },
+      "ratio": 12.103092783505154
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          2560,
+          2159,
+          2851
+        ],
+        "medianMs": 2560,
+        "minMs": 2159,
+        "maxMs": 2851
+      },
+      "ratio": 1.0760823875577974
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "commit",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          720,
+          665,
+          763
+        ],
+        "medianMs": 720,
+        "minMs": 665,
+        "maxMs": 763
+      },
+      "ratio": 1.1059907834101383
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          100,
+          92,
+          135
+        ],
+        "medianMs": 100,
+        "minMs": 92,
+        "maxMs": 135
+      },
+      "ratio": 1.2195121951219512
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "diff",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          3,
+          14,
+          3
+        ],
+        "medianMs": 3,
+        "minMs": 3,
+        "maxMs": 14
+      },
+      "ratio": 1.5
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          65,
+          59,
+          67
+        ],
+        "medianMs": 65,
+        "minMs": 59,
+        "maxMs": 67
+      },
+      "ratio": 1.1607142857142858
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          187,
+          173,
+          196
+        ],
+        "medianMs": 187,
+        "minMs": 173,
+        "maxMs": 196
+      },
+      "ratio": 1.1333333333333333
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "branch",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          58,
+          57,
+          63
+        ],
+        "medianMs": 58,
+        "minMs": 57,
+        "maxMs": 63
+      },
+      "ratio": 1.0545454545454545
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          250,
+          113,
+          105
+        ],
+        "medianMs": 113,
+        "minMs": 105,
+        "maxMs": 250
+      },
+      "ratio": 1.0970873786407767
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "init",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          61,
+          68,
+          74
+        ],
+        "medianMs": 68,
+        "minMs": 61,
+        "maxMs": 74
+      },
+      "ratio": 1.0793650793650793
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "populate",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          990,
+          124,
+          126
+        ],
+        "medianMs": 126,
+        "minMs": 124,
+        "maxMs": 990
+      },
+      "ratio": 1.26
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-all",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          988,
+          1361,
+          1764
+        ],
+        "medianMs": 1361,
+        "minMs": 988,
+        "maxMs": 1764
+      },
+      "ratio": 1.2217235188509874
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "commit",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          783,
+          1229,
+          751
+        ],
+        "medianMs": 783,
+        "minMs": 751,
+        "maxMs": 1229
+      },
+      "ratio": 1.1397379912663756
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "clone-bare",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          133,
+          97,
+          87
+        ],
+        "medianMs": 97,
+        "minMs": 87,
+        "maxMs": 133
+      },
+      "ratio": 1.3661971830985915
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "clone-worktree",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          1458,
+          1207,
+          225
+        ],
+        "medianMs": 1207,
+        "minMs": 225,
+        "maxMs": 1458
+      },
+      "ratio": 5.747619047619048
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "fetch-unchanged",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          48,
+          92,
+          97
+        ],
+        "medianMs": 92,
+        "minMs": 48,
+        "maxMs": 97
+      },
+      "ratio": 1.108433734939759
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-unchanged",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          49,
+          89,
+          63
+        ],
+        "medianMs": 63,
+        "minMs": 49,
+        "maxMs": 89
+      },
+      "ratio": 1.2857142857142858
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "change-one",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          82,
+          144,
+          48
+        ],
+        "medianMs": 82,
+        "minMs": 48,
+        "maxMs": 144
+      },
+      "ratio": 1.64
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-one",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          71,
+          93,
+          51
+        ],
+        "medianMs": 71,
+        "minMs": 51,
+        "maxMs": 93
+      },
+      "ratio": 1.2456140350877194
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "commit-one",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          237,
+          262,
+          152
+        ],
+        "medianMs": 237,
+        "minMs": 152,
+        "maxMs": 262
+      },
+      "ratio": 1.2091836734693877
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "push-one",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          67,
+          95,
+          59
+        ],
+        "medianMs": 67,
+        "minMs": 59,
+        "maxMs": 95
+      },
+      "ratio": 1.1166666666666667
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "change-all",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          136,
+          80,
+          727
+        ],
+        "medianMs": 136,
+        "minMs": 80,
+        "maxMs": 727
+      },
+      "ratio": 2.1587301587301586
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-changed",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          2284,
+          996,
+          805
+        ],
+        "medianMs": 996,
+        "minMs": 805,
+        "maxMs": 2284
+      },
+      "ratio": 1.3551020408163266
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "remove-files",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          105,
+          127,
+          132
+        ],
+        "medianMs": 127,
+        "minMs": 105,
+        "maxMs": 132
+      },
+      "ratio": 1.1981132075471699
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-removals-repeat",
+        "files": 1000,
+        "cache": false,
+        "iterations": 20,
+        "samplesMs": [
+          536,
+          801,
+          2018
+        ],
+        "medianMs": 801,
+        "minMs": 536,
+        "maxMs": 2018
+      },
+      "ratio": 1.7115384615384615
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1000,
+        "samplesMs": [
+          133,
+          549,
+          70
+        ],
+        "medianMs": 133,
+        "minMs": 70,
+        "maxMs": 549
+      },
+      "ratio": 1.3571428571428572
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1000,
+        "samplesMs": [
+          14,
+          19,
+          10
+        ],
+        "medianMs": 14,
+        "minMs": 10,
+        "maxMs": 19
+      },
+      "ratio": 4.666666666666667
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          73,
+          99,
+          90
+        ],
+        "medianMs": 90,
+        "minMs": 73,
+        "maxMs": 99
+      },
+      "ratio": 1.0588235294117647
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          55,
+          77,
+          70
+        ],
+        "medianMs": 70,
+        "minMs": 55,
+        "maxMs": 77
+      },
+      "ratio": 1.1864406779661016
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "populate",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1000,
+        "samplesMs": [
+          100,
+          663,
+          78
+        ],
+        "medianMs": 100,
+        "minMs": 78,
+        "maxMs": 663
+      },
+      "ratio": 1.075268817204301
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          2559,
+          2764,
+          2371
+        ],
+        "medianMs": 2559,
+        "minMs": 2371,
+        "maxMs": 2764
+      },
+      "ratio": 1.057001239157373
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "commit",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          760,
+          712,
+          695
+        ],
+        "medianMs": 712,
+        "minMs": 695,
+        "maxMs": 760
+      },
+      "ratio": 1.0755287009063443
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          97,
+          86,
+          79
+        ],
+        "medianMs": 86,
+        "minMs": 79,
+        "maxMs": 97
+      },
+      "ratio": 1.0617283950617284
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "diff",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          2,
+          3,
+          5
+        ],
+        "medianMs": 3,
+        "minMs": 2,
+        "maxMs": 5
+      },
+      "ratio": 1.5
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          59,
+          60,
+          65
+        ],
+        "medianMs": 60,
+        "minMs": 59,
+        "maxMs": 65
+      },
+      "ratio": 1.1111111111111112
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          190,
+          176,
+          176
+        ],
+        "medianMs": 176,
+        "minMs": 176,
+        "maxMs": 190
+      },
+      "ratio": 1.1139240506329113
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "log",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          3,
+          3,
+          2
+        ],
+        "medianMs": 3,
+        "minMs": 2,
+        "maxMs": 3
+      },
+      "ratio": 1.5
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "branch",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          56,
+          58,
+          57
+        ],
+        "medianMs": 57,
+        "minMs": 56,
+        "maxMs": 58
+      },
+      "ratio": 1.0961538461538463
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          123,
+          106,
+          114
+        ],
+        "medianMs": 114,
+        "minMs": 106,
+        "maxMs": 123
+      },
+      "ratio": 1.1067961165048543
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          85,
+          106,
+          103
+        ],
+        "medianMs": 103,
+        "minMs": 85,
+        "maxMs": 106
+      },
+      "ratio": 1.1839080459770115
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          580,
+          574,
+          353
+        ],
+        "medianMs": 574,
+        "minMs": 353,
+        "maxMs": 580
+      },
+      "ratio": 2.1908396946564888
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          100,
+          118,
+          84
+        ],
+        "medianMs": 100,
+        "minMs": 84,
+        "maxMs": 118
+      },
+      "ratio": 1.6666666666666667
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          87,
+          84,
+          71
+        ],
+        "medianMs": 84,
+        "minMs": 71,
+        "maxMs": 87
+      },
+      "ratio": 1.6153846153846154
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          12,
+          12,
+          10
+        ],
+        "medianMs": 12,
+        "minMs": 10,
+        "maxMs": 12
+      },
+      "ratio": 4
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          9,
+          18,
+          8
+        ],
+        "medianMs": 9,
+        "minMs": 8,
+        "maxMs": 18
+      },
+      "ratio": 1.5
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          83,
+          88,
+          70
+        ],
+        "medianMs": 83,
+        "minMs": 70,
+        "maxMs": 88
+      },
+      "ratio": 1.537037037037037
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          165,
+          237,
+          138
+        ],
+        "medianMs": 165,
+        "minMs": 138,
+        "maxMs": 237
+      },
+      "ratio": 1.3524590163934427
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          80,
+          80,
+          69
+        ],
+        "medianMs": 80,
+        "minMs": 69,
+        "maxMs": 80
+      },
+      "ratio": 1.5384615384615385
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          507,
+          154,
+          132
+        ],
+        "medianMs": 154,
+        "minMs": 132,
+        "maxMs": 507
+      },
+      "ratio": 1.54
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          81,
+          86,
+          82
+        ],
+        "medianMs": 82,
+        "minMs": 81,
+        "maxMs": 86
+      },
+      "ratio": 1.4385964912280702
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          80,
+          79,
+          69
+        ],
+        "medianMs": 79,
+        "minMs": 69,
+        "maxMs": 80
+      },
+      "ratio": 1.4363636363636363
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          13,
+          7,
+          9
+        ],
+        "medianMs": 9,
+        "minMs": 7,
+        "maxMs": 13
+      },
+      "ratio": 1.5
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          700,
+          524,
+          689
+        ],
+        "medianMs": 689,
+        "minMs": 524,
+        "maxMs": 700
+      },
+      "ratio": 1.7355163727959697
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          142,
+          167,
+          140
+        ],
+        "medianMs": 142,
+        "minMs": 140,
+        "maxMs": 167
+      },
+      "ratio": 1.42
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          11,
+          1173,
+          17
+        ],
+        "medianMs": 17,
+        "minMs": 11,
+        "maxMs": 1173
+      },
+      "ratio": 2.125
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          97,
+          59,
+          103
+        ],
+        "medianMs": 97,
+        "minMs": 59,
+        "maxMs": 103
+      },
+      "ratio": 1.2435897435897436
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          5,
+          3,
+          6
+        ],
+        "medianMs": 5,
+        "minMs": 3,
+        "maxMs": 6
+      },
+      "ratio": 1.6666666666666667
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          16,
+          8,
+          14
+        ],
+        "medianMs": 14,
+        "minMs": 8,
+        "maxMs": 16
+      },
+      "ratio": 1.75
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          85,
+          58,
+          81
+        ],
+        "medianMs": 81,
+        "minMs": 58,
+        "maxMs": 85
+      },
+      "ratio": 1.1911764705882353
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          7,
+          3,
+          10
+        ],
+        "medianMs": 7,
+        "minMs": 3,
+        "maxMs": 10
+      },
+      "ratio": 3.5
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          155,
+          106,
+          155
+        ],
+        "medianMs": 155,
+        "minMs": 106,
+        "maxMs": 155
+      },
+      "ratio": 1.1481481481481481
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          87,
+          58,
+          83
+        ],
+        "medianMs": 83,
+        "minMs": 58,
+        "maxMs": 87
+      },
+      "ratio": 1.3174603174603174
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          151,
+          107,
+          151
+        ],
+        "medianMs": 151,
+        "minMs": 107,
+        "maxMs": 151
+      },
+      "ratio": 1.2479338842975207
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          97,
+          71,
+          101
+        ],
+        "medianMs": 97,
+        "minMs": 71,
+        "maxMs": 101
+      },
+      "ratio": 1.127906976744186
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          93,
+          68,
+          90
+        ],
+        "medianMs": 90,
+        "minMs": 68,
+        "maxMs": 93
+      },
+      "ratio": 1.836734693877551
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "prepare",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          3366,
+          2661,
+          2215
+        ],
+        "medianMs": 2661,
+        "minMs": 2215,
+        "maxMs": 3366
+      },
+      "ratio": 1.2463700234192037
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "status-clean",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          142,
+          68,
+          1738
+        ],
+        "medianMs": 142,
+        "minMs": 68,
+        "maxMs": 1738
+      },
+      "ratio": 1.5777777777777777
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "edit",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          91,
+          44,
+          63
+        ],
+        "medianMs": 63,
+        "minMs": 44,
+        "maxMs": 91
+      },
+      "ratio": 1.0677966101694916
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "diff",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          839,
+          94,
+          88
+        ],
+        "medianMs": 94,
+        "minMs": 88,
+        "maxMs": 839
+      },
+      "ratio": 1.119047619047619
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "commit-partial",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          166,
+          123,
+          119
+        ],
+        "medianMs": 123,
+        "minMs": 119,
+        "maxMs": 166
+      },
+      "ratio": 1.1714285714285715
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "add-rest",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          154,
+          998,
+          110
+        ],
+        "medianMs": 154,
+        "minMs": 110,
+        "maxMs": 998
+      },
+      "ratio": 1.439252336448598
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "commit-rest",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          175,
+          90,
+          149
+        ],
+        "medianMs": 149,
+        "minMs": 90,
+        "maxMs": 175
+      },
+      "ratio": 1.3545454545454545
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "status-final",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          658,
+          77,
+          52
+        ],
+        "medianMs": 77,
+        "minMs": 52,
+        "maxMs": 658
+      },
+      "ratio": 1.3275862068965518
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          1969,
+          3329,
+          3458
+        ],
+        "medianMs": 3329,
+        "minMs": 1969,
+        "maxMs": 3458
+      },
+      "ratio": 1.356560717196414
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          2046,
+          1022,
+          343
+        ],
+        "medianMs": 1022,
+        "minMs": 343,
+        "maxMs": 2046
+      },
+      "ratio": 4.104417670682731
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          76,
+          45,
+          65
+        ],
+        "medianMs": 65,
+        "minMs": 45,
+        "maxMs": 76
+      },
+      "ratio": 1.6666666666666667
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          98,
+          77,
+          35
+        ],
+        "medianMs": 77,
+        "minMs": 35,
+        "maxMs": 98
+      },
+      "ratio": 1.375
+    },
+    {
+      "row": {
+        "group": "git-recovery",
+        "operation": "serialized-two-shells",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          387,
+          512,
+          623
+        ],
+        "medianMs": 512,
+        "minMs": 387,
+        "maxMs": 623
+      },
+      "ratio": 1.292929292929293
+    },
+    {
+      "row": {
+        "group": "git-recovery",
+        "operation": "concurrent-two-adds",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          695,
+          483,
+          531
+        ],
+        "medianMs": 531,
+        "minMs": 483,
+        "maxMs": 695
+      },
+      "ratio": 1.0903490759753593
+    },
+    {
+      "row": {
+        "group": "git-recovery",
+        "operation": "partial-add-retry",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          2180,
+          1388,
+          1926
+        ],
+        "medianMs": 1926,
+        "minMs": 1388,
+        "maxMs": 2180
+      },
+      "ratio": 3.314974182444062
+    }
+  ],
+  "metrics": [
+    {
+      "id": "overall",
+      "label": "Overall · VFS",
+      "ratio": 1.187909809402771
+    },
+    {
+      "id": "files",
+      "label": "File operations · VFS",
+      "ratio": 1.1732223667661792
+    },
+    {
+      "id": "git",
+      "label": "Git & coding · VFS",
+      "ratio": 1.1899899248954517
+    },
+    {
+      "id": "cache",
+      "label": "Metadata cache",
+      "ratio": 1.1144495864008395
+    }
+  ],
+  "worstRatio": 12.103092783505154,
+  "requiresReview": true
+}

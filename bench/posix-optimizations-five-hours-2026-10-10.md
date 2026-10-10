@@ -89,7 +89,7 @@ control was cancelled during warmup with zero measured rows; both rooms were
 explicitly cleared to test the final combined candidate instead. This
 intermediate has not been adopted.
 
-## Second adoption: final combined source
+## Second adoption: `6520dbe`
 
 Credential-bound append commits retain bounded directory access metadata only
 while all active transactions change file contents. Ordinary nested mutations
@@ -124,8 +124,8 @@ control completed: overall0.989547 [0.974384,1.013681], Git0.994250,
 files0.989325, optionalcache0.998991 [0.996360,1.006205]. This does not establish
 a timing change. Two pointwise flags remain (status-clean100 and shellclone100),
 with zero cost flags. Native counts370226 statements/993349 reads/216461 writes
-are identical in both versions. Independent signal repetitions are running
-in both modes. Source adoption follows the user's full-suite aggregate policy:
+are identical in both versions. Independent signal repetitions completed
+in both modes; their results are recorded below. Source adoption follows the user's full-suite aggregate policy:
 the primary confidence interval establishes an improvement, the unbound full
 control is inconclusive, compatibility gates pass and total native cost falls.
 Individual latency tradeoffs and the small recovery cost variation remain
@@ -171,3 +171,68 @@ path removed preserves inode/link count in both versions. That layout already
 allows the old query to stop early: its two reads become three, constant in
 alias count. This one-read tradeoff is disclosed rather than presented as a
 universal identity-query improvement. Source and both logs are retained.
+
+## Final source deployment
+
+Source6520dbe is pushed and publicly deployed as build
+678a943d59904199061bdc6f7f44c7607d22446b7ed62466c7805cd27a493a79,
+Worker version a4f7711f-61b6-4afa-b5d8-da836d2d8a8e. Every117 emitted JS
+module in the release graph is byte-identical to the final measured graph;
+no comment normalization is needed. Exact SHA256 is
+47e3e8c47d4b28b9565de712c41bfd6f0cee947bc39f4017dc3de93d1f4c1405.
+The public shell clone/pull/content, clean-status and warm-cache chmod denial/
+restoration verification passes, with cleanup. Post-deploy full public timing
+verification is complete; see the final public result below.
+
+All ten owned experimental worktrees have been removed after losslessly
+archiving their tracked binary diffs, base commits and every untracked source
+file in owned-worktree-snapshots.json.gz. Both release worktrees were subsequently removed after final verification. The38 complete measured/release JS graphs are archived;
+redundant dependency copies were removed without changing either graph SHA.
+
+## Independent final signal checks
+
+Ten alternating pairs per mode repeat all six initially confirmed signals.
+None reproduces: demo selected68-workload aggregate0.991233
+[0.957648,1.027190], unbound selected32-workload aggregate0.968299
+[0.929994,1.016800]. These are selected subsets, not full-suite improvement
+claims. Both repetitions have zero confirmed timing and zero SQL cost flags.
+The initial recovery cost increase does not reproduce. Initial signals and
+repeat confidence intervals remain in cf-round11-flags-assessment.json; lack
+of reproduction is not proof that no effect exists.
+
+The final composed source also repeats the native handle/identity probes in
+ten pairs and namespace/copy probes in three pairs. All24 operation/version/
+size groups have ten identical cost samples, all48 namespace samples verify
+behavior, and the earlier component read counts are reproduced. These final
+source probes remain cost evidence only: DO-local clock-zero times are excluded
+from timing claims. Owned34 evaluation rooms return successful explicit clears,
+and the temporary cf-vfs-five-hour-evaluation Worker is deleted.
+
+## Final public result and remaining limitation
+
+The post-deploy public run completes190 rows and60648 checks in LAX for source
+6520dbe, build678a943d59904199061bdc6f7f44c7607d22446b7ed62466c7805cd27a493a79,
+versiona4f7711f-61b6-4afa-b5d8-da836d2d8a8e. Full raw result and all comparisons
+are retained. Public developer/screening exits2 because individual descriptive
+flags require review; this is not a functional failure.
+
+| Public baseline | Current overall latency ratio |
+| --- | ---: |
+| morning | 1.187910 |
+| round2-first | 1.049769 |
+| round2-repeat | 0.992875 |
+
+The current public default is18.8% slower than the morning sample and lies
+within the two prior round-two public outcomes. It does not establish a public
+page acceleration. The cause of the discrepancy with matched credential-bound
+results remains unresolved. The unbound matched full10 control is inconclusive;
+private harness timing excludes public job/assertion bookkeeping, so its result
+must not be substituted for public latency. No causal explanation is claimed.
+Three public samples are descriptive screening, not statistical proof.
+
+An ordinary public POST immediately reuses the result, preserves its VFS file
+mtime and reports exactly600000ms TTL. History contains ten points and exactly
+one for source6520dbe. All twelve owned worktrees are removed, with source/data
+archives preserved and the original local exclude file restored. The temporary
+private Worker and all34 identified evaluation rooms are cleaned up. No new FS
+API, schema migration or npm release was introduced.

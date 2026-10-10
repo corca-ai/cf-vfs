@@ -381,3 +381,40 @@ Four demo/two unbound pointwise timing signals, a small recovery cost variation,
 and the local unbound read tradeoff remain disclosed. Independent repetitions
 continue; they will be recorded even if signals persist. Public deployment and
 post-deploy full validation are pending. No public-page acceleration is claimed.
+
+- Independent final CF repetitions: demo selected68 and unbound selected32,
+  ten alternating pairs each. Zero confirmed timing and zero cost flags in both;
+  all six initial signals and the recovery cost variation do not reproduce.
+  Selected aggregates are not full-suite claims. Final-source native probes
+  reproduce all prior handle/identity/copy counts (24 groups*10 and48 namespace
+  samples). Every verification passes. Explicit34-room cleanup succeeds and
+  the owned private Worker is deleted. Public full post-deploy run is active.
+
+## Final public result and remaining limitation
+
+The post-deploy public run completes190 rows and60648 checks in LAX for source
+6520dbe, build678a943d59904199061bdc6f7f44c7607d22446b7ed62466c7805cd27a493a79,
+versiona4f7711f-61b6-4afa-b5d8-da836d2d8a8e. Full raw result and all comparisons
+are retained. Public developer/screening exits2 because individual descriptive
+flags require review; this is not a functional failure.
+
+| Public baseline | Current overall latency ratio |
+| --- | ---: |
+| morning | 1.187910 |
+| round2-first | 1.049769 |
+| round2-repeat | 0.992875 |
+
+The current public default is18.8% slower than the morning sample and lies
+within the two prior round-two public outcomes. It does not establish a public
+page acceleration. The cause of the discrepancy with matched credential-bound
+results remains unresolved. The unbound matched full10 control is inconclusive;
+private harness timing excludes public job/assertion bookkeeping, so its result
+must not be substituted for public latency. No causal explanation is claimed.
+Three public samples are descriptive screening, not statistical proof.
+
+An ordinary public POST immediately reuses the result, preserves its VFS file
+mtime and reports exactly600000ms TTL. History contains ten points and exactly
+one for source6520dbe. All twelve owned worktrees are removed, with source/data
+archives preserved and the original local exclude file restored. The temporary
+private Worker and all34 identified evaluation rooms are cleaned up. No new FS
+API, schema migration or npm release was introduced.
