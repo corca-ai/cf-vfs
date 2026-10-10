@@ -27,3 +27,13 @@ select { margin-left: 8px; padding: 8px; color: var(--ink); background: var(--su
 .benchmark-footer { margin-top: 32px; }
 .benchmark-nav { display: flex; justify-content: flex-end; padding-top: 24px; color: var(--mint); }
 @media (max-width: 600px) { .benchmark-page .intro { padding-top: 20px; }.benchmark-controls { padding: 18px; }.result-heading { align-items: flex-start; flex-direction: column; gap: 0; }.benchmark-table th, .benchmark-table td { padding: 12px; }.download-link { margin-left: 12px; } }
+
+.trend { margin-top: 10px; font-size: 11px; font-weight: 400; }
+.trend summary { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 4px; cursor: pointer; color: var(--muted); }
+.trend summary.faster { color: var(--mint); }
+.trend summary.slower { color: #e5bd81; }
+.trend summary:focus-visible { outline: 2px solid var(--mint); outline-offset: 4px; border-radius: 3px; }
+.trend svg { display: block; width: 120px; height: 32px; overflow: visible; }
+.trend polyline { fill: none; stroke: currentColor; stroke-width: 1.5; }
+.trend circle { fill: currentColor; }
+.trend ol { text-align: left; color: var(--muted); line-height: 1.7; padding-left: 18px; white-space: normal; max-width: 270px; }

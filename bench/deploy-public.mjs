@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 
@@ -27,9 +27,19 @@ for (const path of paths) {
   hash.update("\0");
 }
 const id = hash.digest("hex");
+const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const dirty = execFileSync("git", ["status", "--porcelain", "--untracked-files=normal"], {
+  encoding: "utf8",
+})
+  .split("\n")
+  .filter((line) => line && line.slice(3) !== "demo/benchmark-build.ts");
+if (dirty.length > 0)
+  throw new Error(
+    "Commit source changes before deploying so benchmark history identifies the measured commit.",
+  );
 await writeFile(
   "demo/benchmark-build.ts",
-  `/** Generated deployment fingerprint; includes library, demo, config and lockfile. */\nexport const BENCHMARK_BUILD_ID =\n  "${id}";\n`,
+  `/** Generated deployment fingerprint; includes library, demo, config and lockfile. */\nexport const BENCHMARK_BUILD_ID =\n  "${id}";\nexport const BENCHMARK_COMMIT_HASH = "${commit}";\n`,
 );
 console.log(`Implementation: ${id}`);
 const child = spawn("npx", ["wrangler", "deploy", "--config", "wrangler.benchmark.jsonc"], {

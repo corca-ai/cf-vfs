@@ -1,6 +1,6 @@
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
-import { BENCHMARK_BUILD_ID } from "./benchmark-build.js";
+import { BENCHMARK_BUILD_ID, BENCHMARK_COMMIT_HASH } from "./benchmark-build.js";
 import { type BenchmarkJob, type BenchmarkRow, BenchmarkStore } from "./benchmark-store.js";
 import { benchmarkPlan, PublicBenchmarkSuite, summarizeStage } from "./benchmark-suite.js";
 
@@ -60,6 +60,7 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
           runId: claim.runId,
           deploymentId: deploymentId ?? this.env.VERSION_METADATA.id,
           buildId: BENCHMARK_BUILD_ID,
+          commitHash: BENCHMARK_COMMIT_HASH,
           nextIndex: 0,
           rows: [],
           verified: 0,
@@ -147,6 +148,7 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
             version: 1,
             deploymentId: job.deploymentId ?? this.env.VERSION_METADATA.id,
             buildId: BENCHMARK_BUILD_ID,
+            commitHash: job.commitHash ?? BENCHMARK_COMMIT_HASH,
             runId: job.runId,
             completedAt: new Date().toISOString(),
             colo: job.colo,

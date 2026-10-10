@@ -2,6 +2,7 @@ import { VfsError } from "../src/core/errors.js";
 import type { VirtualFileSystem } from "../src/vfs/types.js";
 
 export const RESULT_PATH = "/benchmarks/latest.json";
+const HISTORY_PATH = "/benchmarks/trends.json";
 const JOB_PATH = "/benchmarks/job.json";
 const RUN_PATH = "/benchmarks/run.json";
 export const BENCHMARK_TTL_MS = 10 * 60 * 1000;
@@ -21,6 +22,7 @@ export interface BenchmarkRow {
 
 export interface PublicBenchmarkResult {
   version: 1;
+  commitHash?: string;
   deploymentId?: string;
   buildId?: string;
   runId: string;
@@ -33,6 +35,7 @@ export interface PublicBenchmarkResult {
 }
 
 export interface BenchmarkJob {
+  commitHash?: string;
   deploymentId?: string;
   buildId?: string;
   runId: string;
@@ -50,9 +53,60 @@ interface RunRecord {
   error?: string;
 }
 
+export interface BenchmarkHistoryPoint {
+  commitHash?: string;
+  buildId?: string;
+  deploymentId?: string;
+  completedAt: string;
+  rows: Array<
+    Pick<BenchmarkRow, "group" | "operation" | "files" | "cache" | "iterations" | "medianMs">
+  >;
+}
+
+function historyKey(point: BenchmarkHistoryPoint): string | undefined {
+  if (point.commitHash) return `commit:${point.commitHash}`;
+  if (point.buildId) return `build:${point.buildId}`;
+  if (point.deploymentId) return `deployment:${point.deploymentId}`;
+  return undefined;
+}
+
+function historyPoint(result: PublicBenchmarkResult): BenchmarkHistoryPoint {
+  return {
+    ...(result.commitHash === undefined ? {} : { commitHash: result.commitHash }),
+    ...(result.buildId === undefined ? {} : { buildId: result.buildId }),
+    ...(result.deploymentId === undefined ? {} : { deploymentId: result.deploymentId }),
+    completedAt: result.completedAt,
+    rows: result.rows.map(({ group, operation, files, cache, iterations, medianMs }) => ({
+      group,
+      operation,
+      files,
+      cache,
+      iterations,
+      medianMs,
+    })),
+  };
+}
+
+/** Replace repeated commits in place; reruns cannot consume the ten-point window. */
+function updateHistory(history: BenchmarkHistoryPoint[], point: BenchmarkHistoryPoint) {
+  const key = historyKey(point);
+  if (key === undefined) return history;
+  // A new commit annotation may identify a previously unlabelled build.
+  const index = history.findIndex(
+    (saved) =>
+      historyKey(saved) === key ||
+      (!saved.commitHash && point.buildId !== undefined && saved.buildId === point.buildId),
+  );
+  const next = [...history];
+  if (index < 0) next.push(point);
+  else next[index] = point;
+  return next.slice(-10);
+}
+
 export interface BenchmarkSnapshot {
   status: "empty" | "ready" | "running" | "failed";
   result: PublicBenchmarkResult | null;
+  history: BenchmarkHistoryPoint[];
   modifiedAt: number | null;
   nextRunAt: number | null;
   error: string | null;
@@ -88,6 +142,30 @@ export class BenchmarkStore {
     return result;
   }
 
+  private async history(latest: PublicBenchmarkResult | null): Promise<BenchmarkHistoryPoint[]> {
+    const saved = await this.read<BenchmarkHistoryPoint[]>(HISTORY_PATH);
+    let history = saved?.value ?? [];
+    if (saved === null) {
+      // Older deployments retained up to twenty full runs. Reuse only known
+      // build/deployment identities; never invent commit hashes for old data.
+      let entries: ReturnType<VirtualFileSystem["list"]>;
+      try {
+        entries = this.fs.list("/benchmarks/history");
+      } catch (error) {
+        if (!(error instanceof VfsError) || error.code !== "ENOENT") throw error;
+        entries = [];
+      }
+      for (const entry of entries.sort((a, b) => a.modifiedAtMs - b.modifiedAtMs)) {
+        const result = await this.read<PublicBenchmarkResult>(entry.path);
+        if (result !== null) history = updateHistory(history, historyPoint(result.value));
+      }
+    }
+    const next = latest === null ? history : updateHistory(history, historyPoint(latest));
+    if (saved === null && next.length > 0)
+      await this.fs.writeFile(HISTORY_PATH, JSON.stringify(next));
+    return next;
+  }
+
   private async snapshot(): Promise<BenchmarkSnapshot> {
     const saved = await this.read<PublicBenchmarkResult>(RESULT_PATH);
     const run = (await this.read<RunRecord>(RUN_PATH))?.value;
@@ -97,6 +175,7 @@ export class BenchmarkStore {
     return {
       status: running ? "running" : failed ? "failed" : saved === null ? "empty" : "ready",
       result: saved?.value ?? null,
+      history: await this.history(saved?.value ?? null),
       modifiedAt: saved?.modifiedAt ?? null,
       nextRunAt: resultNext,
       error: failed
@@ -160,9 +239,11 @@ export class BenchmarkStore {
       }
       // One transaction publishes result and completion together. Freshness
       // uses the result file's actual mtime, never a client-supplied timestamp.
+      const historyPoints = updateHistory(await this.history(null), historyPoint(result));
       this.fs.mkdir("/benchmarks/history", true);
       await this.fs.writeFiles([
         { path: `/benchmarks/history/${result.runId}.json`, body: JSON.stringify(result) },
+        { path: HISTORY_PATH, body: JSON.stringify(historyPoints) },
         { path: RESULT_PATH, body: JSON.stringify(result) },
         { path: RUN_PATH, body: JSON.stringify({ ...run, status: "completed" }) },
       ]);

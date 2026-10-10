@@ -16,6 +16,9 @@ included.
 
 ## [Unreleased]
 
+- Add public benchmark sparklines for the latest ten distinct commits, retaining
+  existing identifiable runs and replacing repeated measurements of a commit.
+
 - Reuse worktree Git hashes using existing mutation tokens and permission-checked
   reads, reducing repeated status/add body reads without new filesystem APIs or
   SQL cache writes. Cache scope, CRLF settings and collaborative edits remain checked.

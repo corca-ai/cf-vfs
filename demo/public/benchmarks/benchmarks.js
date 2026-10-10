@@ -21,6 +21,64 @@ function element(tag, text) {
   if (text !== undefined) node.textContent = text;
   return node;
 }
+function trend(row, ratio = false) {
+  const points = (snapshot.history ?? []).flatMap((saved) => {
+    const match = saved.rows.find((candidate) => candidate.group === row.group &&
+      candidate.operation === row.operation && candidate.files === row.files &&
+      candidate.cache === row.cache && candidate.iterations === row.iterations);
+    if (!match) return [];
+    let value = match.medianMs;
+    if (ratio) {
+      const cached = saved.rows.find((candidate) => candidate.group === row.group &&
+        candidate.operation === row.operation && candidate.files === row.files &&
+        candidate.cache && candidate.iterations === row.iterations);
+      if (!cached || value <= 0 || cached.medianMs <= 0) return [];
+      value = cached.medianMs / value;
+    }
+    return Number.isFinite(value) ? [{ ...saved, value }] : [];
+  });
+  const wrap = element("details"); wrap.className = "trend";
+  const summary = element("summary");
+  if (points.length === 0) {
+    wrap.append(element("small", "History starts with the next saved run"));
+    return wrap;
+  }
+  const format = ratio ? (value) => `${value.toFixed(2)}×` : time;
+  const first = points[0].value, last = points.at(-1).value;
+  const change = points.length > 1 && first > 0 ? (last / first - 1) * 100 : null;
+  const description = change === null ? `${points.length} point · collecting history` :
+    `${change > 0 ? "+" : ""}${change.toFixed(1)}% · ${points.length} points`;
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 120 32");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `${labels[row.operation] ?? row.operation}: ${description}. Lower is faster.`);
+  const values = points.map((point) => point.value);
+  const low = Math.min(...values), high = Math.max(...values);
+  const coords = points.map((point, index) => [
+    points.length === 1 ? 60 : 4 + index * 112 / (points.length - 1),
+    high === low ? 16 : 28 - (point.value - low) * 24 / (high - low),
+  ]);
+  const line = document.createElementNS(ns, "polyline");
+  line.setAttribute("points", coords.map((point) => point.join(",")).join(" "));
+  svg.append(line);
+  const list = element("ol");
+  points.forEach((point, index) => {
+    const identity = point.commitHash ? `Commit ${point.commitHash.slice(0, 8)}` :
+      `Legacy ${point.buildId ? "build" : "deployment"} ${(point.buildId ?? point.deploymentId).slice(0, 8)}`;
+    const description = `${identity} · ${new Date(point.completedAt).toLocaleString()} · ${format(point.value)}`;
+    const dot = document.createElementNS(ns, "circle");
+    dot.setAttribute("cx", coords[index][0]); dot.setAttribute("cy", coords[index][1]);
+    dot.setAttribute("r", "2.5");
+    const title = document.createElementNS(ns, "title"); title.textContent = description;
+    dot.append(title); svg.append(dot);
+    list.append(element("li", description));
+  });
+  summary.append(svg, element("span", description));
+  if (change !== null) summary.className = change < 0 ? "faster" : change > 0 ? "slower" : "";
+  wrap.append(summary, list);
+  return wrap;
+}
 function render() {
   if (!snapshot) return;
   const result = snapshot.result;
@@ -32,7 +90,7 @@ function render() {
   else status.textContent = "The saved result is more than 10 minutes old. Request a benchmark to refresh it.";
   resultPanel.hidden = !result;
   if (!result) return;
-  metadata.textContent = `Saved ${new Date(snapshot.modifiedAt).toLocaleString()} · Deployment ${result.deploymentId?.slice(0, 8) ?? "legacy"} · Request location ${result.colo ?? "local"} · 3 samples + warmup · ${result.verified.toLocaleString()} checks passed`;
+  metadata.textContent = `Saved ${new Date(snapshot.modifiedAt).toLocaleString()} · Commit ${result.commitHash?.slice(0, 8) ?? "not recorded"} · Deployment ${result.deploymentId?.slice(0, 8) ?? "legacy"} · Request location ${result.colo ?? "local"} · 3 samples + warmup · ${result.verified.toLocaleString()} checks passed`;
   tables.replaceChildren();
   for (const group of ["files", "git", "git-shell", "coding-small", "coding-mixed", "git-recovery"]) {
     const rows = result.rows.filter((row) => row.group === group && row.files === Number(workload.value));
@@ -52,13 +110,17 @@ function render() {
       tr.append(name);
       for (const row of shell ? [plain] : [plain, cached]) {
         const cell = element("td", row ? time(row.medianMs) : "—");
-        if (row) cell.append(element("small", `${time(row.minMs)} – ${time(row.maxMs)}`));
+        if (row) {
+          cell.append(element("small", `${time(row.minMs)} – ${time(row.maxMs)}`));
+          cell.append(trend(row));
+        }
         tr.append(cell);
       }
       if (shell) { body.append(tr); continue; }
       const ratio = cached && cached.medianMs > 0 && plain.medianMs > 0 ? cached.medianMs / plain.medianMs : null;
       const cell = element("td", ratio === null ? "—" : `${ratio.toFixed(2)}×`);
       if (ratio !== null) cell.className = ratio < 1 ? "faster" : "slower";
+      cell.append(trend(plain, true));
       tr.append(cell); body.append(tr);
     }
     table.append(body); wrap.append(table); tables.append(wrap);

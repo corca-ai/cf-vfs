@@ -86,6 +86,76 @@ it("recovers an expired run without letting its old owner publish", async () => 
   await expect(store.complete(result(first.runId))).rejects.toThrow("no longer active");
 });
 
+it("retains ten distinct commits across resets and replaces reruns without losing older commits", async () => {
+  const { fs, store, result, advance, now } = fixture();
+  for (let commit = 0; commit < 12; commit++) {
+    const claim = await store.claim(true);
+    if (claim.runId === null) throw new Error("No run");
+    await store.complete({
+      ...result(claim.runId),
+      commitHash: `commit-${commit}`,
+      buildId: `build-${commit}`,
+    });
+    advance(1000);
+  }
+  const reopened = new BenchmarkStore(fs, now);
+  const before = (await reopened.get()).history.map((point) => point.commitHash);
+  expect(before).toEqual(Array.from({ length: 10 }, (_, index) => `commit-${index + 2}`));
+  for (let repeat = 0; repeat < 22; repeat++) {
+    const claim = await reopened.claim(true);
+    if (claim.runId === null) throw new Error("No run");
+    await reopened.complete({
+      ...result(claim.runId),
+      commitHash: "commit-11",
+      buildId: `rebuilt-${repeat}`,
+      rows: [
+        {
+          group: "files",
+          operation: "read",
+          files: 100,
+          cache: false,
+          iterations: 100,
+          samplesMs: [repeat],
+          medianMs: repeat,
+          minMs: repeat,
+          maxMs: repeat,
+        },
+      ],
+    });
+    advance(1000);
+  }
+  const saved = await new BenchmarkStore(fs, now).get();
+  expect(saved.history.map((point) => point.commitHash)).toEqual(before);
+  expect(saved.history.at(-1)?.rows[0]?.medianMs).toBe(21);
+});
+
+it("recovers identifiable legacy runs without inventing commit hashes or duplicate builds", async () => {
+  const { fs, store, result, advance } = fixture();
+  fs.mkdir("/benchmarks/history", true);
+  for (const [runId, buildId] of [
+    ["a", "old"],
+    ["b", "old"],
+    ["c", "new"],
+  ]) {
+    await fs.writeFile(
+      `/benchmarks/history/${runId}.json`,
+      JSON.stringify({ ...result(runId ?? "missing"), buildId }),
+    );
+    advance(1000);
+  }
+  await fs.writeFile(RESULT_PATH, JSON.stringify({ ...result("c"), buildId: "new" }));
+  const snapshot = await store.get();
+  expect(snapshot.history.map((point) => point.buildId)).toEqual(["old", "new"]);
+  expect(snapshot.history.every((point) => point.commitHash === undefined)).toBe(true);
+  const claim = await store.claim(true);
+  if (claim.runId === null) throw new Error("No run");
+  await store.complete({ ...result(claim.runId), commitHash: "known", buildId: "new" });
+  expect((await store.get()).history.map((point) => point.commitHash ?? point.buildId)).toEqual([
+    "old",
+    "known",
+  ]);
+});
+
 it("runs real file and Git operations and verifies the resulting bytes with both cache settings", async () => {
   let suite: PublicBenchmarkSuite | undefined;
   const fs = createTestFileSystem({ onEvent: (event) => suite?.onEvent(event) });

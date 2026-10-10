@@ -453,6 +453,18 @@ continue without an open browser. The report distinguishes local metadata
 reuse gains, rejected checkout candidates, production RPC timings and the
 Git compression concurrency needed to fit a real isolate.
 
+Each displayed median and cache ratio has a sparkline for up to ten distinct
+commits. A successful rerun replaces that commit's point in place, so repeated
+requests cannot fill the window. Compact history is saved atomically with the
+latest result in `/benchmarks/trends.json`; failed runs do not add points.
+Existing retained runs without commit metadata are deduplicated by build (or
+Worker deployment) and explicitly labelled legacy. Unidentifiable results are
+not assigned invented versions. Trends match group, operation, file count,
+cache setting and operation count; timing noise and workload changes still
+matter when interpreting the first-to-last percentage. Opening the page reads
+saved history and does not execute a benchmark. Deploy committed source with
+`npm run deploy:public` to record its Git SHA alongside the source fingerprint.
+
 
 For iterative production optimization, use the authenticated public-suite
 workflow in [the demo README](../demo/README.md#repeated-production-performance-evaluation).
