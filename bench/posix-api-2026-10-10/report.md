@@ -141,3 +141,16 @@ local supplementary-group control.
 
 The generated baseline and .dev.vars are ignored. Set the private evaluation
 Worker's EVALUATION_TOKEN secret separately; no credentials are checked in.
+
+## Public deployment
+
+Retained source commit: `0c5440036e7fbaf59bca851429c6108eeeef40cf`.
+Public Worker version: `afaeebd3-f606-46bd-b69f-f7bdbd654cf8`.
+`https://vfs.borca.ai/`, `/benchmarks/` and `/health` return 200.
+A same-origin terminal WebSocket smoke test verifies binary append bytes
+`00 ff c0 80 00 ff` (base64 `AP/AgAD/`), mkdir/rmdir, rename, and Git
+init/config/add/commit/clean status. The uniquely named scratch tree is removed.
+The public benchmark suite was not rerun as part of this deployment; the
+private comparison above supplies the measured evidence. Existing public
+benchmark requests continue to refresh according to their normal cache policy.
+The private evaluation Worker was successfully deleted after all rooms cleared.
