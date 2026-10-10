@@ -1,0 +1,52 @@
+import * as git from "isomorphic-git";
+import { VfsError } from "../../core/errors.js";
+import type { GitRepository } from "./git-repository.js";
+
+// Content-addressed metadata only: no bodies or filesystem identities survive.
+const identities = new Map<string, string>();
+const capacity = 4096;
+export function cachedWorkIdentity(repo: GitRepository) {
+  let config: Promise<unknown> | undefined;
+  return async (entry: git.WalkerEntry, path: string): Promise<string | undefined> => {
+    const mode = await entry.mode();
+    const full = `${repo.dir}/${path}`;
+    const vfs = repo.fs.context.fileSystem;
+    let digest: string | undefined;
+    let token: string | undefined;
+    let key: string | undefined;
+    if ((mode & 0o170000) === 0o100000) {
+      config ??= git.getConfig({ ...repo, path: "core.autocrlf" });
+      token = vfs.getMutationToken(full);
+      try {
+        const release = repo.fs.context.budget.buffered((await entry.stat()).size);
+        try {
+          digest = await vfs.digestFile(full);
+        } finally {
+          release();
+        }
+      } catch (error) {
+        if (!(error instanceof VfsError) || error.code !== "ENOTSUP") throw error;
+      }
+      if (digest !== undefined) {
+        key = `${await config}:${digest}`;
+        const oid = identities.get(key);
+        if (oid !== undefined) {
+          repo.fs.check();
+          repo.fs.context.budget.io((await entry.stat()).size);
+          return `${mode}:${oid}`;
+        }
+      }
+    }
+    const body = await entry.content();
+    if (body === undefined) return undefined;
+    const oid = (await git.hashBlob({ object: body })).oid;
+    if (key !== undefined && token === vfs.getMutationToken(full)) {
+      if (identities.size >= capacity) {
+        const oldest = identities.keys().next().value;
+        if (oldest !== undefined) identities.delete(oldest);
+      }
+      identities.set(key, oid);
+    }
+    return `${mode}:${oid}`;
+  };
+}

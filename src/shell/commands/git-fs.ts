@@ -1,11 +1,11 @@
 import { VfsError } from "../../core/errors.js";
 import { encodeUtf8 } from "../../core/unicode.js";
 import { FsStats } from "../../fs/stats.js";
-import { NO_ENTRY_IDENTITY } from "../../vfs/types.js";
+import { NO_ENTRY_IDENTITY, type VfsStat } from "../../vfs/types.js";
 import type { ShellCommandContext } from "../types.js";
 import { GitCheckoutWrites } from "./git-checkout-writes.js";
 import { GitObjectWrites } from "./git-object-writes.js";
-import { commandPath, readFileBytes } from "./helpers.js";
+import { collectStream, commandPath, readFileBytes } from "./helpers.js";
 
 interface ConfigRead {
   readonly value: string;
@@ -15,12 +15,33 @@ interface ConfigRead {
 /** Git sees only the execution's scoped filesystem, never the host VFS. */
 export class GitFileSystem {
   private failure: unknown;
+  private workReads:
+    | { limit: number; snapshots: Map<string, VfsStat>; stats: Map<string, VfsStat> }
+    | undefined;
   private objectWrites: GitObjectWrites | undefined;
   private checkoutWrites: { dir: string; gitdir: string; writer: GitCheckoutWrites } | undefined;
   private readonly objectDirectories = new Set<string>();
   private configPath: string | undefined;
   private pendingConfig: Promise<ConfigRead> | undefined;
   constructor(readonly context: ShellCommandContext) {}
+
+  beginWorkReads(limit: number): void {
+    this.workReads = { limit, snapshots: new Map(), stats: new Map() };
+  }
+  workReadSnapshot(path: string): VfsStat | undefined {
+    return this.workReads?.snapshots.get(path);
+  }
+  workStatSnapshot(path: string): VfsStat | undefined {
+    return this.workReads?.stats.get(path);
+  }
+  private async readBytes(path: string) {
+    const resolved = commandPath(this.context, path);
+    const read = this.context.fileSystem.readFile(resolved);
+    const work = this.workReads;
+    if (work !== undefined && (work.snapshots.size < work.limit || work.snapshots.has(resolved)))
+      work.snapshots.set(resolved, read.stat);
+    return collectStream(this.context, read.stream);
+  }
 
   /** Share only overlapping reads, never a completed configuration snapshot. */
   coalesceConfigReads(gitdir: string): void {
@@ -159,10 +180,15 @@ export class GitFileSystem {
 
   private fileStats(path: string, follow: boolean): FsStats | Promise<FsStats> {
     const resolved = commandPath(this.context, path);
-    const read = () =>
-      new FsStats(
-        follow ? this.context.fileSystem.stat(resolved) : this.context.fileSystem.lstat(resolved),
-      );
+    const read = () => {
+      const entry = follow
+        ? this.context.fileSystem.stat(resolved)
+        : this.context.fileSystem.lstat(resolved);
+      const work = this.workReads;
+      if (work !== undefined && (work.stats.size < work.limit || work.stats.has(resolved)))
+        work.stats.set(resolved, entry);
+      return new FsStats(entry);
+    };
     return this.objectWrites === undefined
       ? read()
       : this.objectWrites.beforeRead(resolved).then(read);
@@ -176,7 +202,7 @@ export class GitFileSystem {
           return (await this.readConfig(path)).value;
         if (this.objectWrites !== undefined)
           await this.objectWrites.beforeRead(commandPath(this.context, path));
-        const lease = await readFileBytes(this.context, path);
+        const lease = await this.readBytes(path);
         try {
           if (encoding !== undefined && encoding !== "utf8" && encoding !== "utf-8")
             throw new VfsError("ENOTSUP", "Git supports only UTF-8 text encoding", path);

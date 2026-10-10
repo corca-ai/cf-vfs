@@ -1,0 +1,12 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "cf-vfs-no-api-evaluation",
+  "main": "worker.ts",
+  "account_id": "b23e9b2e3a9159dd7eb3fa51f839c5c5",
+  "compatibility_date": "2026-07-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "secrets": { "required": ["EVALUATION_TOKEN"] },
+  "durable_objects": { "bindings": [{ "name": "EVALUATIONS", "class_name": "NoApiEvaluation" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["NoApiEvaluation"] }]
+}

@@ -2,6 +2,7 @@ import * as git from "isomorphic-git";
 import { VfsError } from "../../core/errors.js";
 import { compareUtf8 } from "../../core/path.js";
 import type { GitRepository } from "./git-repository.js";
+import { cachedWorkIdentity } from "./git-work-identity.js";
 
 /** Compare actual bytes: the engine's stat cache compares only whole seconds. */
 export async function gitMatrix(
@@ -11,7 +12,7 @@ export async function gitMatrix(
 ) {
   const rows: Array<[string, number, number, number]> = [];
   const ignoreFs = missingIgnoreProbes(repo);
-  const inspectWork = boundedWorkIdentity();
+  const inspectWork = boundedWorkIdentity(repo);
   const relevant = (path: string) =>
     path === "." ||
     paths.some(
@@ -63,7 +64,7 @@ export async function gitMatrix(
 async function matrixRow(
   path: string,
   entries: readonly (git.WalkerEntry | null | undefined)[],
-  inspectWork: typeof workIdentity,
+  inspectWork: ReturnType<typeof boundedWorkIdentity>,
   stagingSizes?: Map<string, number>,
 ): Promise<[string, number, number, number]> {
   const [head, work, stage] = entries;
@@ -81,7 +82,7 @@ async function matrixRow(
   }
   const h = await entryIdentity(head),
     i = await entryIdentity(stage);
-  const w = await inspectWork(work);
+  const w = await inspectWork(work, path);
   const workColumn = matrixColumn(h, w),
     stageColumn = matrixColumn(h, i, w);
   if (stagingSizes !== undefined && work != null && workColumn !== stageColumn)
@@ -107,21 +108,17 @@ export function gitStatusCode(head: number, work: number, stage: number) {
   return `${index}${tree}`;
 }
 
-async function workIdentity(entry: git.WalkerEntry | null | undefined) {
-  const body = await entry?.content();
-  return body ? `${await entry?.mode()}:${(await git.hashBlob({ object: body })).oid}` : undefined;
-}
-
 /** Bound body collection and native hashes without serializing metadata walks. */
-function boundedWorkIdentity(): typeof workIdentity {
+function boundedWorkIdentity(repo: GitRepository) {
+  const inspect = cachedWorkIdentity(repo);
   let active = 0;
   const waiting: Array<() => void> = [];
-  return async (entry) => {
+  return async (entry: git.WalkerEntry | null | undefined, path: string) => {
     if (entry == null) return undefined;
     if (active < 32) active++;
     else await new Promise<void>((resolve) => waiting.push(resolve));
     try {
-      return await workIdentity(entry);
+      return await inspect(entry, path);
     } finally {
       // Hand off the reserved slot before admitting a fresh caller.
       const next = waiting.shift();

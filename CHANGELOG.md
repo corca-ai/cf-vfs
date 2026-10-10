@@ -16,6 +16,10 @@ included.
 
 ## [Unreleased]
 
+- Reuse worktree Git hashes using existing mutation tokens and permission-checked
+  reads, reducing repeated status/add body reads without new filesystem APIs or
+  SQL cache writes. Cache scope, CRLF settings and collaborative edits remain checked.
+
 - Speed up fresh local Git clones with guarded recursive object copying and
   bounded checkout writes. An optional `canUseBulkOperation` hint preserves
   collaborative overlays and falls back to individual I/O when unsupported.

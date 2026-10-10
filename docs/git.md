@@ -215,3 +215,19 @@ document opens/closes and edits; the hint is not a lock or reservation.
 The [safe bulk-operation evaluation](../bench/git-bulk-safe-2026-10-10/report.md)
 records local measurements and failure tests. Actual Cloudflare batch interruption
 and reset behavior has not yet been evaluated for this optimization.
+
+Worktree inspection still enumerates metadata, but reuses Git blob hashes for up
+to 4,096 paths per filesystem owner. The cache contains hashes and opaque tokens,
+never file bodies, and is weakly owned so filesystem disposal releases it. A hit
+requires the current inode, mutation token and CRLF conversion setting to match.
+A scoped read at EOF checks current read permission and overlay metadata before
+reuse. Changed paths, symlinks and paths beyond capacity use ordinary reads.
+Logical I/O and buffer limits remain enforced even on hits. No SQL digest writes
+or persisted cache files are introduced. Cold commands still hash their inputs;
+resetting a Durable Object safely returns to that cold path. Hosts must continue
+to serialize repository operations and document edits.
+
+The [API-free optimization evaluation](../bench/git-no-api-2026-10-10/report.md)
+compares this cache, pack storage and a rejected copy-on-write prototype locally
+and on Cloudflare. Pack preparation remains an explicit external maintenance
+choice through the existing Git SDK; automatic packing is not enabled.

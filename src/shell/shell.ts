@@ -12,6 +12,7 @@ import {
 import type { ShellContentReader } from "./content.js";
 import { ReservedPathFileSystem } from "./devices.js";
 import type { ShellEventSink } from "./events.js";
+import { registerFileSystemOrigin } from "./fs-origin.js";
 import type { ShellIdentityResolver } from "./identity.js";
 import type { ShellNetwork } from "./network.js";
 import { ScopedFileSystem } from "./policy.js";
@@ -139,9 +140,11 @@ export class Shell {
     fileSystem: VirtualFileSystem = this.fileSystem,
   ): ShellFileSystem {
     this.#appletListing ??= this.#buildAppletListing();
-    return new ReservedPathFileSystem(new ScopedFileSystem(fileSystem, this.policy, budget), {
+    const view = new ReservedPathFileSystem(new ScopedFileSystem(fileSystem, this.policy, budget), {
       applets: { directories: APPLET_DIRECTORIES, names: this.#appletListing },
     });
+    registerFileSystemOrigin(view, this.fileSystem);
+    return view;
   }
 
   #sessionFileSystem(session: ShellSession): VirtualFileSystem {
