@@ -16,7 +16,11 @@ Compatibility date stays 2026-07-24. The dedicated private Worker is
 `cf-vfs-five-hour-evaluation`; timing and native SQL profiling are separate.
 Local returned rows are diagnostic and are not Cloudflare billed rows.
 
-## Experiments in progress
+## Chronological experiment ledger
+
+Intermediate pending/adoption statements below describe their original
+checkpoints. See the final adoption sections and the
+[run report](../posix-optimizations-five-hours-2026-10-10.md) for current status.
 
 - Local identical-code A/A, ten alternating pairs: overall candidate/baseline
   latency ratio 0.9982, bootstrap 95% CI [0.9943, 1.0042]. No confirmed latency
@@ -240,3 +244,33 @@ ratios versus round two: demo 0.945607 [0.944019,0.954846], unbound 0.963455
 100/1000 unrelated entries, with statements and writes unchanged. Round four
 exceeds two existing bundle caps (raw VFS +244 bytes versus round three);
 no budget has been changed and CF validation is still required.
+
+- Unbound flagged-group independent ten-pair CF repeat completed: selected
+  uncached ratio 0.9976 [0.9891,1.0130], cache 0.9846 [0.9121,1.0220],
+  zero native SQL cost flags. Cached append1000 reproduces (1.2321
+  [1.0611,1.4921]); checkout-base1000 is a new pointwise flag (1.0849
+  [1.0076,1.2713]). Six other initial confirmed timing flags and the
+  31-statement checkout-failure increase do not reproduce. Full-suite adoption
+  policy remains aggregate based; these tradeoffs are disclosed.
+- Round-four cumulative local demo ten pairs versus accepted round two:
+  overall 0.951705 [0.944913,0.956673], files 0.919380, Git 0.955074,
+  optional cache 0.985727. Zero cost flags; coding-mixed edit100 has one
+  confirmed signal (1.0900 [1.0194,1.2073]). Actual CF validation is next.
+
+- Public round-two verification: both full190/60648 checks and expected build
+  pass, but descriptive overall ratios versus morning baseline are 1.132 and
+  1.196. Not explained by colo or engine changes (all LAX, same protocol).
+  Report these as slower public results, not a successful public speedup.
+  Actual shell clone/pull/permission restoration checks pass and clean up.
+- Indexed statById: native guard reads before 102/1002 for both plain and alias
+  identities, after 2/2 plain and 3/3 alias; lowest identity and last-unlink
+  ENOENT behavior preserved. Related33 tests pass. Incremental local full10
+  ratio 1.001544 [0.988322,1.011290], zero confirmed timing flags; one tiny
+  add-changed cost variation (+1 statement/+6 returned rows) in an unrelated
+  workload that does not call statById. No aggregate timing claim.
+- Round-five native CF handle/identity cost probe completed ten alternating
+  pairs at100/1000 plus warmup, all behavior checks pass. DO clock samples
+  include zero, so timing ratios are null; costs remain valid. Initial summary
+  rejected zeros, corrected without rerunning or changing raw samples.
+  Original room identifier was lost during summary recovery; each operation
+  cleared storage in finally. Full matched CF demo/unbound runs follow.

@@ -589,3 +589,6 @@ series, with counts shown. No artificial epsilon or infinite speedup is used.
 The baseline can move when the history window or comparable cohort changes;
 compare values within the currently displayed series. Opening the page never
 runs a benchmark; same-commit replacement and the ten-minute cache remain.
+
+The [five-hour optimization report](../bench/posix-optimizations-five-hours-2026-10-10.md)
+records matched full-suite CF results, tradeoffs and deployment checkpoints.

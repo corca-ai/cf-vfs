@@ -1,11 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { timingSafeEqual } from "node:crypto";
 import { meterSqlStorage } from "../metered-sql.js";
-import { PublicBenchmarkSuite as BaselineSuite } from "./compiled/baseline/demo/benchmark-suite.js";
-import { createFsAdapter as baselineFsAdapter } from "./compiled/baseline/src/fs/index.js";
-import { collectStream as baselineCollectStream } from "./compiled/baseline/src/shell/commands/helpers.js";
-import { Shell as BaselineShell } from "./compiled/baseline/src/shell/shell.js";
-import { DurableObjectFileSystem as BaselineFileSystem } from "./compiled/baseline/src/vfs/do-sql.js";
 import {
   type BenchmarkStage,
   benchmarkPlan,
@@ -16,8 +11,13 @@ import { defineApplet } from "./compiled/candidate/src/shell/commands/applet.js"
 import { collectStream } from "./compiled/candidate/src/shell/commands/helpers.js";
 import { Shell } from "./compiled/candidate/src/shell/shell.js";
 import { DurableObjectFileSystem } from "./compiled/candidate/src/vfs/do-sql.js";
+import { PublicBenchmarkSuite as BaselineSuite } from "./compiled/cf-baseline/demo/benchmark-suite.js";
+import { createFsAdapter as baselineFsAdapter } from "./compiled/cf-baseline/src/fs/index.js";
+import { collectStream as baselineCollectStream } from "./compiled/cf-baseline/src/shell/commands/helpers.js";
+import { Shell as BaselineShell } from "./compiled/cf-baseline/src/shell/shell.js";
+import { DurableObjectFileSystem as BaselineFileSystem } from "./compiled/cf-baseline/src/vfs/do-sql.js";
 
-const BUILD = "five-hour-round2-006ba6e7000d";
+const BUILD = "five-hour-round5-ed34298a1c49";
 const plan = benchmarkPlan().filter((stage) => stage.trial === 0);
 function validates(stage: BenchmarkStage) {
   return (
@@ -202,12 +202,11 @@ export class FullEvaluation extends DurableObject<FullEvaluationEnv> {
   async handles(version: string, count: number) {
     await this.clear();
     try {
-      const fs =
-        version === "baseline"
-          ? baselineFsAdapter(new BaselineFileSystem(this.meter.storage, { chunkBytes: 32768 }))
-              .promises
-          : createFsAdapter(new DurableObjectFileSystem(this.meter.storage, { chunkBytes: 32768 }))
-              .promises;
+      const raw = new (version === "baseline" ? BaselineFileSystem : DurableObjectFileSystem)(
+        this.meter.storage,
+        { chunkBytes: 32768 },
+      );
+      const fs = (version === "baseline" ? baselineFsAdapter(raw) : createFsAdapter(raw)).promises;
       for (let index = 0; index < count; index++) await fs.writeFile(`/noise${index}`, "noise");
       await fs.writeFile("/file", new Uint8Array(1024 * 1024).fill(65));
       const handle = await fs.open("/file", "r+");
@@ -231,6 +230,10 @@ export class FullEvaluation extends DurableObject<FullEvaluationEnv> {
           rowsWritten: this.meter.rowsWritten,
         });
       };
+      await sample("identity-100", async () => {
+        for (let i = 0; i < 100; i++)
+          if (raw.statById(identity).ino !== identity) throw new Error("identity changed");
+      });
       await sample("fstat-100", async () => {
         for (let i = 0; i < 100; i++) await handle.stat();
       });
@@ -240,6 +243,10 @@ export class FullEvaluation extends DurableObject<FullEvaluationEnv> {
       await sample("truncate-zero", () => handle.truncate(0));
       await fs.link("/file", "/alias");
       await fs.unlink("/file");
+      await sample("alias-identity-100", async () => {
+        for (let i = 0; i < 100; i++)
+          if (raw.statById(identity).ino !== identity) throw new Error("alias identity changed");
+      });
       await sample("alias-fstat-100", async () => {
         for (let i = 0; i < 100; i++) await handle.stat();
       });

@@ -1,0 +1,55 @@
+
+ RUN  v4.1.10 /private/tmp/cf-vfs-5h-identity-1791628763
+
+identity scaling 100 {
+  plain: 102,
+  linked: 102,
+  statIdentity: 102,
+  aliasIdentity: 102,
+  expectedIdentity: 102,
+  missing: true
+}
+identity scaling 1000 {
+  plain: 1002,
+  linked: 1002,
+  statIdentity: 1002,
+  aliasIdentity: 1002,
+  expectedIdentity: 1002,
+  missing: true
+}
+ ❯ bench/identity-scaling.bench.ts (2 tests | 2 failed) 45ms
+   × bounds identity lookup beside 100 unrelated files 13ms
+   × bounds identity lookup beside 1000 unrelated files 32ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  bench/identity-scaling.bench.ts > bounds identity lookup beside 100 unrelated files
+AssertionError: expected 102 to be less than 10
+ ❯ bench/identity-scaling.bench.ts:32:24
+     30|   expect(result.aliasIdentity).toBe(result.expectedIdentity);
+     31|   expect(result.missing).toBe(true);
+     32|   expect(result.plain).toBeLessThan(10);
+       |                        ^
+     33|   expect(result.linked).toBeLessThan(10);
+     34| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  bench/identity-scaling.bench.ts > bounds identity lookup beside 1000 unrelated files
+AssertionError: expected 1002 to be less than 10
+ ❯ bench/identity-scaling.bench.ts:32:24
+     30|   expect(result.aliasIdentity).toBe(result.expectedIdentity);
+     31|   expect(result.missing).toBe(true);
+     32|   expect(result.plain).toBeLessThan(10);
+       |                        ^
+     33|   expect(result.linked).toBeLessThan(10);
+     34| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  22:28:56
+   Duration  720ms (transform 238ms, setup 0ms, import 470ms, tests 45ms, environment 0ms)
+

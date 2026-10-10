@@ -365,6 +365,61 @@
       "costRegressions": 1
     },
     {
+      "file": "cf-round2-none-flag-repeat.json.gz",
+      "originalBytes": 952915,
+      "compressedBytes": 32634,
+      "sha256": "ef40878448446773ab3c0174d8cd7d7991549229ee47615387e1ab2b40eeb2cc",
+      "compressedSha256": "b8d6a38ab443d85d3b5ddcbed06a72bd4bd21609092f6524531a818cf842c9da",
+      "kind": "paired-measurement",
+      "credentials": "none",
+      "trials": 10,
+      "fullPlan": false,
+      "metrics": [
+        {
+          "id": "overall",
+          "workloads": 74,
+          "ratio": {
+            "median": 0.9976244088421126,
+            "p10": 0.981125155039905,
+            "p90": 1.0167755946413448,
+            "ci95": [
+              0.9891286661516687,
+              1.0129965266521421
+            ]
+          }
+        },
+        {
+          "id": "git",
+          "workloads": 74,
+          "ratio": {
+            "median": 0.9976244088421126,
+            "p10": 0.981125155039905,
+            "p90": 1.0167755946413448,
+            "ci95": [
+              0.9891286661516687,
+              1.0129965266521421
+            ]
+          }
+        },
+        {
+          "id": "cache",
+          "workloads": 9,
+          "ratio": {
+            "median": 0.9846439284765096,
+            "p10": 0.8909776430295875,
+            "p90": 1.0430965546628734,
+            "ci95": [
+              0.9120988077089661,
+              1.0219593919448993
+            ]
+          }
+        }
+      ],
+      "regressions": 12,
+      "confirmed": 2,
+      "costRegressions": 0
+    },
+    {
       "file": "combined-round1.patch.txt.gz",
       "originalBytes": 9405,
       "compressedBytes": 3092,
@@ -397,11 +452,19 @@
       "kind": "patch"
     },
     {
+      "file": "combined-round5.patch.txt.gz",
+      "originalBytes": 15337,
+      "compressedBytes": 4787,
+      "sha256": "5a01ace8f0e2d1b704c9a2d6ac085c2d1e76912cbb47c250f415a4c7c7dcb516",
+      "compressedSha256": "d423e19b890d739088c7ff57f6a69a6d5f3e781b2a2c275a4cff0697326f1875",
+      "kind": "patch"
+    },
+    {
       "file": "compiled-graphs.json.gz",
-      "originalBytes": 2988678,
-      "compressedBytes": 662930,
-      "sha256": "1ef9f59fce3a316202f6cc970ed49cba8901e7720518806bcfe53f774cb08048",
-      "compressedSha256": "8b4b472d8746c8515e03459b3d5773a263303adbbed56595341d6f03fa61a022",
+      "originalBytes": 3517157,
+      "compressedBytes": 780037,
+      "sha256": "1dc656ec8fe138ac484be57fa9fc4616615020c91235aaad4eb16b382171bc4b",
+      "compressedSha256": "7fb8008735c7049d881bae543e9829475ad50fd73193d4cbb2fe2e43101033d9",
       "kind": "diagnostic"
     },
     {
@@ -1953,6 +2016,77 @@
       "costRegressions": 0
     },
     {
+      "file": "local-identity-point-demo.json.gz",
+      "originalBytes": 1711425,
+      "compressedBytes": 91819,
+      "sha256": "a01db13829fed817bbd205261044b40f1c383b01722498751b3fa41e9babca0f",
+      "compressedSha256": "77cd3d66963ffcdc89a1e9d083f13b024a88a2d31c94edae66b3535f142ed5db",
+      "kind": "paired-measurement",
+      "credentials": {
+        "uid": 1000,
+        "gid": 1000
+      },
+      "trials": 10,
+      "fullPlan": true,
+      "metrics": [
+        {
+          "id": "overall",
+          "workloads": 146,
+          "ratio": {
+            "median": 1.0015439055586364,
+            "p10": 0.9866909943462103,
+            "p90": 1.0167779389676657,
+            "ci95": [
+              0.9883222155280887,
+              1.0112895900288352
+            ]
+          }
+        },
+        {
+          "id": "files",
+          "workloads": 18,
+          "ratio": {
+            "median": 0.9982671102444807,
+            "p10": 0.9841052799751429,
+            "p90": 1.0230361525607803,
+            "ci95": [
+              0.9867860095219774,
+              1.010929858843448
+            ]
+          }
+        },
+        {
+          "id": "git",
+          "workloads": 128,
+          "ratio": {
+            "median": 0.9984262448620618,
+            "p10": 0.9869027501164405,
+            "p90": 1.018814195254161,
+            "ci95": [
+              0.9881759218454031,
+              1.011351393561955
+            ]
+          }
+        },
+        {
+          "id": "cache",
+          "workloads": 44,
+          "ratio": {
+            "median": 1.0052417959080964,
+            "p10": 0.9788078973443671,
+            "p90": 1.0130521829887595,
+            "ci95": [
+              0.9793859727142764,
+              1.0100473456426289
+            ]
+          }
+        }
+      ],
+      "regressions": 8,
+      "confirmed": 0,
+      "costRegressions": 1
+    },
+    {
       "file": "local-json-entry-demo.json.gz",
       "originalBytes": 1704115,
       "compressedBytes": 91515,
@@ -2802,6 +2936,77 @@
       "costRegressions": 5
     },
     {
+      "file": "local-round4-cumulative-demo.json.gz",
+      "originalBytes": 1707098,
+      "compressedBytes": 91784,
+      "sha256": "4d5e4ab7ce71b37a0e4581b13bfa7c6851b94247918c5c3fb3b9682f6713e622",
+      "compressedSha256": "f7dfaed7ec3d144576b3c1652a5f42bade9930f88966050f4d31331fc33a622e",
+      "kind": "paired-measurement",
+      "credentials": {
+        "uid": 1000,
+        "gid": 1000
+      },
+      "trials": 10,
+      "fullPlan": true,
+      "metrics": [
+        {
+          "id": "overall",
+          "workloads": 146,
+          "ratio": {
+            "median": 0.9517049895540745,
+            "p10": 0.9438316997814047,
+            "p90": 0.9603409662958032,
+            "ci95": [
+              0.9449125292740764,
+              0.9566733221095265
+            ]
+          }
+        },
+        {
+          "id": "files",
+          "workloads": 18,
+          "ratio": {
+            "median": 0.9193801888263133,
+            "p10": 0.9098857299808766,
+            "p90": 0.9300183975248588,
+            "ci95": [
+              0.912955579033984,
+              0.9271481617080098
+            ]
+          }
+        },
+        {
+          "id": "git",
+          "workloads": 128,
+          "ratio": {
+            "median": 0.9550737624985579,
+            "p10": 0.9481384019847328,
+            "p90": 0.9662981692863086,
+            "ci95": [
+              0.949326384286083,
+              0.9614005370514684
+            ]
+          }
+        },
+        {
+          "id": "cache",
+          "workloads": 44,
+          "ratio": {
+            "median": 0.9857265228754772,
+            "p10": 0.9613715912897445,
+            "p90": 1.002567058972457,
+            "ci95": [
+              0.9687797790479526,
+              0.9962643900459407
+            ]
+          }
+        }
+      ],
+      "regressions": 5,
+      "confirmed": 1,
+      "costRegressions": 0
+    },
+    {
       "file": "local-round4-cumulative-none.json.gz",
       "originalBytes": 1720219,
       "compressedBytes": 92450,
@@ -3041,6 +3246,14 @@
       "compressedBytes": 1094,
       "sha256": "b4eb69ca928280784661f0c5fef26fa90d61a49f5a470605a711a0bb13f35379",
       "compressedSha256": "19a6f908fb539b9e8215f8a647c7dad029b7851dc791d677e98f65f211e2b898",
+      "kind": "patch"
+    },
+    {
+      "file": "scalar-entry.patch.txt.gz",
+      "originalBytes": 869,
+      "compressedBytes": 477,
+      "sha256": "93d05b3f3e5119e9256b88845a4a729919c74027a32b5c69da666ae3b64f487d",
+      "compressedSha256": "cb3ff04e7c615438e0d990c6191343802d0266a5af46e0b60e6bce0a9f3627f7",
       "kind": "patch"
     },
     {
