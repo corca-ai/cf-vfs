@@ -74,7 +74,9 @@ function trend(row, ratio = false) {
     dot.append(title); svg.append(dot);
     list.append(element("li", description));
   });
-  summary.append(svg, element("span", description));
+  const changeLabel = element("span", change === null ? "—" : `${change > 0 ? "+" : ""}${change.toFixed(1)}%`);
+  changeLabel.append(element("small", `${points.length} ${points.length === 1 ? "point" : "points"}`));
+  summary.append(svg, changeLabel);
   if (change !== null) summary.className = change < 0 ? "faster" : change > 0 ? "slower" : "";
   wrap.append(summary, list);
   return wrap;
@@ -109,18 +111,23 @@ function render() {
       if (plain.iterations > 1) name.append(element("small", `${plain.iterations.toLocaleString()} operations / call`));
       tr.append(name);
       for (const row of shell ? [plain] : [plain, cached]) {
-        const cell = element("td", row ? time(row.medianMs) : "—");
-        if (row) {
-          cell.append(element("small", `${time(row.minMs)} – ${time(row.maxMs)}`));
-          cell.append(trend(row));
-        }
+        const cell = element("td");
+        const metric = element("div"); metric.className = "metric";
+        const values = element("div", row ? time(row.medianMs) : "—"); values.className = "metric-values";
+        if (row) values.append(element("small", `${time(row.minMs)} – ${time(row.maxMs)}`));
+        metric.append(values);
+        if (row) metric.append(trend(row));
+        cell.append(metric);
         tr.append(cell);
       }
       if (shell) { body.append(tr); continue; }
       const ratio = cached && cached.medianMs > 0 && plain.medianMs > 0 ? cached.medianMs / plain.medianMs : null;
-      const cell = element("td", ratio === null ? "—" : `${ratio.toFixed(2)}×`);
-      if (ratio !== null) cell.className = ratio < 1 ? "faster" : "slower";
-      cell.append(trend(plain, true));
+      const cell = element("td");
+      const metric = element("div"); metric.className = "metric";
+      const value = element("div", ratio === null ? "—" : `${ratio.toFixed(2)}×`); value.className = "metric-values";
+      if (ratio !== null) value.classList.add(ratio < 1 ? "faster" : "slower");
+      metric.append(value, trend(plain, true));
+      cell.append(metric);
       tr.append(cell); body.append(tr);
     }
     table.append(body); wrap.append(table); tables.append(wrap);
