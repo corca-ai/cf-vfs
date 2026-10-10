@@ -75,9 +75,9 @@ counts only, not CF rows read/written.
 
 Production browser verification confirms four aggregate graphs, visible
 slowdown counts, latest commit metadata and no page overflow at 390px.
-The latest source contributes one distinct history point; prior same-commit
+The deployed dashboard now shows seven comparable points and three omitted
+cohorts. The latest source contributes one distinct history point; prior same-commit
 reruns replaced their point. All 1,958 Node tests, 155 Workers tests, typechecks,
 lint (existing informational diagnostics), quality, protocol, documentation,
 unused-code checks and 12 bundle budgets pass. The new four arithmetic/cohort
 regression tests pass after the final UI warning change.
-
