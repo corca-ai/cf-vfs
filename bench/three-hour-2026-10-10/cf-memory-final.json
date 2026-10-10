@@ -1,0 +1,62 @@
+{
+  "metric": "peak shell-owned buffer reservation, not process RSS",
+  "inputBytes": 65536,
+  "baseline": "02f2ef3",
+  "at": "2026-10-10T08:54:16.239Z",
+  "results": [
+    {
+      "build": "traversal-cache-v2-1d3d16785aef",
+      "colo": "LAX",
+      "rows": [
+        {
+          "version": "baseline",
+          "rows": [
+            {
+              "limit": 98304,
+              "peakReserved": 65536,
+              "peakAttempted": 131072,
+              "verified": false,
+              "exitCode": 1,
+              "stderr": "shell buffered-byte limit exceeded\n"
+            },
+            {
+              "limit": 131072,
+              "peakReserved": 131072,
+              "peakAttempted": 131072,
+              "verified": true,
+              "exitCode": 0,
+              "stderr": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "build": "traversal-cache-v2-1d3d16785aef",
+      "colo": "LAX",
+      "rows": [
+        {
+          "version": "candidate",
+          "rows": [
+            {
+              "limit": 98304,
+              "peakReserved": 65536,
+              "peakAttempted": 65536,
+              "verified": true,
+              "exitCode": 0,
+              "stderr": ""
+            },
+            {
+              "limit": 131072,
+              "peakReserved": 65536,
+              "peakAttempted": 65536,
+              "verified": true,
+              "exitCode": 0,
+              "stderr": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

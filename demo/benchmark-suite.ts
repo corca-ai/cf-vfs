@@ -132,10 +132,13 @@ export class PublicBenchmarkSuite {
   private readonly metadata = new FsMetadataCache();
   readonly onEvent = this.metadata.onEvent;
 
-  constructor(private readonly vfs: VirtualFileSystem) {
-    this.gitShell = new GitShellBenchmark(vfs);
-    this.codingSmall = new GitCodingWorkflow(vfs, false);
-    this.codingMixed = new GitCodingWorkflow(vfs, true);
+  constructor(
+    private readonly vfs: VirtualFileSystem,
+    private readonly identityTime?: number,
+  ) {
+    this.gitShell = new GitShellBenchmark(vfs, identityTime);
+    this.codingSmall = new GitCodingWorkflow(vfs, false, identityTime);
+    this.codingMixed = new GitCodingWorkflow(vfs, true, identityTime);
   }
 
   private adapter(cache: boolean) {
@@ -151,7 +154,8 @@ export class PublicBenchmarkSuite {
     if (stage.group === "git-shell") return this.gitShell.run(stage.operation, stage.files);
     if (stage.group === "coding-small") return this.codingSmall.run(stage.operation, stage.files);
     if (stage.group === "coding-mixed") return this.codingMixed.run(stage.operation, stage.files);
-    if (stage.group === "git-recovery") return runGitRecovery(this.vfs, stage.operation);
+    if (stage.group === "git-recovery")
+      return runGitRecovery(this.vfs, stage.operation, this.identityTime);
     return this.repository(stage);
   }
 

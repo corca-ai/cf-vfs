@@ -516,13 +516,22 @@ directory removal against `6ced964`, with local and actual CF measurements.
 Public API and persisted schemas stay unchanged; ordinary stat, overwrite,
 and rename remain controls; deep traversal candidates were rejected.
 
+The [three-hour evaluation](../bench/three-hour-2026-10-10/report.md) records
+local and actual CF experiments, including bounded POSIX traversal metadata
+reuse and single-chunk command input collection. The strongest candidate
+improved the credential-bound CF aggregate by about 11%, but repeated tests
+confirmed a material shell population regression. No runtime optimization was
+adopted. Raw trials, rejected patches and added permission/rollback tests are
+retained; SQL savings alone did not override the latency gate.
+
 ## Comprehensive regression protocol
 
 Performance adoption requires full-suite evidence, not only a faster target.
 The repository instructions in AGENTS.md require this for future work.
 
 1. Save the baseline commit/build, runtime, workload plan, warmups, raw samples,
-   validation results and SQL counters. Run the entire local and actual CF
+   validation results and SQL counters, including UID/GID/groups and fixture
+   permissions. Run the entire local and actual CF
    plans, including both file counts, both cache variants, Git engine, shell
    Git, coding profiles and recovery probes.
 2. Run the same plan for the candidate. `npm run bench:public:local -- --out
@@ -543,6 +552,9 @@ The repository instructions in AGENTS.md require this for future work.
    trials on the same fixture/environment, use paired confidence intervals,
    and repeat the full comparison if a systemic shift is suspected. A geometric
    mean below 1 cannot override a confirmed material per-workload regression.
+   Credential-bound optimizations additionally need matching credential-bound
+   full comparisons: the default public plan uses an unbound VFS and cannot
+   establish their acceleration. Keep the unbound plan as a regression control.
    SQL reductions and timing improvements are separate claims. Do not convert
    SQL counts into a dollar savings percentage.
 5. Adopt only when overall improvement is supported and no material unexplained

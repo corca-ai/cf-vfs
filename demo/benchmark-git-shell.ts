@@ -1,8 +1,8 @@
 import * as git from "isomorphic-git";
 import { createFsAdapter } from "../src/fs/index.js";
-import { gitCommand } from "../src/shell/commands/git.js";
 import { Shell } from "../src/shell/shell.js";
 import type { VirtualFileSystem } from "../src/vfs/types.js";
+import { benchmarkGitCommand } from "./benchmark-git-command.js";
 
 export const SHELL_GIT_OPERATIONS = [
   "init",
@@ -35,10 +35,13 @@ const CHANGED = "// changed\nconst value = 2;\n";
 /** Measure the applet's scoped I/O and command overhead as well as the Git engine. */
 export class GitShellBenchmark {
   private readonly shell: Shell;
-  constructor(private readonly vfs: VirtualFileSystem) {
+  constructor(
+    private readonly vfs: VirtualFileSystem,
+    identityTime?: number,
+  ) {
     this.shell = new Shell({
       fileSystem: vfs,
-      commands: [gitCommand],
+      commands: [benchmarkGitCommand(identityTime)],
       // Permit the baseline's repeated large index writes to finish too.
       // Other limits remain the same as the real shell.
       limits: { maxTotalIoBytes: 128 * 1024 * 1024 },

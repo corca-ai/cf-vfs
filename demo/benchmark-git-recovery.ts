@@ -1,10 +1,10 @@
 import * as git from "isomorphic-git";
 import { VfsError } from "../src/core/errors.js";
 import { createFsAdapter } from "../src/fs/index.js";
-import { gitCommand } from "../src/shell/commands/git.js";
 import { Shell } from "../src/shell/shell.js";
 import type { VirtualFileSystem } from "../src/vfs/types.js";
 import { runCheckoutRecovery } from "./benchmark-git-checkout-recovery.js";
+import { benchmarkGitCommand } from "./benchmark-git-command.js";
 import { WorkspaceOperations } from "./workspace-operations.js";
 
 export const RECOVERY_OPERATIONS = [
@@ -21,11 +21,15 @@ export type RecoveryOperation = (typeof RECOVERY_OPERATIONS)[number];
 const ROOT = "/scratch/recovery";
 
 /** Faults are local to this isolated benchmark VFS, never to the public shell. */
-export async function runGitRecovery(vfs: VirtualFileSystem, operation: RecoveryOperation) {
-  if (operation === "checkout-failure") return runCheckoutRecovery(vfs);
+export async function runGitRecovery(
+  vfs: VirtualFileSystem,
+  operation: RecoveryOperation,
+  identityTime?: number,
+) {
+  if (operation === "checkout-failure") return runCheckoutRecovery(vfs, identityTime);
   const fs = createFsAdapter(vfs);
   await fs.promises.rm(ROOT, { recursive: true, force: true });
-  const shell = new Shell({ fileSystem: vfs, commands: [gitCommand] });
+  const shell = new Shell({ fileSystem: vfs, commands: [benchmarkGitCommand(identityTime)] });
   const run = (script: string) => shell.executeText({ script, cwd: ROOT });
   const requireSuccess = async (script: string) => {
     const outcome = await run(script);
@@ -43,8 +47,8 @@ export async function runGitRecovery(vfs: VirtualFileSystem, operation: Recovery
   for (let n = 0; n < files; n++) await vfs.writeFile(`${ROOT}/new${n}`, `new body ${n}\n`);
   if (operation === "concurrent-two-adds") {
     const callers = [
-      new Shell({ fileSystem: vfs, commands: [gitCommand] }),
-      new Shell({ fileSystem: vfs, commands: [gitCommand] }),
+      new Shell({ fileSystem: vfs, commands: [benchmarkGitCommand(identityTime)] }),
+      new Shell({ fileSystem: vfs, commands: [benchmarkGitCommand(identityTime)] }),
     ];
     const outcomes = await Promise.all(
       callers.map((caller, n) => caller.executeText({ script: `git add new${n}`, cwd: ROOT })),
@@ -56,7 +60,7 @@ export async function runGitRecovery(vfs: VirtualFileSystem, operation: Recovery
       throw new Error("Concurrent adds lost selection");
     await requireSuccess("git add -A");
   } else if (operation === "serialized-two-shells") {
-    const other = new Shell({ fileSystem: vfs, commands: [gitCommand] });
+    const other = new Shell({ fileSystem: vfs, commands: [benchmarkGitCommand(identityTime)] });
     // Host serialization is the documented contract, including edits. Two callers
     // submit concurrently, but the per-repository host queue owns execution.
     const operations = new WorkspaceOperations();
@@ -113,7 +117,10 @@ export async function runGitRecovery(vfs: VirtualFileSystem, operation: Recovery
         return typeof value === "function" ? value.bind(target) : value;
       },
     });
-    const faulty = new Shell({ fileSystem: wrapped, commands: [gitCommand] });
+    const faulty = new Shell({
+      fileSystem: wrapped,
+      commands: [benchmarkGitCommand(identityTime)],
+    });
     const failed = await faulty.executeText({
       script: "git add -A",
       cwd: ROOT,

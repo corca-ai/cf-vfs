@@ -1,0 +1,50 @@
+import { runInDurableObject } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import { expect, it } from "vitest";
+import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
+import { meterSqlStorage } from "./metered-sql.js";
+
+it("bounds actual SQLite work for credential-bound whole and EOF reads", async () => {
+  const rows = await runInDurableObject(
+    env.VFS_TEST.getByName("fused-read-cost"),
+    async (_, state) => {
+      const rows = [];
+      for (const supplementaryGids of [
+        [],
+        Array.from({ length: 256 }, (_, index) => index + 2000),
+      ]) {
+        await state.storage.deleteAll();
+        const meter = meterSqlStorage(state.storage);
+        const fs = new DurableObjectFileSystem(meter.storage);
+        for (const depth of [1, 16, 64]) {
+          const path = `/${Array(depth).fill("d").join("/")}/file`;
+          await fs.writeFile(path, "x".repeat(768), { createParents: true });
+          const view = fs.forCredentials({ uid: 1000, gid: 1000, supplementaryGids });
+          for (const operation of ["whole", "eof"] as const) {
+            meter.reset();
+            const read = view.readFile(
+              path,
+              operation === "eof" ? { range: { offset: Number.MAX_SAFE_INTEGER } } : undefined,
+            );
+            await read.stream.cancel();
+            rows.push({
+              groups: supplementaryGids.length,
+              depth,
+              operation,
+              statements: meter.statements,
+              rowsRead: meter.rowsRead,
+              rowsWritten: meter.rowsWritten,
+            });
+          }
+        }
+      }
+      return rows;
+    },
+  );
+  console.info(`FUSED READ COST ${JSON.stringify(rows)}`);
+  for (const row of rows) {
+    expect(row.statements).toBe(row.operation === "whole" ? 2 : 1);
+    expect(row.rowsRead).toBe(3 * row.depth + (row.operation === "whole" ? 5 : 4));
+    expect(row.rowsWritten).toBe(0);
+  }
+});

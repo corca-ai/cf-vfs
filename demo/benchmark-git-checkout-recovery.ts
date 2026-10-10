@@ -1,16 +1,16 @@
 import * as git from "isomorphic-git";
 import { VfsError } from "../src/core/errors.js";
 import { createFsAdapter } from "../src/fs/index.js";
-import { gitCommand } from "../src/shell/commands/git.js";
 import { Shell } from "../src/shell/shell.js";
 import type { VirtualFileSystem } from "../src/vfs/types.js";
+import { benchmarkGitCommand } from "./benchmark-git-command.js";
 
 /** Preserve history after a partial checkout, then repair through explicit forced checkout. */
-export async function runCheckoutRecovery(vfs: VirtualFileSystem) {
+export async function runCheckoutRecovery(vfs: VirtualFileSystem, identityTime?: number) {
   const root = "/scratch/checkout-recovery";
   const fs = createFsAdapter(vfs);
   await fs.promises.rm(root, { recursive: true, force: true });
-  const shell = new Shell({ fileSystem: vfs, commands: [gitCommand] });
+  const shell = new Shell({ fileSystem: vfs, commands: [benchmarkGitCommand(identityTime)] });
   const run = (script: string) => shell.executeText({ script, cwd: root });
   const succeed = async (script: string) => {
     const result = await run(script);
@@ -38,7 +38,7 @@ export async function runCheckoutRecovery(vfs: VirtualFileSystem) {
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
-  const faulty = new Shell({ fileSystem: wrapped, commands: [gitCommand] });
+  const faulty = new Shell({ fileSystem: wrapped, commands: [benchmarkGitCommand(identityTime)] });
   if (
     (await faulty.executeText({ script: "git checkout base", cwd: root })).exitCode === 0 ||
     writes < 8

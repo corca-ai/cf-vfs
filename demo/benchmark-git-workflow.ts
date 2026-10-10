@@ -1,8 +1,8 @@
 import * as git from "isomorphic-git";
 import { createFsAdapter } from "../src/fs/index.js";
-import { gitCommand } from "../src/shell/commands/git.js";
 import { Shell } from "../src/shell/shell.js";
 import type { VirtualFileSystem } from "../src/vfs/types.js";
+import { benchmarkGitCommand } from "./benchmark-git-command.js";
 
 export const WORKFLOW_OPERATIONS = [
   "prepare",
@@ -40,8 +40,9 @@ export class GitCodingWorkflow {
   constructor(
     private readonly vfs: VirtualFileSystem,
     private readonly mixed: boolean,
+    identityTime?: number,
   ) {
-    this.shell = new Shell({ fileSystem: vfs, commands: [gitCommand] });
+    this.shell = new Shell({ fileSystem: vfs, commands: [benchmarkGitCommand(identityTime)] });
   }
   private async execute(script: string, cwd = COPY) {
     const result = await this.shell.executeText({ script, cwd });
