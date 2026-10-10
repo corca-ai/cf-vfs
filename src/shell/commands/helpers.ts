@@ -344,6 +344,12 @@ export async function collectStream(
       release = context.budget.buffered(total);
       chunks.push(result.value.slice());
     }
+    const only = chunks.length === 1 ? chunks[0] : undefined;
+    if (only !== undefined) {
+      context.budget.step(0);
+      retained = true;
+      return { value: only, release };
+    }
     const releaseOutput = context.budget.buffered(total);
     const bytes = new Uint8Array(total);
     let offset = 0;

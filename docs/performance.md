@@ -520,9 +520,19 @@ The [three-hour evaluation](../bench/three-hour-2026-10-10/report.md) records
 local and actual CF experiments, including bounded POSIX traversal metadata
 reuse and single-chunk command input collection. The strongest candidate
 improved the credential-bound CF aggregate by about 11%, but repeated tests
-confirmed a material shell population regression. No runtime optimization was
-adopted. Raw trials, rejected patches and added permission/rollback tests are
-retained; SQL savings alone did not override the latency gate.
+confirmed a material shell population regression. The candidate was initially declined under the per-workload gate, then adopted
+with explicit user acceptance of that latency tradeoff in favor of the full
+geometric-mean improvement. Raw trials, earlier rejected patches and added
+permission/rollback tests are retained.
+
+The adopted cache retains at most 256 parent metadata projections, with no
+file bodies or authorization verdicts. Each access checks its principal's
+permissions. A generation and transaction-depth guard shared by filesystem
+instances on the same SQL binding invalidates metadata on transaction entry
+and completion, including nested calls and rollback. Cache reuse is disabled
+inside transactions; partial misses preserve the original ancestor query.
+Single-chunk command input keeps its existing private copy and lease, retaining
+the final deadline/abort check. No filesystem API or schema is added.
 
 ## Comprehensive regression protocol
 
@@ -551,16 +561,19 @@ The repository instructions in AGENTS.md require this for future work.
    Investigate every flagged slowdown with at least ten alternating paired
    trials on the same fixture/environment, use paired confidence intervals,
    and repeat the full comparison if a systemic shift is suspected. A geometric
-   mean below 1 cannot override a confirmed material per-workload regression.
+   mean below 1 does not automatically override a confirmed material per-workload
+   regression. Explicit user acceptance of a documented latency tradeoff may
+   authorize adoption; retain the measured regressions in the report.
    Credential-bound optimizations additionally need matching credential-bound
    full comparisons: the default public plan uses an unbound VFS and cannot
    establish their acceleration. Keep the unbound plan as a regression control.
    SQL reductions and timing improvements are separate claims. Do not convert
    SQL counts into a dollar savings percentage.
 5. Adopt only when overall improvement is supported and no material unexplained
-   per-workload or cost regression remains. Keep POSIX tests and bundle budgets
+   per-workload or cost regression remains, except an explicitly accepted
+   per-workload latency tradeoff. Keep POSIX tests and bundle budgets
    passing. Save unsuccessful experiments too. After deploying, rerun the full
-   CF suite for the expected build; revert a confirmed regression.
+   CF suite for the expected build; revert an unaccepted confirmed regression.
 
 The public overview is a descriptive history, not this adoption gate. It shows
 four indices: uncached overall, uncached file operations, uncached Git/coding

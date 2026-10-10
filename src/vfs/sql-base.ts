@@ -5,6 +5,7 @@ import { resolveFileSystemLimits, validatePositiveInteger } from "./config.js";
 import { emitVfsEvent, type VfsEventSink, type VfsMutationOp } from "./events.js";
 import { migrateSql } from "./sql-migrate.js";
 import {
+  type DirectoryEntryRow,
   type EntryRow,
   firstRow,
   type InlineEntryRow,
@@ -25,6 +26,22 @@ import {
   STICKY_BIT,
 } from "./sql-posix.js";
 import type { OpaqueStore } from "./types.js";
+
+type TraversalParent = Pick<DirectoryEntryRow, "path" | "kind" | "mode" | "uid" | "gid">;
+
+interface TraversalState {
+  generation: number;
+  depth: number;
+}
+const TRAVERSAL_STATES = new WeakMap<VfsSqlStorage, TraversalState>();
+function traversalState(sql: VfsSqlStorage): TraversalState {
+  let state = TRAVERSAL_STATES.get(sql);
+  if (state === undefined) {
+    state = { generation: 0, depth: 0 };
+    TRAVERSAL_STATES.set(sql, state);
+  }
+  return state;
+}
 
 const DEFAULT_MAX_DATABASE_BYTES = 10_000_000_000;
 const DEFAULT_DATABASE_HEADROOM_BYTES = 64 * 1024 * 1024;
@@ -63,6 +80,9 @@ export abstract class SqlBase {
   protected readonly mutationEpoch: string;
   /** Non-zero while a transaction body is on the stack. */
   protected transactionDepth = 0;
+  private traversalParents: Map<string, TraversalParent> | undefined;
+  private readonly traversalState: TraversalState;
+  private traversalGeneration = -1;
   /**
    * `vfs_usage` as the running transaction has it.
    *
@@ -208,6 +228,7 @@ export abstract class SqlBase {
     const limits = resolveFileSystemLimits(options);
     this.storage = storage;
     this.sql = storage.sql;
+    this.traversalState = traversalState(this.sql);
     this.chunkBytes = limits.chunkBytes;
     this.maxInlineFileBytes = limits.maxInlineFileBytes;
     this.maxInlineLogicalBytes = limits.maxInlineLogicalBytes;
@@ -361,6 +382,7 @@ export abstract class SqlBase {
     if (access === undefined) return;
     const ordered = traversalAncestors(path, followed);
     if (ordered.length === 0) return;
+    if (this.cachedTraversalParents(ordered, path, access)) return;
     const rows = this.sql
       .exec<SqlRow>(
         `SELECT path, kind, mode, uid, gid
@@ -376,19 +398,59 @@ export abstract class SqlBase {
       const kind = stringColumn(row, "kind");
       const parent = stringColumn(row, "path");
       if (kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", parent);
-      this.assertPermission(
-        {
-          path: parent,
-          kind: "directory",
-          mode: integerColumn(row, "mode"),
-          uid: integerColumn(row, "uid"),
-          gid: integerColumn(row, "gid"),
-        },
-        access,
-        EXECUTE_PERMISSION,
-        path,
-      );
+      const directory: TraversalParent = {
+        path: parent,
+        kind: "directory",
+        mode: integerColumn(row, "mode"),
+        uid: integerColumn(row, "uid"),
+        gid: integerColumn(row, "gid"),
+      };
+      this.assertPermission(directory, access, EXECUTE_PERMISSION, path);
+      this.rememberTraversalParent(directory);
     }
+  }
+
+  /** Cache metadata, never a principal's authorization decision. */
+  protected rememberTraversalParent(parent: TraversalParent): void {
+    if (!this.refreshTraversalParents()) return;
+    this.traversalParents ??= new Map();
+    if (this.traversalParents.size >= 256 && !this.traversalParents.has(parent.path))
+      this.traversalParents.clear();
+    this.traversalParents.set(parent.path, parent);
+  }
+
+  protected tryCachedTraversal(
+    path: string,
+    followed: readonly string[],
+    access: PosixAccessContext,
+  ): boolean {
+    if (!this.refreshTraversalParents() || this.traversalParents === undefined) return false;
+    return this.cachedTraversalParents(traversalAncestors(path, followed), path, access);
+  }
+
+  private cachedTraversalParents(
+    ordered: readonly string[],
+    path: string,
+    access: PosixAccessContext,
+  ): boolean {
+    if (!this.refreshTraversalParents() || this.traversalParents === undefined) return false;
+    const parents: TraversalParent[] = [];
+    for (const ancestor of ordered) {
+      const parent = this.traversalParents.get(ancestor);
+      if (parent === undefined) return false;
+      parents.push(parent);
+    }
+    for (const parent of parents) this.assertPermission(parent, access, EXECUTE_PERMISSION, path);
+    return true;
+  }
+
+  private refreshTraversalParents(): boolean {
+    if (this.traversalState.depth !== 0) return false;
+    if (this.traversalGeneration !== this.traversalState.generation) {
+      this.traversalParents?.clear();
+      this.traversalGeneration = this.traversalState.generation;
+    }
+    return true;
   }
 
   protected creationMode(
@@ -516,15 +578,21 @@ export abstract class SqlBase {
   }
 
   protected transaction<T>(callback: () => T): T {
+    this.traversalParents?.clear();
+    this.traversalState.generation += 1;
     try {
       const result = this.storage.transactionSync(() => {
         this.transactionDepth += 1;
+        this.traversalState.depth += 1;
         try {
           const result = callback();
           if (this.transactionDepth === 1) this.flushParentTimes();
           return result;
         } finally {
           this.transactionDepth -= 1;
+          this.traversalState.depth -= 1;
+          this.traversalState.generation += 1;
+          this.traversalParents?.clear();
           // A rollback discards the in-memory total along with the row it
           // mirrored, so the next reader goes back to SQLite either way.
           if (this.transactionDepth === 0) this.transactionUsage = undefined;

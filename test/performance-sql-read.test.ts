@@ -257,8 +257,7 @@ it("adds only fixed-cost credential checks to a directory listing", async () => 
   ).toBe("200\n");
   const credentialStatements = meter.statements;
   const credentialRows = meter.rows;
-  expect(credentialStatements).toBeGreaterThan(trustedStatements);
-  expect(credentialStatements).toBeLessThanOrEqual(trustedStatements + 2);
+  expect(credentialStatements).toBe(trustedStatements);
 
   for (let index = 200; index < 400; index += 1) {
     await fileSystem.writeFile(`/many/file-${index}`, "x");

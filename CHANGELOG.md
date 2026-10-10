@@ -16,6 +16,10 @@ included.
 
 ## [Unreleased]
 
+- Reuse bounded POSIX traversal parent metadata with per-access permission
+  checks and invalidation across transactions and filesystem instances sharing
+  a SQL binding; avoid a second copy of single-chunk command input buffers.
+
 - Add aggregate benchmark history indices and full-suite regression screening,
   with separate cache variants, clock-zero exclusions and SQL-cost reporting.
 

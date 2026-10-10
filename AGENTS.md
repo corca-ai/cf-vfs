@@ -23,5 +23,7 @@ performance candidate only when the overall improvement is supported and no
 material per-workload or SQL-cost regression remains unexplained. Preserve
 POSIX behavior and bundle budgets. Save raw evidence and rejected experiments.
 After deployment rerun the full CF suite and verify the measured build/commit;
-revert a confirmed regression. UI-only/documentation changes need relevant
+revert an unaccepted confirmed regression. A user may explicitly accept a
+documented per-workload latency tradeoff when the full-suite geometric mean
+improves; preserve the raw regression evidence and correctness/cost gates. UI-only/documentation changes need relevant
 checks and UI verification, not claims of filesystem acceleration.

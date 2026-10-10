@@ -157,6 +157,11 @@ export abstract class SqlQuery extends SqlContent {
 
   private plainPosixEntry(path: string, posix: PosixAccessContext) {
     const normalized = normalizePath(path);
+    if (this.tryCachedTraversal(normalized, [], posix)) return this.accessEntry(normalized, true);
+    return this.lookupPlainPosixEntry(normalized, posix);
+  }
+
+  private lookupPlainPosixEntry(normalized: string, posix: PosixAccessContext) {
     const ancestors: string[] = [];
     if (normalized !== "/") {
       for (let parent = dirname(normalized); ; parent = dirname(parent)) {
@@ -207,12 +212,9 @@ export abstract class SqlQuery extends SqlContent {
     if (![mode, uid, gid].every(Number.isSafeInteger))
       throw new VfsError("EIO", "invalid ancestor metadata", path);
     if (kind !== "directory") throw new VfsError("ENOTDIR", "not a directory", parent);
-    this.assertPermission(
-      { path: parent, kind: "directory", mode, uid, gid },
-      posix,
-      EXECUTE_PERMISSION,
-      path,
-    );
+    const directory = { path: parent, kind: "directory" as const, mode, uid, gid };
+    this.assertPermission(directory, posix, EXECUTE_PERMISSION, path);
+    this.rememberTraversalParent(directory);
   }
 
   getMutationToken(

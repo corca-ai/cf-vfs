@@ -58,3 +58,16 @@ it("preserves missing-ancestor error precedence after another principal warmed p
   );
   expect(() => user.stat("/private/missing")).toThrow(expect.objectContaining({ code: "EACCES" }));
 });
+
+it("avoids a second ancestor query on repeated credential-bound reads", async () => {
+  let statements = 0;
+  const vfs = createTestFileSystem({ onStatement: () => statements++ });
+  await vfs.writeFile("/a/b/file", "body", { createParents: true });
+  const user = vfs.forCredentials({ uid: 1000, gid: 1000 });
+  await user.readFile("/a/b/file").stream.cancel();
+  statements = 0;
+  await user.readFile("/a/b/file").stream.cancel();
+  expect(statements).toBe(2);
+  vfs.setMetadata("/a", { mode: 0o40000 });
+  expect(() => user.readFile("/a/b/file")).toThrow(expect.objectContaining({ code: "EACCES" }));
+});

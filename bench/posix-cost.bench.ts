@@ -51,5 +51,5 @@ it("records credential-bound stat and replacement rename costs", async () => {
   console.info(`POSIX COST ${JSON.stringify(result)}`);
   expect(result).toHaveLength(6);
   expect(result.map((row) => row.statements)).toEqual([500, 500, 500, 12, 12, 12]);
-  expect(result.slice(0, 3).map((row) => row.rowsRead)).toEqual([3500, 26000, 98000]);
+  expect(result.slice(0, 3).map((row) => row.rowsRead)).toEqual([500, 500, 500]);
 });

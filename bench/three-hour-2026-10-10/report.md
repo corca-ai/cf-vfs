@@ -2,7 +2,8 @@
 
 Optimization window: 2026-10-10 06:06:50–09:06:50 UTC. Baseline library source
 `02f2ef3f9b33deaf9d03659fe366b3a5450e6400` (unchanged since `0c544003`).
-Final decision: no runtime optimization adopted; production remains unchanged.
+Initial decision: no runtime optimization adopted. The subsequent user-approved
+adoption is recorded in the addendum below; original measurements remain intact.
 No filesystem API or persisted schema is added.
 
 ## Candidate decisions
@@ -204,3 +205,26 @@ documentation checks and all 12 bundle budgets passed. Existing lint warnings
 and informational diagnostics remain. Candidate and restored check logs are
 saved separately as lossless `.log.gz` archives. The temporary `cf-vfs-full-evaluation` Worker was deleted
 successfully; dedicated test rooms were cleared by the runners.
+
+## User-approved adoption addendum
+
+After reviewing the full geometric mean and individual regressions, the user
+explicitly approved adopting this candidate. Restore the exact measured v2
+library patch, including the single-chunk collector; do not add other rejected
+experiments. The UID/GID 1000 full CF result remains 0.8896 [0.8756, 0.9265].
+The confirmed shell population slowdown remains an accepted tradeoff, not an
+invalidated observation. Cached-init uncertainty and every raw trial are kept.
+SQL counters, POSIX behavior and bundle budgets retain their independent gates.
+The default public benchmark is unbound and is a deployment regression control,
+not evidence for an 11% improvement in its own aggregate.
+
+Restored tests protect repeated warm reads, per-principal permission checks,
+shared-binding rollback, buffer ownership and late-EOF timeout cleanup. Warm
+500-stat reads at depths 1/16/64 now use 500 rows each; the previous budgets were
+3,500/26,000/98,000. Public deployment and final verification are pending below.
+
+Adoption checks passed: 1,967 Node tests, 156 Workers tests, 46/46 native POSIX
+comparisons, 31 workerd performance guards, all 12 bundle budgets, typecheck,
+lint, knip, quality, docs and comparison-protocol checks. Existing lint warnings
+remain. `adoption-checks.log.gz` preserves the complete check output. The source
+patch under `src/` is byte-for-byte identical to the measured v2 patch.
