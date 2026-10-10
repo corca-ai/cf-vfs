@@ -16,6 +16,11 @@ included.
 
 ## [Unreleased]
 
+- Reduce SQLite entry materialization and use indexed inode, descriptor and
+  single-file copy queries. Retain bounded directory access metadata across
+  credential-bound append commits, preserving per-principal checks, nested
+  mutation invalidation and rollback behavior without adding filesystem APIs.
+
 - Accelerate canonical POSIX path traversal and directory metadata reuse; use
   indexed joins for recursive copy and indexed publication for single-entry
   rename, reducing measured Cloudflare full-suite latency and SQL reads without

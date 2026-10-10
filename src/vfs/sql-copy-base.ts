@@ -161,7 +161,7 @@ export abstract class SqlCopy extends SqlMove {
     const owner =
       targetParent === undefined ? { uid: 0, gid: 0 } : this.creationOwner(targetParent, posix);
     const sourceRange = descendantRange(source);
-    const summary = this.aggregateSubtree(source);
+    const summary = this.aggregateSubtree(source, sourceEntry.kind !== "directory");
     const {
       preserve,
       preservedLinkIdentity,
@@ -287,7 +287,7 @@ export abstract class SqlCopy extends SqlMove {
            WHERE path = ? || substr(e.path, ?)
          ), 1), ?, CASE WHEN e.kind = 'directory' THEN e.link_count ELSE ? END
        FROM vfs_entries e
-       WHERE e.path = ? OR (e.path >= ? AND e.path < ?)`,
+       WHERE e.path = ? ${plan.summary.entries === 1 ? "" : "OR (e.path >= ? AND e.path < ?)"}`,
       plan.inoBase,
       target,
       codePointLength(source) + 1,
@@ -306,8 +306,7 @@ export abstract class SqlCopy extends SqlMove {
       plan.preservedLinkIdentity,
       plan.preservedLinkCount,
       source,
-      plan.sourceRange.lower,
-      plan.sourceRange.upper,
+      ...(plan.summary.entries === 1 ? [] : [plan.sourceRange.lower, plan.sourceRange.upper]),
     );
   }
 
@@ -415,7 +414,7 @@ export abstract class SqlCopy extends SqlMove {
 
   private finishCopy(source: string, target: string, plan: CopyPlan): CopyResult {
     this.clearSubtreeTombstones(target);
-    this.recordPresentSubtree(target, plan.changeSeq);
+    this.recordSubtreeChange(target, true, plan.changeSeq, plan.summary.entries === 1);
     this.sql.exec(
       `INSERT INTO vfs_inline_chunks (entry_id, chunk_index, body)
        SELECT destination.id, chunk.chunk_index, chunk.body
@@ -424,12 +423,11 @@ export abstract class SqlCopy extends SqlMove {
        JOIN vfs_entries destination
          ON destination.path = ? || substr(source_entry.path, ?)
        WHERE source_entry.path = ?
-          OR (source_entry.path >= ? AND source_entry.path < ?)`,
+          ${plan.summary.entries === 1 ? "" : "OR (source_entry.path >= ? AND source_entry.path < ?)"}`,
       target,
       codePointLength(source) + 1,
       source,
-      plan.sourceRange.lower,
-      plan.sourceRange.upper,
+      ...(plan.summary.entries === 1 ? [] : [plan.sourceRange.lower, plan.sourceRange.upper]),
     );
     // The copy is set-based and carries `kind` across, so it may have
     // produced links; the count is recomputed rather than guessed.

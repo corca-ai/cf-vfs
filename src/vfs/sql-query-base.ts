@@ -31,7 +31,7 @@ import {
   WRITE_PERMISSION,
 } from "./sql-posix.js";
 import { ENTRY_COLUMNS } from "./sql-schema.js";
-import { canonicalTraversalAncestors } from "./traversal.js";
+import { canonicalAncestors } from "./traversal.js";
 import type {
   ChangePage,
   ChangesSinceOptions,
@@ -72,9 +72,9 @@ export abstract class SqlQuery extends SqlContent {
   /**
    * Reports the entry holding an identity. See {@link VirtualFileSystem.statById}.
    *
-   * One statement and one row: `id` is `INTEGER PRIMARY KEY`, which SQLite
-   * makes an alias for the rowid, so this seeks the table's own key and needs
-   * no index of its own.
+   * One statement: seek the rowid and indexed hard-link identities separately,
+   * select the lowest matching stored id, then fetch that row. An ordered OR
+   * over both identities can scan the whole namespace.
    *
    * Takes no access context. The credential-bound view refuses the call rather
    * than filtering it, because an identity carries no path to check ancestors
@@ -89,7 +89,11 @@ export abstract class SqlQuery extends SqlContent {
       this.sql.exec<SqlRow>(
         `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e
-       WHERE (e.id = ? AND e.link_identity IS NULL) OR e.link_identity = ? ORDER BY e.id LIMIT 1`,
+       WHERE e.id = (
+         SELECT id FROM vfs_entries WHERE id = ? AND link_identity IS NULL
+         UNION SELECT id FROM vfs_entries WHERE link_identity = ?
+         ORDER BY id LIMIT 1
+       )`,
         ino,
         ino,
       ),
@@ -164,7 +168,7 @@ export abstract class SqlQuery extends SqlContent {
   }
 
   private lookupPlainPosixEntry(normalized: string, posix: PosixAccessContext) {
-    const ancestors = canonicalTraversalAncestors(normalized);
+    const ancestors = canonicalAncestors(normalized);
     // Return one envelope while SQLite still checks the same indexed ancestors.
     // Combining statements saves boundary work, not billed rows.
     const row = this.sql

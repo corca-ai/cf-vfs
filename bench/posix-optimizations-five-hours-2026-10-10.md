@@ -89,7 +89,7 @@ control was cancelled during warmup with zero measured rows; both rooms were
 explicitly cleared to test the final combined candidate instead. This
 intermediate has not been adopted.
 
-## Final combined candidate, validation in progress
+## Second adoption: final combined source
 
 Credential-bound append commits retain bounded directory access metadata only
 while all active transactions change file contents. Ordinary nested mutations
@@ -112,15 +112,62 @@ tradeoffs. Local returned-row variations are not Cloudflare billed costs.
 Native actual-CF append1000 uses7999 ->6000 statements,18994 ->7000 reads,
 3000 writes unchanged, confirmed in three alternating pairs at each size.
 Content, identity, token and chmod-denial checks pass, with final cleanup.
-The full final candidate demo/unbound comparisons each run ten alternating
-pairs against accepted round two in the same DO. Frozen graph hashes and
-deployment fingerprint are in cf-round11-deployment.json.
+The final demo full ten-pair CF comparison completed against accepted round
+two: overall0.978942 [0.951442,0.986236], Git0.973694, files0.976757
+[0.947682,1.014028], optionalcache0.983460 [0.957456,0.998991]. The primary
+reciprocal score increases2.15%. Four pointwise confirmed latency flags remain
+(checkout-old100, shellchange-all1000, mixedcheckout-base100 and mixeddiff1000).
+Recoverycheckout-failure100 uses62 extra statements and93 extra native reads,
+with unchanged writes. Full totals still fall551818 ->547484 statements and
+1993959 ->1954488 reads, writes227815 unchanged. The unbound full ten-pair
+control completed: overall0.989547 [0.974384,1.013681], Git0.994250,
+files0.989325, optionalcache0.998991 [0.996360,1.006205]. This does not establish
+a timing change. Two pointwise flags remain (status-clean100 and shellclone100),
+with zero cost flags. Native counts370226 statements/993349 reads/216461 writes
+are identical in both versions. Independent signal repetitions are running
+in both modes. Source adoption follows the user's full-suite aggregate policy:
+the primary confidence interval establishes an improvement, the unbound full
+control is inconclusive, compatibility gates pass and total native cost falls.
+Individual latency tradeoffs and the small recovery cost variation remain
+disclosed; their repetition is additional investigation, not hidden evidence.
+Frozen graph hashes and deployment fingerprint are in cf-round11-deployment.json.
 
-No bundle budget has been changed yet. The final raw VFS bundle is214323
-bytes, +820 bytes (+0.38%) versus round two; the existing213504 cap is exceeded.
-R2 likewise grows820 bytes; opt-in FS adapters grow1060 bytes. Other presets
-still fit. Adoption requires an explicit justified regeneration of all twelve
-presets through the existing measured-size-plus-five-percent rule; import
-exclusions, forbidden dependencies and the lower-bound tolerance stay intact.
+Bundle budgets were explicitly regenerated for all twelve presets using the
+existing measured-size-plus-five-percent rule, rounded up to128 bytes. Raw VFS
+is214323 bytes, +820 bytes (+0.38%) versus round two; R2 also grows820 bytes,
+and opt-in FS adapters grow1060 bytes. This tiny implementation growth had
+exceeded two original caps; the other presets fit. All presets, not just those
+two, were re-recorded deterministically. The larger cap differences restore
+five-percent headroom after earlier accumulated growth; they are not code-size
+growth. Import exclusions, forbidden dependencies and lower tolerance0.75 are
+unchanged. Exact before/after raw sizes and caps are retained in
+round11-bundle-budget-record.json.
 
 
+## Additional native cost checks
+
+These counts come from actual Cloudflare SQLite probes, independent of wall
+clock timing. Inputs and outputs are verified; statements and writes stay
+unchanged for the identity/copy rows.
+
+| Probe | Before reads | Final candidate reads |
+| --- | ---: | ---: |
+| 100 descriptor stats in a 1000-file namespace | 100200 | 200 |
+| 100 inode lookups in a 1000-file namespace | 100200 | 200 |
+| 100 descriptor stats through an alias, same namespace | 100200 | 300 |
+| 100 one-byte descriptor writes, same namespace | 100600 | 600 |
+| Truncate a 1 MiB file, same namespace | 2038 | 38 |
+| Point copy, 1000-file namespace, change feed off | 2039 | 33 |
+| Point copy, 1000-file namespace, change feed on | 3044 | 34 |
+| Rename publication, 1000-file namespace, change feed on | 1026 | 23 |
+| Append 1000 credential-bound files | 18994 | 7000 |
+
+Append additionally reduces statements7999 ->6000, with3000 writes unchanged.
+The identity probes have zero-valued DO-local clocks, so their timing ratios
+are null. No artificial clock epsilon or latency claim is used.
+
+A separate native local test with100/1000 contiguous aliases and the original
+path removed preserves inode/link count in both versions. That layout already
+allows the old query to stop early: its two reads become three, constant in
+alias count. This one-read tradeoff is disclosed rather than presented as a
+universal identity-query improvement. Source and both logs are retained.

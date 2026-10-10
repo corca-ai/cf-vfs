@@ -1,0 +1,351 @@
+{
+  "baseline": "accepted round two (d285026 implementation)",
+  "candidate": "final round eleven (append-cache-final immutable graph)",
+  "policy": "Primary outcome is the equal-workload geometric mean over all 146 uncached workloads. Cache variants are separate. Individual tradeoffs are disclosed under the user's aggregate-score policy. Native costs are separate from timing.",
+  "results": [
+    {
+      "credentials": "demo",
+      "startedAt": "2026-10-10T14:23:00.392Z",
+      "completedAt": "2026-10-10T14:47:23.854Z",
+      "candidate": "five-hour-round11-47e3e8c47d4b",
+      "fullPlan": true,
+      "trials": 10,
+      "metrics": [
+        {
+          "id": "overall",
+          "workloads": 146,
+          "ratio": {
+            "median": 0.9789419816412503,
+            "p10": 0.9492860566685495,
+            "p90": 0.9909164077112205,
+            "ci95": [
+              0.9514421374238838,
+              0.9862362860341278
+            ]
+          }
+        },
+        {
+          "id": "files",
+          "workloads": 18,
+          "ratio": {
+            "median": 0.9767572641380241,
+            "p10": 0.9179084739197828,
+            "p90": 1.0275447794967436,
+            "ci95": [
+              0.947682445901455,
+              1.0140277666253112
+            ]
+          }
+        },
+        {
+          "id": "git",
+          "workloads": 128,
+          "ratio": {
+            "median": 0.973693679386836,
+            "p10": 0.9495340303044889,
+            "p90": 0.9949651862910017,
+            "ci95": [
+              0.9518631106125948,
+              0.9835909760583903
+            ]
+          }
+        },
+        {
+          "id": "cache",
+          "workloads": 44,
+          "ratio": {
+            "median": 0.9834597688952165,
+            "p10": 0.9473003053324313,
+            "p90": 1.0066511256581812,
+            "ci95": [
+              0.9574562466727112,
+              0.9989913951253198
+            ]
+          }
+        }
+      ],
+      "primaryLatencyReductionPercent": 2.1058018358749653,
+      "primaryReciprocalScoreIncreasePercent": 2.1510997335556725,
+      "pointwiseFlags": 21,
+      "confirmedFlags": [
+        {
+          "stage": {
+            "group": "git",
+            "operation": "checkout-old",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "baselineMedianMs": 74,
+          "candidateMedianMs": 80,
+          "ratio": {
+            "median": 1.1034056316590564,
+            "p10": 0.9105584415584416,
+            "p90": 1.1244724176231027,
+            "ci95": [
+              1.0110107284020327,
+              1.1224546464272493
+            ]
+          }
+        },
+        {
+          "stage": {
+            "group": "git-shell",
+            "operation": "change-all",
+            "files": 1000,
+            "cache": false,
+            "trial": 0
+          },
+          "baselineMedianMs": 244,
+          "candidateMedianMs": 252,
+          "ratio": {
+            "median": 1.0889860747680653,
+            "p10": 0.960809929963248,
+            "p90": 1.1655126600558392,
+            "ci95": [
+              1.0207789544335895,
+              1.1385462509555984
+            ]
+          }
+        },
+        {
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "checkout-base",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "baselineMedianMs": 152.5,
+          "candidateMedianMs": 177,
+          "ratio": {
+            "median": 1.081444670852913,
+            "p10": 0.9345201238390093,
+            "p90": 1.2467754777070064,
+            "ci95": [
+              1.0041592394533572,
+              1.211123153500321
+            ]
+          }
+        },
+        {
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "diff",
+            "files": 1000,
+            "cache": false,
+            "trial": 0
+          },
+          "baselineMedianMs": 328.5,
+          "candidateMedianMs": 393,
+          "ratio": {
+            "median": 1.119286703601108,
+            "p10": 0.9345576540755467,
+            "p90": 1.4290164746686482,
+            "ci95": [
+              1.0325814536340852,
+              1.3250065152239048
+            ]
+          }
+        }
+      ],
+      "costFlags": [
+        {
+          "stage": {
+            "group": "git-recovery",
+            "operation": "checkout-failure",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "costs": [
+            {
+              "pair": 0,
+              "profile": true,
+              "stage": {
+                "group": "git-recovery",
+                "operation": "checkout-failure",
+                "files": 100,
+                "cache": false,
+                "trial": 0
+              },
+              "version": "baseline",
+              "ms": 578,
+              "iterations": 1,
+              "verified": 100,
+              "sql": {
+                "statements": 4940,
+                "rowsRead": 39158,
+                "rowsWritten": 1606
+              },
+              "verifiedBodies": 0
+            },
+            {
+              "pair": 0,
+              "profile": true,
+              "stage": {
+                "group": "git-recovery",
+                "operation": "checkout-failure",
+                "files": 100,
+                "cache": false,
+                "trial": 0
+              },
+              "version": "candidate",
+              "ms": 906,
+              "iterations": 1,
+              "verified": 100,
+              "sql": {
+                "statements": 5002,
+                "rowsRead": 39251,
+                "rowsWritten": 1606
+              },
+              "verifiedBodies": 0
+            }
+          ]
+        }
+      ],
+      "nativeSqlTotals": {
+        "baseline": {
+          "stages": 190,
+          "statements": 551818,
+          "rowsRead": 1993959,
+          "rowsWritten": 227815
+        },
+        "candidate": {
+          "stages": 190,
+          "statements": 547484,
+          "rowsRead": 1954488,
+          "rowsWritten": 227815
+        }
+      },
+      "colos": [
+        "LAX"
+      ]
+    },
+    {
+      "credentials": "none",
+      "startedAt": "2026-10-10T14:47:23.916Z",
+      "completedAt": "2026-10-10T15:09:58.698Z",
+      "candidate": "five-hour-round11-47e3e8c47d4b",
+      "fullPlan": true,
+      "trials": 10,
+      "metrics": [
+        {
+          "id": "overall",
+          "workloads": 146,
+          "ratio": {
+            "median": 0.9895472587713454,
+            "p10": 0.9653300031945868,
+            "p90": 1.0293848208480392,
+            "ci95": [
+              0.9743840920380635,
+              1.0136806705764072
+            ]
+          }
+        },
+        {
+          "id": "files",
+          "workloads": 18,
+          "ratio": {
+            "median": 0.989324746938999,
+            "p10": 0.9310742144195322,
+            "p90": 1.0465611736761737,
+            "ci95": [
+              0.9595987397279524,
+              1.0257114556248024
+            ]
+          }
+        },
+        {
+          "id": "git",
+          "workloads": 128,
+          "ratio": {
+            "median": 0.9942500496834991,
+            "p10": 0.9690465714959831,
+            "p90": 1.0272463791009996,
+            "ci95": [
+              0.9765623715989058,
+              1.011681178559437
+            ]
+          }
+        },
+        {
+          "id": "cache",
+          "workloads": 44,
+          "ratio": {
+            "median": 0.9989905166369141,
+            "p10": 0.9914007660197746,
+            "p90": 1.0112766319233566,
+            "ci95": [
+              0.9963595495371159,
+              1.0062052009356317
+            ]
+          }
+        }
+      ],
+      "primaryLatencyReductionPercent": 1.0452741228654583,
+      "primaryReciprocalScoreIncreasePercent": 1.056315515605899,
+      "pointwiseFlags": 16,
+      "confirmedFlags": [
+        {
+          "stage": {
+            "group": "git",
+            "operation": "status-clean",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "baselineMedianMs": 52.5,
+          "candidateMedianMs": 59,
+          "ratio": {
+            "median": 1.0644914215686274,
+            "p10": 1.0059209039548023,
+            "p90": 1.3692716857610474,
+            "ci95": [
+              1.0178571428571428,
+              1.2745290423861853
+            ]
+          }
+        },
+        {
+          "stage": {
+            "group": "git-shell",
+            "operation": "clone-worktree",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "baselineMedianMs": 164.5,
+          "candidateMedianMs": 184,
+          "ratio": {
+            "median": 1.0787919032789888,
+            "p10": 0.9901704545454545,
+            "p90": 1.4180111555111554,
+            "ci95": [
+              1.0182926829268293,
+              1.257591723345148
+            ]
+          }
+        }
+      ],
+      "costFlags": [],
+      "nativeSqlTotals": {
+        "baseline": {
+          "stages": 190,
+          "statements": 370226,
+          "rowsRead": 993349,
+          "rowsWritten": 216461
+        },
+        "candidate": {
+          "stages": 190,
+          "statements": 370226,
+          "rowsRead": 993349,
+          "rowsWritten": 216461
+        }
+      },
+      "colos": [
+        "LAX"
+      ]
+    }
+  ]
+}

@@ -33,12 +33,13 @@ type TraversalParent = Pick<DirectoryEntryRow, "path" | "kind" | "mode" | "uid" 
 interface TraversalState {
   generation: number;
   depth: number;
+  contentDepth: number;
 }
 const TRAVERSAL_STATES = new WeakMap<VfsSqlStorage, TraversalState>();
 function traversalState(sql: VfsSqlStorage): TraversalState {
   let state = TRAVERSAL_STATES.get(sql);
   if (state === undefined) {
-    state = { generation: 0, depth: 0 };
+    state = { generation: 0, depth: 0, contentDepth: 0 };
     TRAVERSAL_STATES.set(sql, state);
   }
   return state;
@@ -433,7 +434,7 @@ export abstract class SqlBase {
   }
 
   private refreshTraversalParents(): boolean {
-    if (this.traversalState.depth !== 0) return false;
+    if (this.traversalState.depth !== this.traversalState.contentDepth) return false;
     if (this.traversalGeneration !== this.traversalState.generation) {
       this.traversalParents?.clear();
       this.traversalGeneration = this.traversalState.generation;
@@ -565,13 +566,17 @@ export abstract class SqlBase {
     return this.createId();
   }
 
-  protected transaction<T>(callback: () => T): T {
-    this.traversalParents?.clear();
-    this.traversalState.generation += 1;
+  protected transaction<T>(callback: () => T, contentOnly = false): T {
+    // Append changes file contents, never cached directory access metadata.
+    if (!contentOnly) {
+      this.traversalParents?.clear();
+      this.traversalState.generation += 1;
+    }
     try {
       const result = this.storage.transactionSync(() => {
         this.transactionDepth += 1;
         this.traversalState.depth += 1;
+        if (contentOnly) this.traversalState.contentDepth += 1;
         try {
           const result = callback();
           if (this.transactionDepth === 1) this.flushParentTimes();
@@ -579,8 +584,11 @@ export abstract class SqlBase {
         } finally {
           this.transactionDepth -= 1;
           this.traversalState.depth -= 1;
-          this.traversalState.generation += 1;
-          this.traversalParents?.clear();
+          if (contentOnly) this.traversalState.contentDepth -= 1;
+          else {
+            this.traversalState.generation += 1;
+            this.traversalParents?.clear();
+          }
           // A rollback discards the in-memory total along with the row it
           // mirrored, so the next reader goes back to SQLite either way.
           if (this.transactionDepth === 0) this.transactionUsage = undefined;
@@ -592,22 +600,13 @@ export abstract class SqlBase {
       // for the outermost one: `transactionSync` runs the callback directly
       // when a transaction is already open, and reporting there would announce
       // work an outer rollback is still free to discard.
-      if (this.transactionDepth === 0) {
-        const usage = this.pendingUsage;
-        if (usage !== undefined) {
-          this.pendingUsage = undefined;
-          emitVfsEvent(this.onEvent, { type: "vfs.usage", ...usage });
-        }
-        if (this.pendingMutations.length > 0) {
-          const mutations = this.pendingMutations;
-          this.pendingMutations = [];
-          for (const mutation of mutations) {
-            emitVfsEvent(this.onEvent, { type: "vfs.mutation", ...mutation });
-          }
-        }
-      }
+      if (this.transactionDepth === 0) this.emitCommittedMutations();
       return result;
     } catch (error) {
+      if (contentOnly) {
+        this.traversalState.generation += 1;
+        this.traversalParents?.clear();
+      }
       this.pendingUsage = undefined;
       this.pendingMutations = [];
       this.pendingParents = undefined;
@@ -618,6 +617,21 @@ export abstract class SqlBase {
         throw new VfsError("ENOSPC", "SQLite database capacity is exhausted");
       }
       throw error;
+    }
+  }
+
+  private emitCommittedMutations(): void {
+    const usage = this.pendingUsage;
+    if (usage !== undefined) {
+      this.pendingUsage = undefined;
+      emitVfsEvent(this.onEvent, { type: "vfs.usage", ...usage });
+    }
+    if (this.pendingMutations.length > 0) {
+      const mutations = this.pendingMutations;
+      this.pendingMutations = [];
+      for (const mutation of mutations) {
+        emitVfsEvent(this.onEvent, { type: "vfs.mutation", ...mutation });
+      }
     }
   }
 

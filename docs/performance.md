@@ -529,8 +529,11 @@ The adopted cache retains at most 256 parent metadata projections, with no
 file bodies or authorization verdicts. Each access checks its principal's
 permissions. A generation and transaction-depth guard shared by filesystem
 instances on the same SQL binding invalidates metadata on transaction entry
-and completion, including nested calls and rollback. Cache reuse is disabled
-inside transactions; partial misses preserve the original ancestor query.
+and completion, including nested calls and rollback. Ordinary transactions
+block cache reuse. Credential-bound append commits may retain directory
+metadata because they change only file contents; nested ordinary transactions
+still invalidate it, and a failed append discards it. Access is checked for
+each principal. Partial misses preserve the original ancestor query.
 Single-chunk command input keeps its existing private copy and lease, retaining
 the final deadline/abort check. No filesystem API or schema is added.
 

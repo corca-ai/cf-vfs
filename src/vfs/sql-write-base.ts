@@ -237,7 +237,7 @@ export abstract class SqlWrite extends SqlWritePlan {
         };
       }
       return this.appendContent(current, path, suffixChunks, suffixBytes, snapshot !== undefined);
-    });
+    }, posix !== undefined);
   }
 
   private appendContent(

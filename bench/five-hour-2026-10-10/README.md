@@ -347,3 +347,37 @@ no budget has been changed and CF validation is still required.
   uncached files aggregate0.949405 is not a full-suite aggregate. Preserve
   this read tradeoff; actual CF evaluation, not local subgroup cherry-picking,
   decides adoption using the user's full-suite geometric-mean policy.
+
+- Additional native alias-layout guard: 100 and 1000 hardlinks, original path
+  removed while its descriptor remains open. Both accepted round two and final
+  eleven preserve inode/link count with constant lookup reads. Round two uses
+  two reads; final eleven uses three. No improvement is claimed for this
+  contiguous alias layout; the one-read cost tradeoff is retained explicitly.
+  These are cost/behavior probes, not latency trials. Source and both logs saved.
+
+- Final actual-CF full ten-pair comparison against accepted round two:
+  credential-bound overall0.978942 [0.951442,0.986236], Git0.973694,
+  optionalcache0.983460 [0.957456,0.998991]. Four confirmed pointwise
+  timing signals; recoverycheckout-failure100 has62 extra statements and93
+  extra reads. Total native statements551818 ->547484, reads1993959 ->1954488,
+  writes227815 unchanged. Unbound overall0.989547 [0.974384,1.013681],
+  optionalcache0.998991 [0.996360,1.006205], two pointwise signals;
+  total native counts exactly370226/993349/216461 in both versions.
+  The unbound comparison does not establish a timing improvement.
+  Independent ten-pair flag repetitions are running for both modes.
+- All twelve bundle budgets explicitly regenerated through the existing
+  measured*1.05 rule, rounded128. Raw VFS grows820 bytes(+0.38%), adapters1060;
+  headroom differences are not actual code-size growth. Lower tolerance0.75,
+  forbidden dependencies and import-exclusion guards are unchanged. All twelve
+  presets pass after regeneration; exact before/after sizes/caps/logs retained.
+
+## Final source adoption decision
+
+Adopt the final combined source using the user-authorized full-suite geometric
+mean policy. Actual CF demo full10 establishes a gain0.978942 with CIupper0.986236;
+the full unbound control0.989547 has an inconclusive CI. Total demo native costs
+fall and unbound costs are identical; behavior/API and all required guards pass.
+Four demo/two unbound pointwise timing signals, a small recovery cost variation,
+and the local unbound read tradeoff remain disclosed. Independent repetitions
+continue; they will be recorded even if signals persist. Public deployment and
+post-deploy full validation are pending. No public-page acceleration is claimed.

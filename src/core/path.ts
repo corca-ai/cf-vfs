@@ -5,7 +5,7 @@ const MAX_PATH_BYTES = 4096;
 const MAX_NAME_BYTES = 255;
 const DOT_COMPONENT = /(?:^|\/)\.\.?(?:\/|$)/u;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: NUL and non-ASCII paths require full byte validation.
-const NON_CANONICAL_ASCII = /\/(?:\/|\.\.?(?:\/|$))|[^\x01-\x7f]/;
+const NON_CANONICAL_ASCII = /\/\/|\/\.\.?(?:\/|$)|[^\x01-\x7f]/;
 
 export function compareUtf8(left: string, right: string): number {
   const leftBytes = encodeUtf8(left);

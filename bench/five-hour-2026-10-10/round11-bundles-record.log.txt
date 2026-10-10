@@ -1,0 +1,25 @@
+
+> @corca-ai/cf-vfs@0.4.2 test:bundle-budgets:record
+> npm run build && node test/check-tree-shaking.mjs --record
+
+
+> @corca-ai/cf-vfs@0.4.2 build
+> npm run clean && tsc -p tsconfig.build.json
+
+
+> @corca-ai/cf-vfs@0.4.2 clean
+> node -e "require('node:fs').rmSync('dist', { recursive: true, force: true })"
+
+  git 558623 bytes recorded (the opt-in Git applet and engine, with no shell or SQL owner)
+  ls 16713 bytes recorded (one applet imported from its own subpath)
+  commands 18220 bytes recorded (a small explicit registry of two applets)
+  awk 98200 bytes recorded (the opt-in AWK applet and its bounded regex engine)
+  vfs 214323 bytes recorded (the SQLite filesystem with no shell and no R2)
+  shell 236816 bytes recorded (the non-interactive shell with one applet)
+  interactive 246611 bytes recorded (the interactive session adapter)
+  default-registry 503845 bytes recorded (the convenience preset with every applet)
+  linux-profile 709458 bytes recorded (the opt-in Linux profile over the SQLite filesystem)
+  r2-opaque 216021 bytes recorded (the SQLite filesystem with the R2 opaque adapter)
+  fs-adapter 249421 bytes recorded (the opt-in promise filesystem adapter)
+  fs-tiered 259386 bytes recorded (the opt-in adapter with metadata reuse and R2 content)
+recorded 12 bundle budgets

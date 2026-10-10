@@ -132,7 +132,11 @@ export class SqlFileHandles implements HandleProvider {
   entry(ino: number): EntryRow {
     const row = firstRow(
       this.port.sql.exec<SqlRow>(
-        `SELECT ${ENTRY_COLUMNS} FROM vfs_entries e WHERE id = ? OR link_identity = ? ORDER BY id LIMIT 1`,
+        `SELECT ${ENTRY_COLUMNS} FROM vfs_entries e WHERE id = (
+           SELECT id FROM vfs_entries WHERE id = ?
+           UNION SELECT id FROM vfs_entries WHERE link_identity = ?
+           ORDER BY id LIMIT 1
+         )`,
         ino,
         ino,
       ),
@@ -157,7 +161,11 @@ export class SqlFileHandles implements HandleProvider {
     for (const ino of this.retainedCandidates(root, recursive)) {
       const row = firstRow(
         this.port.sql.exec<SqlRow>(
-          `SELECT ${ENTRY_COLUMNS} FROM vfs_entries e WHERE id = ? OR link_identity = ? ORDER BY id LIMIT 1`,
+          `SELECT ${ENTRY_COLUMNS} FROM vfs_entries e WHERE id = (
+           SELECT id FROM vfs_entries WHERE id = ?
+           UNION SELECT id FROM vfs_entries WHERE link_identity = ?
+           ORDER BY id LIMIT 1
+         )`,
           ino,
           ino,
         ),

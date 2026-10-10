@@ -335,7 +335,7 @@ export abstract class SqlMove extends SqlMetadata {
     const moved = integerColumn(this.sql.exec<SqlRow>("SELECT changes() AS value").one(), "value");
     this.publishLinkedMetadata(identities);
     this.clearSubtreeTombstones(target);
-    this.recordPresentSubtree(target, this.nextChangeSeq());
+    this.recordSubtreeChange(target, true, this.nextChangeSeq(), sourceEntry.kind !== "directory");
     // One change, though two ranges were republished. A move is a prefix
     // rename, so `root` and `to` are enough for a consumer to recompute
     // every path it holds without being told them.

@@ -25,7 +25,7 @@ import {
   stringColumn,
 } from "./sql-model.js";
 import type { PosixAccessContext } from "./sql-posix.js";
-import { ENTRY_COLUMNS } from "./sql-schema.js";
+import { ENTRY_COLUMNS, ENTRY_JSON } from "./sql-schema.js";
 import { MAX_SYMLINK_HOPS } from "./types.js";
 
 function followsTerminalLink(row: EntryRow, follow: boolean): row is SymlinkEntryRow {
@@ -48,13 +48,16 @@ export abstract class SqlPath extends SqlBase {
   protected oneEntry(path: string): EntryRow | null {
     const row = firstRow(
       this.sql.exec<SqlRow>(
-        `SELECT ${ENTRY_COLUMNS}
+        `SELECT ${ENTRY_JSON} AS entry
        FROM vfs_entries e INDEXED BY vfs_entries_path
        WHERE e.path = ?`,
         path,
       ),
     );
-    return row === undefined ? null : parseEntry(row, this.mutationEpoch);
+    // SQLite builds this object from a fixed scalar projection; parseEntry validates its fields.
+    return row === undefined
+      ? null
+      : parseEntry(JSON.parse(stringColumn(row, "entry")) as SqlRow, this.mutationEpoch);
   }
 
   /**

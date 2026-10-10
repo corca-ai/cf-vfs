@@ -1,0 +1,34 @@
+import { runInDurableObject } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import { expect, it } from "vitest";
+import { createFsAdapter } from "../src/fs/index.js";
+import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
+import { meterSqlStorage } from "./metered-sql.js";
+
+it.each([100, 1000])("bounds identity lookup across %i hard links", async (count) => {
+  const result = await runInDurableObject(env.VFS_TEST.getByName(`aliases-${count}`), async (_, state) => {
+    const meter = meterSqlStorage(state.storage);
+    const raw = new DurableObjectFileSystem(meter.storage);
+    const fs = createFsAdapter(raw).promises;
+    await fs.writeFile("/file", "body");
+    const handle = await fs.open("/file", "r+");
+    const identity = (await handle.stat()).ino;
+    for (let index = 0; index < count; index++) await fs.link("/file", `/alias${index}`);
+    await fs.unlink("/file");
+    meter.reset();
+    const stat = raw.statById(identity);
+    const identityReads = meter.rowsRead;
+    meter.reset();
+    const fd = await handle.stat();
+    const handleReads = meter.rowsRead;
+    await handle.close();
+    return { identityReads, handleReads, ino: stat.ino, fdIno: fd.ino, nlink: stat.nlink, fdNlink: fd.nlink, expected: identity };
+  });
+  console.log("alias lookup", count, result);
+  expect(result.ino).toBe(result.expected);
+  expect(result.fdIno).toBe(result.expected);
+  expect(result.nlink).toBe(count);
+  expect(result.fdNlink).toBe(count);
+  expect(result.identityReads).toBeLessThan(10);
+  expect(result.handleReads).toBeLessThan(10);
+});

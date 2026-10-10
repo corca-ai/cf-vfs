@@ -105,8 +105,16 @@ export const DROP_ENTRY_TRIGGERS = `
         DROP TRIGGER IF EXISTS vfs_opaque_object_delete_guard;
         DROP TRIGGER IF EXISTS vfs_inline_chunk_insert_guard;`;
 
-export const ENTRY_COLUMNS = `
-  e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,
-  e.opaque_object_id, e.link_target, e.size_bytes, e.mode, e.uid, e.gid, e.created_at_ms,
-  e.link_identity, e.link_count, e.modified_at_ms, COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms, e.revision, e.mutation_version
-`;
+const fields =
+  "id,path,parent_path,name,kind,content_class,opaque_object_id,link_target,size_bytes,mode,uid,gid,created_at_ms,link_identity,link_count,modified_at_ms,changed_at_ms,revision,mutation_version"
+    .split(",")
+    .map(
+      (key) =>
+        [
+          key,
+          key === "changed_at_ms" ? "COALESCE(e.changed_at_ms, e.modified_at_ms)" : `e.${key}`,
+        ] as const,
+    );
+export const ENTRY_COLUMNS = fields.map(([key, sql]) => `${sql} AS ${key}`).join(",");
+/** One native string crossing instead of nineteen independently materialized fields. */
+export const ENTRY_JSON = `json_object(${fields.map(([key, sql]) => `'${key}',${sql}`).join(",")})`;

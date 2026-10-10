@@ -49,6 +49,8 @@ it.each([100, 1000])("bounds credential-bound copy work for %i files", async (co
 it.each([
   { count: 100, recordChanges: false },
   { count: 1000, recordChanges: false },
+  { count: 100, recordChanges: true },
+  { count: 1000, recordChanges: true },
 ])(
   "bounds single-entry rename work: $count files, changes $recordChanges",
   async ({ count, recordChanges }) => {

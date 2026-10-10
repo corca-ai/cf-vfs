@@ -181,7 +181,7 @@ export abstract class SqlMutation extends SqlPath {
     this.assertDatabaseHeadroom(path);
   }
 
-  protected aggregateSubtree(path: string): SubtreeSummary {
+  protected aggregateSubtree(path: string, single = false): SubtreeSummary {
     const range = descendantRange(path);
     const row = this.sql
       .exec<SqlRow>(
@@ -191,10 +191,9 @@ export abstract class SqlMutation extends SqlPath {
               COALESCE(SUM(CASE WHEN kind = 'file' THEN size_bytes ELSE 0 END), 0)
                 AS logical_file_bytes
        FROM vfs_entries
-       WHERE path = ? OR (path >= ? AND path < ?)`,
+       WHERE path = ? ${single ? "" : "OR (path >= ? AND path < ?)"}`,
         path,
-        range.lower,
-        range.upper,
+        ...(single ? [] : [range.lower, range.upper]),
       )
       .one();
     return {
@@ -219,36 +218,30 @@ export abstract class SqlMutation extends SqlPath {
       path,
       ...(single ? [] : [range.lower, range.upper]),
     );
-    if (!this.recordChanges) return;
-    if (single) {
-      this.recordPathChange(path, false, changeSeq);
-      return;
-    }
-    this.sql.exec(
-      `INSERT INTO vfs_path_changes (path, change_seq, present)
-       SELECT path, ?, 0 FROM vfs_entries
-       WHERE path = ? OR (path >= ? AND path < ?)
-       ON CONFLICT(path) DO UPDATE SET
-         change_seq = excluded.change_seq,
-         present = 0`,
-      changeSeq,
-      path,
-      range.lower,
-      range.upper,
-    );
+    this.recordSubtreeChange(path, false, changeSeq, single);
   }
 
-  protected recordPresentSubtree(path: string, changeSeq: number): void {
+  protected recordSubtreeChange(
+    path: string,
+    present: boolean,
+    changeSeq: number,
+    single = false,
+  ): void {
     if (!this.recordChanges) return;
+    if (single) {
+      this.recordPathChange(path, present, changeSeq);
+      return;
+    }
     const range = descendantRange(path);
     this.sql.exec(
       `INSERT INTO vfs_path_changes (path, change_seq, present)
-       SELECT path, ?, 1 FROM vfs_entries
+       SELECT path, ?, ? FROM vfs_entries
        WHERE path = ? OR (path >= ? AND path < ?)
        ON CONFLICT(path) DO UPDATE SET
          change_seq = excluded.change_seq,
-         present = 1`,
+         present = excluded.present`,
       changeSeq,
+      present ? 1 : 0,
       path,
       range.lower,
       range.upper,

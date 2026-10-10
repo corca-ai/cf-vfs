@@ -1,0 +1,46 @@
+{
+  "kind": "native SQL cost and behavior; not a timing trial",
+  "baseline": {
+    "graph": "combined-round2",
+    "identityReads": [
+      2,
+      2
+    ],
+    "handleReads": [
+      2,
+      2
+    ]
+  },
+  "candidate": {
+    "graph": "append-cache-final",
+    "identityReads": [
+      3,
+      3
+    ],
+    "handleReads": [
+      3,
+      3
+    ]
+  },
+  "sizes": [
+    100,
+    1000
+  ],
+  "verification": "logical inode and hardlink count preserved after original path unlink; both versions pass",
+  "interpretation": "No improvement claimed in this contiguous alias layout. Candidate adds one native read but remains constant in alias count. Earlier mixed namespace probes establish the indexed query benefit.",
+  "timingExcluded": true,
+  "losslessLogs": [
+    {
+      "file": "round11-alias-before.log.txt.gz",
+      "sha256": "eb246737958267e35cee0ae5a3df7e69fb0fb3e29341128b33c62348eac74c7f",
+      "originalBytes": 478,
+      "compressedBytes": 266
+    },
+    {
+      "file": "round11-alias-after.log.txt.gz",
+      "sha256": "c77fb9d08805424b775306deb120b80322db275610b7645bc8c861ff1a3a8d72",
+      "originalBytes": 484,
+      "compressedBytes": 272
+    }
+  ]
+}

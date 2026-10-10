@@ -7,7 +7,7 @@ individual latency tradeoffs. No new FS APIs. Local then actual CF, adopt only
 supported overall improvements. Instructions/skills already read (docs/index,
 optimize-perf, CF, wrangler, DO, Workers best practices). Main initially clean.
 
-Current HEAD/origin: 92144f1 (evidence). 13b1106 fixes Git removal errors;
+Current HEAD/origin: 90e1dc8 (evidence). 13b1106 fixes Git removal errors;
 d285026 adopts C/E/F/L/J; production source d285026. Public build
 22df29143160fc8daf55ecfe0c2cce7e298b2976b4943ac2fdf3b59eb802aa28,
 version fa8e9a32-6283-4c20-b4ba-ee44a78ba6f3. Public full runs pass190/60648
@@ -42,7 +42,7 @@ cap213504 (+381 bytes), R2+287; final append adds several hundred bytes.
 No bundle fixture change yet. If final fails, main can restore owned identity
 (source5) or HEAD source2; never revert other people's work (all changes ours).
 
-LIVE CF: unified session80774, immutable private Worker
+LIVE CF: session51567 (independent repeats, then native final probes), immutable private Worker
 cf-vfs-five-hour-evaluation, URL
 https://cf-vfs-five-hour-evaluation.donghun.workers.dev
 build five-hour-round11-47e3e8c47d4b, version
@@ -80,13 +80,14 @@ Final11 local cumulative vs accepted2 demo10:
 checkout-failure+1statement/+5returnedRows; not billed costs).
 None10:0.968416 [0.954622,0.975021],files0.949850,Git0.970629,
 cache1.012581 [0.997844,1.043042];4 confirmed individual signals,0cost.
-LIVE local independent flags repeat session72922:
-BENCH_GROUPS=git:100:true,files:1000:false,files:1000:true CREDENTIALSnone,
-10pairs, outputlocal-round11-none-flags-repeat.json,
-log/tmp/vfs-5h-round11-local-none-flags-repeat.log.
-Its initial signals: cached git commit-one100 2.14x, read1000bothcache variants
-~1.06/1.08, cached stat-after-overwrite1000~1.08. Investigate/disclose, no automatic
-veto user aggregate policy. No other local timing currently active.
+Independent selected unbound flags repeat completed, ten pairs:
+selected uncached0.949405 [0.906752,0.998219], cache0.994844 [0.985819,1.008993].
+Uncachedread1000 slowdown repeats1.052837 [1.014522,1.206290],9.208 ->9.685ms.
+Initial cached commit-one1002.14x and two other cache flags do not reproduce;
+new cachedcheckout-old1001.136717 [1.005821,1.273851]. No cost flags.
+No local timing active. Native hardlink100/1000 after-original-unlink checks
+pass both versions: round2 reads2/2, final11 reads3/3. No alias-layout speedup
+claimed; one extra read explicitly retained in evidence. Probe source/logs saved.
 
 Append original incremental vs5 demo10 0.989553 clear; independentrepeat
 0.997518 CIoverlaps1 but files0.944841/cache0.975031 still clear. Original
@@ -140,3 +141,33 @@ Adoption/deployment sequence after full CF11:
    and all obligations. No npmrelease/tags requested. No approval questions.
 Secrets: rootignored .dev.vars.public forpublic; private oldignored
 bench/three-hour-2026-10-10/.dev.vars. Never print token contents.
+
+14:47UTC final11 demo completed: overall0.978942 [0.951442,0.986236],
+Git0.973694, files0.976757 CIoverlaps1, cache0.983460 CIupper0.998991.
+Four confirmed pointwise flags: gitcheckout-old100false, shellchange-all1000,
+coding-mixedcheckout-base100, coding-mixeddiff1000. Target independent10 repeat
+after none with BENCH_GROUPS git:100:false,git-shell:1000:false,
+coding-mixed:100:false,coding-mixed:1000:false,git-recovery:100:false.
+Native recoverycheckout-failure100+62statements/+93reads, writesunchanged;
+include recovery in repeat. Totalnative551818 ->547484stmts,1993959 ->1954488reads,
+227815writes same. Demo compressedlosslessly aftercompletion; active none remains
+plaincheckpoint and mustnotstage. Summarize-final.mjs readsraw/gzip, validatesfull
+190/146/10/complete then writesbothmode summary once none completes.
+
+15:10UTC full final11 none complete:0.989547 [0.974384,1.013681],
+cache0.998991 CIincludes1; two confirmed pointwiseflags gitstatus-clean100false
+and shellclone-worktree100false. Nativeall190 exactlysamebothversions:
+370226statements/993349reads/216461writes. No costflags.
+Both full80774drivers exit0. cf-round11-summary.json validates190/146/10.
+LIVE51567 sequential: demo selected68stages10pairs+warmup1 (four timingflags+
+recoverycostflag), none git100false+git-shell100false10pairs+warmup1, then
+actualfinal11nativehandles10pairs+warmup and namespace3pairs to confirm
+unchanged composition from earlierround5. Logs/tmp/vfs-5h-round11-cf-{demo-flags,
+none-flags,handles,namespace}.log. No concurrent CFtimings/redeploy.
+All12bundlepresets now explicitlyre-recorded with existing measured*1.05
+rounded128rule. ActualrawVFS214323(+820/+0.38%),FSadapter249421(+1060),
+ALL12tree-shaking/import/dependency/budgetguardsPASS,lower tolerance0.75same.
+Newbudgets/proof/logs saved, CHANGELOGfinalcandidate entryadded.
+clear-owned-rooms.mjs prepared; runonlyafter51567fullydone, thenprivateWorker
+delete--force. Own dependencycopiescandidate/cf-baseline replacedwithmainlocked
+node_modules symlinks, bothJavaScriptgraphSHAunchanged; freed~1.9GB.
