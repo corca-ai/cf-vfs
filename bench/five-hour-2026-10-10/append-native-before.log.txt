@@ -1,0 +1,57 @@
+
+ RUN  v4.1.10 /private/tmp/cf-vfs-5h-identity-1791628763
+
+append cache cost 100 {
+  statements: 799,
+  reads: 1894,
+  writes: 300,
+  sameIdentity: true,
+  changedToken: true,
+  denied: true,
+  body: 'bodyx'
+}
+append cache cost 1000 {
+  statements: 7999,
+  reads: 18994,
+  writes: 3000,
+  sameIdentity: true,
+  changedToken: true,
+  denied: true,
+  body: 'bodyx'
+}
+ ❯ bench/append-cache.bench.ts (2 tests | 2 failed) 122ms
+   × bounds parent lookup cost across 100 appends 21ms
+   × bounds parent lookup cost across 1000 appends 101ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  bench/append-cache.bench.ts > bounds parent lookup cost across 100 appends
+AssertionError: expected 799 to be less than or equal to 700
+ ❯ bench/append-cache.bench.ts:34:29
+     32|   expect(result.denied).toBe(true);
+     33|   expect(result.body).toBe("bodyx");
+     34|   expect(result.statements).toBeLessThanOrEqual(7 * count);
+       |                             ^
+     35| });
+     36|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  bench/append-cache.bench.ts > bounds parent lookup cost across 1000 appends
+AssertionError: expected 7999 to be less than or equal to 7000
+ ❯ bench/append-cache.bench.ts:34:29
+     32|   expect(result.denied).toBe(true);
+     33|   expect(result.body).toBe("bodyx");
+     34|   expect(result.statements).toBeLessThanOrEqual(7 * count);
+       |                             ^
+     35| });
+     36|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  23:00:45
+   Duration  746ms (transform 214ms, setup 0ms, import 425ms, tests 122ms, environment 0ms)
+

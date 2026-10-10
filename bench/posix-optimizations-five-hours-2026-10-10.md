@@ -82,5 +82,45 @@ byte-write-100 reads 100600 -> 600 and truncate reads 2038 -> 38, with unchanged
 statement/write counts. These probes do not establish timing improvement: DO
 clock-zero samples are retained and excluded, with no epsilon. Initial summary
 failed on zero clocks; recovery summarized the same verified raw cost samples.
-Full matched CF suite evaluation is in progress. No budget has been changed.
+The primary full matched CF comparison completed: latency ratio 0.979470
+[0.953136,0.989250], fourteen pointwise signals but zero confirmed timing or
+native cost flags. All190 SQL totals are identical to round two. Its unbound
+control was cancelled during warmup with zero measured rows; both rooms were
+explicitly cleared to test the final combined candidate instead. This
+intermediate has not been adopted.
+
+## Final combined candidate, validation in progress
+
+Credential-bound append commits retain bounded directory access metadata only
+while all active transactions change file contents. Ordinary nested mutations
+still invalidate and disable reuse, every access checks its principal, and
+rollback discards metadata. Unbound append retains ordinary invalidation.
+New behavior tests cover principal changes, chmod while an append body yields,
+and warmed metadata after a nested chmod that rolls back. All1977 Node tests,
+156 Workers tests, POSIX46 and native SQL45 pass, along with other checks.
+
+Final-form local ten-pair comparisons against accepted round two:
+demo overall0.947443 [0.944896,0.949693], files0.874402, Git0.957205;
+unbound overall0.968416 [0.954622,0.975021], files0.949850, Git0.970629.
+The unbound optional cache aggregate1.012581 [0.997844,1.043042] is
+inconclusive. Local uncached read1000 slowdown reproduces in an independent
+ten-pair repeat, ratio1.052837 [1.014522,1.206290], medians9.208 ->9.685ms.
+The initially flagged cached commit-one100 2.14x slowdown does not reproduce;
+a new cached checkout-old100 pointwise flag appears. Raw data retain these
+tradeoffs. Local returned-row variations are not Cloudflare billed costs.
+
+Native actual-CF append1000 uses7999 ->6000 statements,18994 ->7000 reads,
+3000 writes unchanged, confirmed in three alternating pairs at each size.
+Content, identity, token and chmod-denial checks pass, with final cleanup.
+The full final candidate demo/unbound comparisons each run ten alternating
+pairs against accepted round two in the same DO. Frozen graph hashes and
+deployment fingerprint are in cf-round11-deployment.json.
+
+No bundle budget has been changed yet. The final raw VFS bundle is214323
+bytes, +820 bytes (+0.38%) versus round two; the existing213504 cap is exceeded.
+R2 likewise grows820 bytes; opt-in FS adapters grow1060 bytes. Other presets
+still fit. Adoption requires an explicit justified regeneration of all twelve
+presets through the existing measured-size-plus-five-percent rule; import
+exclusions, forbidden dependencies and the lower-bound tolerance stay intact.
+
 

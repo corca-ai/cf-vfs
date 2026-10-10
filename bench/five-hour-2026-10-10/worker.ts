@@ -17,7 +17,7 @@ import { collectStream as baselineCollectStream } from "./compiled/cf-baseline/s
 import { Shell as BaselineShell } from "./compiled/cf-baseline/src/shell/shell.js";
 import { DurableObjectFileSystem as BaselineFileSystem } from "./compiled/cf-baseline/src/vfs/do-sql.js";
 
-const BUILD = "five-hour-round5-ed34298a1c49";
+const BUILD = "five-hour-round11-47e3e8c47d4b";
 const plan = benchmarkPlan().filter((stage) => stage.trial === 0);
 function validates(stage: BenchmarkStage) {
   return (
@@ -199,6 +199,47 @@ export class FullEvaluation extends DurableObject<FullEvaluationEnv> {
       await this.clear();
     }
   }
+  async append(version: string, count: number) {
+    await this.clear();
+    try {
+      const raw = new (version === "baseline" ? BaselineFileSystem : DurableObjectFileSystem)(
+        this.meter.storage,
+      );
+      raw.setMetadata("/", { mode: 0o40777 });
+      const fs = raw.forCredentials({ uid: 1000, gid: 1000 });
+      for (let index = 0; index < count; index++)
+        await fs.writeFile(`/append/f${index}`, "body", { createParents: true });
+      await fs.readFile("/append/f0").stream.cancel();
+      const before = fs.stat("/append/f0");
+      this.meter.reset();
+      for (let index = 0; index < count; index++) await fs.appendFile(`/append/f${index}`, "x");
+      const cost = {
+        statements: this.meter.statements,
+        rowsRead: this.meter.rowsRead,
+        rowsWritten: this.meter.rowsWritten,
+      };
+      for (let index = 0; index < count; index++)
+        if ((await new Response(fs.readFile(`/append/f${index}`).stream).text()) !== "bodyx")
+          throw new Error("append content changed");
+      const after = fs.stat("/append/f0");
+      if (after.ino !== before.ino || after.mutationToken === before.mutationToken)
+        throw new Error("append identity/token changed");
+      raw.setMetadata("/append", { mode: 0o40000 });
+      let denied = false;
+      try {
+        await fs.appendFile("/append/f0", "unsafe");
+      } catch (error) {
+        denied = error instanceof Error && "code" in error && error.code === "EACCES";
+      }
+      if (!denied) throw new Error("append permission denial changed");
+      raw.setMetadata("/append", { mode: 0o40777 });
+      if ((await new Response(fs.readFile("/append/f0").stream).text()) !== "bodyx")
+        throw new Error("denied append changed content");
+      return { ...cost, verified: true };
+    } finally {
+      await this.clear();
+    }
+  }
   async handles(version: string, count: number) {
     await this.clear();
     try {
@@ -325,6 +366,14 @@ export default {
             )),
           });
         return Response.json({ build: BUILD, colo: request.cf?.colo, count, recordChanges, rows });
+      }
+      if (url.pathname === "/append") {
+        const count = Number(url.searchParams.get("files"));
+        if (count !== 100 && count !== 1000) return new Response("Invalid count", { status: 400 });
+        const rows = [];
+        for (const version of versions)
+          rows.push({ version, ...(await stub(version).append(version, count)) });
+        return Response.json({ build: BUILD, colo: request.cf?.colo, count, rows });
       }
       if (url.pathname === "/handles") {
         const count = Number(url.searchParams.get("files"));

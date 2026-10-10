@@ -1,0 +1,90 @@
+
+> @corca-ai/cf-vfs@0.4.2 bench:do
+> vitest run --config vitest.performance.config.ts --disableConsoleIntercept
+
+
+ RUN  v4.1.10 /private/tmp/cf-vfs-5h-append-cache-1791628763
+
+append cache cost 100 {
+  statements: 600,
+  reads: 700,
+  writes: 300,
+  sameIdentity: true,
+  changedToken: true,
+  denied: true,
+  body: 'bodyx'
+}
+append cache cost 1000 {
+  statements: 6000,
+  reads: 7000,
+  writes: 3000,
+  sameIdentity: true,
+  changedToken: true,
+  denied: true,
+  body: 'bodyx'
+}
+text processing workerd: {"name":"sed-global-dense","repeatsPerSample":10,"medianMs":1,"p10Ms":1,"p90Ms":1.1,"statements":1,"rowsRead":3,"rowsWritten":0}
+text processing workerd: {"name":"grep-only-matching-dense","repeatsPerSample":10,"medianMs":0.4,"p10Ms":0.4,"p90Ms":0.5,"statements":1,"rowsRead":3,"rowsWritten":0}
+text processing workerd: {"name":"awk-gsub-dense","repeatsPerSample":10,"medianMs":0.3,"p10Ms":0.3,"p90Ms":0.4,"statements":1,"rowsRead":3,"rowsWritten":0}
+text processing workerd: {"name":"awk-regex-split-dense","repeatsPerSample":10,"medianMs":0.8,"p10Ms":0.8,"p90Ms":0.8,"statements":1,"rowsRead":3,"rowsWritten":0}
+text processing workerd: {"name":"grep-short-lines","repeatsPerSample":10,"medianMs":1.2,"p10Ms":1.2,"p90Ms":1.3,"statements":1,"rowsRead":3,"rowsWritten":0}
+text processing workerd: {"name":"sed-short-lines","repeatsPerSample":10,"medianMs":3,"p10Ms":2.9,"p90Ms":3,"statements":1,"rowsRead":3,"rowsWritten":0}
+text processing workerd: {"name":"awk-short-lines","repeatsPerSample":10,"medianMs":2.6,"p10Ms":2.6,"p90Ms":2.7,"statements":1,"rowsRead":3,"rowsWritten":0}
+text processing workerd: {"name":"grep-regex-long-record","repeatsPerSample":10,"medianMs":4.9,"p10Ms":4.8,"p90Ms":5,"statements":1,"rowsRead":3,"rowsWritten":0}
+text processing workerd: {"name":"awk-regex-long-record","repeatsPerSample":10,"medianMs":4.9,"p10Ms":4.8,"p90Ms":4.9,"statements":1,"rowsRead":3,"rowsWritten":0}
+text processing workerd: {"name":"sed-capture-long-record","repeatsPerSample":10,"medianMs":5.7,"p10Ms":5.6,"p90Ms":5.7,"statements":1,"rowsRead":3,"rowsWritten":0}
+SQL optimization: {"name":"batch-create-10","repeatsPerSample":10,"medianMs":0.3,"p10Ms":0.2,"p90Ms":0.4,"statements":53,"rowsRead":53,"rowsWritten":42}
+SQL optimization: {"name":"batch-create-100","repeatsPerSample":10,"medianMs":2.4,"p10Ms":2.3,"p90Ms":2.9,"statements":503,"rowsRead":503,"rowsWritten":402}
+SQL optimization: {"name":"append-string","repeatsPerSample":100,"medianMs":0.03,"p10Ms":0.02,"p90Ms":0.04,"statements":6,"rowsRead":7,"rowsWritten":3}
+SQL optimization: {"name":"append-bytes","repeatsPerSample":100,"medianMs":0.03,"p10Ms":0.02,"p90Ms":0.03,"statements":7,"rowsRead":7,"rowsWritten":3}
+SQL optimization: {"name":"find-shallow","repeatsPerSample":10,"medianMs":0.2,"p10Ms":0.1,"p90Ms":0.2,"statements":2,"rowsRead":52,"rowsWritten":0}
+SQL optimization: {"name":"find-filtered","repeatsPerSample":10,"medianMs":0.9,"p10Ms":0.8,"p90Ms":0.9,"statements":2,"rowsRead":5051,"rowsWritten":0}
+SQL optimization: {"name":"find-all","repeatsPerSample":10,"medianMs":13.6,"p10Ms":13.4,"p90Ms":14,"statements":7,"rowsRead":5061,"rowsWritten":0}
+SQL optimization: {"name":"maintenance-1000","repeatsPerSample":100,"medianMs":0,"p10Ms":0,"p90Ms":0.01,"statements":1,"rowsRead":4,"rowsWritten":0}
+SQL optimization: {"name":"gc-insert-1000","statements":1,"rowsRead":0,"rowsWritten":3,"databaseBytes":348160}
+SQL optimization: {"name":"maintenance-10000","repeatsPerSample":100,"medianMs":0,"p10Ms":0,"p90Ms":0.01,"statements":1,"rowsRead":4,"rowsWritten":0}
+SQL optimization: {"name":"gc-insert-10000","statements":1,"rowsRead":0,"rowsWritten":3,"databaseBytes":2375680}
+EXTENSION COLLECTION [{"size":8192,"repetitions":1000,"asyncMs":0.008,"syncMs":0.008,"rawMs":[[0.008,0.009,0.008,0.008,0.009,0.008,0.009,0.009,0.008,0.008,0.009,0.008,0.009,0.009,0.008],[0.009,0.008,0.009,0.009,0.008,0.009,0.008,0.008,0.009,0.008,0.008,0.009,0.008,0.008,0.009]]},{"size":1048576,"repetitions":50,"asyncMs":0.08,"syncMs":0.04,"rawMs":[[0.08,0.08,0.08,0.06,0.08,0.08,0.08,0.06,0.08,0.08,0.08,0.08,0.06,0.08,0.08],[0.04,0.06,0.04,0.06,0.06,0.04,0.04,0.06,0.06,0.04,0.04,0.06,0.06,0.04,0.04]]},{"size":8388608,"repetitions":50,"asyncMs":0.56,"syncMs":0.34,"rawMs":[[0.54,0.56,0.56,0.56,0.54,0.58,0.56,0.56,0.56,0.56,0.56,0.58,0.58,0.56,0.56],[0.34,0.32,0.32,0.34,0.34,0.32,0.32,0.34,0.32,0.34,0.34,0.32,0.32,0.34,0.34]]}]
+DO small-BLOB benchmark: {"fileCount":512,"logicalBytes":5242790,"databaseBytes":6279168,"storageAmplification":1.197676809485026,"chunks":512,"checksum":125590,"writeMs":38,"readMs":22,"writeCost":{"statements":4096,"rowsRead":4096,"rowsWritten":3072},"readCost":{"statements":512,"rowsRead":1536,"rowsWritten":0}}
+DO storage benchmark: {"rowsRead":18,"rowsWritten":5,"databaseBytesBefore":1175552,"databaseBytesAfter":1175552,"chunks":4,"outputBytes":1048576,"firstByte":7,"estimatedSqlRowUsd":0.000005018}
+DO append benchmark: {"1MiB":{"durationMs":0.6,"maxRowsWritten":3},"8MiB":{"durationMs":1,"maxRowsWritten":3}}
+DO subtree benchmark: {"copy":10,"move":9,"remove":10}
+DO change-cursor benchmark: {"off":{"statements":34,"rowsRead":360,"rowsWritten":118,"point":{"statements":3,"rowsRead":6,"rowsWritten":2},"databaseBytes":126976,"changes":0},"on":{"statements":43,"rowsRead":451,"rowsWritten":208,"point":{"statements":4,"rowsRead":6,"rowsWritten":4},"databaseBytes":126976,"changes":32}}
+DO subtree latency: {"100":{"copyMs":0.45,"moveMs":0.2,"removeMs":0.15},"1000":{"copyMs":3.6,"moveMs":2.3,"removeMs":1.3}}
+DO point benchmark: {"statCost":{"statements":1,"nextCalls":0,"toArrayCalls":1,"oneCalls":0},"populatedStatCost":{"rowsRead":1,"statements":1},"overwriteCost":{"statements":3,"rowsRead":6,"rowsWritten":2},"readEditCost":{"statements":3,"rowsRead":8,"rowsWritten":2},"coldDigestCost":{"statements":3,"rowsRead":3,"rowsWritten":1},"warmDigestCost":{"statements":1,"rowsRead":1,"rowsWritten":0},"statQueryPlan":["SEARCH e USING INDEX vfs_entries_path (path=?)"],"warmInitializeMs":0.008,"statMs":0.0034,"overwriteMs":0.02,"writeAfterReadMs":{"cached":0.016,"uncached":0.021},"utf8ReadMs":0.0224,"globFindMs":2.5}
+token schema workerd spike: {"split":{"layout":"split","databaseBytes":1613824,"statMs":24,"listMs":36,"updateMs":22,"costs":{"stat":{"statements":10000,"rowsRead":20000,"rowsWritten":0},"list":{"statements":500,"rowsRead":100000,"rowsWritten":0},"update":{"statements":10000,"rowsRead":15000,"rowsWritten":10000}}},"separated":{"layout":"separated","databaseBytes":1306624,"statMs":22,"listMs":30,"updateMs":14,"costs":{"stat":{"statements":10000,"rowsRead":10000,"rowsWritten":0},"list":{"statements":500,"rowsRead":50000,"rowsWritten":0},"update":{"statements":5000,"rowsRead":10000,"rowsWritten":5000}}}}
+NAMESPACE COPY 100 {"statements":12,"rowsRead":1745,"rowsWritten":410,"copied":102,"uid":1000,"mode":33188,"newIdentity":true,"body":"file 0","sourcePresent":true}
+NAMESPACE COPY 1000 {"statements":12,"rowsRead":17045,"rowsWritten":4010,"copied":1002,"uid":1000,"mode":33188,"newIdentity":true,"body":"file 0","sourcePresent":true}
+NAMESPACE RENAME 100 {"statements":15,"rowsRead":22,"rowsWritten":10,"changes":[],"moved":1,"replaced":true,"sameIdentity":true,"sourceTokenChanged":true,"targetTokenChanged":true,"body":"source"}
+NAMESPACE RENAME 1000 {"statements":15,"rowsRead":22,"rowsWritten":10,"changes":[],"moved":1,"replaced":true,"sameIdentity":true,"sourceTokenChanged":true,"targetTokenChanged":true,"body":"source"}
+NAMESPACE RENAME 100 {"statements":18,"rowsRead":23,"rowsWritten":16,"changes":[{"path":"/source","present":false},{"path":"/target","present":true},{"path":"/","present":true}],"moved":1,"replaced":true,"sameIdentity":true,"sourceTokenChanged":true,"targetTokenChanged":true,"body":"source"}
+NAMESPACE RENAME 1000 {"statements":18,"rowsRead":23,"rowsWritten":16,"changes":[{"path":"/source","present":false},{"path":"/target","present":true},{"path":"/","present":true}],"moved":1,"replaced":true,"sameIdentity":true,"sourceTokenChanged":true,"targetTokenChanged":true,"body":"source"}
+POSIX COST [{"op":"stat","depth":1,"ms":3,"statements":500,"rowsRead":500},{"op":"stat","depth":16,"ms":4,"statements":500,"rowsRead":500},{"op":"stat","depth":64,"ms":6,"statements":500,"rowsRead":500},{"op":"rename-replace","bytes":80,"statements":12,"rowsRead":15,"rowsWritten":10},{"op":"rename-replace","bytes":1048576,"statements":12,"rowsRead":19,"rowsWritten":13},{"op":"rename-replace","bytes":8388608,"statements":12,"rowsRead":47,"rowsWritten":41}]
+POSIX PERF FIVE [{"name":"fstat","statements":1,"rowsRead":2,"rowsWritten":0},{"name":"fd-read","statements":3,"rowsRead":4,"rowsWritten":0},{"name":"fstat-detached","statements":2,"rowsRead":2,"rowsWritten":0},{"name":"fd-read-detached","statements":4,"rowsRead":4,"rowsWritten":0},{"name":"fd-readfile-detached","statements":4,"rowsRead":4,"rowsWritten":0},{"name":"create-wide","statements":8,"rowsRead":9,"rowsWritten":6},{"name":"rename-wide","statements":8,"rowsRead":8,"rowsWritten":5},{"name":"truncate-zero-1048576","statements":5,"rowsRead":38,"rowsWritten":34},{"name":"truncate-zero-8388608","statements":5,"rowsRead":262,"rowsWritten":258},{"name":"truncate-boundary","statements":7,"rowsRead":38,"rowsWritten":33},{"name":"write-full","statements":35,"rowsRead":36,"rowsWritten":33},{"name":"write-byte","statements":5,"rowsRead":6,"rowsWritten":2},{"name":"alias-chmod","statements":3,"rowsRead":3,"rowsWritten":1},{"name":"alias-write","statements":3,"rowsRead":9,"rowsWritten":2},{"name":"alias-shared-write","statements":4,"rowsRead":1032,"rowsWritten":5}]
+POINT COPY 100 {"statements":16,"rowsRead":34,"rowsWritten":15,"copied":1,"sourceSame":true,"targetSame":true,"targetChanged":true,"changes":[{"path":"/target","present":true},{"path":"/","present":true}],"body":"source"}
+POINT COPY 1000 {"statements":16,"rowsRead":34,"rowsWritten":15,"copied":1,"sourceSame":true,"targetSame":true,"targetChanged":true,"changes":[{"path":"/target","present":true},{"path":"/","present":true}],"body":"source"}
+HANDLE SCALING 100 {"plain":2,"alias":3,"identity":true,"links":1}
+HANDLE SCALING 1000 {"plain":2,"alias":3,"identity":true,"links":1}
+POSIX HANDLE COST [{"size":32768,"read":{"statements":3,"rowsRead":4,"rowsWritten":0},"write":{"statements":5,"rowsRead":6,"rowsWritten":2}},{"size":8388608,"read":{"statements":3,"rowsRead":4,"rowsWritten":0},"write":{"statements":5,"rowsRead":6,"rowsWritten":2}}]
+identity scaling 100 {
+  plain: 2,
+  linked: 3,
+  statIdentity: 102,
+  aliasIdentity: 102,
+  expectedIdentity: 102,
+  missing: true
+}
+identity scaling 1000 {
+  plain: 2,
+  linked: 3,
+  statIdentity: 1002,
+  aliasIdentity: 1002,
+  expectedIdentity: 1002,
+  missing: true
+}
+
+ Test Files  13 passed (13)
+      Tests  45 passed (45)
+   Start at  23:00:46
+   Duration  14.22s (transform 282ms, setup 0ms, import 2.83s, tests 9.52s, environment 0ms)
+

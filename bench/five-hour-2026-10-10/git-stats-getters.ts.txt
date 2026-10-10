@@ -1,0 +1,40 @@
+import type { VfsStat } from "../../vfs/types.js";
+
+/** Engine-only metadata: Git consumes millisecond times, never Date objects. */
+export class GitStats {
+  readonly dev = 0;
+  constructor(private readonly entry: VfsStat) {}
+  get size(): number {
+    return this.entry.sizeBytes;
+  }
+  get mode(): number {
+    return this.entry.mode;
+  }
+  get ino(): number {
+    return this.entry.ino;
+  }
+  get uid(): number {
+    return this.entry.uid;
+  }
+  get gid(): number {
+    return this.entry.gid;
+  }
+  get nlink(): number {
+    return this.entry.nlink ?? 1;
+  }
+  get mtimeMs(): number {
+    return this.entry.modifiedAtMs;
+  }
+  get ctimeMs(): number {
+    return this.entry.changedAtMs ?? this.entry.modifiedAtMs;
+  }
+  isFile(): boolean {
+    return this.entry.kind === "file";
+  }
+  isDirectory(): boolean {
+    return this.entry.kind === "directory";
+  }
+  isSymbolicLink(): boolean {
+    return this.entry.kind === "symlink";
+  }
+}

@@ -11,7 +11,7 @@ assert.ok(token);
 const trials = 10;
 const summarize = process.argv.includes("--summarize");
 const saved = summarize ? JSON.parse(await readFile(output, "utf8")) : undefined;
-const room = saved?.room ?? `full-handles-${randomUUID()}`;
+const room = summarize ? (saved?.room ?? null) : `full-handles-${randomUUID()}`;
 const rows = saved?.rows ?? [];
 if (!summarize)
   for (let pair = -1; pair < trials; pair++) {
@@ -67,6 +67,6 @@ for (const files of [100, 1000])
   }
 await writeFile(
   output,
-  `${JSON.stringify({ room, trials, candidate: process.env.CANDIDATE, rows, metrics }, null, 2)}\n`,
+  `${JSON.stringify({ room, trials, candidate: process.env.CANDIDATE, cleanupNote: saved?.cleanupNote, rows, metrics }, null, 2)}\n`,
 );
 console.log(JSON.stringify(metrics));

@@ -274,3 +274,76 @@ no budget has been changed and CF validation is still required.
   rejected zeros, corrected without rerunning or changing raw samples.
   Original room identifier was lost during summary recovery; each operation
   cleared storage in finally. Full matched CF demo/unbound runs follow.
+
+- Scalar JSON subquery with cursor.one(): full incremental demo10 ratio
+  1.004593 [1.001502,1.012853], 150 returned-row cost flags (absent paths now
+  emit a null row). Rejected; main never contained this change.
+- Git-specific metadata without Date allocation: getter form 0.995417
+  [0.988744,1.003713], assigned-field form 0.996105 [0.990161,1.003247].
+  Neither establishes improvement; both rejected without CF testing. Public
+  FsStats semantics remain unchanged. Exact graphs and source artifacts retained.
+- Avoiding identical traversal-cache reinsertions: full demo10 0.997086
+  [0.991312,1.005659], no native-cost claim, zero local cost flags. Rejected.
+- Append-only traversal reuse: experimental internal transaction flag allows
+  reuse only while all active transactions change file contents; nested
+  ordinary transactions invalidate and block reuse, rollback always invalidates.
+  Only commitAppend opts in. Full demo10 versus round five is 0.989553
+  [0.984544,0.997855], files0.938770, Git0.997455, cache0.977422; zero confirmed
+  timing signals, one tiny checkout-failure local cost variation (+1 statement).
+  Structural test fails before (3 parent queries) and passes after (0).
+  New tests cover different principals, chmod while a body yields, and nested
+  chmod plus warmed metadata followed by rollback. Node1977/Workers156 and
+  POSIX46 pass, as do typecheck, quality and execution limits. Unbound local
+  control is running; no adoption or CF timing claim yet.
+
+- Append-only unbound local full10 control: 1.002874 [0.996061,1.010152],
+  two pointwise confirmed latency signals, zero SQL cost flags. No established
+  unbound improvement or regression. Native local CF guards45/45 pass; appending
+  1000 files uses7999 ->6000 statements,18994 ->7000 reads,3000 writes unchanged.
+  Guard caps tighten to6000 statements/7000 reads, retaining3 writes per file.
+  Guard source and before/after logs retained. Actual CF validation is pending.
+
+- Round-five primary actual CF full ten-pair result versus accepted round two:
+  overall0.979470 [0.953136,0.989250], files0.987878 [0.946364,1.021896],
+  Git0.976007 [0.955741,0.994019], optionalcache0.954785 [0.938708,0.983210].
+  Fourteen pointwise signals, zero confirmed timing flags, zero native SQL
+  cost flags. This remains an unadopted fallback. Its unbound control was
+  cancelled during warmup (zero measured rows), with both evaluation rooms
+  explicitly cleared, to evaluate the final combined candidate in both modes.
+- Append-only repeat: demo overall0.997518 [0.985264,1.001655] is inconclusive,
+  files0.944841 [0.938488,0.950858] and cache0.975031 [0.962678,0.990938]
+  remain faster. Neither initial unbound cached-read/branch flag reproduces
+  in an independent ten-pair selected-group repetition (zero confirmed/cost
+  flags; selected cache aggregate1.0118 [0.9783,1.0225], not overall).
+- Final append form opts in only with a POSIX access context, retains original
+  unbound transaction invalidation and invalidates on append rollback. Commit
+  event notification is extracted to satisfy the unchanged complexity limit.
+  Full1977/156 tests, POSIX46, native45, typecheck/quality/limits pass.
+  Final cumulative local demo/unbound runs are in progress; no adoption yet.
+
+- Final-form local cumulative comparison against accepted round two, ten pairs
+  per mode: demo overall0.947443 [0.944896,0.949693], files0.874402,
+  Git0.957205, optionalcache0.960787. Zero confirmed timing flags; two
+  returned-row-only add-changed variations (+2,+1 with identical statements)
+  and checkout-failure (+1 statement/+5 returned rows) remain in raw evidence.
+  Unbound overall0.968416 [0.954622,0.975021], files0.949850,Git0.970629;
+  optionalcache1.012581 [0.997844,1.043042], four confirmed per-stage flags,
+  zero cost flags. These controls are not claimed regression-free.
+  Actual CF final comparison uses the same accepted round-two baseline, not
+  an unadopted intermediate, with both full modes ten alternating pairs.
+
+- Final native CF append probe (three alternating pairs at100/1000) reproduces
+  the local cost counts exactly:799/7999 ->600/6000 statements,1894/18994
+  ->700/7000 reads,300/3000 writes unchanged. Every content/identity/token and
+  permission-denial check passes; both versions clear storage in finally.
+  Final actual-CF full demo/unbound timing comparison is now running.
+
+- Final unbound local independent flag repetition (ten pairs, selected groups):
+  cached commit-one100 2.14x does not reproduce; neither cached read nor cached
+  stat-after-overwrite initial signal reproduces. Uncached read1000 repeats
+  slower at1.052837 [1.014522,1.206290] (medians9.208 ->9.685ms). A new
+  cached checkout-old100 signal appears1.136717 [1.005821,1.273851]. Selected
+  cache aggregate0.994844 [0.985819,1.008993]; zero SQL cost flags. Selected
+  uncached files aggregate0.949405 is not a full-suite aggregate. Preserve
+  this read tradeoff; actual CF evaluation, not local subgroup cherry-picking,
+  decides adoption using the user's full-suite geometric-mean policy.
