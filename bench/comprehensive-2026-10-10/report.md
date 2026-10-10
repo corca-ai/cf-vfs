@@ -41,4 +41,43 @@ Desktop/mobile browser preview shows all four graphs using real saved CF data;
 the table workload selector. Identical saved-result CLI comparisons correctly
 return ratios 1, no regressions; this is tool validation, not a measured speedup.
 
-Post-deployment full CF evidence is added separately after completion.
+## Deployment and full-suite screening
+
+Source commit `6c6cfbfa90c2657e34e1cb9223e75455ff767be4`, public Worker
+`ca0b1fce-cb3f-4d61-a076-472de75a43a4`. The full deployed run (`after.json`)
+again completes 190 workloads and 60,648 checks. Build/commit/run IDs are
+verified by the runner. `comparison.json` is the strict assessment output.
+
+| Family | Candidate / baseline geometric mean |
+|---|---:|
+| Uncached overall | 1.026 |
+| Uncached files | 1.020 |
+| Uncached Git/coding/recovery | 1.027 |
+| Metadata-cache variants | 0.991 |
+
+The tool correctly returns **review required** (exit 2): 66 workloads exceed
++5%, zero unresolved timings, and the worst median ratio is 9.91. This is not a
+performance win or a regression-free performance approval. No library source
+changed (`git diff ea885f1 6c6cfbf -- src` is empty), and the UI/tooling-only
+exception applies; retained changes make these observations visible rather than
+claiming an engine acceleration. These unpaired three-sample runs cannot
+attribute the differences to a cause. Examples of raw timings in milliseconds:
+
+- coding-small/checkout-main/1000: [181,154,201] → [1794,154,1919]
+- coding-mixed/diff/1000: [141,118,105] → [683,975,1140]
+- coding-mixed/clone/1000: [1106,298,265] → [1783,1644,1913]
+
+Do not silently discard these flags as noise. A future engine optimization
+requires the paired follow-up specified by the protocol before adoption.
+Public rows have no SQL counters (coverage 0/190); the report therefore makes
+no assertion about CF SQL-cost changes. The local artifact records statement
+counts only, not CF rows read/written.
+
+Production browser verification confirms four aggregate graphs, visible
+slowdown counts, latest commit metadata and no page overflow at 390px.
+The latest source contributes one distinct history point; prior same-commit
+reruns replaced their point. All 1,958 Node tests, 155 Workers tests, typechecks,
+lint (existing informational diagnostics), quality, protocol, documentation,
+unused-code checks and 12 bundle budgets pass. The new four arithmetic/cohort
+regression tests pass after the final UI warning change.
+
