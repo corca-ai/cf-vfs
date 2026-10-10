@@ -43,3 +43,10 @@ select { margin-left: 8px; padding: 8px; color: var(--ink); background: var(--su
 
 .trend summary > span { width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
 .trend summary > span small { margin-top: 2px; font-size: 10px; }
+
+#benchmark-summary { border: 1px solid var(--line); border-radius: 12px; padding: 8px 16px; }
+.summary-row { display: grid; grid-template-columns: minmax(160px, 1fr) 64px 160px; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.summary-row small { display: block; color: var(--dim); font-size: 11px; margin-top: 3px; }
+.summary-value { text-align: right; font-variant-numeric: tabular-nums; }
+#benchmark-summary > p { color: var(--muted); font-size: 12px; line-height: 1.6; }
+@media (max-width: 480px) { .summary-row { grid-template-columns: minmax(100px, 1fr) 40px 144px; gap: 6px; font-size: 12px; } }

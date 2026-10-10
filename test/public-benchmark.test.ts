@@ -127,6 +127,7 @@ it("retains ten distinct commits across resets and replaces reruns without losin
   const saved = await new BenchmarkStore(fs, now).get();
   expect(saved.history.map((point) => point.commitHash)).toEqual(before);
   expect(saved.history.at(-1)?.rows[0]?.medianMs).toBe(21);
+  expect(saved.history.at(-1)).toMatchObject({ engine: "test", measurement: "test" });
 });
 
 it("recovers identifiable legacy runs without inventing commit hashes or duplicate builds", async () => {

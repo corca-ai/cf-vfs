@@ -28,6 +28,9 @@
     <div class="result-heading"><h2 id="results-title">Saved results</h2><label for="file-count">Workload <select id="file-count"><option value="100">100 files</option><option value="1000" selected>1,000 files</option></select></label></div>
     <p id="result-meta" class="benchmark-help"></p>
     <p class="benchmark-help">Trends show up to 10 distinct commits, oldest → newest; lower is faster. Re-running the same commit updates its point. Click a sparkline for dates, versions and values. Older saved runs are grouped by build or deployment because their commit was not recorded. Percentages compare the first and last available points; timing varies between runs.</p>
+    <h3>Performance overview</h3>
+    <p class="benchmark-help">Geometric means of workload time ratios against the oldest comparable saved run. VFS includes uncached file, Git, coding and recovery workloads. Cached adapters have a separate index. Each series uses the same workloads at every point. The reference moves when the ten-commit window advances.</p>
+    <div id="benchmark-summary" aria-label="Aggregate performance trends"></div>
     <div id="benchmark-tables"></div>
     <details class="measurement-details"><summary>How these numbers are measured</summary>
       <p>Each cell is the median of three runs after one full warmup. Cache order alternates. Times are measured by the Worker around one Durable Object RPC call and include dispatch, storage, and operation assertions. Full-body verification and teardown run outside that timer.</p>

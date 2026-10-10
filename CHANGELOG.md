@@ -16,6 +16,9 @@ included.
 
 ## [Unreleased]
 
+- Add aggregate benchmark history indices and full-suite regression screening,
+  with separate cache variants, clock-zero exclusions and SQL-cost reporting.
+
 - Reduce append body copying and directory
   bookkeeping without changing POSIX APIs, permissions or transaction semantics.
 

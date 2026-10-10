@@ -54,6 +54,8 @@ interface RunRecord {
 }
 
 export interface BenchmarkHistoryPoint {
+  engine?: string;
+  measurement?: string;
   commitHash?: string;
   buildId?: string;
   deploymentId?: string;
@@ -72,6 +74,8 @@ function historyKey(point: BenchmarkHistoryPoint): string | undefined {
 
 function historyPoint(result: PublicBenchmarkResult): BenchmarkHistoryPoint {
   return {
+    engine: result.engine,
+    measurement: result.measurement,
     ...(result.commitHash === undefined ? {} : { commitHash: result.commitHash }),
     ...(result.buildId === undefined ? {} : { buildId: result.buildId }),
     ...(result.deploymentId === undefined ? {} : { deploymentId: result.deploymentId }),

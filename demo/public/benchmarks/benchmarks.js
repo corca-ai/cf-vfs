@@ -1,3 +1,4 @@
+import { summarizeHistory } from "./summary.js";
 const button = document.querySelector("#run-benchmark");
 const status = document.querySelector("#benchmark-status");
 const resultPanel = document.querySelector("#results");
@@ -37,13 +38,15 @@ function trend(row, ratio = false) {
     }
     return Number.isFinite(value) ? [{ ...saved, value }] : [];
   });
+  return sparkline(points, labels[row.operation] ?? row.operation, ratio ? (value) => `${value.toFixed(2)}×` : time);
+}
+function sparkline(points, label, format) {
   const wrap = element("details"); wrap.className = "trend";
   const summary = element("summary");
   if (points.length === 0) {
     wrap.append(element("small", "History starts with the next saved run"));
     return wrap;
   }
-  const format = ratio ? (value) => `${value.toFixed(2)}×` : time;
   const first = points[0].value, last = points.at(-1).value;
   const change = points.length > 1 && first > 0 ? (last / first - 1) * 100 : null;
   const description = change === null ? `${points.length} point · collecting history` :
@@ -52,7 +55,7 @@ function trend(row, ratio = false) {
   const svg = document.createElementNS(ns, "svg");
   svg.setAttribute("viewBox", "0 0 120 32");
   svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", `${labels[row.operation] ?? row.operation}: ${description}. Lower is faster.`);
+  svg.setAttribute("aria-label", `${label}: ${description}. Lower is better.`);
   const values = points.map((point) => point.value);
   const low = Math.min(...values), high = Math.max(...values);
   const coords = points.map((point, index) => [
@@ -81,6 +84,29 @@ function trend(row, ratio = false) {
   wrap.append(summary, list);
   return wrap;
 }
+function renderSummary(result) {
+  const panel = document.querySelector("#benchmark-summary");
+  panel.replaceChildren();
+  const metrics = summarizeHistory(snapshot.history ?? [], result);
+  for (const metric of metrics) {
+    const row = element("div"); row.className = "summary-row";
+    const name = element("div", metric.label);
+    name.append(element("small", `${metric.workloads} workloads · ${metric.excluded} clock-zero exclusions`));
+    const value = element("span", metric.points.length ? metric.points.at(-1).value.toFixed(1) : "—");
+    value.className = "summary-value";
+    row.append(name, value, sparkline(metric.points, metric.label, (value) => `${value.toFixed(1)} index`));
+    panel.append(row);
+  }
+  const overall = metrics.find((metric) => metric.id === "overall");
+  const cached = metrics.find((metric) => metric.id === "cache");
+  if (overall.regressions !== null && cached.regressions !== null) {
+    const warning = element("p", `Latest vs previous comparable commit: ${overall.regressions + cached.regressions} / ${overall.workloads + cached.workloads} workloads are more than 5% slower. Check individual rows; repeated measurements are needed to separate regressions from noise.`);
+    warning.className = "summary-regressions";
+    panel.append(warning);
+  }
+  const skipped = metrics[0]?.skipped ?? 0;
+  panel.append(element("p", `Oldest comparable point = 100; lower is better. All workload sizes, equal weight per operation/size/variant. ${skipped} incompatible history points omitted. Clock-rounded zero workloads are excluded from the entire series. These trends are descriptive, not a regression approval gate.`));
+}
 function render() {
   if (!snapshot) return;
   const result = snapshot.result;
@@ -94,6 +120,7 @@ function render() {
   if (!result) return;
   metadata.textContent = `Saved ${new Date(snapshot.modifiedAt).toLocaleString()} · Commit ${result.commitHash?.slice(0, 8) ?? "not recorded"} · Deployment ${result.deploymentId?.slice(0, 8) ?? "legacy"} · Request location ${result.colo ?? "local"} · 3 samples + warmup · ${result.verified.toLocaleString()} checks passed`;
   tables.replaceChildren();
+  renderSummary(result);
   for (const group of ["files", "git", "git-shell", "coding-small", "coding-mixed", "git-recovery"]) {
     const rows = result.rows.filter((row) => row.group === group && row.files === Number(workload.value));
     if (rows.length === 0) continue;

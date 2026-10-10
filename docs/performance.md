@@ -515,3 +515,52 @@ permission checks, small append, parent link-count maintenance and empty
 directory removal against `6ced964`, with local and actual CF measurements.
 Public API and persisted schemas stay unchanged; ordinary stat, overwrite,
 and rename remain controls; deep traversal candidates were rejected.
+
+## Comprehensive regression protocol
+
+Performance adoption requires full-suite evidence, not only a faster target.
+The repository instructions in AGENTS.md require this for future work.
+
+1. Save the baseline commit/build, runtime, workload plan, warmups, raw samples,
+   validation results and SQL counters. Run the entire local and actual CF
+   plans, including both file counts, both cache variants, Git engine, shell
+   Git, coding profiles and recovery probes.
+2. Run the same plan for the candidate. `npm run bench:public:local -- --out
+   local.json` compiles and runs the full public plan on NodeSqlFileSystem;
+   `--root /path/to/baseline-worktree` selects an isolated baseline checkout
+   with matching dependencies. `npm run bench:public -- --out cf.json` requests
+   the authenticated full deployed suite and verifies its build identity.
+   Existing `bench:check` and SQL/compatibility/bundle guards remain required.
+3. Screen saved results with `npm run bench:assess -- before.json after.json
+   report.json`. Exact workload identities, iteration counts, engine and
+   measurement protocol must match. The report contains per-workload >5%
+   slowdowns, overall/family geometric means, unresolved clock-zero cases,
+   worst slowdown and available SQL counter increases. Exit code 2 means review
+   is required. Missing SQL counters are not evidence of unchanged SQL costs;
+   separately meter statements, rows read and rows written on CF.
+4. Three public samples are descriptive screening, not statistical approval.
+   Investigate every flagged slowdown with at least ten alternating paired
+   trials on the same fixture/environment, use paired confidence intervals,
+   and repeat the full comparison if a systemic shift is suspected. A geometric
+   mean below 1 cannot override a confirmed material per-workload regression.
+   SQL reductions and timing improvements are separate claims. Do not convert
+   SQL counts into a dollar savings percentage.
+5. Adopt only when overall improvement is supported and no material unexplained
+   per-workload or cost regression remains. Keep POSIX tests and bundle budgets
+   passing. Save unsuccessful experiments too. After deploying, rerun the full
+   CF suite for the expected build; revert a confirmed regression.
+
+The public overview is a descriptive history, not this adoption gate. It shows
+four indices: uncached overall, uncached file operations, uncached Git/coding
+(including recovery), and the metadata-cache variants. Each workload ratio has
+equal weight in its geometric mean; both file counts participate independently.
+The oldest comparable point in the ten-distinct-commit window is 100, and lower
+is better. Cache and uncached rows are not mixed. A point must have the exact
+same full workload identities/iterations as the latest result; known engine or
+protocol changes are omitted. Older history did not record engine/protocol, so
+its comparability is limited to workload identity. A workload with a nonpositive
+or nonfinite time in any comparable point is excluded from every point of that
+series, with counts shown. No artificial epsilon or infinite speedup is used.
+The baseline can move when the history window or comparable cohort changes;
+compare values within the currently displayed series. Opening the page never
+runs a benchmark; same-commit replacement and the ten-minute cache remain.

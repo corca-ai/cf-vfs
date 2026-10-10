@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
+import { assessPairs } from "../demo/public/benchmarks/summary.js";
 import { comparePublicResults } from "./public-comparison.mjs";
 
 const args = process.argv.slice(2);
@@ -70,6 +71,14 @@ if (baselinePath) {
   const saved = JSON.parse(await readFile(baselinePath, "utf8"));
   const baseline = saved.result ?? saved;
   const pairs = comparePublicResults(baseline, result, allowAddedWorkloads);
+  const assessment = assessPairs(pairs);
+  console.error("Full-suite geometric means (candidate / baseline; lower is better):");
+  for (const metric of assessment.metrics)
+    console.error(`${metric.label}: ${metric.ratio === null ? "n/a" : metric.ratio.toFixed(3)}x`);
+  console.error(
+    `${assessment.regressions.length} workloads exceed +5%; ${assessment.unresolved.length} unresolved. Descriptive screening only.`,
+  );
+  if (args.includes("--check-regressions") && assessment.requiresReview) process.exitCode = 2;
   console.error(
     "operation/files/cache: previous -> current ms (ratio; three samples, descriptive only)",
   );
