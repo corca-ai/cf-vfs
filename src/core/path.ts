@@ -3,7 +3,9 @@ import { encodeUtf8, utf8ByteLength } from "./unicode.js";
 
 const MAX_PATH_BYTES = 4096;
 const MAX_NAME_BYTES = 255;
-const DOT_COMPONENT = /(?:^|\/)\.{1,2}(?:\/|$)/u;
+const DOT_COMPONENT = /(?:^|\/)\.\.?(?:\/|$)/u;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: NUL and non-ASCII paths require full byte validation.
+const NON_CANONICAL_ASCII = /\/(?:\/|\.\.?(?:\/|$))|[^\x01-\x7f]/;
 
 export function compareUtf8(left: string, right: string): number {
   const leftBytes = encodeUtf8(left);
@@ -38,10 +40,7 @@ export function normalizePath(path: string, cwd = "/"): string {
     path.length <= MAX_NAME_BYTES &&
     path.startsWith("/") &&
     !path.endsWith("/") &&
-    !path.includes("//") &&
-    !hasDotSegments(path) &&
-    !path.includes("\0") &&
-    !/[\u0080-\u{10ffff}]/u.test(path)
+    !NON_CANONICAL_ASCII.test(path)
   )
     return path;
   const absolute = path.startsWith("/") ? path : `${cwd}/${path}`;

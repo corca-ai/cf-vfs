@@ -16,6 +16,11 @@ included.
 
 ## [Unreleased]
 
+- Accelerate canonical POSIX path traversal and directory metadata reuse; use
+  indexed joins for recursive copy and indexed publication for single-entry
+  rename, reducing measured Cloudflare full-suite latency and SQL reads without
+  adding filesystem APIs.
+
 - Propagate asynchronous Git unlink/rmdir failures, preserving permission and
   nonempty-directory errors instead of reporting successful removal.
 

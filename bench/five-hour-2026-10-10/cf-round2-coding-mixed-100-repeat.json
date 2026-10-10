@@ -1,0 +1,7821 @@
+{
+  "engine": "cloudflare-sqlite-rpc",
+  "protocol": "full-suite-colocated-alternating-fixed-git-v1",
+  "identityTime": 1700000000000,
+  "fixtureRootMode": 16895,
+  "trials": 10,
+  "warmups": 1,
+  "fullPlan": false,
+  "groups": [
+    "coding-mixed:100:false"
+  ],
+  "credentials": "demo",
+  "colocated": true,
+  "baseUrl": "https://cf-vfs-five-hour-evaluation.donghun.workers.dev",
+  "room": "full-87587e4a-2cfe-4c04-8d94-437737c324a6",
+  "startedAt": "2026-10-10T13:10:03.168Z",
+  "candidate": "five-hour-round2-006ba6e7000d",
+  "completedAt": "2026-10-10T13:11:20.556Z",
+  "metrics": [
+    {
+      "id": "overall",
+      "workloads": 14,
+      "ratio": {
+        "median": 0.9767576117448822,
+        "p10": 0.9393053898964555,
+        "p90": 1.0670189442395388,
+        "ci95": [
+          0.9472160935561952,
+          1.0357993586144454
+        ]
+      }
+    },
+    {
+      "id": "git",
+      "workloads": 14,
+      "ratio": {
+        "median": 0.9767576117448822,
+        "p10": 0.9393053898964555,
+        "p90": 1.0670189442395388,
+        "ci95": [
+          0.9472160935561952,
+          1.0357993586144454
+        ]
+      }
+    }
+  ],
+  "regressions": [
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 84.5,
+        "p10": 76,
+        "p90": 99.1
+      },
+      "candidate": {
+        "median": 93.5,
+        "p10": 58,
+        "p90": 97.4
+      },
+      "ratio": {
+        "median": 1.1141520136131593,
+        "p10": 0.6483632193494578,
+        "p90": 1.2578947368421052,
+        "ci95": [
+          0.7615430622009569,
+          1.2403846153846154
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "diff",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 84,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 404,
+            "rowsRead": 679,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "diff",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 104,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 404,
+            "rowsRead": 679,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 37,
+        "p10": 34.9,
+        "p90": 42.599999999999994
+      },
+      "candidate": {
+        "median": 40,
+        "p10": 37,
+        "p90": 44.3
+      },
+      "ratio": {
+        "median": 1.0643500643500645,
+        "p10": 0.917479674796748,
+        "p90": 1.2362698412698414,
+        "ci95": [
+          0.9872241579558654,
+          1.1857142857142857
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "add-rest",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 63,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 258,
+            "rowsRead": 389,
+            "rowsWritten": 3
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "add-rest",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 61,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 258,
+            "rowsRead": 389,
+            "rowsWritten": 3
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    }
+  ],
+  "confirmed": [],
+  "costRegressions": [],
+  "workloads": [
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 416.5,
+        "p10": 397.4,
+        "p90": 460.5
+      },
+      "candidate": {
+        "median": 438,
+        "p10": 405,
+        "p90": 473
+      },
+      "ratio": {
+        "median": 1.021791895314479,
+        "p10": 0.9733060764624918,
+        "p90": 1.1322699699640748,
+        "ci95": [
+          0.9957077968079344,
+          1.075268817204301
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "prepare",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 796,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 3809,
+            "rowsRead": 13781,
+            "rowsWritten": 1717
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "prepare",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 707,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 3809,
+            "rowsRead": 13781,
+            "rowsWritten": 1717
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 320.5,
+        "p10": 282.9,
+        "p90": 371
+      },
+      "candidate": {
+        "median": 287,
+        "p10": 274.8,
+        "p90": 339.3
+      },
+      "ratio": {
+        "median": 0.938382136085949,
+        "p10": 0.8027809388335704,
+        "p90": 1.0477563072969434,
+        "ci95": [
+          0.8122313920896916,
+          1.012274058121809
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "clone",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 495,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 4903,
+            "rowsRead": 19792,
+            "rowsWritten": 1664
+          },
+          "verifiedBodies": 101
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "clone",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 350,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 4808,
+            "rowsRead": 12991,
+            "rowsWritten": 1664
+          },
+          "verifiedBodies": 101
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 57.5,
+        "p10": 45.9,
+        "p90": 61
+      },
+      "candidate": {
+        "median": 54,
+        "p10": 50.8,
+        "p90": 55.3
+      },
+      "ratio": {
+        "median": 0.9392014519056261,
+        "p10": 0.8913317191283293,
+        "p90": 1.1070833333333334,
+        "ci95": [
+          0.9074858757062148,
+          1.0713141025641026
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "status-clean",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 66,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 407,
+            "rowsRead": 695,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "status-clean",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 52,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 407,
+            "rowsRead": 695,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 27.5,
+        "p10": 24,
+        "p90": 31.5
+      },
+      "candidate": {
+        "median": 27,
+        "p10": 24.9,
+        "p90": 30
+      },
+      "ratio": {
+        "median": 0.9259259259259259,
+        "p10": 0.8547619047619047,
+        "p90": 1.133,
+        "ci95": [
+          0.8709677419354839,
+          1.0833333333333333
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "edit",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 45,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 25,
+            "rowsRead": 50,
+            "rowsWritten": 14
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "edit",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 44,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 25,
+            "rowsRead": 50,
+            "rowsWritten": 14
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 28,
+        "p10": 23.8,
+        "p90": 32.2
+      },
+      "candidate": {
+        "median": 29,
+        "p10": 24.8,
+        "p90": 30.1
+      },
+      "ratio": {
+        "median": 0.9807692307692308,
+        "p10": 0.8205357142857143,
+        "p90": 1.2163636363636363,
+        "ci95": [
+          0.8773809523809524,
+          1.1357142857142857
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "status-dirty",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 35,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 256,
+            "rowsRead": 444,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "status-dirty",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 26,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 256,
+            "rowsRead": 444,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 84.5,
+        "p10": 76,
+        "p90": 99.1
+      },
+      "candidate": {
+        "median": 93.5,
+        "p10": 58,
+        "p90": 97.4
+      },
+      "ratio": {
+        "median": 1.1141520136131593,
+        "p10": 0.6483632193494578,
+        "p90": 1.2578947368421052,
+        "ci95": [
+          0.7615430622009569,
+          1.2403846153846154
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "diff",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 84,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 404,
+            "rowsRead": 679,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "diff",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 104,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 404,
+            "rowsRead": 679,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 33,
+        "p10": 30.8,
+        "p90": 40.599999999999994
+      },
+      "candidate": {
+        "median": 35,
+        "p10": 30.9,
+        "p90": 45
+      },
+      "ratio": {
+        "median": 1.0298295454545454,
+        "p10": 0.832391304347826,
+        "p90": 1.432591768631813,
+        "ci95": [
+          0.8823529411764706,
+          1.3636363636363635
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "add-partial",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 63,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 117,
+            "rowsRead": 396,
+            "rowsWritten": 21
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "add-partial",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 54,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 117,
+            "rowsRead": 396,
+            "rowsWritten": 21
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 22.5,
+        "p10": 18.9,
+        "p90": 28.4
+      },
+      "candidate": {
+        "median": 21.5,
+        "p10": 18.9,
+        "p90": 27.099999999999994
+      },
+      "ratio": {
+        "median": 1.0444664031620552,
+        "p10": 0.7402500000000001,
+        "p90": 1.2063909774436088,
+        "ci95": [
+          0.7916666666666666,
+          1.1363636363636365
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "diff-staged",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 64,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 64,
+            "rowsRead": 172,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "diff-staged",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 18,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 64,
+            "rowsRead": 172,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 43,
+        "p10": 39.9,
+        "p90": 45.4
+      },
+      "candidate": {
+        "median": 44,
+        "p10": 40.9,
+        "p90": 47.4
+      },
+      "ratio": {
+        "median": 1.032908163265306,
+        "p10": 0.9743078626799556,
+        "p90": 1.1069418386491559,
+        "ci95": [
+          1,
+          1.0716902145473575
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "commit-partial",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 79,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 114,
+            "rowsRead": 355,
+            "rowsWritten": 26
+          },
+          "verifiedBodies": 2
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "commit-partial",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 72,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 114,
+            "rowsRead": 355,
+            "rowsWritten": 26
+          },
+          "verifiedBodies": 2
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 37,
+        "p10": 34.9,
+        "p90": 42.599999999999994
+      },
+      "candidate": {
+        "median": 40,
+        "p10": 37,
+        "p90": 44.3
+      },
+      "ratio": {
+        "median": 1.0643500643500645,
+        "p10": 0.917479674796748,
+        "p90": 1.2362698412698414,
+        "ci95": [
+          0.9872241579558654,
+          1.1857142857142857
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "add-rest",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 63,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 258,
+            "rowsRead": 389,
+            "rowsWritten": 3
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "add-rest",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 61,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 258,
+            "rowsRead": 389,
+            "rowsWritten": 3
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 43,
+        "p10": 39,
+        "p90": 45.2
+      },
+      "candidate": {
+        "median": 40.5,
+        "p10": 39,
+        "p90": 44.3
+      },
+      "ratio": {
+        "median": 0.9758720930232558,
+        "p10": 0.9013854527461652,
+        "p90": 1.0205128205128204,
+        "ci95": [
+          0.9111111111111111,
+          1
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "commit-rest",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 73,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 116,
+            "rowsRead": 390,
+            "rowsWritten": 26
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "commit-rest",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 73,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 116,
+            "rowsRead": 390,
+            "rowsWritten": 26
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 94,
+        "p10": 87,
+        "p90": 111
+      },
+      "candidate": {
+        "median": 91.5,
+        "p10": 81.8,
+        "p90": 107.4
+      },
+      "ratio": {
+        "median": 1.0060054242541652,
+        "p10": 0.8595720720720721,
+        "p90": 1.115246212121212,
+        "ci95": [
+          0.8930555555555555,
+          1.0745330459770115
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "checkout-base",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 170,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 960,
+            "rowsRead": 3671,
+            "rowsWritten": 32
+          },
+          "verifiedBodies": 101
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "checkout-base",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 114,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 960,
+            "rowsRead": 2048,
+            "rowsWritten": 32
+          },
+          "verifiedBodies": 101
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 83.5,
+        "p10": 76.6,
+        "p90": 90.6
+      },
+      "candidate": {
+        "median": 80.5,
+        "p10": 69.1,
+        "p90": 90.3
+      },
+      "ratio": {
+        "median": 0.9819277108433735,
+        "p10": 0.7852272727272727,
+        "p90": 1.1460956764754233,
+        "ci95": [
+          0.8456439393939394,
+          1.0815250150693188
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "checkout-main",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 92,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 910,
+            "rowsRead": 3236,
+            "rowsWritten": 22
+          },
+          "verifiedBodies": 101
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "checkout-main",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 92,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 910,
+            "rowsRead": 1649,
+            "rowsWritten": 22
+          },
+          "verifiedBodies": 101
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 30,
+        "p10": 23.8,
+        "p90": 32.3
+      },
+      "candidate": {
+        "median": 25.5,
+        "p10": 20,
+        "p90": 34.1
+      },
+      "ratio": {
+        "median": 0.8052083333333333,
+        "p10": 0.6539285714285714,
+        "p90": 1.4670454545454545,
+        "ci95": [
+          0.6666666666666666,
+          1.2291666666666665
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "status-final",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 25,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 247,
+            "rowsRead": 373,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "status-final",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 28,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 247,
+            "rowsRead": 373,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 409,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 289,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 70,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 36,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 95,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 33,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 22,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 41,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 43,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 89,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 88,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 396,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 287,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 58,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 28,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 81,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 36,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 25,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 47,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 43,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 42,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 87,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 61,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 23,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 406,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 338,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 53,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 24,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 26,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 97,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 31,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 18,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 45,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 40,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 39,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 84,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 93,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 35,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 399,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 283,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 48,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 28,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 32,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 83,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 32,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 32,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 43,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 48,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 43,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 96,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 77,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 24,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 399,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 282,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 52,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 24,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 28,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 82,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 31,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 19,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 45,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 41,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 43,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 87,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 90,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 25,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 450,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 264,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 54,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 95,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 44,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 22,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 45,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 38,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 40,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 90,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 79,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 28,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 500,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 276,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 51,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 28,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 25,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 92,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 45,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 21,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 41,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 40,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 39,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 80,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 86,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 20,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 465,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 338,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 45,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 26,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 86,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 29,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 22,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 40,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 39,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 111,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 96,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 422,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 370,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 46,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 24,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 22,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 78,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 40,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 23,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 44,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 36,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 39,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 96,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 79,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 27,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 427,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 280,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 49,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 26,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 96,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 34,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 24,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 46,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 47,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 47,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 107,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 90,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 421,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 351,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 55,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 59,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 45,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 23,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 43,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 38,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 41,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 97,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 86,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 412,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 353,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 60,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 25,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 88,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 33,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 22,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 39,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 34,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 41,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 92,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 84,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 32,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 460,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 352,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 58,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 31,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 24,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 98,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 34,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 28,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 43,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 42,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 44,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 111,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 88,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 470,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 287,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 54,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 82,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 46,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 42,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 44,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 44,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 100,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 70,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 23,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 410,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 285,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 53,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 25,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 23,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 49,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 43,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 19,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 43,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 37,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 39,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 111,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 81,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 24,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 421,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 303,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 59,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 27,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 28,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 109,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 33,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 25,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 43,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 37,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 40,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 99,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 81,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 32,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 383,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 286,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 57,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 25,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 76,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 46,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 24,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 42,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 37,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 47,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 90,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 83,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 22,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 449,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 295,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 54,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 28,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 101,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 31,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 19,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 40,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 40,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 40,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 82,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 80,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 34,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 465,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 307,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 55,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 25,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 31,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 95,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 31,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 20,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 51,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 37,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 41,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 93,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 76,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 20,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 443,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 380,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 60,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 27,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 34,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 76,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 33,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 18,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 49,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 37,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 45,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 87,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 73,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 32,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 0,
+        "rowsRead": 0,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 796,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 3809,
+        "rowsRead": 13781,
+        "rowsWritten": 1717
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 495,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 4903,
+        "rowsRead": 19792,
+        "rowsWritten": 1664
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 66,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 407,
+        "rowsRead": 695,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 45,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 25,
+        "rowsRead": 50,
+        "rowsWritten": 14
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 256,
+        "rowsRead": 444,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 84,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 404,
+        "rowsRead": 679,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 63,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 117,
+        "rowsRead": 396,
+        "rowsWritten": 21
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 64,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 64,
+        "rowsRead": 172,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 79,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 114,
+        "rowsRead": 355,
+        "rowsWritten": 26
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 63,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 258,
+        "rowsRead": 389,
+        "rowsWritten": 3
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 73,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 116,
+        "rowsRead": 390,
+        "rowsWritten": 26
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 170,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 960,
+        "rowsRead": 3671,
+        "rowsWritten": 32
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 92,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 910,
+        "rowsRead": 3236,
+        "rowsWritten": 22
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 25,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 247,
+        "rowsRead": 373,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 707,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 3809,
+        "rowsRead": 13781,
+        "rowsWritten": 1717
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 350,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 4808,
+        "rowsRead": 12991,
+        "rowsWritten": 1664
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 52,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 407,
+        "rowsRead": 695,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 44,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 25,
+        "rowsRead": 50,
+        "rowsWritten": 14
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 26,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 256,
+        "rowsRead": 444,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 104,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 404,
+        "rowsRead": 679,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 54,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 117,
+        "rowsRead": 396,
+        "rowsWritten": 21
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 18,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 64,
+        "rowsRead": 172,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 72,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 114,
+        "rowsRead": 355,
+        "rowsWritten": 26
+      },
+      "verifiedBodies": 2
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 61,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 258,
+        "rowsRead": 389,
+        "rowsWritten": 3
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 73,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 116,
+        "rowsRead": 390,
+        "rowsWritten": 26
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 114,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 960,
+        "rowsRead": 2048,
+        "rowsWritten": 32
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 92,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 910,
+        "rowsRead": 1649,
+        "rowsWritten": 22
+      },
+      "verifiedBodies": 101
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 28,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 247,
+        "rowsRead": 373,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    }
+  ],
+  "placements": [
+    {
+      "pair": -1,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": -1,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "start": 140,
+      "colo": "LAX"
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "start": 140,
+      "colo": "LAX"
+    }
+  ]
+}

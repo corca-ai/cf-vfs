@@ -320,6 +320,8 @@ export abstract class SqlCopy extends SqlMove {
   ): void {
     // The trusted branch deliberately keeps its original range-copy query and
     // exact SQL cost; only this credential-bound branch needs the recursive CTE.
+    // Drive recursion from one parent, then seek its children. Scanning the
+    // namespace for every copied entry makes flat-directory copies quadratic.
     this.sql.exec(
       `WITH RECURSIVE copied (
            path, parent_path, name, kind, content_class, opaque_object_id,
@@ -352,8 +354,9 @@ export abstract class SqlCopy extends SqlMove {
                WHEN (parent.copied_mode & ?) <> 0 THEN parent.copied_gid
                ELSE ?
              END
-           FROM vfs_entries e INDEXED BY vfs_entries_parent_name
-           JOIN copied parent ON e.parent_path = parent.path
+           FROM copied parent
+           CROSS JOIN vfs_entries e INDEXED BY vfs_entries_parent_name
+           WHERE e.parent_path = parent.path
          )
          INSERT INTO vfs_entries (
            id, path, parent_path, name, kind, content_class, opaque_object_id,

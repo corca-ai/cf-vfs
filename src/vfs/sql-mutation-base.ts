@@ -204,19 +204,26 @@ export abstract class SqlMutation extends SqlPath {
     };
   }
 
-  protected publishSubtreeRemoval(path: string, changeSeq = this.nextChangeSeq()): void {
+  protected publishSubtreeRemoval(
+    path: string,
+    changeSeq = this.nextChangeSeq(),
+    single = false,
+  ): void {
     const range = descendantRange(path);
     this.sql.exec(
       `INSERT INTO vfs_path_tombstones (path, version)
        SELECT path, mutation_version + 1 FROM vfs_entries
-       WHERE path = ? OR (path >= ? AND path < ?)
+       WHERE path = ? ${single ? "" : "OR (path >= ? AND path < ?)"}
        ON CONFLICT(path) DO UPDATE SET
          version = MAX(vfs_path_tombstones.version, excluded.version)`,
       path,
-      range.lower,
-      range.upper,
+      ...(single ? [] : [range.lower, range.upper]),
     );
     if (!this.recordChanges) return;
+    if (single) {
+      this.recordPathChange(path, false, changeSeq);
+      return;
+    }
     this.sql.exec(
       `INSERT INTO vfs_path_changes (path, change_seq, present)
        SELECT path, ?, 0 FROM vfs_entries

@@ -1,0 +1,373 @@
+{
+  "note": "Node query-plan diagnostic, not native CF billed rows or latency evidence",
+  "graph": "bench/five-hour-2026-10-10/compiled/baseline",
+  "results": [
+    {
+      "from": "/source/f0",
+      "to": "/source/renamed",
+      "moved": 1,
+      "replaced": false
+    },
+    {
+      "from": "/source",
+      "to": "/copy",
+      "copied": 1001,
+      "replaced": false,
+      "opaqueBodiesCopied": 0
+    }
+  ],
+  "rows": [
+    {
+      "phase": "rename",
+      "query": "BEGIN",
+      "statements": 1,
+      "returnedRows": 0
+    },
+    {
+      "phase": "rename",
+      "query": "SELECT \n  e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,\n  e.opaque_object_id, e.link_target, e.size_bytes, e.mode, e.uid, e.gid, e.created_at_ms,\n  e.link_identity, e.link_count, e.modified_at_ms, COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms, e.revision, e.mutation_version\n\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+      "statements": 3,
+      "returnedRows": 2,
+      "plan": [
+        {
+          "id": 3,
+          "parent": 0,
+          "notused": 15,
+          "detail": "SEARCH e USING INDEX vfs_entries_path (path=?)"
+        }
+      ]
+    },
+    {
+      "phase": "rename",
+      "query": "INSERT INTO vfs_path_tombstones (path, version)\n       SELECT path, mutation_version + 1 FROM vfs_entries\n       WHERE path = ? OR (path >= ? AND path < ?)\n       ON CONFLICT(path) DO UPDATE SET\n         version = MAX(vfs_path_tombstones.version, excluded.version)",
+      "statements": 1,
+      "returnedRows": 0,
+      "plan": [
+        {
+          "id": 3,
+          "parent": 0,
+          "notused": 16,
+          "detail": "SCAN vfs_entries"
+        }
+      ]
+    },
+    {
+      "phase": "rename",
+      "query": "UPDATE vfs_entries SET\n         mutation_version = COALESCE((\n           SELECT version + 1 FROM vfs_path_tombstones\n           WHERE path = ? || substr(vfs_entries.path, ?)\n         ), 1),\n         path = ? || substr(path, ?),\n         parent_path = CASE WHEN path = ? THEN ?\n           ELSE ? || substr(parent_path, ?) END,\n         name = CASE WHEN path = ? THEN ? ELSE name END,\n         changed_at_ms = CASE WHEN path = ? THEN ? ELSE COALESCE(changed_at_ms, modified_at_ms) END,\n         revision = CASE WHEN path = ? THEN MAX(revision, ?) + 1 ELSE revision + 1 END\n       WHERE path = ? OR (path >= ? AND path < ?)",
+      "statements": 1,
+      "returnedRows": 0,
+      "plan": [
+        {
+          "id": 4,
+          "parent": 0,
+          "notused": 16,
+          "detail": "SCAN vfs_entries"
+        },
+        {
+          "id": 57,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 61,
+          "parent": 57,
+          "notused": 39,
+          "detail": "SEARCH vfs_path_tombstones USING PRIMARY KEY (path=?)"
+        }
+      ]
+    },
+    {
+      "phase": "rename",
+      "query": "SELECT changes() AS value",
+      "statements": 1,
+      "returnedRows": 1,
+      "plan": [
+        {
+          "id": 1,
+          "parent": 0,
+          "notused": 0,
+          "detail": "SCAN CONSTANT ROW"
+        }
+      ]
+    },
+    {
+      "phase": "rename",
+      "query": "DELETE FROM vfs_path_tombstones\n       WHERE (path = ? OR (path >= ? AND path < ?))\n         AND EXISTS (\n           SELECT 1 FROM vfs_entries WHERE vfs_entries.path = vfs_path_tombstones.path\n         )",
+      "statements": 1,
+      "returnedRows": 0,
+      "plan": [
+        {
+          "id": 4,
+          "parent": 0,
+          "notused": 0,
+          "detail": "MULTI-INDEX OR"
+        },
+        {
+          "id": 5,
+          "parent": 4,
+          "notused": 0,
+          "detail": "INDEX 1"
+        },
+        {
+          "id": 11,
+          "parent": 5,
+          "notused": 45,
+          "detail": "SEARCH vfs_path_tombstones USING PRIMARY KEY (path=?)"
+        },
+        {
+          "id": 13,
+          "parent": 4,
+          "notused": 0,
+          "detail": "INDEX 2"
+        },
+        {
+          "id": 22,
+          "parent": 13,
+          "notused": 155,
+          "detail": "SEARCH vfs_path_tombstones USING PRIMARY KEY (path>? AND path<?)"
+        },
+        {
+          "id": 27,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 31,
+          "parent": 27,
+          "notused": 39,
+          "detail": "SEARCH vfs_entries USING COVERING INDEX vfs_entries_path (path=?)"
+        }
+      ]
+    },
+    {
+      "phase": "rename",
+      "query": "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (?) AND kind = 'directory'\n      ",
+      "statements": 1,
+      "returnedRows": 0,
+      "plan": [
+        {
+          "id": 5,
+          "parent": 0,
+          "notused": 15,
+          "detail": "SEARCH vfs_entries USING INDEX vfs_entries_path (path=?)"
+        }
+      ]
+    },
+    {
+      "phase": "rename",
+      "query": "COMMIT",
+      "statements": 1,
+      "returnedRows": 0
+    },
+    {
+      "phase": "copy-tree",
+      "query": "BEGIN",
+      "statements": 1,
+      "returnedRows": 0
+    },
+    {
+      "phase": "copy-tree",
+      "query": "SELECT \n  e.id, e.path, e.parent_path, e.name, e.kind, e.content_class,\n  e.opaque_object_id, e.link_target, e.size_bytes, e.mode, e.uid, e.gid, e.created_at_ms,\n  e.link_identity, e.link_count, e.modified_at_ms, COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms, e.revision, e.mutation_version\n\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+      "statements": 3,
+      "returnedRows": 2,
+      "plan": [
+        {
+          "id": 3,
+          "parent": 0,
+          "notused": 15,
+          "detail": "SEARCH e USING INDEX vfs_entries_path (path=?)"
+        }
+      ]
+    },
+    {
+      "phase": "copy-tree",
+      "query": "SELECT COUNT(*) AS entries,\n              COALESCE(SUM(CASE WHEN content_class = 'inline' THEN size_bytes ELSE 0 END), 0)\n                AS inline_bytes,\n              COALESCE(SUM(CASE WHEN kind = 'file' THEN size_bytes ELSE 0 END), 0)\n                AS logical_file_bytes\n       FROM vfs_entries\n       WHERE path = ? OR (path >= ? AND path < ?)",
+      "statements": 1,
+      "returnedRows": 1,
+      "plan": [
+        {
+          "id": 3,
+          "parent": 0,
+          "notused": 16,
+          "detail": "SCAN vfs_entries"
+        }
+      ]
+    },
+    {
+      "phase": "copy-tree",
+      "query": "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+      "statements": 1,
+      "returnedRows": 1,
+      "plan": [
+        {
+          "id": 2,
+          "parent": 0,
+          "notused": 33,
+          "detail": "SEARCH vfs_usage USING INTEGER PRIMARY KEY (rowid=?)"
+        }
+      ]
+    },
+    {
+      "phase": "copy-tree",
+      "query": "INSERT INTO vfs_entries (\n         id, path, parent_path, name, kind, content_class, opaque_object_id,\n         link_target, size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,\n         mutation_version, link_identity, link_count\n       )\n       SELECT\n         ? + ROW_NUMBER() OVER (ORDER BY e.path),\n         ? || substr(e.path, ?),\n         CASE WHEN e.path = ? THEN ?\n           ELSE ? || substr(e.parent_path, ?) END,\n         CASE WHEN e.path = ? THEN ? ELSE e.name END,\n         e.kind, e.content_class, e.opaque_object_id,\n         e.link_target, e.size_bytes, e.mode, e.uid, e.gid, ?, ?,\n         CASE WHEN e.path = ? THEN ? ELSE 1 END,\n         COALESCE((\n           SELECT version + 1 FROM vfs_path_tombstones\n           WHERE path = ? || substr(e.path, ?)\n         ), 1), ?, CASE WHEN e.kind = 'directory' THEN e.link_count ELSE ? END\n       FROM vfs_entries e\n       WHERE e.path = ? OR (e.path >= ? AND e.path < ?)",
+      "statements": 1,
+      "returnedRows": 0,
+      "plan": [
+        {
+          "id": 4,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CO-ROUTINE (subquery-3)"
+        },
+        {
+          "id": 8,
+          "parent": 4,
+          "notused": 23,
+          "detail": "SCAN e USING INDEX vfs_entries_path"
+        },
+        {
+          "id": 38,
+          "parent": 0,
+          "notused": 15,
+          "detail": "SCAN (subquery-3)"
+        },
+        {
+          "id": 112,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 116,
+          "parent": 112,
+          "notused": 39,
+          "detail": "SEARCH vfs_path_tombstones USING PRIMARY KEY (path=?)"
+        }
+      ]
+    },
+    {
+      "phase": "copy-tree",
+      "query": "DELETE FROM vfs_path_tombstones\n       WHERE (path = ? OR (path >= ? AND path < ?))\n         AND EXISTS (\n           SELECT 1 FROM vfs_entries WHERE vfs_entries.path = vfs_path_tombstones.path\n         )",
+      "statements": 1,
+      "returnedRows": 0,
+      "plan": [
+        {
+          "id": 4,
+          "parent": 0,
+          "notused": 0,
+          "detail": "MULTI-INDEX OR"
+        },
+        {
+          "id": 5,
+          "parent": 4,
+          "notused": 0,
+          "detail": "INDEX 1"
+        },
+        {
+          "id": 11,
+          "parent": 5,
+          "notused": 45,
+          "detail": "SEARCH vfs_path_tombstones USING PRIMARY KEY (path=?)"
+        },
+        {
+          "id": 13,
+          "parent": 4,
+          "notused": 0,
+          "detail": "INDEX 2"
+        },
+        {
+          "id": 22,
+          "parent": 13,
+          "notused": 155,
+          "detail": "SEARCH vfs_path_tombstones USING PRIMARY KEY (path>? AND path<?)"
+        },
+        {
+          "id": 27,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 31,
+          "parent": 27,
+          "notused": 39,
+          "detail": "SEARCH vfs_entries USING COVERING INDEX vfs_entries_path (path=?)"
+        }
+      ]
+    },
+    {
+      "phase": "copy-tree",
+      "query": "INSERT INTO vfs_inline_chunks (entry_id, chunk_index, body)\n       SELECT destination.id, chunk.chunk_index, chunk.body\n       FROM vfs_inline_chunks chunk\n       JOIN vfs_entries source_entry ON source_entry.id = chunk.entry_id\n       JOIN vfs_entries destination\n         ON destination.path = ? || substr(source_entry.path, ?)\n       WHERE source_entry.path = ?\n          OR (source_entry.path >= ? AND source_entry.path < ?)",
+      "statements": 1,
+      "returnedRows": 0,
+      "plan": [
+        {
+          "id": 5,
+          "parent": 0,
+          "notused": 10,
+          "detail": "SCAN source_entry USING COVERING INDEX vfs_entries_path"
+        },
+        {
+          "id": 13,
+          "parent": 0,
+          "notused": 10,
+          "detail": "SEARCH destination USING COVERING INDEX vfs_entries_path (path=?)"
+        },
+        {
+          "id": 21,
+          "parent": 0,
+          "notused": 56,
+          "detail": "SEARCH chunk USING PRIMARY KEY (entry_id=?)"
+        }
+      ]
+    },
+    {
+      "phase": "copy-tree",
+      "query": "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+      "statements": 1,
+      "returnedRows": 0,
+      "plan": [
+        {
+          "id": 4,
+          "parent": 0,
+          "notused": 33,
+          "detail": "SEARCH vfs_usage USING INTEGER PRIMARY KEY (rowid=?)"
+        }
+      ]
+    },
+    {
+      "phase": "copy-tree",
+      "query": "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = 2 + (SELECT COUNT(*) FROM vfs_entries child INDEXED BY vfs_entries_child_directories WHERE child.parent_path = vfs_entries.path AND child.kind = 'directory' AND child.path <> '/')\n      WHERE path IN (?) AND kind = 'directory'\n      ",
+      "statements": 1,
+      "returnedRows": 0,
+      "plan": [
+        {
+          "id": 5,
+          "parent": 0,
+          "notused": 15,
+          "detail": "SEARCH vfs_entries USING INDEX vfs_entries_path (path=?)"
+        },
+        {
+          "id": 39,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 45,
+          "parent": 39,
+          "notused": 15,
+          "detail": "SEARCH child USING INDEX vfs_entries_child_directories (parent_path=?)"
+        }
+      ]
+    },
+    {
+      "phase": "copy-tree",
+      "query": "COMMIT",
+      "statements": 1,
+      "returnedRows": 0
+    }
+  ]
+}

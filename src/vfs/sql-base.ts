@@ -1,5 +1,5 @@
 import { VfsError } from "../core/errors.js";
-import { descendantRange, dirname, normalizePath } from "../core/path.js";
+import { descendantRange } from "../core/path.js";
 import { InFlightByteBudget } from "./buffering.js";
 import { resolveFileSystemLimits, validatePositiveInteger } from "./config.js";
 import { emitVfsEvent, type VfsEventSink, type VfsMutationOp } from "./events.js";
@@ -25,6 +25,7 @@ import {
   SETGID_BIT,
   STICKY_BIT,
 } from "./sql-posix.js";
+import { traversalAncestors } from "./traversal.js";
 import type { OpaqueStore } from "./types.js";
 
 type TraversalParent = Pick<DirectoryEntryRow, "path" | "kind" | "mode" | "uid" | "gid">;
@@ -45,19 +46,6 @@ function traversalState(sql: VfsSqlStorage): TraversalState {
 
 const DEFAULT_MAX_DATABASE_BYTES = 10_000_000_000;
 const DEFAULT_DATABASE_HEADROOM_BYTES = 64 * 1024 * 1024;
-
-function traversalAncestors(path: string, followed: readonly string[]): string[] {
-  const ancestors = new Set<string>();
-  for (const candidate of [path, ...followed]) {
-    const first = candidate.endsWith("/") ? normalizePath(candidate) : dirname(candidate);
-    for (let parent = first; ; parent = dirname(parent)) {
-      ancestors.add(parent);
-      if (parent === "/") break;
-    }
-  }
-  if (path === "/" && followed.length === 0) ancestors.delete("/");
-  return [...ancestors];
-}
 
 export abstract class SqlBase {
   protected recoveredDetached = false;
@@ -411,12 +399,12 @@ export abstract class SqlBase {
   }
 
   /** Cache metadata, never a principal's authorization decision. */
-  protected rememberTraversalParent(parent: TraversalParent): void {
+  protected rememberTraversalParent({ path, kind, mode, uid, gid }: TraversalParent): void {
     if (!this.refreshTraversalParents()) return;
     this.traversalParents ??= new Map();
-    if (this.traversalParents.size >= 256 && !this.traversalParents.has(parent.path))
+    if (this.traversalParents.size >= 256 && !this.traversalParents.has(path))
       this.traversalParents.clear();
-    this.traversalParents.set(parent.path, parent);
+    this.traversalParents.set(path, { path, kind, mode, uid, gid });
   }
 
   protected tryCachedTraversal(

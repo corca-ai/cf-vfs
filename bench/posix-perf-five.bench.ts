@@ -77,7 +77,7 @@ it("meters the five POSIX optimization workloads", async () => {
     ["fd-read-detached", 4, 4, 0],
     ["fd-readfile-detached", 4, 4, 0],
     ["create-wide", 8, 9, 6],
-    ["rename-wide", 8, 2012, 5],
+    ["rename-wide", 8, 8, 5],
     ["truncate-zero-1048576", 5, 2042, 34],
     ["truncate-zero-8388608", 5, 2268, 258],
     ["truncate-boundary", 7, 2046, 33],

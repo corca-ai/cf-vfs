@@ -31,6 +31,7 @@ import {
   WRITE_PERMISSION,
 } from "./sql-posix.js";
 import { ENTRY_COLUMNS } from "./sql-schema.js";
+import { canonicalTraversalAncestors } from "./traversal.js";
 import type {
   ChangePage,
   ChangesSinceOptions,
@@ -142,6 +143,7 @@ export abstract class SqlQuery extends SqlContent {
       throw new VfsError("ENOENT", "no such file or directory", access.path);
     }
     const row = access.row;
+    if (posix !== undefined && row.kind === "directory") this.rememberTraversalParent(row);
     const stat = rowToStat(row);
     if (row.contentClass !== "opaque") {
       return stat;
@@ -162,13 +164,7 @@ export abstract class SqlQuery extends SqlContent {
   }
 
   private lookupPlainPosixEntry(normalized: string, posix: PosixAccessContext) {
-    const ancestors: string[] = [];
-    if (normalized !== "/") {
-      for (let parent = dirname(normalized); ; parent = dirname(parent)) {
-        ancestors.push(parent);
-        if (parent === "/") break;
-      }
-    }
+    const ancestors = canonicalTraversalAncestors(normalized);
     // Return one envelope while SQLite still checks the same indexed ancestors.
     // Combining statements saves boundary work, not billed rows.
     const row = this.sql
@@ -245,6 +241,7 @@ export abstract class SqlQuery extends SqlContent {
     this.assertTraverse(normalized, access.followed, posix);
     const directory = this.requireDirectory(normalized, access.row);
     this.assertPermission(directory, posix, READ_PERMISSION | EXECUTE_PERMISSION, normalized);
+    if (posix !== undefined) this.rememberTraversalParent(directory);
     return this.rows(
       `SELECT ${ENTRY_COLUMNS}
        FROM vfs_entries e INDEXED BY vfs_entries_parent_name
@@ -260,6 +257,7 @@ export abstract class SqlQuery extends SqlContent {
     this.assertTraverse(normalized, access.followed, posix);
     const directory = this.requireDirectory(normalized, access.row);
     this.assertPermission(directory, posix, READ_PERMISSION | EXECUTE_PERMISSION, normalized);
+    if (posix !== undefined) this.rememberTraversalParent(directory);
     const limit = options.limit ?? 1000;
     validatePositiveInteger(limit, "limit");
     const cursor = options.cursor ?? "";

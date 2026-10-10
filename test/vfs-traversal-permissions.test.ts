@@ -71,3 +71,51 @@ it("avoids a second ancestor query on repeated credential-bound reads", async ()
   vfs.setMetadata("/a", { mode: 0o40000 });
   expect(() => user.readFile("/a/b/file")).toThrow(expect.objectContaining({ code: "EACCES" }));
 });
+
+it("preserves Unicode, trailing-directory and path-length checks after warming traversal", async () => {
+  const vfs = createTestFileSystem();
+  const parent = `/深😀/${"é".repeat(100)}`;
+  await vfs.writeFile(`${parent}/file`, "body", { createParents: true });
+  const user = vfs.forCredentials({ uid: 1000, gid: 1000 });
+  user.stat(`${parent}/file`);
+  expect(user.stat(`${parent}/`).kind).toBe("directory");
+  expect(user.stat(`${parent}/../${"é".repeat(100)}/file`).kind).toBe("file");
+  expect(() => user.stat(`/深😀/${"é".repeat(128)}/file`)).toThrow(
+    expect.objectContaining({ code: "ENAMETOOLONG" }),
+  );
+  vfs.setMetadata(parent, { mode: 0o40000 });
+  expect(() => user.readFile(`${parent}/file`)).toThrow(
+    expect.objectContaining({ code: "EACCES" }),
+  );
+});
+
+it("checks permissions after traversal metadata churns across many directories", async () => {
+  const vfs = createTestFileSystem();
+  for (let index = 0; index < 270; index++)
+    await vfs.writeFile(`/tree/d${index}/file`, "body", { createParents: true });
+  const root = vfs.forCredentials({ uid: 0, gid: 0 });
+  const user = vfs.forCredentials({ uid: 1000, gid: 1000 });
+  for (let index = 0; index < 270; index++) root.stat(`/tree/d${index}/file`);
+  user.stat("/tree/d0/file");
+  vfs.setMetadata("/tree/d0", { mode: 0o40000 });
+  root.stat("/tree/d0/file");
+  expect(() => user.stat("/tree/d0/file")).toThrow(expect.objectContaining({ code: "EACCES" }));
+  expect(user.stat("/tree/d269/file").kind).toBe("file");
+});
+
+it.each(["stat", "list", "listPage"] as const)(
+  "reuses directory metadata returned by %s while rechecking authorization",
+  async (operation) => {
+    let statements = 0;
+    const vfs = createTestFileSystem({ onStatement: () => statements++ });
+    await vfs.writeFile("/a/b/file", "body", { createParents: true });
+    const user = vfs.forCredentials({ uid: 1000, gid: 1000 });
+    user[operation]("/a/b");
+    statements = 0;
+    await user.readFile("/a/b/file").stream.cancel();
+    expect(statements).toBe(2);
+    vfs.setMetadata("/a/b", { mode: 0o40000 });
+    vfs.forCredentials({ uid: 0, gid: 0 })[operation]("/a/b");
+    expect(() => user.readFile("/a/b/file")).toThrow(expect.objectContaining({ code: "EACCES" }));
+  },
+);

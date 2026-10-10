@@ -300,7 +300,7 @@ export abstract class SqlMove extends SqlMetadata {
     const now = this.now();
     if (destination !== null) state.queued += this.removeExact(target, now, false, destination);
     const sourceChangeSeq = this.nextChangeSeq();
-    this.publishSubtreeRemoval(source, sourceChangeSeq);
+    this.publishSubtreeRemoval(source, sourceChangeSeq, sourceEntry.kind !== "directory");
     this.sql.exec(
       `UPDATE vfs_entries SET
          mutation_version = COALESCE((
@@ -313,7 +313,7 @@ export abstract class SqlMove extends SqlMetadata {
          name = CASE WHEN path = ? THEN ? ELSE name END,
          changed_at_ms = CASE WHEN path = ? THEN ? ELSE COALESCE(changed_at_ms, modified_at_ms) END,
          revision = CASE WHEN path = ? THEN MAX(revision, ?) + 1 ELSE revision + 1 END
-       WHERE path = ? OR (path >= ? AND path < ?)`,
+       WHERE path = ? ${sourceEntry.kind === "directory" ? "OR (path >= ? AND path < ?)" : ""}`,
       target,
       codePointLength(source) + 1,
       target,
@@ -329,8 +329,7 @@ export abstract class SqlMove extends SqlMetadata {
       source,
       destination?.revision ?? 0,
       source,
-      sourceRange.lower,
-      sourceRange.upper,
+      ...(sourceEntry.kind === "directory" ? [sourceRange.lower, sourceRange.upper] : []),
     );
     // Keep this immediately after the UPDATE: changes() reports that statement.
     const moved = integerColumn(this.sql.exec<SqlRow>("SELECT changes() AS value").one(), "value");
