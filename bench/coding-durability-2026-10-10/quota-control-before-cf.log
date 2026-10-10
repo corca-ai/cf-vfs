@@ -1,0 +1,30 @@
+begin /setup { files: '32' }
+done /setup 
+begin /execute {}
+done /execute 0
+begin /change { all: 'true' }
+done /change 
+begin /inspect {}
+done /inspect 
+begin /quota { bytes: '1' }
+done /quota 
+begin /execute {}
+done /execute 0
+begin /clear {}
+done /clear 
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected "actual" to be strictly unequal to: 0
+    at file:///Users/ak/prjs/cc/cf-vfs/bench/coding-durability-2026-10-10/run.mjs:55:10
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 0,
+  expected: 0,
+  operator: 'notStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.18.0

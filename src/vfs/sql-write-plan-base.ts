@@ -294,16 +294,6 @@ export abstract class SqlWritePlan extends SqlRead {
     const unchanged = this.unchangedInlineWrite(plan, current, chunks, sizeBytes, digest);
     if (unchanged !== null) return unchanged;
     const mutation = this.inlineMutationPlan(plan, state, sizeBytes, posix, deferCapacity);
-    if (
-      current?.contentClass === "inline" &&
-      chunks.length < Math.ceil(current.sizeBytes / this.chunkBytes)
-    ) {
-      this.sql.exec(
-        "DELETE FROM vfs_inline_chunks WHERE entry_id = ? AND chunk_index >= ?",
-        current.id,
-        chunks.length,
-      );
-    }
     const written = this.writeInlineEntry(plan, current, mutation, sizeBytes, digest, now);
     if (written === undefined) {
       this.planInlineWrite(
@@ -317,6 +307,17 @@ export abstract class SqlWritePlan extends SqlRead {
         posix,
       );
       throw new VfsError("EREVISION", "path changed after it was read", plan.path);
+    }
+    if (current?.contentClass === "inline") {
+      // Existing chunks may have been written with another chunk width.
+      // The UPDATE returns their actual last index, avoiding a second lookup.
+      const lastChunk = nullableIntegerColumn(written, "last_chunk_index");
+      if (lastChunk !== null && lastChunk >= chunks.length)
+        this.sql.exec(
+          "DELETE FROM vfs_inline_chunks WHERE entry_id = ? AND chunk_index >= ?",
+          current.id,
+          chunks.length,
+        );
     }
     return this.finishInlineWrite(plan, current, mutation, written, chunks, sizeBytes, now);
   }
@@ -400,7 +401,9 @@ export abstract class SqlWritePlan extends SqlRead {
              size_bytes = ?, mode = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,
              body_digest = ?, body_digest_revision = revision + 1, mutation_version = ?
            WHERE id = ? AND mutation_version = ?
-           RETURNING id, revision`,
+           RETURNING id, revision,
+             (SELECT MAX(chunk_index) FROM vfs_inline_chunks
+              WHERE entry_id = vfs_entries.id) AS last_chunk_index`,
           sizeBytes,
           mutation.mode,
           now,

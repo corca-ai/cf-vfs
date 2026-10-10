@@ -1,0 +1,616 @@
+{
+  "node": "v24.18.0",
+  "baselineDir": "/tmp/cf-vfs-checkout-before-dist",
+  "candidateDir": "/tmp/cf-vfs-checkout-adaptive-dist",
+  "warmups": 3,
+  "trials": 21,
+  "methodology": "Warm metadata via list, overwrite one existing inline file, time lstat for every file; SQL observation is the same integer increment on both versions.",
+  "summary": [
+    {
+      "count": 1000,
+      "baselineMs": 4.676916000000006,
+      "candidateMs": 0.25041699999997036,
+      "pairedRatio": 0.05215379970907931,
+      "baselineStatements": 1000,
+      "candidateStatements": 1
+    },
+    {
+      "count": 4096,
+      "baselineMs": 18.982458999999835,
+      "candidateMs": 0.9995829999998023,
+      "pairedRatio": 0.05267185024707689,
+      "baselineStatements": 4096,
+      "candidateStatements": 1
+    }
+  ],
+  "samples": [
+    {
+      "count": 1000,
+      "trial": 0,
+      "variant": "baseline",
+      "ms": 4.676916000000006,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 0,
+      "variant": "candidate",
+      "ms": 0.25833299999999326,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 1,
+      "variant": "candidate",
+      "ms": 0.2524579999999901,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 1,
+      "variant": "baseline",
+      "ms": 5.1522919999999885,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 2,
+      "variant": "baseline",
+      "ms": 5.267457999999976,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 2,
+      "variant": "candidate",
+      "ms": 0.24591700000001993,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 3,
+      "variant": "candidate",
+      "ms": 0.2557090000000244,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 3,
+      "variant": "baseline",
+      "ms": 5.060541999999998,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 4,
+      "variant": "baseline",
+      "ms": 4.583249999999964,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 4,
+      "variant": "candidate",
+      "ms": 0.2653750000000059,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 5,
+      "variant": "candidate",
+      "ms": 0.25258300000001555,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 5,
+      "variant": "baseline",
+      "ms": 4.8966669999999795,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 6,
+      "variant": "baseline",
+      "ms": 4.8449170000000095,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 6,
+      "variant": "candidate",
+      "ms": 0.5951670000000036,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 7,
+      "variant": "candidate",
+      "ms": 0.2609589999999571,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 7,
+      "variant": "baseline",
+      "ms": 4.7369169999999485,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 8,
+      "variant": "baseline",
+      "ms": 4.531791999999996,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 8,
+      "variant": "candidate",
+      "ms": 0.24108300000000327,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 9,
+      "variant": "candidate",
+      "ms": 0.25041699999997036,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 9,
+      "variant": "baseline",
+      "ms": 5.036875000000009,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 10,
+      "variant": "baseline",
+      "ms": 4.5138749999999845,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 10,
+      "variant": "candidate",
+      "ms": 0.29712499999993724,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 11,
+      "variant": "candidate",
+      "ms": 0.2832090000000562,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 11,
+      "variant": "baseline",
+      "ms": 4.53283399999998,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 12,
+      "variant": "baseline",
+      "ms": 5.07204200000001,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 12,
+      "variant": "candidate",
+      "ms": 0.24641700000006495,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 13,
+      "variant": "candidate",
+      "ms": 0.2436249999999518,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 13,
+      "variant": "baseline",
+      "ms": 4.664916999999946,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 14,
+      "variant": "baseline",
+      "ms": 4.533167000000049,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 14,
+      "variant": "candidate",
+      "ms": 0.24737500000003365,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 15,
+      "variant": "candidate",
+      "ms": 0.2543749999999818,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 15,
+      "variant": "baseline",
+      "ms": 4.786375000000021,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 16,
+      "variant": "baseline",
+      "ms": 5.117250000000013,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 16,
+      "variant": "candidate",
+      "ms": 0.2339999999999236,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 17,
+      "variant": "candidate",
+      "ms": 0.2375409999999647,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 17,
+      "variant": "baseline",
+      "ms": 4.554624999999987,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 18,
+      "variant": "baseline",
+      "ms": 4.540917000000036,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 18,
+      "variant": "candidate",
+      "ms": 0.22966599999995196,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 19,
+      "variant": "candidate",
+      "ms": 0.2274169999999458,
+      "statements": 1
+    },
+    {
+      "count": 1000,
+      "trial": 19,
+      "variant": "baseline",
+      "ms": 4.436249999999973,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 20,
+      "variant": "baseline",
+      "ms": 4.432291999999961,
+      "statements": 1000
+    },
+    {
+      "count": 1000,
+      "trial": 20,
+      "variant": "candidate",
+      "ms": 0.2286669999998594,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 0,
+      "variant": "baseline",
+      "ms": 19.139832999999953,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 0,
+      "variant": "candidate",
+      "ms": 1.0503340000000208,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 1,
+      "variant": "candidate",
+      "ms": 0.9692500000001019,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 1,
+      "variant": "baseline",
+      "ms": 19.555249999999887,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 2,
+      "variant": "baseline",
+      "ms": 18.523791999999958,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 2,
+      "variant": "candidate",
+      "ms": 1.030999999999949,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 3,
+      "variant": "candidate",
+      "ms": 1.0224590000002536,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 3,
+      "variant": "baseline",
+      "ms": 18.96787499999982,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 4,
+      "variant": "baseline",
+      "ms": 19.93920799999978,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 4,
+      "variant": "candidate",
+      "ms": 0.9753340000002026,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 5,
+      "variant": "candidate",
+      "ms": 1.0052909999999429,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 5,
+      "variant": "baseline",
+      "ms": 18.688666000000012,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 6,
+      "variant": "baseline",
+      "ms": 18.999249999999847,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 6,
+      "variant": "candidate",
+      "ms": 1.0395829999997659,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 7,
+      "variant": "candidate",
+      "ms": 0.9539579999996022,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 7,
+      "variant": "baseline",
+      "ms": 19.125125000000025,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 8,
+      "variant": "baseline",
+      "ms": 18.982458999999835,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 8,
+      "variant": "candidate",
+      "ms": 0.9653750000002219,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 9,
+      "variant": "candidate",
+      "ms": 0.9572920000000522,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 9,
+      "variant": "baseline",
+      "ms": 18.649333000000297,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 10,
+      "variant": "baseline",
+      "ms": 18.674625000000106,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 10,
+      "variant": "candidate",
+      "ms": 1.0670410000002448,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 11,
+      "variant": "candidate",
+      "ms": 0.961833000000297,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 11,
+      "variant": "baseline",
+      "ms": 19.394916000000194,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 12,
+      "variant": "baseline",
+      "ms": 19.10370899999998,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 12,
+      "variant": "candidate",
+      "ms": 1.0168329999996786,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 13,
+      "variant": "candidate",
+      "ms": 1.0253339999999298,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 13,
+      "variant": "baseline",
+      "ms": 18.71041699999978,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 14,
+      "variant": "baseline",
+      "ms": 18.855666999999812,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 14,
+      "variant": "candidate",
+      "ms": 0.9520409999995536,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 15,
+      "variant": "candidate",
+      "ms": 0.9460829999998168,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 15,
+      "variant": "baseline",
+      "ms": 18.904999999999745,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 16,
+      "variant": "baseline",
+      "ms": 20.865624999999454,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 16,
+      "variant": "candidate",
+      "ms": 0.9694579999995767,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 17,
+      "variant": "candidate",
+      "ms": 1.0423749999999927,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 17,
+      "variant": "baseline",
+      "ms": 18.455916999999317,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 18,
+      "variant": "baseline",
+      "ms": 18.688749999999345,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 18,
+      "variant": "candidate",
+      "ms": 0.9995829999998023,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 19,
+      "variant": "candidate",
+      "ms": 0.9558329999999842,
+      "statements": 1
+    },
+    {
+      "count": 4096,
+      "trial": 19,
+      "variant": "baseline",
+      "ms": 19.07524999999987,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 20,
+      "variant": "baseline",
+      "ms": 19.04320800000005,
+      "statements": 4096
+    },
+    {
+      "count": 4096,
+      "trial": 20,
+      "variant": "candidate",
+      "ms": 1.0030409999999392,
+      "statements": 1
+    }
+  ]
+}

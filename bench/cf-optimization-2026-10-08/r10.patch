@@ -1,0 +1,20 @@
+--- /tmp/cf-vfs-ten-rounds/r09-src/vfs/sql-content-base.ts	2026-10-08 21:24:36
++++ src/vfs/sql-content-base.ts	2026-10-08 21:24:57
+@@ -436,6 +436,17 @@
+       if (updated === undefined) throw new VfsError("EIO", "inline file is missing a stored chunk");
+       return;
+     }
++    if (chunks.length === 1 && single !== undefined) {
++      this.sql.exec(
++        `INSERT INTO vfs_inline_chunks(entry_id, chunk_index, body)
++         VALUES (?, ?, ?)
++         ON CONFLICT(entry_id, chunk_index) DO UPDATE SET body = excluded.body`,
++        entryId,
++        firstIndex,
++        single,
++      );
++      return;
++    }
+     for (let offset = 0; offset < chunks.length; offset += 33) {
+       const batch = chunks.slice(offset, offset + 33);
+       this.sql.exec(

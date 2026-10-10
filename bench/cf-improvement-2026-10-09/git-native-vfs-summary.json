@@ -1,0 +1,114 @@
+{
+  "node": "v24.18.0",
+  "cpu": "Apple M5 Max",
+  "engine": "1.43.1",
+  "workloadFiles": 1000,
+  "warmups": 2,
+  "samples": 5,
+  "instrumentation": "timing only",
+  "comparison": "same isomorphic-git engine over macOS temporary real filesystem and Node SQLite VFS; local HTTP Git remote; excludes shell applet and Cloudflare",
+  "summary": [
+    {
+      "operation": "populate",
+      "nativeFsMedianMs": 78.2711249999993,
+      "vfsMedianMs": 20.711500000000342,
+      "vfsOverNative": 0.26461226921167325
+    },
+    {
+      "operation": "add-all",
+      "nativeFsMedianMs": 137.39924999999948,
+      "vfsMedianMs": 120.14970799999901,
+      "vfsOverNative": 0.8744567965254502
+    },
+    {
+      "operation": "commit-initial",
+      "nativeFsMedianMs": 4.557291000000987,
+      "vfsMedianMs": 3.2767910000002303,
+      "vfsOverNative": 0.7190216731824939
+    },
+    {
+      "operation": "status-clean-0",
+      "nativeFsMedianMs": 20.213332999999693,
+      "vfsMedianMs": 20.324792000000343,
+      "vfsOverNative": 1.0055141326767165
+    },
+    {
+      "operation": "status-clean-1",
+      "nativeFsMedianMs": 20.0278330000001,
+      "vfsMedianMs": 19.8295420000004,
+      "vfsOverNative": 0.9900992284087999
+    },
+    {
+      "operation": "status-clean-2",
+      "nativeFsMedianMs": 18.367624999998952,
+      "vfsMedianMs": 19.727209000000585,
+      "vfsOverNative": 1.0740206749648749
+    },
+    {
+      "operation": "status-one-change",
+      "nativeFsMedianMs": 20.01441700000032,
+      "vfsMedianMs": 19.463000000001557,
+      "vfsOverNative": 0.9724490101311092
+    },
+    {
+      "operation": "diff-one-change",
+      "nativeFsMedianMs": 20.11541700000089,
+      "vfsMedianMs": 20.814000000000306,
+      "vfsOverNative": 1.0347287356756951
+    },
+    {
+      "operation": "add-one",
+      "nativeFsMedianMs": 1.4262500000004366,
+      "vfsMedianMs": 1.2237500000001091,
+      "vfsOverNative": 0.8580192813319787
+    },
+    {
+      "operation": "commit-one",
+      "nativeFsMedianMs": 3.4046669999997903,
+      "vfsMedianMs": 2.760084000000461,
+      "vfsOverNative": 0.8106766388609021
+    },
+    {
+      "operation": "branch-create",
+      "nativeFsMedianMs": 0.4797920000000886,
+      "vfsMedianMs": 0.22108300000036252,
+      "vfsOverNative": 0.46078925867943127
+    },
+    {
+      "operation": "checkout-old",
+      "nativeFsMedianMs": 16.74016699999993,
+      "vfsMedianMs": 27.549917000000278,
+      "vfsOverNative": 1.645737285655537
+    },
+    {
+      "operation": "checkout-main",
+      "nativeFsMedianMs": 17.84100000000035,
+      "vfsMedianMs": 27.464209000000665,
+      "vfsOverNative": 1.539387310128363
+    },
+    {
+      "operation": "push",
+      "nativeFsMedianMs": 175.4042500000014,
+      "vfsMedianMs": 137.10354199999892,
+      "vfsOverNative": 0.7816432156005217
+    },
+    {
+      "operation": "add-20-individually-existing",
+      "nativeFsMedianMs": 25.608290999999554,
+      "vfsMedianMs": 22.017707999999402,
+      "vfsOverNative": 0.8597882615438799
+    },
+    {
+      "operation": "add-20-bulk-existing",
+      "nativeFsMedianMs": 2.0710830000007263,
+      "vfsMedianMs": 1.8525829999998678,
+      "vfsOverNative": 0.8944996410086984
+    },
+    {
+      "operation": "clone",
+      "nativeFsMedianMs": 138.3035829999999,
+      "vfsMedianMs": 132.75608300000022,
+      "vfsOverNative": 0.9598889639757223
+    }
+  ]
+}

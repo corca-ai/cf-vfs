@@ -171,6 +171,10 @@
     "./fs/content": {
       "types": "./dist/fs/content.d.ts",
       "import": "./dist/fs/content.js"
+    },
+    "./shell/commands/git": {
+      "types": "./dist/shell/commands/git.d.ts",
+      "import": "./dist/shell/commands/git.js"
     }
   },
   "publishConfig": {
@@ -191,7 +195,7 @@
     "lint:fix": "biome check --write",
     "format": "biome format --write",
     "knip": "knip",
-    "typecheck": "tsc --noEmit && tsc -p bench/tsconfig.remote.json",
+    "typecheck": "tsc --noEmit && tsc -p bench/tsconfig.remote.json && tsc -p bench/coding-durability-2026-10-10/tsconfig.json",
     "test": "vitest run --config vitest.node.config.ts && vitest run",
     "test:limits": "node test/check-execution-limits.mjs",
     "test:docs": "node test/check-docs.mjs",
@@ -205,6 +209,8 @@
     "bench:do": "vitest run --config vitest.performance.config.ts --disableConsoleIntercept",
     "bench:all": "npm run bench && npm run bench:do",
     "bench:check": "npm run build && node bench/check-node-sql.mjs && npm run bench:do",
+    "deploy:public": "node bench/deploy-public.mjs",
+    "bench:public": "node bench/public-remote.mjs",
     "bench:remote": "node bench/remote.mjs",
     "bench:remote:check": "node bench/remote.mjs --check bench/remote-baseline-2026-07-26.json",
     "repl": "npm run build && node scripts/repl.mjs",
@@ -232,5 +238,13 @@
     "typescript": "7.0.2",
     "vitest": "4.1.10",
     "wrangler": "4.114.0"
+  },
+  "peerDependencies": {
+    "isomorphic-git": "^1.43.1"
+  },
+  "peerDependenciesMeta": {
+    "isomorphic-git": {
+      "optional": true
+    }
   }
 }

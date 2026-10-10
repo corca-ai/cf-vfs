@@ -400,3 +400,16 @@ it("stays bound when a credential view is taken from it", async () => {
   });
   expect(document.text()).toBe("body\nedited\n");
 });
+
+it("forwards write buffer headroom through collaborative credential views", async () => {
+  const inner = createTestFileSystem({ maxInFlightBufferedBytes: 2048 });
+  await inner.writeFile("/body", new Uint8Array(1024));
+  const fs = new CollaborativeFileSystem(inner, new DocumentRegistry());
+  const user = fs.forCredentials({ uid: 1000, gid: 1000 });
+  const snapshot = inner.readFile("/body");
+  expect(fs.availableWriteBufferBytes).toBe(1024);
+  expect(user.availableWriteBufferBytes).toBe(1024);
+  await snapshot.stream.cancel();
+  expect(fs.availableWriteBufferBytes).toBe(2048);
+  expect(user.availableWriteBufferBytes).toBe(2048);
+});

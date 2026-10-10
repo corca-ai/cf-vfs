@@ -1,4 +1,5 @@
 import { VfsError } from "../core/errors.js";
+import { hasDotSegments, normalizePath, pathRequiresDirectory } from "../core/path.js";
 import { sha256Hex } from "./digest.js";
 import { byteRangeBounds } from "./range.js";
 import {
@@ -44,6 +45,10 @@ function sliceChunkSequence<Buffer extends ArrayBufferLike>(
 }
 
 export abstract class SqlRead extends SqlQuery {
+  get availableWriteBufferBytes(): number {
+    return this.inFlightBytes.remainingBytes;
+  }
+
   async digestFile(path: string, posix?: PosixAccessContext): Promise<string> {
     const access = this.resolveAccess(path);
     const normalized = access.path;
@@ -136,7 +141,15 @@ export abstract class SqlRead extends SqlQuery {
     options: ReadFileOptions = {},
     posix?: PosixAccessContext,
   ): InlineReadResult {
-    const access = this.resolveAccess(path);
+    const direct =
+      posix === undefined &&
+      options.range === undefined &&
+      !pathRequiresDirectory(path) &&
+      !hasDotSegments(path) &&
+      this.links() === 0
+        ? this.directRead(path)
+        : null;
+    const access = direct?.access ?? this.resolveAccess(path);
     const normalized = access.path;
     this.assertTraverse(normalized, access.followed, posix);
     const entry = access.row ?? this.requireEntry(normalized);
@@ -156,7 +169,10 @@ export abstract class SqlRead extends SqlQuery {
       options.range === undefined ||
       (selected.offset === 0 && selected.length === entry.sizeBytes) ||
       (entry.sizeBytes <= MIN_INLINE_SQL_RANGE_BYTES && entry.sizeBytes <= this.chunkBytes);
-    const rows = this.readInlineRows(entry, selected, readWholeBody, normalized);
+    const rows =
+      direct?.body !== undefined && direct.body.byteLength === entry.sizeBytes
+        ? [{ body: direct.body }]
+        : this.readInlineRows(entry, selected, readWholeBody, normalized);
     const materialized = rows.map((row) => new Uint8Array(blobColumn(row, "body")));
     const chunks =
       readWholeBody && options.range !== undefined && selected.length < entry.sizeBytes
@@ -170,6 +186,30 @@ export abstract class SqlRead extends SqlQuery {
       stream: streamFromOwnedChunks(chunks, () => {
         this.inFlightBytes.release(materializedBytes);
       }),
+    };
+  }
+
+  /** One snapshot statement for metadata and a small whole inline body. */
+  private directRead(path: string) {
+    const normalized = normalizePath(path);
+    const row = firstRow(
+      this.sql.exec<SqlRow>(
+        `SELECT ${ENTRY_COLUMNS},
+        CASE WHEN e.content_class = 'inline' AND e.size_bytes BETWEEN 1 AND ?
+          THEN (SELECT body FROM vfs_inline_chunks
+                WHERE entry_id = e.id AND chunk_index = 0
+                  AND NOT EXISTS (SELECT 1 FROM vfs_inline_chunks tail
+                                  WHERE tail.entry_id = e.id AND tail.chunk_index > 0))
+          ELSE NULL END AS first_body
+       FROM vfs_entries e INDEXED BY vfs_entries_path WHERE e.path = ?`,
+        this.chunkBytes,
+        normalized,
+      ),
+    );
+    if (row === undefined) throw new VfsError("ENOENT", "no such file or directory", normalized);
+    return {
+      access: { path: normalized, row: parseEntry(row, this.mutationEpoch), followed: [] },
+      body: row["first_body"] === null ? undefined : blobColumn(row, "first_body"),
     };
   }
 
@@ -214,7 +254,7 @@ export abstract class SqlRead extends SqlQuery {
       .toArray();
   }
 
-  private storedChunkBytes(entry: InlineEntryRow, path: string): number {
+  protected storedChunkBytes(entry: InlineEntryRow, path: string): number {
     const cached = this.lastInlineChunkLayout;
     const chunkBytes =
       cached !== undefined && cached.id === entry.id && cached.revision === entry.revision

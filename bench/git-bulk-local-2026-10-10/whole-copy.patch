@@ -1,0 +1,85 @@
+--- a/src/shell/commands/git-local.ts
++++ b/src/shell/commands/git-local.ts
+@@ -9,7 +9,11 @@
+ import { requireCleanGitTree } from "./git-status.js";
+ import { writeText } from "./helpers.js";
+ 
+-async function copyObjects(source: GitRepository, target: GitRepository): Promise<void> {
++async function copyObjects(
++  source: GitRepository,
++  target: GitRepository,
++  fresh = false,
++): Promise<void> {
+   if (
+     gitExists(source.fs, `${source.gitdir}/shallow`) ||
+     gitExists(source.fs, `${source.gitdir}/objects/info/alternates`)
+@@ -18,7 +22,48 @@
+       "ENOTSUP",
+       "git: shallow repositories and object alternates are unsupported",
+     );
++  if (fresh && (await copyFreshObjects(source, target))) return;
+   await copyDirectory(source.fs, `${source.gitdir}/objects`, `${target.gitdir}/objects`);
++}
++
++async function copyFreshObjects(source: GitRepository, target: GitRepository): Promise<boolean> {
++  const fs = source.fs;
++  const from = `${source.gitdir}/objects`,
++    to = `${target.gitdir}/objects`;
++  const pending = [from];
++  let bytes = 0,
++    largest = 0;
++  while (pending.length > 0) {
++    const directory = pending.pop();
++    if (directory === undefined) break;
++    for (const entry of fs.listEntries(directory)) {
++      fs.check();
++      const expected =
++        (entry.kind === "directory" ? 0o40777 : 0o100666) & ~fs.context.session.umask;
++      if (
++        entry.mode !== expected ||
++        entry.uid !== 0 ||
++        entry.gid !== 0 ||
++        (entry.kind !== "directory" &&
++          (entry.kind !== "file" || entry.contentClass !== "inline" || (entry.nlink ?? 1) !== 1))
++      )
++        return false;
++      if (entry.kind === "directory") pending.push(entry.path);
++      else {
++        bytes += entry.sizeBytes;
++        largest = Math.max(largest, entry.sizeBytes);
++      }
++    }
++  }
++  fs.context.budget.io(bytes * 2);
++  const release = fs.context.budget.buffered(largest);
++  release();
++  for (const entry of fs.listEntries(to)) {
++    if (entry.kind !== "directory" || fs.listEntries(entry.path).length !== 0) return false;
++    await fs.context.fileSystem.remove(entry.path);
++  }
++  await fs.context.fileSystem.copy(from, to, { recursive: true, replace: true });
++  return true;
+ }
+ 
+ async function copyDirectory(fs: GitFileSystem, source: string, target: string): Promise<void> {
+@@ -44,8 +89,9 @@
+   target: GitRepository,
+   remote: string,
+   bare = false,
+-) {
+-  await copyObjects(source, target);
++  fresh = false,
++) {
++  await copyObjects(source, target, fresh);
+   const branches = await git.listBranches(source);
+   for (const branch of branches) {
+     source.fs.check();
+@@ -101,7 +147,7 @@
+     path: "remote.origin.fetch",
+     value: "+refs/heads/*:refs/remotes/origin/*",
+   });
+-  const branches = await importRefs(source, target, "origin", bare);
++  const branches = await importRefs(source, target, "origin", bare, true);
+   await checkoutClone(
+     source,
+     target,

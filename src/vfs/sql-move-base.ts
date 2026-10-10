@@ -48,9 +48,20 @@ export abstract class SqlMove extends SqlMetadata {
       this.assertPermission(parent, posix, WRITE_PERMISSION | EXECUTE_PERMISSION, path);
       this.assertStickyRemoval(parent, root, posix, path);
     }
+    if (root.kind !== "directory") {
+      state.queued = this.removeExact(path, this.now(), false, root);
+      this.sql.exec(
+        "UPDATE vfs_path_tombstones SET version = MAX(version, ?) WHERE path = ?",
+        root.mutationVersion + 1,
+        path,
+      );
+      this.recordPathChange(path, false);
+      this.recordMutation({ op: "remove", path });
+      return { removed: 1, opaqueObjectsQueuedForDeletion: state.queued };
+    }
     const range = descendantRange(path);
     const recursive = options.recursive ?? false;
-    if (root.kind === "directory" && !recursive) {
+    if (!recursive) {
       const hasDescendants = firstRow(
         this.sql.exec<SqlRow>(
           `SELECT 1 AS present FROM vfs_entries
@@ -63,17 +74,11 @@ export abstract class SqlMove extends SqlMetadata {
         throw new VfsError("ENOTEMPTY", "directory is not empty", path);
       }
     }
-    if (root.kind === "directory" && recursive) {
+    if (recursive) {
       this.assertSubtreePermissions(path, posix, 0, WRITE_PERMISSION | EXECUTE_PERMISSION);
       this.assertSubtreeSticky(path, posix);
     }
-    const summary =
-      root.kind === "directory" && recursive
-        ? this.aggregateSubtree(path)
-        : {
-            entries: 1,
-            inlineBytes: root.contentClass === "inline" ? root.sizeBytes : 0,
-          };
+    const summary = recursive ? this.aggregateSubtree(path) : { entries: 1, inlineBytes: 0 };
     const now = this.now();
     const retained = this.retainOpenInodes?.(path, recursive, root) ?? 0;
     const identities = this.linkedIdentities(path, range);

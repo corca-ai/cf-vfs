@@ -1,0 +1,3192 @@
+{
+  "node": "v24.18.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "cpu": "Apple M5 Max",
+  "trials": 7,
+  "warmups": 3,
+  "summaries": [
+    {
+      "name": "subtree-summary",
+      "size": 100,
+      "repetitions": 10,
+      "summary": [
+        {
+          "variant": "aggregate",
+          "medianMs": 0.16920799999999758,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 2
+        },
+        {
+          "variant": "paged-walk",
+          "medianMs": 3.0878330000000034,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 101
+        }
+      ]
+    },
+    {
+      "name": "list-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "summary": [
+        {
+          "variant": "listPage",
+          "medianMs": 8.85929200000001,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 101
+        },
+        {
+          "variant": "list-slice",
+          "medianMs": 8.392124999999993,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 101
+        }
+      ]
+    },
+    {
+      "name": "find-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "summary": [
+        {
+          "variant": "findPage",
+          "medianMs": 8.80741599999999,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 101
+        },
+        {
+          "variant": "find-limit",
+          "medianMs": 8.728583000000015,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 101
+        }
+      ]
+    },
+    {
+      "name": "subtree-summary",
+      "size": 10000,
+      "repetitions": 10,
+      "summary": [
+        {
+          "variant": "aggregate",
+          "medianMs": 8.09762499999988,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 2
+        },
+        {
+          "variant": "paged-walk",
+          "medianMs": 285.51912500000026,
+          "statementsPerOperation": 22,
+          "returnedRowsPerOperation": 10021
+        }
+      ]
+    },
+    {
+      "name": "list-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "summary": [
+        {
+          "variant": "listPage",
+          "medianMs": 8.74670900000092,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 102
+        },
+        {
+          "variant": "list-slice",
+          "medianMs": 889.2807920000014,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 10001
+        }
+      ]
+    },
+    {
+      "name": "find-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "summary": [
+        {
+          "variant": "findPage",
+          "medianMs": 8.947041999999783,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 102
+        },
+        {
+          "variant": "find-limit",
+          "medianMs": 8.957749999999578,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 102
+        }
+      ]
+    },
+    {
+      "name": "subtree-summary",
+      "size": 20000,
+      "repetitions": 10,
+      "summary": [
+        {
+          "variant": "aggregate",
+          "medianMs": 18.60845899999913,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 2
+        },
+        {
+          "variant": "paged-walk",
+          "medianMs": 584.0524590000023,
+          "statementsPerOperation": 42,
+          "returnedRowsPerOperation": 20041
+        }
+      ]
+    },
+    {
+      "name": "list-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "summary": [
+        {
+          "variant": "listPage",
+          "medianMs": 9.243334000002505,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 102
+        },
+        {
+          "variant": "list-slice",
+          "medianMs": 1792.2124580000018,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 20001
+        }
+      ]
+    },
+    {
+      "name": "find-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "summary": [
+        {
+          "variant": "findPage",
+          "medianMs": 8.919834000000264,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 102
+        },
+        {
+          "variant": "find-limit",
+          "medianMs": 8.848209000003408,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 102
+        }
+      ]
+    },
+    {
+      "name": "digest-warm",
+      "size": 8192,
+      "repetitions": 20,
+      "summary": [
+        {
+          "variant": "cached",
+          "medianMs": 0.13483300000370946,
+          "statementsPerOperation": 1,
+          "returnedRowsPerOperation": 1
+        },
+        {
+          "variant": "read-hash",
+          "medianMs": 0.5962500000023283,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 2
+        }
+      ]
+    },
+    {
+      "name": "range",
+      "size": 8192,
+      "repetitions": 30,
+      "summary": [
+        {
+          "variant": "ranged",
+          "medianMs": 0.3624580000032438,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 2
+        },
+        {
+          "variant": "whole-read",
+          "medianMs": 0.3290000000051805,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 2
+        }
+      ]
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8192,
+      "repetitions": 30,
+      "summary": [
+        {
+          "variant": "ranged",
+          "medianMs": 0.36695899999904213,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 2
+        },
+        {
+          "variant": "open-read-close",
+          "medianMs": 24.137291999999434,
+          "statementsPerOperation": 8,
+          "returnedRowsPerOperation": 5
+        }
+      ]
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8192,
+      "repetitions": 30,
+      "summary": [
+        {
+          "variant": "skip",
+          "medianMs": 0.9341249999997672,
+          "statementsPerOperation": 5,
+          "returnedRowsPerOperation": 3
+        },
+        {
+          "variant": "overwrite",
+          "medianMs": 0.5923750000001746,
+          "statementsPerOperation": 5,
+          "returnedRowsPerOperation": 3
+        }
+      ]
+    },
+    {
+      "name": "digest-warm",
+      "size": 8388608,
+      "repetitions": 20,
+      "summary": [
+        {
+          "variant": "cached",
+          "medianMs": 0.12695800000074087,
+          "statementsPerOperation": 1,
+          "returnedRowsPerOperation": 1
+        },
+        {
+          "variant": "read-hash",
+          "medianMs": 76.26779199999874,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 33
+        }
+      ]
+    },
+    {
+      "name": "range",
+      "size": 8388608,
+      "repetitions": 30,
+      "summary": [
+        {
+          "variant": "ranged",
+          "medianMs": 1.6569159999999101,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 2
+        },
+        {
+          "variant": "whole-read",
+          "medianMs": 29.263458000001265,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 33
+        }
+      ]
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8388608,
+      "repetitions": 30,
+      "summary": [
+        {
+          "variant": "ranged",
+          "medianMs": 1.6198750000039581,
+          "statementsPerOperation": 2,
+          "returnedRowsPerOperation": 2
+        },
+        {
+          "variant": "open-read-close",
+          "medianMs": 26.189333999995142,
+          "statementsPerOperation": 8,
+          "returnedRowsPerOperation": 5
+        }
+      ]
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8388608,
+      "repetitions": 3,
+      "summary": [
+        {
+          "variant": "skip",
+          "medianMs": 20.68841699999757,
+          "statementsPerOperation": 5,
+          "returnedRowsPerOperation": 3
+        },
+        {
+          "variant": "overwrite",
+          "medianMs": 40.579291999994894,
+          "statementsPerOperation": 5,
+          "returnedRowsPerOperation": 2
+        }
+      ]
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 1,
+      "repetitions": 20,
+      "summary": [
+        {
+          "variant": "batch",
+          "medianMs": 1.4372499999954016,
+          "statementsPerOperation": 7,
+          "returnedRowsPerOperation": 5
+        },
+        {
+          "variant": "individual",
+          "medianMs": 1.1950829999987036,
+          "statementsPerOperation": 5,
+          "returnedRowsPerOperation": 3
+        }
+      ]
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 3,
+      "repetitions": 20,
+      "summary": [
+        {
+          "variant": "batch",
+          "medianMs": 4.263458000001265,
+          "statementsPerOperation": 15,
+          "returnedRowsPerOperation": 13
+        },
+        {
+          "variant": "individual",
+          "medianMs": 3.99695800000336,
+          "statementsPerOperation": 15,
+          "returnedRowsPerOperation": 9
+        }
+      ]
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 100,
+      "repetitions": 20,
+      "summary": [
+        {
+          "variant": "batch",
+          "medianMs": 128.82412500000646,
+          "statementsPerOperation": 403,
+          "returnedRowsPerOperation": 401
+        },
+        {
+          "variant": "individual",
+          "medianMs": 123.29258400000253,
+          "statementsPerOperation": 500,
+          "returnedRowsPerOperation": 300
+        }
+      ]
+    }
+  ],
+  "results": [
+    {
+      "name": "subtree-summary",
+      "size": 100,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 0,
+      "ms": 0.15108299999999986,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 100,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 0,
+      "ms": 3.0955000000000013,
+      "statements": 20,
+      "returnedRows": 1010
+    },
+    {
+      "name": "subtree-summary",
+      "size": 100,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 1,
+      "ms": 3.1277079999999984,
+      "statements": 20,
+      "returnedRows": 1010
+    },
+    {
+      "name": "subtree-summary",
+      "size": 100,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 1,
+      "ms": 0.22787499999999739,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 100,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 2,
+      "ms": 0.14695800000000503,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 100,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 2,
+      "ms": 3.0416659999999993,
+      "statements": 20,
+      "returnedRows": 1010
+    },
+    {
+      "name": "subtree-summary",
+      "size": 100,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 3,
+      "ms": 3.0243329999999986,
+      "statements": 20,
+      "returnedRows": 1010
+    },
+    {
+      "name": "subtree-summary",
+      "size": 100,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 3,
+      "ms": 0.3299170000000018,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 100,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 4,
+      "ms": 0.20358399999999932,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 100,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 4,
+      "ms": 3.2432090000000002,
+      "statements": 20,
+      "returnedRows": 1010
+    },
+    {
+      "name": "subtree-summary",
+      "size": 100,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 5,
+      "ms": 3.0439170000000004,
+      "statements": 20,
+      "returnedRows": 1010
+    },
+    {
+      "name": "subtree-summary",
+      "size": 100,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 5,
+      "ms": 0.16920799999999758,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 100,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 6,
+      "ms": 0.1510419999999968,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 100,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 6,
+      "ms": 3.0878330000000034,
+      "statements": 20,
+      "returnedRows": 1010
+    },
+    {
+      "name": "list-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 0,
+      "ms": 8.681916999999999,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "list-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 0,
+      "ms": 8.392124999999993,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "list-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 1,
+      "ms": 8.536084000000017,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "list-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 1,
+      "ms": 9.167915999999991,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "list-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 2,
+      "ms": 8.95195799999999,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "list-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 2,
+      "ms": 8.270499999999998,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "list-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 3,
+      "ms": 8.371292000000011,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "list-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 3,
+      "ms": 8.730792000000008,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "list-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 4,
+      "ms": 9.10375000000002,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "list-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 4,
+      "ms": 8.269000000000005,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "list-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 5,
+      "ms": 8.407208999999995,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "list-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 5,
+      "ms": 8.85929200000001,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "list-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 6,
+      "ms": 8.664792000000006,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "list-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 6,
+      "ms": 8.854165999999992,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "find-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 0,
+      "ms": 8.725166999999999,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "find-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 0,
+      "ms": 8.683875,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "find-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 1,
+      "ms": 8.480208000000005,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "find-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 1,
+      "ms": 8.664166000000023,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "find-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 2,
+      "ms": 9.192709000000036,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "find-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 2,
+      "ms": 8.964417000000026,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "find-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 3,
+      "ms": 8.84216699999996,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "find-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 3,
+      "ms": 9.32695799999999,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "find-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 4,
+      "ms": 10.109958000000006,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "find-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 4,
+      "ms": 9.27049999999997,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "find-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 5,
+      "ms": 8.62070799999998,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "find-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 5,
+      "ms": 8.80741599999999,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "find-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 6,
+      "ms": 8.80174999999997,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "find-page-first",
+      "size": 100,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 6,
+      "ms": 8.728583000000015,
+      "statements": 60,
+      "returnedRows": 3030
+    },
+    {
+      "name": "subtree-summary",
+      "size": 10000,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 0,
+      "ms": 8.125334000000066,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 10000,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 0,
+      "ms": 284.85241699999983,
+      "statements": 220,
+      "returnedRows": 100210
+    },
+    {
+      "name": "subtree-summary",
+      "size": 10000,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 1,
+      "ms": 288.0497079999998,
+      "statements": 220,
+      "returnedRows": 100210
+    },
+    {
+      "name": "subtree-summary",
+      "size": 10000,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 1,
+      "ms": 8.205667000000176,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 10000,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 2,
+      "ms": 8.09762499999988,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 10000,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 2,
+      "ms": 285.4971250000003,
+      "statements": 220,
+      "returnedRows": 100210
+    },
+    {
+      "name": "subtree-summary",
+      "size": 10000,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 3,
+      "ms": 287.2975829999996,
+      "statements": 220,
+      "returnedRows": 100210
+    },
+    {
+      "name": "subtree-summary",
+      "size": 10000,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 3,
+      "ms": 8.015792000000147,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 10000,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 4,
+      "ms": 8.40583400000014,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 10000,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 4,
+      "ms": 286.5321249999997,
+      "statements": 220,
+      "returnedRows": 100210
+    },
+    {
+      "name": "subtree-summary",
+      "size": 10000,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 5,
+      "ms": 285.51912500000026,
+      "statements": 220,
+      "returnedRows": 100210
+    },
+    {
+      "name": "subtree-summary",
+      "size": 10000,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 5,
+      "ms": 8.020584000000326,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 10000,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 6,
+      "ms": 7.69800000000032,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 10000,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 6,
+      "ms": 280.5977499999999,
+      "statements": 220,
+      "returnedRows": 100210
+    },
+    {
+      "name": "list-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 0,
+      "ms": 8.727707999999438,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "list-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 0,
+      "ms": 938.4630829999996,
+      "statements": 60,
+      "returnedRows": 300030
+    },
+    {
+      "name": "list-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 1,
+      "ms": 913.0139159999999,
+      "statements": 60,
+      "returnedRows": 300030
+    },
+    {
+      "name": "list-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 1,
+      "ms": 9.082416000000194,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "list-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 2,
+      "ms": 8.590291999999863,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "list-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 2,
+      "ms": 891.7855,
+      "statements": 60,
+      "returnedRows": 300030
+    },
+    {
+      "name": "list-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 3,
+      "ms": 889.2807920000014,
+      "statements": 60,
+      "returnedRows": 300030
+    },
+    {
+      "name": "list-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 3,
+      "ms": 9.758707999999388,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "list-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 4,
+      "ms": 8.74670900000092,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "list-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 4,
+      "ms": 868.5952080000006,
+      "statements": 60,
+      "returnedRows": 300030
+    },
+    {
+      "name": "list-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 5,
+      "ms": 872.12075,
+      "statements": 60,
+      "returnedRows": 300030
+    },
+    {
+      "name": "list-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 5,
+      "ms": 9.351916999999958,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "list-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 6,
+      "ms": 8.58587500000067,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "list-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 6,
+      "ms": 882.8047500000011,
+      "statements": 60,
+      "returnedRows": 300030
+    },
+    {
+      "name": "find-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 0,
+      "ms": 8.947041999999783,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 0,
+      "ms": 9.262749999999869,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 1,
+      "ms": 8.834208000000217,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 1,
+      "ms": 9.111374999998588,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 2,
+      "ms": 8.855540999998993,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 2,
+      "ms": 8.78320800000074,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 3,
+      "ms": 9.306291999999303,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 3,
+      "ms": 9.173416999999972,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 4,
+      "ms": 8.836624999999913,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 4,
+      "ms": 9.205792000000656,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 5,
+      "ms": 8.957749999999578,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 5,
+      "ms": 9.428084000001036,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 6,
+      "ms": 8.916791999999987,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 10000,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 6,
+      "ms": 8.912124999998923,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "subtree-summary",
+      "size": 20000,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 0,
+      "ms": 18.640292000000045,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 20000,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 0,
+      "ms": 582.8441249999996,
+      "statements": 420,
+      "returnedRows": 200410
+    },
+    {
+      "name": "subtree-summary",
+      "size": 20000,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 1,
+      "ms": 573.6097919999993,
+      "statements": 420,
+      "returnedRows": 200410
+    },
+    {
+      "name": "subtree-summary",
+      "size": 20000,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 1,
+      "ms": 18.490791000000172,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 20000,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 2,
+      "ms": 18.60845899999913,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 20000,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 2,
+      "ms": 589.7596249999988,
+      "statements": 420,
+      "returnedRows": 200410
+    },
+    {
+      "name": "subtree-summary",
+      "size": 20000,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 3,
+      "ms": 585.6754579999979,
+      "statements": 420,
+      "returnedRows": 200410
+    },
+    {
+      "name": "subtree-summary",
+      "size": 20000,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 3,
+      "ms": 18.14875000000029,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 20000,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 4,
+      "ms": 18.400582999998733,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 20000,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 4,
+      "ms": 578.5514169999988,
+      "statements": 420,
+      "returnedRows": 200410
+    },
+    {
+      "name": "subtree-summary",
+      "size": 20000,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 5,
+      "ms": 584.0524590000023,
+      "statements": 420,
+      "returnedRows": 200410
+    },
+    {
+      "name": "subtree-summary",
+      "size": 20000,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 5,
+      "ms": 18.814167000000452,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 20000,
+      "repetitions": 10,
+      "variant": "aggregate",
+      "trial": 6,
+      "ms": 20.52654199999961,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "subtree-summary",
+      "size": 20000,
+      "repetitions": 10,
+      "variant": "paged-walk",
+      "trial": 6,
+      "ms": 585.5796250000021,
+      "statements": 420,
+      "returnedRows": 200410
+    },
+    {
+      "name": "list-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 0,
+      "ms": 9.243334000002505,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "list-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 0,
+      "ms": 1809.0779169999987,
+      "statements": 60,
+      "returnedRows": 600030
+    },
+    {
+      "name": "list-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 1,
+      "ms": 1780.9774580000012,
+      "statements": 60,
+      "returnedRows": 600030
+    },
+    {
+      "name": "list-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 1,
+      "ms": 9.921042000001762,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "list-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 2,
+      "ms": 8.655624999999418,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "list-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 2,
+      "ms": 1794.5109169999996,
+      "statements": 60,
+      "returnedRows": 600030
+    },
+    {
+      "name": "list-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 3,
+      "ms": 1792.2124580000018,
+      "statements": 60,
+      "returnedRows": 600030
+    },
+    {
+      "name": "list-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 3,
+      "ms": 10.85766700000022,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "list-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 4,
+      "ms": 9.241083000000799,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "list-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 4,
+      "ms": 1844.1292090000024,
+      "statements": 60,
+      "returnedRows": 600030
+    },
+    {
+      "name": "list-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 5,
+      "ms": 1754.5356669999965,
+      "statements": 60,
+      "returnedRows": 600030
+    },
+    {
+      "name": "list-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 5,
+      "ms": 9.25487499999872,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "list-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "listPage",
+      "trial": 6,
+      "ms": 8.736041999996814,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "list-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "list-slice",
+      "trial": 6,
+      "ms": 1770.8131250000006,
+      "statements": 60,
+      "returnedRows": 600030
+    },
+    {
+      "name": "find-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 0,
+      "ms": 8.919834000000264,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 0,
+      "ms": 11.411083999999391,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 1,
+      "ms": 8.899959000002127,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 1,
+      "ms": 8.822124999998778,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 2,
+      "ms": 8.861749999996391,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 2,
+      "ms": 8.675125000001572,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 3,
+      "ms": 8.78479199999856,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 3,
+      "ms": 8.992874999996275,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 4,
+      "ms": 8.803916000004392,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 4,
+      "ms": 8.848209000003408,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 5,
+      "ms": 8.863665999997465,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 5,
+      "ms": 8.982374999999593,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "findPage",
+      "trial": 6,
+      "ms": 9.03545899999881,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "find-page-first",
+      "size": 20000,
+      "repetitions": 30,
+      "variant": "find-limit",
+      "trial": 6,
+      "ms": 8.767208000004757,
+      "statements": 60,
+      "returnedRows": 3060
+    },
+    {
+      "name": "digest-warm",
+      "size": 8192,
+      "repetitions": 20,
+      "variant": "cached",
+      "trial": 0,
+      "ms": 0.12966700000106357,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "digest-warm",
+      "size": 8192,
+      "repetitions": 20,
+      "variant": "read-hash",
+      "trial": 0,
+      "ms": 0.5962500000023283,
+      "statements": 40,
+      "returnedRows": 40
+    },
+    {
+      "name": "digest-warm",
+      "size": 8192,
+      "repetitions": 20,
+      "variant": "read-hash",
+      "trial": 1,
+      "ms": 0.5960829999967245,
+      "statements": 40,
+      "returnedRows": 40
+    },
+    {
+      "name": "digest-warm",
+      "size": 8192,
+      "repetitions": 20,
+      "variant": "cached",
+      "trial": 1,
+      "ms": 0.14087499999732245,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "digest-warm",
+      "size": 8192,
+      "repetitions": 20,
+      "variant": "cached",
+      "trial": 2,
+      "ms": 0.13483300000370946,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "digest-warm",
+      "size": 8192,
+      "repetitions": 20,
+      "variant": "read-hash",
+      "trial": 2,
+      "ms": 0.5868330000012065,
+      "statements": 40,
+      "returnedRows": 40
+    },
+    {
+      "name": "digest-warm",
+      "size": 8192,
+      "repetitions": 20,
+      "variant": "read-hash",
+      "trial": 3,
+      "ms": 0.6943329999994603,
+      "statements": 40,
+      "returnedRows": 40
+    },
+    {
+      "name": "digest-warm",
+      "size": 8192,
+      "repetitions": 20,
+      "variant": "cached",
+      "trial": 3,
+      "ms": 0.15337500000168802,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "digest-warm",
+      "size": 8192,
+      "repetitions": 20,
+      "variant": "cached",
+      "trial": 4,
+      "ms": 0.13620900000387337,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "digest-warm",
+      "size": 8192,
+      "repetitions": 20,
+      "variant": "read-hash",
+      "trial": 4,
+      "ms": 0.631041999993613,
+      "statements": 40,
+      "returnedRows": 40
+    },
+    {
+      "name": "digest-warm",
+      "size": 8192,
+      "repetitions": 20,
+      "variant": "read-hash",
+      "trial": 5,
+      "ms": 0.6163330000053975,
+      "statements": 40,
+      "returnedRows": 40
+    },
+    {
+      "name": "digest-warm",
+      "size": 8192,
+      "repetitions": 20,
+      "variant": "cached",
+      "trial": 5,
+      "ms": 0.131083000000217,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "digest-warm",
+      "size": 8192,
+      "repetitions": 20,
+      "variant": "cached",
+      "trial": 6,
+      "ms": 0.126750000003085,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "digest-warm",
+      "size": 8192,
+      "repetitions": 20,
+      "variant": "read-hash",
+      "trial": 6,
+      "ms": 0.5662499999962165,
+      "statements": 40,
+      "returnedRows": 40
+    },
+    {
+      "name": "range",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 0,
+      "ms": 0.41391699999803677,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "whole-read",
+      "trial": 0,
+      "ms": 0.40454099999624304,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "whole-read",
+      "trial": 1,
+      "ms": 0.3548330000048736,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 1,
+      "ms": 0.3624580000032438,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 2,
+      "ms": 0.4767500000016298,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "whole-read",
+      "trial": 2,
+      "ms": 0.40949999999429565,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "whole-read",
+      "trial": 3,
+      "ms": 0.31437500000174623,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 3,
+      "ms": 0.33295799999905284,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 4,
+      "ms": 0.33308299999771407,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "whole-read",
+      "trial": 4,
+      "ms": 0.3290000000051805,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "whole-read",
+      "trial": 5,
+      "ms": 0.32133299999986775,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 5,
+      "ms": 0.3569169999973383,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 6,
+      "ms": 0.3684590000048047,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "whole-read",
+      "trial": 6,
+      "ms": 0.3172919999997248,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 0,
+      "ms": 0.3516670000026352,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "open-read-close",
+      "trial": 0,
+      "ms": 26.534707999999227,
+      "statements": 240,
+      "returnedRows": 150
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "open-read-close",
+      "trial": 1,
+      "ms": 24.46774999999616,
+      "statements": 240,
+      "returnedRows": 150
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 1,
+      "ms": 0.4073340000031749,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 2,
+      "ms": 0.33283400000073016,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "open-read-close",
+      "trial": 2,
+      "ms": 24.58583400000498,
+      "statements": 240,
+      "returnedRows": 150
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "open-read-close",
+      "trial": 3,
+      "ms": 24.137291999999434,
+      "statements": 240,
+      "returnedRows": 150
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 3,
+      "ms": 0.388874999996915,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 4,
+      "ms": 0.3734169999952428,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "open-read-close",
+      "trial": 4,
+      "ms": 23.85395900000003,
+      "statements": 240,
+      "returnedRows": 150
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "open-read-close",
+      "trial": 5,
+      "ms": 24.02499999999418,
+      "statements": 240,
+      "returnedRows": 150
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 5,
+      "ms": 0.36695899999904213,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 6,
+      "ms": 0.3311669999966398,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "open-read-close",
+      "trial": 6,
+      "ms": 23.96783399999549,
+      "statements": 240,
+      "returnedRows": 150
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "skip",
+      "trial": 0,
+      "ms": 0.9021250000005239,
+      "statements": 150,
+      "returnedRows": 90
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "overwrite",
+      "trial": 0,
+      "ms": 0.5832080000036513,
+      "statements": 150,
+      "returnedRows": 90
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "overwrite",
+      "trial": 1,
+      "ms": 0.5555420000018785,
+      "statements": 150,
+      "returnedRows": 90
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "skip",
+      "trial": 1,
+      "ms": 0.9243329999953858,
+      "statements": 152,
+      "returnedRows": 90
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "skip",
+      "trial": 2,
+      "ms": 0.966999999996915,
+      "statements": 150,
+      "returnedRows": 90
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "overwrite",
+      "trial": 2,
+      "ms": 0.6142499999987194,
+      "statements": 150,
+      "returnedRows": 90
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "overwrite",
+      "trial": 3,
+      "ms": 0.5923750000001746,
+      "statements": 150,
+      "returnedRows": 90
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "skip",
+      "trial": 3,
+      "ms": 0.9377089999979944,
+      "statements": 152,
+      "returnedRows": 90
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "skip",
+      "trial": 4,
+      "ms": 0.9584170000016456,
+      "statements": 150,
+      "returnedRows": 90
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "overwrite",
+      "trial": 4,
+      "ms": 0.6005000000004657,
+      "statements": 150,
+      "returnedRows": 90
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "overwrite",
+      "trial": 5,
+      "ms": 0.5997500000012224,
+      "statements": 150,
+      "returnedRows": 90
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "skip",
+      "trial": 5,
+      "ms": 0.9341249999997672,
+      "statements": 152,
+      "returnedRows": 90
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "skip",
+      "trial": 6,
+      "ms": 0.879916999998386,
+      "statements": 150,
+      "returnedRows": 90
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8192,
+      "repetitions": 30,
+      "variant": "overwrite",
+      "trial": 6,
+      "ms": 0.5699590000003809,
+      "statements": 150,
+      "returnedRows": 90
+    },
+    {
+      "name": "digest-warm",
+      "size": 8388608,
+      "repetitions": 20,
+      "variant": "cached",
+      "trial": 0,
+      "ms": 0.12587500000518048,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "digest-warm",
+      "size": 8388608,
+      "repetitions": 20,
+      "variant": "read-hash",
+      "trial": 0,
+      "ms": 76.26779199999874,
+      "statements": 40,
+      "returnedRows": 660
+    },
+    {
+      "name": "digest-warm",
+      "size": 8388608,
+      "repetitions": 20,
+      "variant": "read-hash",
+      "trial": 1,
+      "ms": 77.05354200000147,
+      "statements": 40,
+      "returnedRows": 660
+    },
+    {
+      "name": "digest-warm",
+      "size": 8388608,
+      "repetitions": 20,
+      "variant": "cached",
+      "trial": 1,
+      "ms": 0.151040999997349,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "digest-warm",
+      "size": 8388608,
+      "repetitions": 20,
+      "variant": "cached",
+      "trial": 2,
+      "ms": 0.12695800000074087,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "digest-warm",
+      "size": 8388608,
+      "repetitions": 20,
+      "variant": "read-hash",
+      "trial": 2,
+      "ms": 77.19216600000073,
+      "statements": 40,
+      "returnedRows": 660
+    },
+    {
+      "name": "digest-warm",
+      "size": 8388608,
+      "repetitions": 20,
+      "variant": "read-hash",
+      "trial": 3,
+      "ms": 75.78095899999607,
+      "statements": 40,
+      "returnedRows": 660
+    },
+    {
+      "name": "digest-warm",
+      "size": 8388608,
+      "repetitions": 20,
+      "variant": "cached",
+      "trial": 3,
+      "ms": 0.143791999995301,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "digest-warm",
+      "size": 8388608,
+      "repetitions": 20,
+      "variant": "cached",
+      "trial": 4,
+      "ms": 0.14395800000056624,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "digest-warm",
+      "size": 8388608,
+      "repetitions": 20,
+      "variant": "read-hash",
+      "trial": 4,
+      "ms": 76.29012499999953,
+      "statements": 40,
+      "returnedRows": 660
+    },
+    {
+      "name": "digest-warm",
+      "size": 8388608,
+      "repetitions": 20,
+      "variant": "read-hash",
+      "trial": 5,
+      "ms": 75.72454200000357,
+      "statements": 40,
+      "returnedRows": 660
+    },
+    {
+      "name": "digest-warm",
+      "size": 8388608,
+      "repetitions": 20,
+      "variant": "cached",
+      "trial": 5,
+      "ms": 0.12312499999825377,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "digest-warm",
+      "size": 8388608,
+      "repetitions": 20,
+      "variant": "cached",
+      "trial": 6,
+      "ms": 0.10474999999860302,
+      "statements": 20,
+      "returnedRows": 20
+    },
+    {
+      "name": "digest-warm",
+      "size": 8388608,
+      "repetitions": 20,
+      "variant": "read-hash",
+      "trial": 6,
+      "ms": 76.1707080000051,
+      "statements": 40,
+      "returnedRows": 660
+    },
+    {
+      "name": "range",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 0,
+      "ms": 1.6599169999972219,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "whole-read",
+      "trial": 0,
+      "ms": 30.453125,
+      "statements": 60,
+      "returnedRows": 990
+    },
+    {
+      "name": "range",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "whole-read",
+      "trial": 1,
+      "ms": 29.221708999997645,
+      "statements": 60,
+      "returnedRows": 990
+    },
+    {
+      "name": "range",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 1,
+      "ms": 1.7068749999962165,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 2,
+      "ms": 1.6318749999991269,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "whole-read",
+      "trial": 2,
+      "ms": 29.167750000000524,
+      "statements": 60,
+      "returnedRows": 990
+    },
+    {
+      "name": "range",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "whole-read",
+      "trial": 3,
+      "ms": 29.285583000004408,
+      "statements": 60,
+      "returnedRows": 990
+    },
+    {
+      "name": "range",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 3,
+      "ms": 1.7025000000066939,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 4,
+      "ms": 1.6153750000012224,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "whole-read",
+      "trial": 4,
+      "ms": 29.57050000000163,
+      "statements": 60,
+      "returnedRows": 990
+    },
+    {
+      "name": "range",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "whole-read",
+      "trial": 5,
+      "ms": 28.97916599999735,
+      "statements": 60,
+      "returnedRows": 990
+    },
+    {
+      "name": "range",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 5,
+      "ms": 1.6569159999999101,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 6,
+      "ms": 1.6312910000051488,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "whole-read",
+      "trial": 6,
+      "ms": 29.263458000001265,
+      "statements": 60,
+      "returnedRows": 990
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 0,
+      "ms": 1.60508299999492,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "open-read-close",
+      "trial": 0,
+      "ms": 26.90466600000218,
+      "statements": 240,
+      "returnedRows": 150
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "open-read-close",
+      "trial": 1,
+      "ms": 26.181499999998778,
+      "statements": 240,
+      "returnedRows": 150
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 1,
+      "ms": 1.6719999999986612,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 2,
+      "ms": 1.6287499999962165,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "open-read-close",
+      "trial": 2,
+      "ms": 26.228916000000027,
+      "statements": 240,
+      "returnedRows": 150
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "open-read-close",
+      "trial": 3,
+      "ms": 26.09958299999562,
+      "statements": 240,
+      "returnedRows": 150
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 3,
+      "ms": 1.6198750000039581,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 4,
+      "ms": 1.587666999999783,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "open-read-close",
+      "trial": 4,
+      "ms": 26.872082999994745,
+      "statements": 240,
+      "returnedRows": 150
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "open-read-close",
+      "trial": 5,
+      "ms": 26.189333999995142,
+      "statements": 240,
+      "returnedRows": 150
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 5,
+      "ms": 1.76991700000508,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "ranged",
+      "trial": 6,
+      "ms": 1.603291999999783,
+      "statements": 60,
+      "returnedRows": 60
+    },
+    {
+      "name": "range-vs-descriptor",
+      "size": 8388608,
+      "repetitions": 30,
+      "variant": "open-read-close",
+      "trial": 6,
+      "ms": 26.02799999999843,
+      "statements": 240,
+      "returnedRows": 150
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8388608,
+      "repetitions": 3,
+      "variant": "skip",
+      "trial": 0,
+      "ms": 20.68841699999757,
+      "statements": 15,
+      "returnedRows": 9
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8388608,
+      "repetitions": 3,
+      "variant": "overwrite",
+      "trial": 0,
+      "ms": 40.579291999994894,
+      "statements": 15,
+      "returnedRows": 6
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8388608,
+      "repetitions": 3,
+      "variant": "overwrite",
+      "trial": 1,
+      "ms": 40.051375000002736,
+      "statements": 15,
+      "returnedRows": 6
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8388608,
+      "repetitions": 3,
+      "variant": "skip",
+      "trial": 1,
+      "ms": 27.072707999999693,
+      "statements": 17,
+      "returnedRows": 40
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8388608,
+      "repetitions": 3,
+      "variant": "skip",
+      "trial": 2,
+      "ms": 20.34245799999917,
+      "statements": 15,
+      "returnedRows": 9
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8388608,
+      "repetitions": 3,
+      "variant": "overwrite",
+      "trial": 2,
+      "ms": 40.7642909999995,
+      "statements": 15,
+      "returnedRows": 6
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8388608,
+      "repetitions": 3,
+      "variant": "overwrite",
+      "trial": 3,
+      "ms": 39.54645800000435,
+      "statements": 15,
+      "returnedRows": 6
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8388608,
+      "repetitions": 3,
+      "variant": "skip",
+      "trial": 3,
+      "ms": 29.425208000000566,
+      "statements": 17,
+      "returnedRows": 40
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8388608,
+      "repetitions": 3,
+      "variant": "skip",
+      "trial": 4,
+      "ms": 20.638082999998005,
+      "statements": 15,
+      "returnedRows": 9
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8388608,
+      "repetitions": 3,
+      "variant": "overwrite",
+      "trial": 4,
+      "ms": 40.58445799999754,
+      "statements": 15,
+      "returnedRows": 6
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8388608,
+      "repetitions": 3,
+      "variant": "overwrite",
+      "trial": 5,
+      "ms": 39.46745799999917,
+      "statements": 15,
+      "returnedRows": 6
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8388608,
+      "repetitions": 3,
+      "variant": "skip",
+      "trial": 5,
+      "ms": 29.121791999998095,
+      "statements": 17,
+      "returnedRows": 40
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8388608,
+      "repetitions": 3,
+      "variant": "skip",
+      "trial": 6,
+      "ms": 20.18345799999952,
+      "statements": 15,
+      "returnedRows": 9
+    },
+    {
+      "name": "unchanged-write",
+      "size": 8388608,
+      "repetitions": 3,
+      "variant": "overwrite",
+      "trial": 6,
+      "ms": 43.86120800000208,
+      "statements": 15,
+      "returnedRows": 6
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 1,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 0,
+      "ms": 1.5352920000004815,
+      "statements": 140,
+      "returnedRows": 100
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 1,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 0,
+      "ms": 1.2016659999935655,
+      "statements": 100,
+      "returnedRows": 60
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 1,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 1,
+      "ms": 1.2464170000021113,
+      "statements": 100,
+      "returnedRows": 60
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 1,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 1,
+      "ms": 1.4851249999992433,
+      "statements": 140,
+      "returnedRows": 100
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 1,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 2,
+      "ms": 1.4372499999954016,
+      "statements": 140,
+      "returnedRows": 100
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 1,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 2,
+      "ms": 1.210291999996116,
+      "statements": 100,
+      "returnedRows": 60
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 1,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 3,
+      "ms": 1.1950829999987036,
+      "statements": 100,
+      "returnedRows": 60
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 1,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 3,
+      "ms": 2.5227500000037253,
+      "statements": 140,
+      "returnedRows": 100
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 1,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 4,
+      "ms": 1.305791999999201,
+      "statements": 140,
+      "returnedRows": 100
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 1,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 4,
+      "ms": 1.1142089999993914,
+      "statements": 100,
+      "returnedRows": 60
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 1,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 5,
+      "ms": 1.1045830000002752,
+      "statements": 100,
+      "returnedRows": 60
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 1,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 5,
+      "ms": 1.3020829999950365,
+      "statements": 140,
+      "returnedRows": 100
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 1,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 6,
+      "ms": 1.2964169999977457,
+      "statements": 140,
+      "returnedRows": 100
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 1,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 6,
+      "ms": 1.1390420000025188,
+      "statements": 100,
+      "returnedRows": 60
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 3,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 0,
+      "ms": 4.2855839999974705,
+      "statements": 300,
+      "returnedRows": 260
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 3,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 0,
+      "ms": 4.079416000000492,
+      "statements": 300,
+      "returnedRows": 180
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 3,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 1,
+      "ms": 4.0537919999987935,
+      "statements": 300,
+      "returnedRows": 180
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 3,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 1,
+      "ms": 4.218833999999333,
+      "statements": 300,
+      "returnedRows": 260
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 3,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 2,
+      "ms": 4.317250000000058,
+      "statements": 300,
+      "returnedRows": 260
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 3,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 2,
+      "ms": 3.994334000002709,
+      "statements": 300,
+      "returnedRows": 180
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 3,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 3,
+      "ms": 3.99695800000336,
+      "statements": 300,
+      "returnedRows": 180
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 3,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 3,
+      "ms": 4.263458000001265,
+      "statements": 300,
+      "returnedRows": 260
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 3,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 4,
+      "ms": 4.263958999996248,
+      "statements": 300,
+      "returnedRows": 260
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 3,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 4,
+      "ms": 3.9406249999956344,
+      "statements": 300,
+      "returnedRows": 180
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 3,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 5,
+      "ms": 3.982292000000598,
+      "statements": 300,
+      "returnedRows": 180
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 3,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 5,
+      "ms": 4.209708000002138,
+      "statements": 300,
+      "returnedRows": 260
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 3,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 6,
+      "ms": 4.191167000004498,
+      "statements": 300,
+      "returnedRows": 260
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 3,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 6,
+      "ms": 4.097999999998137,
+      "statements": 300,
+      "returnedRows": 180
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 100,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 0,
+      "ms": 125.77262500000506,
+      "statements": 8060,
+      "returnedRows": 8020
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 100,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 0,
+      "ms": 121.12741700000333,
+      "statements": 10000,
+      "returnedRows": 6000
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 100,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 1,
+      "ms": 122.54970799999865,
+      "statements": 10000,
+      "returnedRows": 6000
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 100,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 1,
+      "ms": 127.06950000000506,
+      "statements": 8060,
+      "returnedRows": 8020
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 100,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 2,
+      "ms": 128.5152919999964,
+      "statements": 8060,
+      "returnedRows": 8020
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 100,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 2,
+      "ms": 123.13549999999668,
+      "statements": 10000,
+      "returnedRows": 6000
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 100,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 3,
+      "ms": 124.6975420000017,
+      "statements": 10000,
+      "returnedRows": 6000
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 100,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 3,
+      "ms": 128.82412500000646,
+      "statements": 8060,
+      "returnedRows": 8020
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 100,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 4,
+      "ms": 131.0926660000041,
+      "statements": 8060,
+      "returnedRows": 8020
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 100,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 4,
+      "ms": 123.29258400000253,
+      "statements": 10000,
+      "returnedRows": 6000
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 100,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 5,
+      "ms": 125.17287499999657,
+      "statements": 10000,
+      "returnedRows": 6000
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 100,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 5,
+      "ms": 129.94670800000313,
+      "statements": 8060,
+      "returnedRows": 8020
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 100,
+      "repetitions": 20,
+      "variant": "batch",
+      "trial": 6,
+      "ms": 142.9744159999973,
+      "statements": 8060,
+      "returnedRows": 8020
+    },
+    {
+      "name": "batch-overwrite",
+      "size": 100,
+      "repetitions": 20,
+      "variant": "individual",
+      "trial": 6,
+      "ms": 125.56245900000067,
+      "statements": 10000,
+      "returnedRows": 6000
+    }
+  ]
+}

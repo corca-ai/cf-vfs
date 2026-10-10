@@ -111,8 +111,9 @@ describe("Durable Object storage benchmark metrics", () => {
       rowsWritten: 3_072,
     });
     expect(metrics.readCost).toEqual({
-      statements: 1_024,
-      rowsRead: 1_535,
+      // Whole-body point reads combine entry and body; include the indexed tail guard cost.
+      statements: 512,
+      rowsRead: 1_536,
       rowsWritten: 0,
     });
   });
@@ -387,8 +388,8 @@ describe("Durable Object storage benchmark metrics", () => {
     console.info(`DO change-cursor benchmark: ${JSON.stringify(metrics)}`);
     expect(metrics.off.changes).toBe(0);
     expect(metrics.on.changes).toBe(32);
-    expect(metrics.off.point).toEqual({ statements: 3, rowsRead: 5, rowsWritten: 2 });
-    expect(metrics.on.point).toEqual({ statements: 4, rowsRead: 5, rowsWritten: 4 });
+    expect(metrics.off.point).toEqual({ statements: 3, rowsRead: 6, rowsWritten: 2 });
+    expect(metrics.on.point).toEqual({ statements: 4, rowsRead: 6, rowsWritten: 4 });
     expect(metrics.off.statements).toBe(34);
     expect(metrics.on.statements).toBe(43);
   });
@@ -624,14 +625,15 @@ describe("Durable Object storage benchmark metrics", () => {
       oneCalls: 0,
     });
     expect(metrics.populatedStatCost).toEqual({ rowsRead: 1, statements: 1 });
+    // Inspect the actual stored tail to preserve writes across chunk-size changes.
     expect(metrics.overwriteCost).toMatchObject({
       statements: 3,
-      rowsRead: 5,
+      rowsRead: 6,
       rowsWritten: 2,
     });
     expect(metrics.readEditCost).toMatchObject({
-      statements: 4,
-      rowsRead: 6,
+      statements: 3,
+      rowsRead: 8,
       rowsWritten: 2,
     });
     expect(metrics.coldDigestCost).toMatchObject({

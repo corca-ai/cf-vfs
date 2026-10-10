@@ -17,6 +17,7 @@
       crossorigin="anonymous"
     >
     <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/benchmarks/benchmarks.css">
     <script
       src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"
       integrity="sha384-f/1U6Z9wM4D71a5eRXEZnyOTMOvjqxr2XLwh+Go1OvIl3L3tOcvUrzudnhbECwl4"
@@ -36,6 +37,7 @@
     <div class="ambient ambient-two" aria-hidden="true"></div>
 
     <main class="shell-page">
+      <nav class="benchmark-nav" aria-label="Main navigation"><a href="/benchmarks/">File &amp; Git benchmarks ↗</a></nav>
 
       <section class="intro" aria-labelledby="page-title">
         <h1 id="page-title">Virtual Filesystem and Container<br><em>based on Durable Object SQL.</em></h1>
@@ -98,7 +100,9 @@
         Everyone visiting from the same country shares one workspace here, so
         what you write is what the next person finds — and can change. It holds
         fifty kilobytes; when it is full, deleting something makes room. A
-        public whiteboard, not your own.
+        public whiteboard, not your own. Commands run one at a time across this
+        workspace, and edits wait for the current command to finish. Ctrl-C
+        cancels your running or waiting command.
       </p>
 
       <section class="features" aria-label="What this is">

@@ -8,7 +8,7 @@ export type RpcCompatibleVirtualFileSystem = {
     ...args: infer Args
   ) => infer Result
     ? (...args: Args) => Result | Promise<Awaited<Result>>
-    : never;
+    : VirtualFileSystem[Method];
 };
 
 export type VfsFactory = () =>

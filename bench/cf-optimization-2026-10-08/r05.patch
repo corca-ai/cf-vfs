@@ -1,0 +1,52 @@
+--- src/fs/promises.ts
++++ src/fs/promises.ts
+@@ -190,19 +190,8 @@
+   ): Promise<void> {
+     const resolved = this.path(path);
+     const recursive = typeof options === "object" && options.recursive === true;
+-    if (!recursive) {
+-      try {
+-        this.vfs.lstat(resolved);
+-      } catch (error) {
+-        if (error instanceof VfsError && error.code === "ENOENT") {
+-          this.vfs.mkdir(resolved, false, typeof options === "number" ? options : options?.mode);
+-          return;
+-        }
+-        throw error;
+-      }
+-      throw new VfsError("EEXIST", "file or directory already exists", resolved);
+-    }
+-    this.vfs.mkdir(resolved, true, typeof options === "object" ? options.mode : options);
++
++    this.vfs.mkdir(resolved, recursive, typeof options === "object" ? options.mode : options);
+   }
+ 
+   async unlink(path: string): Promise<void> {
+--- src/vfs/sql-metadata-base.ts
++++ src/vfs/sql-metadata-base.ts
+@@ -229,16 +229,16 @@
+     // EEXIST rather than creating a directory at whatever it points at.
+     const access = this.resolveAccess(path, true, false);
+     const normalized = access.path;
++    const existing = access.row ?? this.oneEntry(normalized);
++    if (existing !== null) {
++      this.assertTraverse(normalized, access.followed, posix);
++      if (recursive && existing.kind === "directory") {
++        this.assertPermission(existing, posix, EXECUTE_PERMISSION, normalized);
++        return rowToStat(existing);
++      }
++      throw new VfsError("EEXIST", "file or directory already exists", normalized);
++    }
+     return this.transaction(() => {
+-      const existing = access.row ?? this.oneEntry(normalized);
+-      if (existing !== null) {
+-        this.assertTraverse(normalized, access.followed, posix);
+-        if (recursive && existing.kind === "directory") {
+-          this.assertPermission(existing, posix, EXECUTE_PERMISSION, normalized);
+-          return rowToStat(existing);
+-        }
+-        throw new VfsError("EEXIST", "file or directory already exists", normalized);
+-      }
+       const now = this.now();
+       const parent = this.prepareParents(normalized, recursive, now, access.followed, posix);
+       this.assertCapacity(0, 1, normalized);

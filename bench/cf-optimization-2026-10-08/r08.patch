@@ -1,0 +1,22 @@
+--- src/fs/promises.ts
++++ src/fs/promises.ts
+@@ -24,6 +24,8 @@
+   maxInFlightReadBytes?: number;
+ }
+ 
++let utf8Decoder: TextDecoder | undefined;
++
+ type Encoding = "utf8" | "utf-8" | null;
+ type ReadOptions = Encoding | { encoding?: Encoding; flag?: "r" };
+ type WriteOptions =
+@@ -75,7 +77,9 @@
+         ? this.vfs.readFile(resolved)
+         : await this.options.content.open(resolved);
+     const bytes = await materialize(opened, this.maximum, this.budget);
+-    return textEncoding === null ? bytes : new TextDecoder().decode(bytes);
++    if (textEncoding === null) return bytes;
++    utf8Decoder ??= new TextDecoder();
++    return utf8Decoder.decode(bytes);
+   }
+ 
+   async writeFile(path: string, body: string | Uint8Array, options?: WriteOptions): Promise<void> {

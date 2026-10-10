@@ -16,6 +16,95 @@ included.
 
 ## [Unreleased]
 
+- Speed up fresh local Git clones with guarded recursive object copying and
+  bounded checkout writes. An optional `canUseBulkOperation` hint preserves
+  collaborative overlays and falls back to individual I/O when unsupported.
+
+- Reuse directory-entry metadata during local Git object transfers to avoid
+  duplicate per-object SQL lookups in clone, fetch and push.
+
+- Isolate Git checkout metadata lock paths so an interrupted checkout cannot
+  block same-path operations in another filesystem or after a Durable Object reset.
+
+
+### Added
+
+- Git `checkout --force REF` / `-f` explicitly restores tracked files and the
+  index after a partial checkout while ordinary checkout retains dirty-tree
+  protection.
+
+- Optional `availableWriteBufferBytes` reports inline buffer headroom so callers
+  can plan bounded `writeFiles` batches without changing atomicity or quotas.
+
+- An [optional Git applet](docs/git.md) supplies repository editing commands and
+  local clone/fetch/push/fast-forward pull through the shell's scoped VFS.
+  The Git engine is an optional peer dependency and excluded from default
+  shell/VFS bundles. The public demo explicitly enables the command.
+
+### Changed
+
+- Git diff avoids decoding unchanged stored blobs and bounds worktree body
+  comparisons. The demo serializes shell commands, editor changes and deferred
+  publication in one room queue, acknowledges edits and subscribes open readers.
+  The [evaluation](bench/git-recovery-coordination-2026-10-09/report.md) records
+  recovery and concurrency tests and measured diff performance.
+
+- Git add persists bounded sets of loose objects using existing `writeFiles`
+  before publishing the index. Small sets and backends without sufficient
+  reported buffer headroom keep individual writes. The
+  [API experiments](bench/git-api-experiments-2026-10-09/report.md) record
+  measured gains and rejected engine and metadata API candidates.
+
+- Optional Git staging skips unchanged files, confines traversal to selected
+  paths, shares command-local index state and batches index deletions. Missing
+  ignore-file probes are reused during inspection; default-mode Git writes
+  avoid duplicate existence lookups. The
+  [evaluation](bench/cf-improvement-2026-10-09/report.md) records local and
+  repeated Cloudflare measurements.
+- Whole-worktree Git staging skips comparison reads for new blobs, extends
+  small-body batches within a 1 MiB inspected total, and shares overlapping
+  configuration reads without caching completed values. Worktree body collection
+  and hashing use a per-inspection concurrency limit. The
+  [evaluation](bench/git-add-optimization-2026-10-09/report.md) records repeated
+  CF measurements and preserves scoped I/O accounting.
+- Deletion-only Git staging groups up to 1,024 paths per index serialization,
+  without expanding blob/compression concurrency or adding filesystem APIs. The
+  [follow-up evaluation](bench/git-add-next-2026-10-09/report.md) records actual
+  CF phase profiling, alternating controls and rejected body/hash reuse experiments.
+- Up-to-date local Git pull skips checkout and reference publication after
+  fetching and verifying a clean tree and index.
+- Single-file VFS removal uses exact entry deletion and path publication;
+  recursive directory removal retains the set-based implementation.
+
+- Canonical short ASCII paths avoid normalization allocations, small whole-file
+  reads combine entry and body retrieval, and directory creation avoids a
+  duplicate lookup. No filesystem API is added. The
+  [ten-round CF evaluation](bench/cf-optimization-2026-10-08/report.md) records
+  accepted and rejected candidates, production samples and storage costs.
+
+- Optional filesystem metadata caching retains independent entries across
+  existing-file content writes while preserving whole-cache invalidation for
+  permission/namespace changes and oversized working sets. No filesystem API
+  is added. The [evaluation](bench/public-benchmark-evaluation-2026-10-08.md)
+  records the measured scope and the rejected checkout optimizations.
+
+- String `writeFiles` batches collect synchronously and reuse owned UTF-8 chunk
+  views instead of copying the encoded body again. Unchanged string writes also
+  reuse these views during hashing, while retaining commit-time validation and
+  the existing byte budgets. The [evaluation](bench/extension-write-optimization-2026-10-08.md)
+  records the measured latency and unchanged SQL costs.
+
+### Fixed
+
+- Reopening stored inline data with a different chunk size preserves overwrite
+  and append behavior. Full overwrites remove actual stored tail chunks,
+  append uses the stored width, and hard links and existing streams retain
+  their expected identity and bytes.
+
+- Failed incoming digest computation releases collected write buffers for both
+  single and batch writes, preventing subsequent writes from failing against a
+  leaked in-flight byte reservation.
+
 ## [0.4.2] — 2026-10-08
 
 ### Added

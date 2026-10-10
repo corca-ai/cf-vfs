@@ -1,0 +1,20 @@
+--- src/vfs/streams.ts
++++ src/vfs/streams.ts
+@@ -63,6 +63,17 @@
+   };
+   return new ReadableStream<Uint8Array>({
+     type: "bytes",
++    start(controller) {
++      // A single private chunk can be queued without an extra pull callback.
++      // Its lease is still held until the stream is drained or cancelled.
++      if (chunks.length === 1) {
++        const first = chunks[0];
++        if (first !== undefined) {
++          controller.enqueue(take(first));
++          index = 1;
++        }
++      }
++    },
+     pull(controller) {
+       const chunk = chunks[index++];
+       if (chunk === undefined) {

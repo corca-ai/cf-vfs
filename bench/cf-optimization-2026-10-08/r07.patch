@@ -1,0 +1,26 @@
+--- src/vfs/sql-model.ts
++++ src/vfs/sql-model.ts
+@@ -390,12 +390,18 @@
+     revision: row.revision,
+     mutationToken: row.mutationToken,
+   };
+-  if (row.kind === "directory") return { ...common, kind: "directory", contentClass: null };
++  if (row.kind === "directory")
++    return Object.assign(common, { kind: "directory", contentClass: null } as const);
+   if (row.kind === "symlink") {
+-    return { ...common, kind: "symlink", contentClass: null, linkTarget: row.linkTarget };
+-  }
+-  if (row.contentClass === "inline") return { ...common, kind: "file", contentClass: "inline" };
+-  return { ...common, kind: "file", contentClass: "opaque" };
++    return Object.assign(common, {
++      kind: "symlink",
++      contentClass: null,
++      linkTarget: row.linkTarget,
++    } as const);
++  }
++  if (row.contentClass === "inline")
++    return Object.assign(common, { kind: "file", contentClass: "inline" } as const);
++  return Object.assign(common, { kind: "file", contentClass: "opaque" } as const);
+ }
+ 
+ export function parseOpaqueObject(row: SqlRow): OpaqueObjectRow {

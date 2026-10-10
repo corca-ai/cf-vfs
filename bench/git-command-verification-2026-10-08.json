@@ -1,0 +1,22 @@
+{
+  "verifiedAt": "2026-10-08T14:09:03.186Z",
+  "url": "https://vfs.borca.ai/",
+  "deploymentId": "b909d18e-34fb-428c-b5c1-b4ed1885adb4",
+  "buildId": "d491ca4776a0c337694cf038386fe74c8c93c63e3338d013ad4ab25ef4bc7db6",
+  "checks": {
+    "node": 1862,
+    "workerd": 132,
+    "posix": "46/46",
+    "bundlePresets": 12
+  },
+  "defaultBundleBytes": {
+    "shell": 235191,
+    "defaultRegistry": 502036,
+    "unchanged": true
+  },
+  "gitAppletBundleBytes": 538379,
+  "gitPeerOptional": true,
+  "productionShellOutput": "cf-vfs:/home/demo$ mkdir git-smoke-b909d18e && git init git-smoke-b909d18e/source && git -C git-smoke-b909d18e/source config user.name Demo && \ngit -C git-smoke-b909d18e/source config user.email demo@example.invalid && printf \"first\\n\" > git-smoke-b909d18e/source/a.txt && git -C git-smo\nke-b909d18e/source add . && git -C git-smoke-b909d18e/source commit -m initial && git clone --bare git-smoke-b909d18e/source git-smoke-b909d18e\n/remote.git && git clone git-smoke-b909d18e/remote.git git-smoke-b909d18e/copy && git -C git-smoke-b909d18e/copy config user.name Demo && git -\nC git-smoke-b909d18e/copy config user.email demo@example.invalid && printf \"later\\n\" > git-smoke-b909d18e/copy/a.txt && git -C git-smoke-b909d1\n8e/copy status --porcelain && git -C git-smoke-b909d18e/copy add . && git -C git-smoke-b909d18e/copy commit -m updated && git -C git-smoke-b909\nd18e/copy push origin main && git -C git-smoke-b909d18e/source remote add origin ../remote.git && git -C git-smoke-b909d18e/source pull --ff-on\nly origin main && cat git-smoke-b909d18e/source/a.txt && echo git-local-smoke-ok\n3193801d766da77f01d1b6293a7c5f823b82b456\nCloned local repository into '/home/demo/git-smoke-b909d18e/remote.git'.\nCloned local repository into '/home/demo/git-smoke-b909d18e/copy'.\n M \"a.txt\"\n637b5895c52a487b0740ef5fdc9a4818f8f1f504\nPushed 'main' to local remote 'origin/main'.\nFetched local remote 'origin'.\nUpdated by fast-forward only.\nlater\ngit-local-smoke-ok\ncf-vfs:/home/demo$  ",
+  "scope": "Same-VFS local repositories; no host filesystem or network Git transport.",
+  "smokeFilesRemoved": true
+}

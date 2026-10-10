@@ -1,0 +1,53 @@
+
+ RUN  v4.1.10 /Users/ak/prjs/cc/cf-vfs
+
+ ❯ test/git-diff-budgets.test.ts (3 tests | 2 failed) 630ms
+   × diff --cached skips unchanged blobs within a small I/O budget 321ms
+   × diff reads worktree bytes once and only decodes the changed stored blob 286ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/git-diff-budgets.test.ts > diff --cached skips unchanged blobs within a small I/O budget
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ test/git-diff-budgets.test.ts:32:42
+     30|   });
+     31|   const result = await shell.executeText({ script: "git diff --cached"…
+     32|   expect(result.exitCode, result.stderr).toBe(0);
+       |                                          ^
+     33|   expect(result.stdout).toBe("");
+     34| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  test/git-diff-budgets.test.ts > diff reads worktree bytes once and only decodes the changed stored blob
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ test/git-diff-budgets.test.ts:44:42
+     42|   });
+     43|   const result = await shell.executeText({ script: "git diff", cwd: "/…
+     44|   expect(result.exitCode, result.stderr).toBe(0);
+       |                                          ^
+     45|   expect(result.stdout.match(/diff --git/g)).toHaveLength(1);
+     46|   expect(result.stdout).toContain("+edited");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  23:04:18
+   Duration  897ms (transform 167ms, setup 0ms, import 217ms, tests 630ms, environment 0ms)
+

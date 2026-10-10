@@ -8,6 +8,7 @@ import { readAllBytes } from "../vfs/streams.js";
 import type {
   AppendFileOptions,
   BeginOpaqueUploadOptions,
+  BulkOperation,
   ByteBody,
   ChangePage,
   ChangesSinceOptions,
@@ -120,6 +121,22 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
    */
   async reconcile(path: string): Promise<boolean> {
     return this.#documents.reconcile(path);
+  }
+
+  canUseBulkOperation(operation: BulkOperation, path: string): boolean {
+    const resolved = this.#resolved(path);
+    const open = this.#registry
+      .paths()
+      .some(
+        (candidate) =>
+          candidate === resolved ||
+          (operation === "copy-source" && isDescendant(resolved, candidate)),
+      );
+    return !open && this.#inner.canUseBulkOperation?.(operation, resolved) === true;
+  }
+
+  get availableWriteBufferBytes(): number {
+    return this.#inner.availableWriteBufferBytes ?? 0;
   }
 
   forCredentials(credentials: PosixCredentials, options?: PosixViewOptions): VirtualFileSystem {

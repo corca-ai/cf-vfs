@@ -431,7 +431,22 @@ export interface MutationTokenOptions {
   follow?: boolean;
 }
 
+/** Which existing operation may bypass per-file bodies in this filesystem view. */
+export type BulkOperation = "copy-source" | "write-target";
+
 export interface VirtualFileSystem {
+  /**
+   * Optional, read-only eligibility hint for the current filesystem view.
+   * `copy-source` covers the named path and all descendants: copy sees the same
+   * bytes as readFile. `write-target` means writeFiles may replace writeFile for
+   * this path (including any overlay). False/absent selects individual I/O.
+   * Not authorization or a reservation; callers still validate modes, limits
+   * and permissions and serialize edits/open/close with the operation.
+   * Wrappers that change read/write semantics must override or omit this hint.
+   */
+  canUseBulkOperation?(operation: BulkOperation, path: string): boolean;
+  /** Advisory shared buffer headroom for planning bounded writes, not a reservation. */
+  readonly availableWriteBufferBytes?: number;
   getMutationToken(path: string, options?: MutationTokenOptions): string;
   /** Resolves symbolic links in every component, as `stat(2)` does. */
   stat(path: string): VfsStat;

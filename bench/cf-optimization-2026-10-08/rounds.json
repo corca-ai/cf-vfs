@@ -1,0 +1,93 @@
+[
+  {
+    "round": 1,
+    "candidate": "Synchronous collection of materialized byte writes",
+    "retained": false,
+    "reason": "Local binary overwrite median 17.96 to 17.64 ms (paired ratio 0.979); no structural SQL saving. CF adds variability, insufficient additional benefit to justify expanding fast-path complexity.",
+    "baseline": "baseline.json",
+    "result": "r01-cf.json",
+    "local": "r01-local.json"
+  },
+  {
+    "round": 2,
+    "candidate": "Allocation-free canonical short ASCII pathname normalization",
+    "retained": true,
+    "reason": "Paired local canonical normalization ratio 0.379 and warmed stat ratio 0.655; exact path limits and dot/symlink tests pass. CF correctness passes; macro latency remains noisy.",
+    "baseline": "baseline.json",
+    "result": "r02-cf.json",
+    "local": "r02-local.json"
+  },
+  {
+    "round": 3,
+    "candidate": "Combine entry and single-chunk whole body reads in one SQL statement",
+    "retained": true,
+    "reason": "1,000 whole reads use 1,000 instead of 2,000 SQL boundary calls. Local CPU ratio 1.052 shows SQLite subquery overhead; CF cached-read/status/checkout samples improved; uncached-read median did not, not yet a statistical broad speed claim. Whole/range/legacy chunk layout/corrupt tail/credential tests pass. Initial mislabeled CF sample excluded; fingerprint verified rerun used.",
+    "baseline": "r02-cf.json",
+    "result": "r03-cf-verified.json",
+    "local": "r03-local.json"
+  },
+  {
+    "round": 4,
+    "candidate": "Eagerly queue a single byte-stream chunk",
+    "retained": false,
+    "reason": "Local read paired ratio 1.005 and CF checkout/read results lack a consistent gain. Preserve original lazy stream ownership and lease timing.",
+    "baseline": "r03-cf-verified.json",
+    "result": "r04-cf.json",
+    "local": "r04-local.json"
+  },
+  {
+    "round": 5,
+    "candidate": "Remove duplicate FS mkdir preflight and keep existing-directory checks outside mutation transactions",
+    "retained": true,
+    "reason": "Paired local 1,000-directory creation ratio 0.874, SQL statements 10,002 to 9,002. Existing names, links, mode and ancestor permission tests pass. Production 18,096 checks pass; propagation mismatch retried before starting.",
+    "baseline": "r03-cf-verified.json",
+    "result": "r05-cf.json",
+    "local": "r05-local.json"
+  },
+  {
+    "round": 6,
+    "candidate": "Reuse the parsed SQL entry common object instead of spreading its fields",
+    "retained": false,
+    "reason": "Local read ratio 1.008, readdir 1.006 and unchanged SQL costs; CF checkout roughly unchanged. Extra type/shape handling does not justify the change.",
+    "baseline": "r05-cf.json",
+    "result": "r06-cf.json",
+    "local": "r06-local.json"
+  },
+  {
+    "round": 7,
+    "candidate": "Reuse stat common fields instead of a second object spread",
+    "retained": false,
+    "reason": "Local read ratio 1.022 and cached-stat 1.049; CF checkout unchanged. Original object construction retained.",
+    "baseline": "r05-cf.json",
+    "result": "r07-cf.json",
+    "local": "r07-local.json"
+  },
+  {
+    "round": 8,
+    "candidate": "Reuse a lazy non-streaming UTF-8 decoder",
+    "retained": false,
+    "reason": "Local whole-read ratio 0.988 (about 1%); CF checkout ratio about 1.03 and no consistent speedup. Keep independent decoders; BOM/malformed/concurrent read coverage retained. Worker/DO fingerprint propagation waited before production run.",
+    "baseline": "r05-cf.json",
+    "result": "r08-cf.json",
+    "local": "r08-local.json"
+  },
+  {
+    "round": 9,
+    "candidate": "Preserve stored chunk layout across configuration changes for overwrite and append",
+    "retained": true,
+    "reason": "Four regression cases failed before the fix, then pass with an additional hard-link case. Full overwrites remove actual stored tail chunks and append uses the stored width only when needed. Local overwrite costs increase 2.5\u20134.3%; accepted for POSIX/data correctness. SQL call counts unchanged; CF 18,096 checks pass.",
+    "baseline": "r05-cf.json",
+    "result": "r09-cf.json",
+    "local": "r09-local.json"
+  },
+  {
+    "round": 10,
+    "candidate": "Fixed SQL insert for a single chunk without batch array allocations",
+    "retained": false,
+    "reason": "Two local creation comparisons yield paired ratios 0.972 and 0.982, both 95% bootstrap intervals include 1. Quiet repeat append ratio 0.953, but CF append medians worsen in both cache modes; creation/Git results mixed. Retain original batching pending stronger representative evidence.",
+    "baseline": "r09-cf.json",
+    "result": "r10-cf.json",
+    "local": "r10-local-repeat.json",
+    "additionalLocal": "r10-local.json"
+  }
+]

@@ -1,0 +1,180 @@
+--- baseline/git-fs.ts
++++ cf-content-reuse/git-fs.ts
+@@ -3,7 +3,7 @@
+ import { FsStats } from "../../fs/stats.js";
+ import { NO_ENTRY_IDENTITY } from "../../vfs/types.js";
+ import type { ShellCommandContext } from "../types.js";
+-import { commandPath, readFileBytes } from "./helpers.js";
++import { collectStream, commandPath, readFileBytes } from "./helpers.js";
+ 
+ interface ConfigRead {
+   readonly value: string;
+@@ -13,9 +13,87 @@
+ /** Git sees only the execution's scoped filesystem, never the host VFS. */
+ export class GitFileSystem {
+   private failure: unknown;
++  private workReads:
++    | {
++        dir: string;
++        gitdir: string;
++        inspecting: boolean;
++        bytes: number;
++        entries: Map<string, { body: Uint8Array; token: string; release: () => void }>;
++      }
++    | undefined;
+   private configPath: string | undefined;
+   private pendingConfig: Promise<ConfigRead> | undefined;
+   constructor(readonly context: ShellCommandContext) {}
++
++  beginWorkReads(dir: string, gitdir: string): void {
++    this.workReads = { dir, gitdir, inspecting: true, bytes: 0, entries: new Map() };
++  }
++
++  selectWorkReads(paths: readonly string[]): void {
++    const reads = this.workReads;
++    if (reads === undefined) return;
++    reads.inspecting = false;
++    const selected = new Set(paths.map((path) => `${reads.dir}/${path}`));
++    for (const path of reads.entries.keys()) if (!selected.has(path)) this.dropWorkRead(path);
++  }
++
++  endWorkReads(): void {
++    for (const path of this.workReads?.entries.keys() ?? []) this.dropWorkRead(path);
++    this.workReads = undefined;
++  }
++
++  private dropWorkRead(path: string): void {
++    const reads = this.workReads;
++    const cached = reads?.entries.get(path);
++    if (reads !== undefined && cached !== undefined) {
++      reads.bytes -= cached.body.byteLength;
++      cached.release();
++      reads.entries.delete(path);
++    }
++  }
++
++  private canReuseWorkRead(path: string): boolean {
++    const reads = this.workReads;
++    return (
++      typeof path === "string" &&
++      reads !== undefined &&
++      path.startsWith(`${reads.dir}/`) &&
++      path !== reads.gitdir &&
++      !path.startsWith(`${reads.gitdir}/`) &&
++      (reads.inspecting || reads.entries.has(path))
++    );
++  }
++
++  private async readWork(path: string): Promise<Uint8Array> {
++    const reads = this.workReads;
++    const cached = reads?.entries.get(path);
++    // Opening afresh enforces current read/search permissions and returns the
++    // current inode mutation token, including metadata and same-size edits.
++    const read = this.context.fileSystem.readFile(commandPath(this.context, path));
++    if (cached !== undefined && cached.token === read.stat.mutationToken) {
++      await read.stream.cancel();
++      this.context.budget.io(cached.body.byteLength);
++      this.dropWorkRead(path);
++      return cached.body;
++    }
++    this.dropWorkRead(path);
++    const lease = await collectStream(this.context, read.stream);
++    try {
++      if (
++        reads?.inspecting &&
++        reads.bytes + lease.value.byteLength <= 1024 * 1024 &&
++        reads.entries.size < 1024
++      ) {
++        const release = this.context.budget.buffered(lease.value.byteLength);
++        reads.bytes += lease.value.byteLength;
++        reads.entries.set(path, { body: lease.value, token: read.stat.mutationToken, release });
++      }
++      return lease.value;
++    } finally {
++      lease.release();
++    }
++  }
+ 
+   /** Share only overlapping reads, never a completed configuration snapshot. */
+   coalesceConfigReads(gitdir: string): void {
+@@ -84,6 +162,7 @@
+         const encoding = typeof options === "string" ? options : options?.encoding;
+         if (path === this.configPath && (encoding === "utf8" || encoding === "utf-8"))
+           return (await this.readConfig(path)).value;
++        if (encoding === undefined && this.canReuseWorkRead(path)) return await this.readWork(path);
+         const lease = await readFileBytes(this.context, path);
+         try {
+           if (encoding !== undefined && encoding !== "utf8" && encoding !== "utf-8")
+--- baseline/git-worktree.ts
++++ cf-content-reuse/git-worktree.ts
+@@ -34,35 +34,41 @@
+     args.operands.length === 0 ? ["."] : args.operands.map((path) => relativePath(repo, path));
+   // Share the index snapshot between inspection and mutation in this command.
+   repo.fs.coalesceConfigReads(repo.gitdir);
+-  const options = { ...repo, cache: {} };
+-  const sizes = new Map<string, number>();
+-  const matrix = await gitMatrix(options, paths, sizes);
+-  const selected = matrix.filter(
+-    ([path, , work, stage]) =>
+-      work !== stage &&
+-      paths.some((prefix) => prefix === "." || path === prefix || path.startsWith(`${prefix}/`)),
+-  );
+-  // The cache is never reused across shell executions or repository edits.
+-  // Removing index entries holds no file bodies or compression streams.
+-  for (const batch of stagingBatches(selected, sizes)) {
+-    repo.fs.check();
+-    // Matrix already checked ignore rules for new paths; indexed paths are
+-    // tracked regardless of those rules. Avoid reading every ignore file a
+-    // second time. HEAD-only paths still need the engine's normal ignore check.
+-    const existing = batch
+-      .filter(([, head, work, stage]) => work !== 0 && (head === 0 || stage !== 0))
+-      .map(([path]) => path);
+-    if (existing.length > 0) await git.add({ ...options, filepath: existing, force: true });
+-    const headOnly = batch
+-      .filter(([, head, work, stage]) => head !== 0 && work !== 0 && stage === 0)
+-      .map(([path]) => path);
+-    if (headOnly.length > 0) await git.add({ ...options, filepath: headOnly });
+-    const removed = batch.filter(([, , work]) => work === 0).map(([path]) => path);
+-    if (removed.length > 0) await git.remove({ ...options, filepath: removed });
+-  }
+-  for (const path of paths) {
+-    if (path !== "." && !matrix.some(([name]) => name === path || name.startsWith(`${path}/`)))
+-      await git.add({ ...options, filepath: path });
++  repo.fs.beginWorkReads(repo.dir, repo.gitdir);
++  try {
++    const options = { ...repo, cache: {} };
++    const sizes = new Map<string, number>();
++    const matrix = await gitMatrix(options, paths, sizes);
++    const selected = matrix.filter(
++      ([path, , work, stage]) =>
++        work !== stage &&
++        paths.some((prefix) => prefix === "." || path === prefix || path.startsWith(`${prefix}/`)),
++    );
++    repo.fs.selectWorkReads(selected.map(([path]) => path));
++    // The cache is never reused across shell executions or repository edits.
++    // Removing index entries holds no file bodies or compression streams.
++    for (const batch of stagingBatches(selected, sizes)) {
++      repo.fs.check();
++      // Matrix already checked ignore rules for new paths; indexed paths are
++      // tracked regardless of those rules. Avoid reading every ignore file a
++      // second time. HEAD-only paths still need the engine's normal ignore check.
++      const existing = batch
++        .filter(([, head, work, stage]) => work !== 0 && (head === 0 || stage !== 0))
++        .map(([path]) => path);
++      if (existing.length > 0) await git.add({ ...options, filepath: existing, force: true });
++      const headOnly = batch
++        .filter(([, head, work, stage]) => head !== 0 && work !== 0 && stage === 0)
++        .map(([path]) => path);
++      if (headOnly.length > 0) await git.add({ ...options, filepath: headOnly });
++      const removed = batch.filter(([, , work]) => work === 0).map(([path]) => path);
++      if (removed.length > 0) await git.remove({ ...options, filepath: removed });
++    }
++    for (const path of paths) {
++      if (path !== "." && !matrix.some(([name]) => name === path || name.startsWith(`${path}/`)))
++        await git.add({ ...options, filepath: path });
++    }
++  } finally {
++    repo.fs.endWorkReads();
+   }
+ }
+ 

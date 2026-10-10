@@ -1,0 +1,53 @@
+
+ RUN  v4.1.10 /Users/ak/prjs/cc/cf-vfs
+
+ ❯ test/git-object-writes.test.ts (9 tests | 2 failed) 155ms
+   × preserves existing loose-object permissions for umask 18 4ms
+   × preserves existing loose-object permissions for umask 63 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/git-object-writes.test.ts > preserves existing loose-object permissions for umask 18
+AssertionError: expected 420 to be 416 // Object.is equality
+
+- Expected
++ Received
+
+- 416
++ 420
+
+ ❯ test/git-object-writes.test.ts:142:41
+    140|     const shell = new Shell({ fileSystem: vfs, commands: [probe] });
+    141|     expect((await shell.executeText({ script: "probe", umask })).exitC…
+    142|     expect(vfs.stat(path).mode & 0o777).toBe(0o640);
+       |                                         ^
+    143|   },
+    144| );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  test/git-object-writes.test.ts > preserves existing loose-object permissions for umask 63
+AssertionError: expected 384 to be 416 // Object.is equality
+
+- Expected
++ Received
+
+- 416
++ 384
+
+ ❯ test/git-object-writes.test.ts:142:41
+    140|     const shell = new Shell({ fileSystem: vfs, commands: [probe] });
+    141|     expect((await shell.executeText({ script: "probe", umask })).exitC…
+    142|     expect(vfs.stat(path).mode & 0o777).toBe(0o640);
+       |                                         ^
+    143|   },
+    144| );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 7 passed (9)
+   Start at  15:33:40
+   Duration  453ms (transform 193ms, setup 0ms, import 247ms, tests 155ms, environment 0ms)
+

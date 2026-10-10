@@ -1,4 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
+import { handlePublicBenchmarks } from "../demo/benchmark.js";
+import { BENCHMARK_BUILD_ID } from "../demo/benchmark-build.js";
+
+export { BenchmarkRunner, PublicBenchmarks } from "../demo/benchmark.js";
+
 import { DemoWorkspace, handleTerminalRequest } from "../demo/workspace.js";
 import {
   RemoteBenchmarkHarness,
@@ -181,6 +186,49 @@ export class VfsBenchmark extends DurableObject<VfsBenchmarkEnv> {
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === "/api/benchmarks/developer") {
+      if (!(await authorized(request, env.PUBLIC_BENCHMARK_TOKEN)))
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (request.method !== "POST")
+        return Response.json({ error: "Method not allowed" }, { status: 405 });
+      const expectedBuild = request.headers.get("X-Vfs-Expected-Build");
+      if (expectedBuild !== null && expectedBuild !== BENCHMARK_BUILD_ID)
+        return Response.json(
+          { error: "Deployment is still propagating" },
+          { status: 409, headers: { "Retry-After": "2" } },
+        );
+      const benchmark = env.PUBLIC_BENCHMARKS.getByName("shared-results-v1");
+      let claim: Awaited<ReturnType<typeof benchmark.claim>>;
+      try {
+        claim = await benchmark.claim(
+          typeof request.cf?.colo === "string" ? request.cf.colo : null,
+          true,
+          BENCHMARK_BUILD_ID,
+          env.VERSION_METADATA.id,
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("deployment is still propagating"))
+          return Response.json(
+            { error: "Deployment is still propagating" },
+            { status: 503, headers: { "Retry-After": "2" } },
+          );
+        throw error;
+      }
+      return Response.json(
+        {
+          ...claim.snapshot,
+          reused: claim.runId === null,
+          runId: claim.runId,
+          buildId: BENCHMARK_BUILD_ID,
+          deploymentId: env.VERSION_METADATA.id,
+        },
+        {
+          status: claim.snapshot.status === "running" ? 202 : 200,
+          headers: { "Cache-Control": "no-store" },
+        },
+      );
+    }
+    if (url.pathname === "/api/benchmarks") return handlePublicBenchmarks(request, env);
     if (url.pathname === "/ws") return handleTerminalRequest(request, env);
     if (request.method === "GET" && url.pathname === "/health") {
       return json({

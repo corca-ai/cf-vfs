@@ -36,6 +36,7 @@ try {
     "dist/shell/commands/sed.js",
     "dist/shell/commands/system.js",
     "dist/shell/commands/sh.js",
+    "dist/shell/commands/git.js",
     "dist/shell/linux.js",
     "dist/shell/commands/default.js",
     "dist/shell/commands/ls.js",
@@ -168,6 +169,31 @@ try {
   `,
   );
   await execFileAsync("node", ["probe.mjs"], { cwd: consumerDirectory });
+  assert(
+    !(await readdir(join(consumerDirectory, "node_modules"))).includes("isomorphic-git"),
+    "non-Git consumer unexpectedly installed the optional engine",
+  );
+  await execFileAsync(
+    "npm",
+    ["install", "--ignore-scripts", "--no-package-lock", "isomorphic-git@1.43.1"],
+    { cwd: consumerDirectory },
+  );
+  await writeFile(
+    join(consumerDirectory, "git-probe.mjs"),
+    `
+    import { gitCommand } from "@corca-ai/cf-vfs/shell/commands/git";
+    import { defaultShellCommands } from "@corca-ai/cf-vfs/shell/commands/default";
+    import { Shell } from "@corca-ai/cf-vfs/shell";
+    import { NodeSqlFileSystem } from "@corca-ai/cf-vfs/testing/node";
+    const vfs = new NodeSqlFileSystem();
+    try {
+      const shell = new Shell({ fileSystem: vfs, commands: [...defaultShellCommands, gitCommand] });
+      const result = await shell.executeText({ script: "git init /repo; git clone /repo /copy" });
+      if (result.exitCode !== 0 || vfs.stat("/copy/.git/HEAD").kind !== "file") throw new Error(result.stderr);
+    } finally { vfs.close(); }
+  `,
+  );
+  await execFileAsync("node", ["git-probe.mjs"], { cwd: consumerDirectory });
   await writeFile(
     join(consumerDirectory, "probe.ts"),
     `
@@ -230,6 +256,7 @@ try {
 
   for (const hidden of [
     "@corca-ai/cf-vfs/shell/commands/helpers",
+    "@corca-ai/cf-vfs/shell/commands/git-local",
     "@corca-ai/cf-vfs/shell/session",
     "@corca-ai/cf-vfs/vfs/memory",
   ]) {

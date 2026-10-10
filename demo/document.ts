@@ -75,11 +75,17 @@ export class DemoDocuments {
   readonly #timers = new Map<string, ReturnType<typeof setTimeout>>();
   #fileSystem: CollaborativeFileSystem | undefined;
   #notify: ((notice: DocumentNotice) => void) | undefined;
+  #run: <T>(operation: () => Promise<T>) => Promise<T> = (operation) => operation();
 
   /** Wired after `super()`, when the object has a filesystem and sockets. */
-  attach(fileSystem: CollaborativeFileSystem, notify: (notice: DocumentNotice) => void): void {
+  attach(
+    fileSystem: CollaborativeFileSystem,
+    notify: (notice: DocumentNotice) => void,
+    run?: <T>(operation: () => Promise<T>) => Promise<T>,
+  ): void {
     this.#fileSystem = fileSystem;
     this.#notify = notify;
+    if (run !== undefined) this.#run = run;
   }
 
   get(path: string): DemoDocument | undefined {
@@ -172,7 +178,7 @@ export class DemoDocuments {
       path,
       setTimeout(() => {
         this.#timers.delete(path);
-        void this.#publish(path).catch((error: unknown) => {
+        void this.#run(() => this.#publish(path)).catch((error: unknown) => {
           this.#notify?.({
             path,
             kind: "error",
@@ -183,7 +189,27 @@ export class DemoDocuments {
     );
   }
 
+  async flush(): Promise<boolean> {
+    let saved = true;
+    for (const path of this.registry.paths()) {
+      if (this.registry.get(path)?.dirty !== true) continue;
+      this.#cancelPublish(path);
+      try {
+        await this.#publish(path);
+      } catch (error) {
+        saved = false;
+        this.#notify?.({
+          path,
+          kind: "error",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return saved;
+  }
+
   async #publish(path: string): Promise<void> {
+    if (this.registry.get(path)?.dirty !== true) return;
     const fileSystem = this.#require();
     try {
       await fileSystem.publish(path);

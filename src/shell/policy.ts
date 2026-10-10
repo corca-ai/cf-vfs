@@ -2,6 +2,7 @@ import { VfsError } from "../core/errors.js";
 import { dirname, isDescendant, normalizePath } from "../core/path.js";
 import type {
   AppendFileOptions,
+  BulkOperation,
   ByteBody,
   CopyOptions,
   CopyResult,
@@ -174,6 +175,22 @@ export class ScopedFileSystem implements ShellFileSystem {
       }
     }
     return this.#inner.getMutationToken(path, options);
+  }
+
+  canUseBulkOperation(operation: BulkOperation, path: string): boolean {
+    if (operation === "copy-source") this.read(path);
+    else this.write(path);
+    return this.#inner.canUseBulkOperation?.(operation, path) === true;
+  }
+
+  get availableWriteBufferBytes(): number {
+    return this.#inner.availableWriteBufferBytes ?? 0;
+  }
+
+  writeFiles(entries: Parameters<VirtualFileSystem["writeFiles"]>[0]) {
+    for (const entry of entries) this.write(entry.path);
+    this.#budget.mutation(entries.length);
+    return this.#inner.writeFiles(entries);
   }
 
   lstat(path: string) {

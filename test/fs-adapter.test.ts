@@ -114,3 +114,17 @@ it("releases its materialization reservation when a host stream is already locke
   await reader.cancel();
   expect(await fs.readFile("/file", "utf8")).toBe("12345678");
 });
+
+it("decodes independent UTF-8 reads without carrying BOM or malformed-byte state", async () => {
+  const fs = createFsAdapter(createTestFileSystem()).promises;
+  await fs.writeFile("/bom", Uint8Array.of(239, 187, 191, 65));
+  await fs.writeFile("/malformed", Uint8Array.of(255, 66));
+  expect(
+    await Promise.all([
+      fs.readFile("/bom", "utf8"),
+      fs.readFile("/malformed", "utf8"),
+      fs.readFile("/bom", "utf8"),
+    ]),
+  ).toEqual(["A", "\ufffdB", "A"]);
+  expect(await fs.readFile("/bom")).toEqual(Uint8Array.of(239, 187, 191, 65));
+});

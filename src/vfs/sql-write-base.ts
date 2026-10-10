@@ -22,6 +22,18 @@ import type {
   WriteResult,
 } from "./types.js";
 
+function matchesChunkTail(
+  sizeBytes: number,
+  width: number,
+  index: number,
+  tailBytes: number,
+): boolean {
+  const expectedIndex = Math.floor((sizeBytes - 1) / width);
+  return (
+    sizeBytes > 0 && index === expectedIndex && tailBytes === sizeBytes - expectedIndex * width
+  );
+}
+
 export abstract class SqlWrite extends SqlWritePlan {
   /** Uses the same write planner as publication without changing storage. Returns the effective mode. */
   validateInlineWrite(
@@ -67,7 +79,8 @@ export abstract class SqlWrite extends SqlWritePlan {
         ? this.lastInlineRead
         : undefined;
     const plan = this.planInlineWrite(path, options, options, posix, snapshot);
-    const buffered = materialized ? this.collectInlineSync(body) : await this.collectInline(body);
+    const buffered =
+      typeof body === "string" ? this.collectInlineSync(body) : await this.collectInline(body);
     const digest = materialized ? undefined : await this.incomingDigest(options, buffered);
     let queued = false;
     const result = this.useBuffered(buffered, (chunks, sizeBytes) =>
@@ -96,9 +109,10 @@ export abstract class SqlWrite extends SqlWritePlan {
    * The three phases are the whole design, and the order is what makes it
    * possible at all. Every entry is planned against SQLite synchronously, so
    * a batch that cannot succeed is refused before it holds a byte. Then every
-   * body is collected; this awaits only if the set contains a stream or asks
-   * for a digest. Then one transaction publishes the set, holding no cursor
-   * across anything.
+   * body is collected; strings need no async boundary, while other bodies and
+   * digests may yield. Entry accessors can still run caller code, so the set is
+   * revalidated inside the transaction that publishes it. No cursor crosses
+   * an await.
    *
    * An open transaction handed back to the host would be the other way to
    * offer this, and it is the reason this shape exists instead: it would hold
@@ -139,13 +153,20 @@ export abstract class SqlWrite extends SqlWritePlan {
         // What the batch is already holding, so the budget can tell a set too
         // large for it -- retrying which is work with no outcome -- from one
         // that merely collided with a concurrent read or batch.
-        const lease = await this.collectInline(entry.body, held);
+        const body = entry.body;
+        const lease =
+          typeof body === "string"
+            ? this.collectInlineSync(body, held)
+            : await this.collectInline(body, held);
         held += lease.sizeBytes;
-        collected.push({
-          plan,
-          lease,
-          digest: await this.incomingDigest(options, lease),
-        });
+        const item: CollectedWrite = { plan, lease, digest: undefined };
+        collected.push(item);
+        if (options.skipIfUnchanged === true) {
+          collected[collected.length - 1] = {
+            ...item,
+            digest: await this.incomingDigest(options, lease),
+          };
+        }
       }
     } catch (error) {
       for (const item of collected) item.lease.release();
@@ -293,16 +314,17 @@ export abstract class SqlWrite extends SqlWritePlan {
     }
     const index = integerColumn(lastChunk, "chunk_index");
     const tail = new Uint8Array(blobColumn(lastChunk, "body"));
-    const expectedIndex = Math.floor((current.sizeBytes - 1) / this.chunkBytes);
-    const expectedBytes = current.sizeBytes - expectedIndex * this.chunkBytes;
-    if (current.sizeBytes === 0 || index !== expectedIndex || tail.byteLength !== expectedBytes) {
-      throw new VfsError("EIO", "inline file chunks do not match its size", path);
+    let width = this.chunkBytes;
+    if (!matchesChunkTail(current.sizeBytes, width, index, tail.byteLength)) {
+      width = this.storedChunkBytes(current, path);
+      if (!matchesChunkTail(current.sizeBytes, width, index, tail.byteLength))
+        throw new VfsError("EIO", "inline file chunks do not match its size", path);
     }
-    return tail.byteLength === this.chunkBytes
-      ? { firstChunkIndex: index + 1, chunks: suffixChunks }
-      : {
-          firstChunkIndex: index,
-          chunks: rechunk([tail, ...suffixChunks], this.chunkBytes),
-        };
+    return tail.byteLength === width
+      ? {
+          firstChunkIndex: index + 1,
+          chunks: width === this.chunkBytes ? suffixChunks : rechunk(suffixChunks, width),
+        }
+      : { firstChunkIndex: index, chunks: rechunk([tail, ...suffixChunks], width) };
   }
 }

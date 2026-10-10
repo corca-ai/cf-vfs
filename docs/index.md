@@ -55,6 +55,8 @@ second and offers the first from a subpath.
   mutation tokens, upload verification, read leases, and GC alarms.
 - [Promise filesystem adapter](fs.md) — optional FS-shaped metadata reuse and
   immutable large-body access without changing the VFS core.
+- [Optional Git command](git.md) — local repositories/remotes without adding Git
+  to the default shell bundle.
 - [Collaborative documents](collaboration.md) — document guards, authorization,
   deferred quotas, publication, and reconciliation.
 - [POSIX and Bash compatibility](posix-compatibility.md) — supported behavior,

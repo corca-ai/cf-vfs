@@ -31,6 +31,19 @@ export function normalizePath(path: string, cwd = "/"): string {
   if (typeof path !== "string" || path.length === 0) {
     throw new VfsError("EINVAL", "path must be a non-empty string");
   }
+  // A canonical ASCII path this short fits both POSIX byte limits without
+  // allocating component arrays. All other spellings retain full validation.
+  if (path === "/") return path;
+  if (
+    path.length <= MAX_NAME_BYTES &&
+    path.startsWith("/") &&
+    !path.endsWith("/") &&
+    !path.includes("//") &&
+    !hasDotSegments(path) &&
+    !path.includes("\0") &&
+    !/[\u0080-\u{10ffff}]/u.test(path)
+  )
+    return path;
   const absolute = path.startsWith("/") ? path : `${cwd}/${path}`;
   const segments: string[] = [];
 

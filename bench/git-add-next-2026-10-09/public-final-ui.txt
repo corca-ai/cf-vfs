@@ -1,0 +1,222 @@
+← Shell demo
+Source ↗
+
+MEASURED ON CLOUDFLARE
+
+Files. Commits. Checkout.
+See what the VFS costs.
+
+Real file and Git operations on a SQLite-backed Durable Object. Results are saved in the VFS and shared with everyone.
+
+Request benchmarkStored JSON ↗
+
+Saved result available. A new run becomes eligible at 2:06:06 PM. Requests before then reuse this result.
+
+Opening this page never runs a benchmark. A request runs the suite only when the saved result is at least 10 minutes old. Concurrent requests share one run. It continues in the background when you close this page.
+
+Saved results
+Workload 
+100 files
+1,000 files
+
+Saved 10/9/2026, 1:56:06 PM · Deployment e4dc525d · Request location LAX · 3 samples + warmup · 31,640 checks passed
+
+File operations
+Operation	VFS	Metadata cache	Cache / VFS
+Write files
+1,000 operations / call
+	121 ms
+89 ms – 127 ms
+	119 ms
+100 ms – 171 ms
+	0.98×
+Stat files
+1,000 operations / call
+	5 ms
+4 ms – 6 ms
+	5 ms
+4 ms – 5 ms
+	1.00×
+Stat after one overwrite
+1,000 operations / call
+	88 ms
+69 ms – 120 ms
+	85 ms
+74 ms – 93 ms
+	0.97×
+Read files
+1,000 operations / call
+	16 ms
+6 ms – 39 ms
+	13 ms
+7 ms – 743 ms
+	0.81×
+List directory (10×)
+10 operations / call
+	51 ms
+15 ms – 765 ms
+	33 ms
+29 ms – 54 ms
+	0.65×
+Append to files
+1,000 operations / call
+	1,396 ms
+390 ms – 1,787 ms
+	1,055 ms
+149 ms – 1,888 ms
+	0.76×
+Rename files
+1,000 operations / call
+	60 ms
+56 ms – 1,500 ms
+	124 ms
+104 ms – 1,559 ms
+	2.07×
+Copy subtree	89 ms
+61 ms – 94 ms
+	100 ms
+76 ms – 118 ms
+	1.12×
+Remove subtree	52 ms
+43 ms – 103 ms
+	68 ms
+57 ms – 75 ms
+	1.31×
+Git engine operations
+Operation	VFS	Metadata cache	Cache / VFS
+Init repository	54 ms
+48 ms – 64 ms
+	75 ms
+62 ms – 78 ms
+	1.39×
+Populate worktree
+1,000 operations / call
+	94 ms
+86 ms – 97 ms
+	108 ms
+96 ms – 153 ms
+	1.15×
+Add all	2,552 ms
+2,400 ms – 2,671 ms
+	2,688 ms
+2,658 ms – 3,047 ms
+	1.05×
+Initial commit	752 ms
+736 ms – 807 ms
+	726 ms
+716 ms – 1,046 ms
+	0.97×
+Clean status	46 ms
+30 ms – 54 ms
+	37 ms
+33 ms – 39 ms
+	0.80×
+Status after edit	109 ms
+109 ms – 130 ms
+	103 ms
+88 ms – 108 ms
+	0.94×
+Diff one file	3 ms
+3 ms – 5 ms
+	3 ms
+3 ms – 5 ms
+	1.00×
+Add one file	67 ms
+66 ms – 68 ms
+	62 ms
+60 ms – 65 ms
+	0.93×
+Commit one change	193 ms
+192 ms – 198 ms
+	179 ms
+173 ms – 183 ms
+	0.93×
+Log (2 commits)	4 ms
+3 ms – 5 ms
+	5 ms
+3 ms – 22 ms
+	1.25×
+Create branch	62 ms
+62 ms – 64 ms
+	60 ms
+60 ms – 60 ms
+	0.97×
+Checkout initial branch	114 ms
+112 ms – 126 ms
+	112 ms
+104 ms – 119 ms
+	0.98×
+Checkout main	122 ms
+111 ms – 134 ms
+	114 ms
+97 ms – 116 ms
+	0.93×
+Shell Git commands
+Operation	Time
+Init repository	53 ms
+49 ms – 246 ms
+
+Populate worktree
+1,000 operations / call
+	102 ms
+93 ms – 137 ms
+
+Add all	2,038 ms
+1,664 ms – 2,717 ms
+
+Initial commit	771 ms
+675 ms – 856 ms
+
+Clone local bare remote	179 ms
+142 ms – 182 ms
+
+Clone local worktree	3,270 ms
+3,199 ms – 3,558 ms
+
+Fetch unchanged remote	52 ms
+46 ms – 57 ms
+
+Pull unchanged remote	108 ms
+85 ms – 133 ms
+
+Add unchanged worktree	57 ms
+43 ms – 84 ms
+
+Edit one file	59 ms
+59 ms – 68 ms
+
+Add one file	72 ms
+65 ms – 84 ms
+
+Commit one change	177 ms
+174 ms – 209 ms
+
+Push one commit	78 ms
+76 ms – 110 ms
+
+Pull one commit	353 ms
+246 ms – 1,788 ms
+
+Edit all tracked files
+1,000 operations / call
+	126 ms
+75 ms – 1,214 ms
+
+Stage all tracked changes	1,086 ms
+1,069 ms – 3,153 ms
+
+Delete worktree files
+1,000 operations / call
+	107 ms
+84 ms – 113 ms
+
+Stage deletions (20 rounds, incl. index resets)
+20 operations / call
+	1,570 ms
+351 ms – 1,791 ms
+
+Stage all deletions	48 ms
+43 ms – 77 ms
+How these numbers are measured
+
+The result lives at /benchmarks/latest.json in an isolated benchmark VFS. Its actual file modification time controls the next run.

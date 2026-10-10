@@ -1,0 +1,31 @@
+begin /setup { files: '32' }
+done /setup 
+begin /execute {}
+done /execute 0
+begin /change { all: 'true' }
+done /change 
+begin /inspect {}
+done /inspect 
+begin /quota { bytes: '1' }
+done /quota 
+begin /execute {}
+done /execute 1
+begin /inspect {}
+done /inspect 
+begin /quota { bytes: '33554432' }
+done /quota 
+begin /execute {}
+done /execute 0
+begin /inspect {}
+done /inspect 
+begin /restart { checkout: 'true' }
+begin /inspect {}
+begin /clear {}
+done /clear 
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+[DOMException [TimeoutError]: The operation was aborted due to timeout]
+
+Node.js v24.18.0

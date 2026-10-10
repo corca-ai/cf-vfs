@@ -1,0 +1,11 @@
+--- baseline/git-worktree.ts
++++ final/git-worktree.ts
+@@ -73,7 +73,7 @@
+   const removalOnly = rows.every(([, , work]) => work === 0);
+   for (let start = 0; start < rows.length; ) {
+     const end = removalOnly
+-      ? Math.min(start + 256, rows.length)
++      ? Math.min(start + 1024, rows.length)
+       : smallBatchEnd(rows, sizes, start);
+     yield rows.slice(start, end);
+     start = end;

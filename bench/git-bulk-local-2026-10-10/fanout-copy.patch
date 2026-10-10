@@ -1,0 +1,63 @@
+--- a/src/shell/commands/git-local.ts
++++ b/src/shell/commands/git-local.ts
+@@ -1,6 +1,7 @@
+ import * as git from "isomorphic-git";
+ import { VfsError } from "../../core/errors.js";
+ import { basename, dirname, isDescendant, normalizePath } from "../../core/path.js";
++import type { VfsStat } from "../../vfs/types.js";
+ import type { ShellFileDescriptors } from "../types.js";
+ import { checkoutGit } from "./git-checkout.js";
+ import type { GitFileSystem } from "./git-fs.js";
+@@ -21,16 +22,49 @@
+   await copyDirectory(source.fs, `${source.gitdir}/objects`, `${target.gitdir}/objects`);
+ }
+ 
+-async function copyDirectory(fs: GitFileSystem, source: string, target: string): Promise<void> {
++async function copyDirectory(
++  fs: GitFileSystem,
++  source: string,
++  target: string,
++  directory?: VfsStat,
++): Promise<void> {
+   fs.check();
++  const entries = fs.listEntries(source);
++  if (
++    directory !== undefined &&
++    !gitExists(fs, target) &&
++    directory.mode === (0o40777 & ~fs.context.session.umask) &&
++    entries.every(
++      (entry) =>
++        entry.kind === "file" &&
++        entry.contentClass === "inline" &&
++        entry.mode === (0o100666 & ~fs.context.session.umask) &&
++        entry.uid === 0 &&
++        entry.gid === 0 &&
++        (entry.nlink ?? 1) === 1,
++    )
++  ) {
++    let bytes = 0,
++      largest = 0;
++    for (const entry of entries) {
++      fs.check();
++      bytes += entry.sizeBytes;
++      largest = Math.max(largest, entry.sizeBytes);
++    }
++    fs.context.budget.io(bytes * 2);
++    const release = fs.context.budget.buffered(largest);
++    release();
++    await fs.context.fileSystem.copy(source, target, { recursive: true });
++    return;
++  }
+   fs.mkdir(target, true);
+-  for (const entry of fs.listEntries(source)) {
++  for (const entry of entries) {
+     fs.check();
+     const from = `${source}/${entry.name}`,
+       to = `${target}/${entry.name}`;
+     if (entry.kind === "symlink")
+       throw new VfsError("ENOTSUP", "git: symbolic links in object storage are unsupported", from);
+-    if (entry.kind === "directory") await copyDirectory(fs, from, to);
++    if (entry.kind === "directory") await copyDirectory(fs, from, to, entry);
+     else if (!gitExists(fs, to)) {
+       const bytes = await fs.promises.readFile(from);
+       if (typeof bytes === "string") throw new VfsError("EIO", "expected binary Git object", from);

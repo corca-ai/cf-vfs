@@ -1,0 +1,36 @@
+--- a/engine.mjs
++++ b/engine.mjs
+@@ -5999,16 +5999,19 @@
+       async index => {
+         const config = await GitConfigManager.get({ fs, gitdir: updatedGitdir });
+         const autocrlf = await config.get('core.autocrlf');
+-        return addToIndex({
++        const batches = Array.isArray(filepath) ? filepath : [filepath];
++        for (let offset=0; offset<batches.length; offset+=128) {
++          await addToIndex({
+           dir,
+           gitdir: updatedGitdir,
+           fs,
+-          filepath,
++          filepath: batches.slice(offset, offset+128),
+           index,
+           force,
+           parallel,
+           autocrlf,
+-        })
++        });
++        }
+       }
+     );
+   } catch (err) {
+--- a/dist/shell/commands/git-worktree.js
++++ b/dist/shell/commands/git-worktree.js
+@@ -39,7 +39,7 @@
+         paths.some((prefix) => prefix === "." || path === prefix || path.startsWith(`${prefix}/`)));
+     // The cache is never reused across shell executions or repository edits.
+     // Removing index entries holds no file bodies or compression streams.
+-    for (const batch of stagingBatches(selected, sizes)) {
++    for (const batch of [selected]) {
+         repo.fs.check();
+         // Matrix already checked ignore rules for new paths; indexed paths are
+         // tracked regardless of those rules. Avoid reading every ignore file a

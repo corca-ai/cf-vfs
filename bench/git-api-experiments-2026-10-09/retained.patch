@@ -1,0 +1,724 @@
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -18,6 +18,9 @@
+ 
+ ### Added
+ 
++- Optional `availableWriteBufferBytes` reports inline buffer headroom so callers
++  can plan bounded `writeFiles` batches without changing atomicity or quotas.
++
+ - An [optional Git applet](docs/git.md) supplies repository editing commands and
+   local clone/fetch/push/fast-forward pull through the shell's scoped VFS.
+   The Git engine is an optional peer dependency and excluded from default
+@@ -25,6 +28,12 @@
+ 
+ ### Changed
+ 
++- Git add persists bounded sets of loose objects using existing `writeFiles`
++  before publishing the index. Small sets and backends without sufficient
++  reported buffer headroom keep individual writes. The
++  [API experiments](bench/git-api-experiments-2026-10-09/report.md) record
++  measured gains and rejected engine and metadata API candidates.
++
+ - Optional Git staging skips unchanged files, confines traversal to selected
+   paths, shares command-local index state and batches index deletions. Missing
+   ignore-file probes are reused during inspection; default-mode Git writes
+--- a/demo/README.md
++++ b/demo/README.md
+@@ -153,3 +153,9 @@
+ remotes and host paths are unavailable. Initialize a repository, configure
+ `user.name`/`user.email`, then add and commit files. Use a bare local repository
+ as a push target. These operations obey the room's existing execution budgets.
++
++Git staging uses bounded atomic loose-object writes before index publication;
++small changes retain ordinary individual writes. The demo's collaborative and
++credential views forward backend buffer headroom so the same optimization can
++run under its smaller limits. Existing public benchmark rows measure this path
++without changing their clocks or iteration counts.
+--- a/docs/commands.md
++++ b/docs/commands.md
+@@ -1240,6 +1240,14 @@
+ twelve `writeFile` calls leaves a tree that matches nobody's intent. A failed
+ batch leaves every path exactly as it was, including the paths earlier in the
+ array.
++
++The optional `availableWriteBufferBytes` property reports current instance-wide
++inline buffer headroom in bytes. SQL filesystems and their credential and
++collaborative views expose it; an absent value means the backend has not
++reported its capacity. It helps callers plan bounded write batches, but does
++not reserve memory or guarantee success after an asynchronous boundary. Consume
++or cancel read streams to release their leases; concurrent work can still
++cause `EAGAIN`. This property does not change `writeFiles` atomicity or quotas.
+ 
+ Each entry carries its own `path`, `body`, optional `mode`, and optional
+ `ifMutationToken`; `createParents`, `disposition`, and `skipIfUnchanged` apply
+--- a/docs/git.md
++++ b/docs/git.md
+@@ -106,6 +106,16 @@
+ 32-path batch. Small-body batches grow to at most 128 paths when their inspected
+ total stays within 1 MiB; larger bodies retain the 32-path bound. Removal-only
+ staging batches up to 1,024 paths without retaining file bodies.
++Staging batches with at least 32 bodies can collect compressed loose objects
++and persist them through the existing atomic `writeFiles` operation before
++publishing the index. The adapter accounts for retained buffers and bounds the
++set by shell and backend buffer headroom, leaving room for working-file reads.
++Small sets, insufficient headroom and backends without capacity information use
++ordinary individual writes. Any object-set failure remains fatal to that index
++publication, including errors the engine normally retries. Object directory
++creation is shared within the command; each actual write still checks traversal,
++permissions, quotas and the session umask. Index serialization and compression
++concurrency retain their existing bounds.
+ Selected-path staging prunes unrelated walker branches before stat or content
+ reads. New blobs with no HEAD/index entry skip comparison reads and hashes;
+ the engine reads and hashes them during staging with its normal permission and
+--- a/docs/performance.md
++++ b/docs/performance.md
+@@ -491,3 +491,9 @@
+ reuse. Larger compression batches and body/hash caches are rejected. Deletion-only
+ staging reduces index serialization for up to 1,024 paths without retaining bodies;
+ the report records alternating CF controls and the small-buffer cache regression.
++
++The [Git API experiments](../bench/git-api-experiments-2026-10-09/report.md)
++compare bounded one-serialization engine staging, loose-object `writeFiles`
++and multi-path metadata queries. Only object batching is retained, with advisory
++backend buffer headroom and small-set fallback. The new capacity property is
++optional; it does not alter POSIX operations, atomic write semantics or quotas.
+--- a/src/collab/filesystem.ts
++++ b/src/collab/filesystem.ts
+@@ -120,6 +120,10 @@
+    */
+   async reconcile(path: string): Promise<boolean> {
+     return this.#documents.reconcile(path);
++  }
++
++  get availableWriteBufferBytes(): number {
++    return this.#inner.availableWriteBufferBytes ?? 0;
+   }
+ 
+   forCredentials(credentials: PosixCredentials, options?: PosixViewOptions): VirtualFileSystem {
+--- a/src/shell/budget.ts
++++ b/src/shell/budget.ts
+@@ -210,6 +210,10 @@
+     this.expansionFields += fields;
+   }
+ 
++  remainingBufferedBytes(): number {
++    return this.limits.maxBufferedBytes - this.bufferedBytes;
++  }
++
+   buffered(bytes: number): () => void {
+     this.checkDeadline();
+     this.bufferedBytes += bytes;
+--- a/src/shell/commands/git-fs.ts
++++ b/src/shell/commands/git-fs.ts
+@@ -3,6 +3,7 @@
+ import { FsStats } from "../../fs/stats.js";
+ import { NO_ENTRY_IDENTITY } from "../../vfs/types.js";
+ import type { ShellCommandContext } from "../types.js";
++import { GitObjectWrites } from "./git-object-writes.js";
+ import { commandPath, readFileBytes } from "./helpers.js";
+ 
+ interface ConfigRead {
+@@ -13,6 +14,8 @@
+ /** Git sees only the execution's scoped filesystem, never the host VFS. */
+ export class GitFileSystem {
+   private failure: unknown;
++  private objectWrites: GitObjectWrites | undefined;
++  private readonly objectDirectories = new Set<string>();
+   private configPath: string | undefined;
+   private pendingConfig: Promise<ConfigRead> | undefined;
+   constructor(readonly context: ShellCommandContext) {}
+@@ -22,6 +25,42 @@
+     this.configPath = `${gitdir}/config`;
+   }
+ 
++  beginObjectWrites(gitdir: string, inputBytes: number, files: number): void {
++    const backend = this.context.fileSystem.availableWriteBufferBytes ?? 0;
++    const capacity = Math.min(2 * inputBytes + 128 * files, backend - inputBytes);
++    const available = this.context.budget.remainingBufferedBytes?.() ?? 0;
++    if (
++      files < 32 ||
++      capacity <= 0 ||
++      this.context.fileSystem.writeFiles === undefined ||
++      available < capacity + inputBytes
++    )
++      return;
++    const release = this.context.budget.buffered(capacity);
++    this.objectWrites = new GitObjectWrites(
++      this.context,
++      `${gitdir}/objects/`,
++      capacity,
++      release,
++      (path) => {
++        if (this.objectDirectories.has(path)) return;
++        try {
++          this.mkdir(path);
++        } catch (error) {
++          if (!(error instanceof VfsError)) throw error;
++          if (error.code === "ENOENT") this.mkdir(path, true);
++          else if (error.code !== "EEXIST") throw error;
++        }
++        this.objectDirectories.add(path);
++      },
++    );
++  }
++
++  endObjectWrites(): void {
++    this.objectWrites?.close();
++    this.objectWrites = undefined;
++  }
++
+   private async loadConfig(path: string): Promise<ConfigRead> {
+     const lease = await readFileBytes(this.context, path);
+     try {
+@@ -78,12 +117,25 @@
+     );
+   }
+ 
++  private fileStats(path: string, follow: boolean): FsStats | Promise<FsStats> {
++    const resolved = commandPath(this.context, path);
++    const read = () =>
++      new FsStats(
++        follow ? this.context.fileSystem.stat(resolved) : this.context.fileSystem.lstat(resolved),
++      );
++    return this.objectWrites === undefined
++      ? read()
++      : this.objectWrites.beforeRead(resolved).then(read);
++  }
++
+   readonly promises = {
+     readFile: (path: string, options?: string | { encoding?: string }) =>
+       this.operation(async () => {
+         const encoding = typeof options === "string" ? options : options?.encoding;
+         if (path === this.configPath && (encoding === "utf8" || encoding === "utf-8"))
+           return (await this.readConfig(path)).value;
++        if (this.objectWrites !== undefined)
++          await this.objectWrites.beforeRead(commandPath(this.context, path));
+         const lease = await readFileBytes(this.context, path);
+         try {
+           if (encoding !== undefined && encoding !== "utf8" && encoding !== "utf-8")
+@@ -99,6 +151,14 @@
+         this.context.budget.io(bytes.byteLength);
+         const resolved = commandPath(this.context, path);
+         const mode = (options?.mode ?? 0o100666) & ~this.context.session.umask;
++        if (this.objectWrites !== undefined) {
++          if (
++            this.objectWrites.matches(resolved) &&
++            (await this.objectWrites.retain(resolved, bytes, mode))
++          )
++            return;
++          await this.objectWrites.flush();
++        }
+         // Omitting mode preserves existing permissions and creates 0644 files,
+         // matching the VFS default without a separate existence inspection.
+         const creation =
+@@ -107,14 +167,8 @@
+             : { mode };
+         await this.context.fileSystem.writeFile(resolved, bytes, creation);
+       }),
+-    stat: (path: string) =>
+-      this.operation(
+-        () => new FsStats(this.context.fileSystem.stat(commandPath(this.context, path))),
+-      ),
+-    lstat: (path: string) =>
+-      this.operation(
+-        () => new FsStats(this.context.fileSystem.lstat(commandPath(this.context, path))),
+-      ),
++    stat: (path: string) => this.operation(() => this.fileStats(path, true)),
++    lstat: (path: string) => this.operation(() => this.fileStats(path, false)),
+     readdir: (path: string) =>
+       this.operation(() => {
+         const entries = this.context.fileSystem.list(commandPath(this.context, path));
+--- a/src/shell/commands/git-worktree.ts
++++ b/src/shell/commands/git-worktree.ts
+@@ -46,19 +46,29 @@
+   // Removing index entries holds no file bodies or compression streams.
+   for (const batch of stagingBatches(selected, sizes)) {
+     repo.fs.check();
+-    // Matrix already checked ignore rules for new paths; indexed paths are
+-    // tracked regardless of those rules. Avoid reading every ignore file a
+-    // second time. HEAD-only paths still need the engine's normal ignore check.
+-    const existing = batch
+-      .filter(([, head, work, stage]) => work !== 0 && (head === 0 || stage !== 0))
+-      .map(([path]) => path);
+-    if (existing.length > 0) await git.add({ ...options, filepath: existing, force: true });
+-    const headOnly = batch
+-      .filter(([, head, work, stage]) => head !== 0 && work !== 0 && stage === 0)
+-      .map(([path]) => path);
+-    if (headOnly.length > 0) await git.add({ ...options, filepath: headOnly });
+-    const removed = batch.filter(([, , work]) => work === 0).map(([path]) => path);
+-    if (removed.length > 0) await git.remove({ ...options, filepath: removed });
++    const bodies = batch.filter(([, , work]) => work !== 0);
++    repo.fs.beginObjectWrites(
++      repo.gitdir,
++      bodies.reduce((sum, [path]) => sum + (sizes.get(path) ?? 0), 0),
++      bodies.length,
++    );
++    try {
++      // Matrix already checked ignore rules for new paths; indexed paths are
++      // tracked regardless of those rules. Avoid reading every ignore file a
++      // second time. HEAD-only paths still need the engine's normal ignore check.
++      const existing = batch
++        .filter(([, head, work, stage]) => work !== 0 && (head === 0 || stage !== 0))
++        .map(([path]) => path);
++      if (existing.length > 0) await git.add({ ...options, filepath: existing, force: true });
++      const headOnly = batch
++        .filter(([, head, work, stage]) => head !== 0 && work !== 0 && stage === 0)
++        .map(([path]) => path);
++      if (headOnly.length > 0) await git.add({ ...options, filepath: headOnly });
++      const removed = batch.filter(([, , work]) => work === 0).map(([path]) => path);
++      if (removed.length > 0) await git.remove({ ...options, filepath: removed });
++    } finally {
++      repo.fs.endObjectWrites();
++    }
+   }
+   for (const path of paths) {
+     if (path !== "." && !matrix.some(([name]) => name === path || name.startsWith(`${path}/`)))
+--- a/src/shell/devices.ts
++++ b/src/shell/devices.ts
+@@ -30,6 +30,7 @@
+   WriteResult,
+ } from "../vfs/types.js";
+ import { NO_ENTRY_IDENTITY } from "../vfs/types.js";
++import { writeCheckedBatch } from "./batch-writes.js";
+ import type { ShellFileDescriptors, ShellFileSystem, ShellSink } from "./types.js";
+ 
+ /**
+@@ -337,6 +338,14 @@
+     return this.#statAt(path) ?? this.#inner.stat(path);
+   }
+ 
++  get availableWriteBufferBytes(): number {
++    return this.#inner.availableWriteBufferBytes ?? 0;
++  }
++
++  writeFiles(entries: Parameters<NonNullable<ShellFileSystem["writeFiles"]>>[0]) {
++    return writeCheckedBatch(this.#inner, entries, (path) => this.#refuseMutation(path));
++  }
++
+   lstat(path: string): VfsStat {
+     return this.#statAt(path, false) ?? this.#inner.lstat(path);
+   }
+--- a/src/shell/policy.ts
++++ b/src/shell/policy.ts
+@@ -174,6 +174,16 @@
+       }
+     }
+     return this.#inner.getMutationToken(path, options);
++  }
++
++  get availableWriteBufferBytes(): number {
++    return this.#inner.availableWriteBufferBytes ?? 0;
++  }
++
++  writeFiles(entries: Parameters<VirtualFileSystem["writeFiles"]>[0]) {
++    for (const entry of entries) this.write(entry.path);
++    this.#budget.mutation(entries.length);
++    return this.#inner.writeFiles(entries);
+   }
+ 
+   lstat(path: string) {
+--- a/src/shell/types.ts
++++ b/src/shell/types.ts
+@@ -7,6 +7,7 @@
+ 
+ export type ShellFileSystem = Pick<
+   VirtualFileSystem,
++  | "availableWriteBufferBytes"
+   | "getMutationToken"
+   | "stat"
+   | "list"
+@@ -30,6 +31,10 @@
+   | "symlink"
+   | "realpath"
+ > & {
++  /** Optional atomic writes through the same roots and mutation budget. */
++  writeFiles?: (
++    entries: Parameters<VirtualFileSystem["writeFiles"]>[0],
++  ) => ReturnType<VirtualFileSystem["writeFiles"]>;
+   inspectWriteTarget(path: string, follow?: boolean): VfsStat | null;
+   /**
+    * Enforces the declared roots without reading or writing anything.
+@@ -399,6 +404,8 @@
+   checkExpansionOutput(characters: number, fields?: number): void;
+   expansionOutput(characters: number, fields?: number): void;
+   buffered(bytes: number): () => void;
++  /** Available space for optional optimizations; absent means use the normal path. */
++  remainingBufferedBytes?(): number;
+   checkDeadline(): void;
+   remainingDeadlineMs(): number;
+ }
+--- a/src/vfs/buffering.ts
++++ b/src/vfs/buffering.ts
+@@ -39,6 +39,10 @@
+     validatePositiveInteger(maximumBytes, "maxInFlightBufferedBytes");
+   }
+ 
++  get remainingBytes(): number {
++    return this.maximumBytes - this.usedBytes;
++  }
++
+   /**
+    * Reserves `bytes`, or refuses in a way the caller can act on.
+    *
+--- a/src/vfs/sql-read-base.ts
++++ b/src/vfs/sql-read-base.ts
+@@ -45,6 +45,10 @@
+ }
+ 
+ export abstract class SqlRead extends SqlQuery {
++  get availableWriteBufferBytes(): number {
++    return this.inFlightBytes.remainingBytes;
++  }
++
+   async digestFile(path: string, posix?: PosixAccessContext): Promise<string> {
+     const access = this.resolveAccess(path);
+     const normalized = access.path;
+--- a/src/vfs/sql.ts
++++ b/src/vfs/sql.ts
+@@ -161,6 +161,10 @@
+ 
+   getMutationToken(path: string, options?: MutationTokenOptions): string {
+     return this.inner.getMutationToken(path, options, this.access);
++  }
++
++  get availableWriteBufferBytes(): number {
++    return this.inner.availableWriteBufferBytes;
+   }
+ 
+   stat(path: string): VfsStat {
+--- a/src/vfs/types.ts
++++ b/src/vfs/types.ts
+@@ -432,6 +432,8 @@
+ }
+ 
+ export interface VirtualFileSystem {
++  /** Advisory shared buffer headroom for planning bounded writes, not a reservation. */
++  readonly availableWriteBufferBytes?: number;
+   getMutationToken(path: string, options?: MutationTokenOptions): string;
+   /** Resolves symbolic links in every component, as `stat(2)` does. */
+   stat(path: string): VfsStat;
+--- a/test/collab-filesystem.test.ts
++++ b/test/collab-filesystem.test.ts
+@@ -400,3 +400,16 @@
+   });
+   expect(document.text()).toBe("body\nedited\n");
+ });
++
++it("forwards write buffer headroom through collaborative credential views", async () => {
++  const inner = createTestFileSystem({ maxInFlightBufferedBytes: 2048 });
++  await inner.writeFile("/body", new Uint8Array(1024));
++  const fs = new CollaborativeFileSystem(inner, new DocumentRegistry());
++  const user = fs.forCredentials({ uid: 1000, gid: 1000 });
++  const snapshot = inner.readFile("/body");
++  expect(fs.availableWriteBufferBytes).toBe(1024);
++  expect(user.availableWriteBufferBytes).toBe(1024);
++  await snapshot.stream.cancel();
++  expect(fs.availableWriteBufferBytes).toBe(2048);
++  expect(user.availableWriteBufferBytes).toBe(2048);
++});
+--- a/test/helpers/vfs-conformance-support.ts
++++ b/test/helpers/vfs-conformance-support.ts
+@@ -8,7 +8,7 @@
+     ...args: infer Args
+   ) => infer Result
+     ? (...args: Args) => Result | Promise<Awaited<Result>>
+-    : never;
++    : VirtualFileSystem[Method];
+ };
+ 
+ export type VfsFactory = () =>
+--- a/test/vfs-batch-collection.test.ts
++++ b/test/vfs-batch-collection.test.ts
+@@ -67,3 +67,16 @@
+     await expect(vfs.writeFile("/c", "12345678")).resolves.toMatchObject({ sizeBytes: 8 });
+   },
+ );
++
++it("reports advisory write headroom and restores it when read leases close", async () => {
++  const vfs = createTestFileSystem({ maxInFlightBufferedBytes: 2048 });
++  await vfs.writeFile("/body", new Uint8Array(1024));
++  const user = vfs.forCredentials({ uid: 1000, gid: 1000 });
++  expect(vfs.availableWriteBufferBytes).toBe(2048);
++  const snapshot = vfs.readFile("/body");
++  expect(vfs.availableWriteBufferBytes).toBe(1024);
++  expect(user.availableWriteBufferBytes).toBe(1024);
++  await snapshot.stream.cancel();
++  expect(vfs.availableWriteBufferBytes).toBe(2048);
++  expect(user.availableWriteBufferBytes).toBe(2048);
++});
+--- /dev/null
++++ b/src/shell/commands/git-object-writes.ts
+@@ -0,0 +1,69 @@
++import { dirname } from "../../core/path.js";
++import type { WriteFilesEntry } from "../../vfs/types.js";
++import type { ShellCommandContext } from "../types.js";
++
++/** One add batch: objects become durable before the engine publishes its index. */
++export class GitObjectWrites {
++  private readonly pending = new Map<string, WriteFilesEntry>();
++  private held = 0;
++  private failure: unknown;
++  private flushing: Promise<void> | undefined;
++  constructor(
++    private readonly context: ShellCommandContext,
++    private readonly prefix: string,
++    private readonly capacity: number,
++    private readonly release: () => void,
++    private readonly mkdir: (path: string) => void,
++  ) {}
++  matches(path: string): boolean {
++    return (
++      path.startsWith(this.prefix) &&
++      /^[a-f0-9]{2}\/[a-f0-9]{38}$/u.test(path.slice(this.prefix.length))
++    );
++  }
++  async retain(path: string, body: Uint8Array, mode: number): Promise<boolean> {
++    if (this.flushing !== undefined) await this.flushing;
++    if (this.held + body.byteLength > this.capacity) return false;
++    const previous = this.pending.get(path);
++    this.held -= previous?.body instanceof Uint8Array ? previous.body.byteLength : 0;
++    this.pending.set(path, mode === 0o100644 ? { path, body } : { path, body, mode });
++    this.held += body.byteLength;
++    return true;
++  }
++  async beforeRead(path: string): Promise<void> {
++    if (this.pending.has(path) || this.flushing !== undefined) await this.flush();
++  }
++  async flush(): Promise<void> {
++    if (this.failure !== undefined) throw this.failure;
++    if (this.flushing !== undefined) return this.flushing;
++    if (this.pending.size === 0) return;
++    const entries = [...this.pending.values()];
++    this.pending.clear();
++    this.held = 0;
++    const work = this.commit(entries);
++    this.flushing = work;
++    try {
++      await work;
++    } catch (error) {
++      this.failure = error;
++      throw error;
++    } finally {
++      this.flushing = undefined;
++    }
++  }
++  private async commit(entries: WriteFilesEntry[]): Promise<void> {
++    for (const path of new Set(entries.map((entry) => dirname(entry.path)))) this.mkdir(path);
++    const writes = entries.map((entry) =>
++      entry.mode === undefined || this.context.fileSystem.inspectWriteTarget(entry.path) === null
++        ? entry
++        : { path: entry.path, body: entry.body },
++    );
++    const write = this.context.fileSystem.writeFiles;
++    if (write === undefined) throw new Error("Git object batch lost its writer");
++    await write.call(this.context.fileSystem, writes);
++  }
++  close(): void {
++    this.pending.clear();
++    this.release();
++  }
++}
+--- /dev/null
++++ b/src/shell/batch-writes.ts
+@@ -0,0 +1,14 @@
++import { VfsError } from "../core/errors.js";
++import type { WriteFilesEntry, WriteResult } from "../vfs/types.js";
++import type { ShellFileSystem } from "./types.js";
++
++/** Validate the entire namespace boundary before delegating an atomic write. */
++export function writeCheckedBatch(
++  fs: ShellFileSystem,
++  entries: readonly WriteFilesEntry[],
++  checkPath: (path: string) => void,
++): Promise<WriteResult[]> {
++  for (const entry of entries) checkPath(entry.path);
++  if (fs.writeFiles === undefined) throw new VfsError("ENOTSUP", "batch writes are unavailable");
++  return fs.writeFiles(entries);
++}
+--- /dev/null
++++ b/test/git-object-writes.test.ts
+@@ -0,0 +1,144 @@
++import * as git from "isomorphic-git";
++import { expect, it, vi } from "vitest";
++import { VfsError } from "../src/core/errors.js";
++import { createFsAdapter } from "../src/fs/index.js";
++import { defineApplet } from "../src/shell/commands/applet.js";
++import { gitCommand } from "../src/shell/commands/git.js";
++import { GitFileSystem } from "../src/shell/commands/git-fs.js";
++import { Shell } from "../src/shell/shell.js";
++import { createTestFileSystem } from "./helpers/node-sql.js";
++
++async function fixture() {
++  const vfs = createTestFileSystem();
++  const shell = new Shell({ fileSystem: vfs, commands: [gitCommand] });
++  const run = (script: string, umask = 0o022) => shell.executeText({ script, cwd: "/repo", umask });
++  expect((await shell.executeText({ script: "git init /repo" })).exitCode).toBe(0);
++  return { vfs, shell, run, fs: createFsAdapter(vfs) };
++}
++
++it("persists every batched blob before publishing the index", async () => {
++  const { vfs, run, fs } = await fixture();
++  for (let n = 0; n < 100; n++) await vfs.writeFile(`/repo/f${n}`, `body ${n}\n`);
++  const batch = vi.spyOn(vfs, "writeFiles");
++  const write = vfs.writeFile.bind(vfs);
++  const observe = vi.spyOn(vfs, "writeFile").mockImplementation(async (path, body, options) => {
++    if (path === "/repo/.git/index") {
++      expect(batch).toHaveBeenCalled();
++      for (const [entries] of batch.mock.calls)
++        for (const entry of entries) expect(vfs.stat(entry.path).kind).toBe("file");
++    }
++    return write(path, body, options);
++  });
++  expect((await run("git add -A")).exitCode).toBe(0);
++  observe.mockRestore();
++  expect(await git.listFiles({ fs, dir: "/repo" })).toHaveLength(100);
++  await git.walk({
++    fs,
++    dir: "/repo",
++    trees: [git.STAGE()],
++    map: async (path, [entry]) => {
++      if (entry == null || (await entry.type()) !== "blob") return;
++      const { blob } = await git.readBlob({ fs, dir: "/repo", oid: await entry.oid() });
++      expect(new TextDecoder().decode(blob)).toBe(`body ${Number(path.slice(1))}\n`);
++    },
++  });
++});
++
++it("does not publish an index after a retriable-looking object batch failure", async () => {
++  const { vfs, run, fs } = await fixture();
++  await vfs.writeFile("/repo/seed", "seed");
++  expect((await run("git add seed")).exitCode).toBe(0);
++  const token = vfs.getMutationToken("/repo/.git/index");
++  for (let n = 0; n < 32; n++) await vfs.writeFile(`/repo/new${n}`, `new ${n}`);
++  const batch = vi
++    .spyOn(vfs, "writeFiles")
++    .mockRejectedValueOnce(new VfsError("ENOENT", "injected parent disappearance"));
++  expect((await run("git add -A")).exitCode).toBe(1);
++  expect(vfs.getMutationToken("/repo/.git/index")).toBe(token);
++  expect(await git.listFiles({ fs, dir: "/repo" })).toEqual(["seed"]);
++  batch.mockRestore();
++  expect((await run("git add -A")).exitCode).toBe(0);
++  expect(await git.listFiles({ fs, dir: "/repo" })).toHaveLength(33);
++});
++
++it.each([0o077, 0o002])("preserves object and directory creation umask %i", async (umask) => {
++  const { vfs, run, fs } = await fixture();
++  await vfs.writeFile("/repo/new", "new content");
++  for (let n = 0; n < 31; n++) await vfs.writeFile(`/repo/f${n}`, `mode ${n}`);
++  const batch = vi.spyOn(vfs, "writeFiles");
++  expect((await run("git add -A", umask)).exitCode).toBe(0);
++  expect(batch).toHaveBeenCalled();
++  const { oid } = await git.hashBlob({ object: "new content" });
++  expect(vfs.stat(`/repo/.git/objects/${oid.slice(0, 2)}`).mode & 0o777).toBe(0o777 & ~umask);
++  expect(vfs.stat(`/repo/.git/objects/${oid.slice(0, 2)}/${oid.slice(2)}`).mode & 0o777).toBe(
++    0o666 & ~umask,
++  );
++  expect(await git.listFiles({ fs, dir: "/repo" })).toHaveLength(32);
++});
++
++it("falls back to individual writes when batching would consume read buffer headroom", async () => {
++  const { vfs, fs } = await fixture();
++  for (let n = 0; n < 100; n++) await vfs.writeFile(`/repo/f${n}`, `${n}`.padEnd(256, "x"));
++  const batch = vi.spyOn(vfs, "writeFiles");
++  const shell = new Shell({
++    fileSystem: vfs,
++    commands: [gitCommand],
++    limits: { maxBufferedBytes: 32 * 1024 },
++  });
++  expect((await shell.executeText({ script: "git add -A", cwd: "/repo" })).exitCode).toBe(0);
++  expect(batch).not.toHaveBeenCalled();
++  expect(await git.listFiles({ fs, dir: "/repo" })).toHaveLength(100);
++});
++
++it("preserves Git add under a small backend in-flight buffer budget", async () => {
++  const vfs = createTestFileSystem({ maxInFlightBufferedBytes: 8192 });
++  const shell = new Shell({ fileSystem: vfs, commands: [gitCommand] });
++  expect((await shell.executeText({ script: "git init /repo" })).exitCode).toBe(0);
++  for (let n = 0; n < 100; n++) {
++    let seed = n + 1;
++    const body = Uint8Array.from({ length: 64 }, () => {
++      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
++      return seed >>> 24;
++    });
++    await vfs.writeFile(`/repo/f${n}`, body);
++  }
++  const result = await shell.executeText({ script: "git add -A", cwd: "/repo" });
++  expect(result.exitCode, result.stderr).toBe(0);
++  expect(await git.listFiles({ fs: createFsAdapter(vfs), dir: "/repo" })).toHaveLength(100);
++});
++
++it("keeps small staging operations on the individual-write path", async () => {
++  const { vfs, run, fs } = await fixture();
++  await vfs.writeFile("/repo/one", "one");
++  const batch = vi.spyOn(vfs, "writeFiles");
++  expect((await run("git add one")).exitCode).toBe(0);
++  expect(batch).not.toHaveBeenCalled();
++  expect(await git.listFiles({ fs, dir: "/repo" })).toEqual(["one"]);
++});
++
++it.each([0o022, 0o077])(
++  "preserves existing loose-object permissions for umask %i",
++  async (umask) => {
++    const vfs = createTestFileSystem();
++    const path = `/repo/.git/objects/aa/${"b".repeat(38)}`;
++    vfs.mkdir("/repo/.git/objects/aa", true);
++    await vfs.writeFile(path, "old", { mode: 0o640 });
++    const probe = defineApplet(
++      { name: "probe", usage: "", summary: "checks deferred Git writes" },
++      async (context) => {
++        const fs = new GitFileSystem(context);
++        fs.beginObjectWrites("/repo/.git", 256, 32);
++        try {
++          await fs.promises.writeFile(path, "new");
++          await fs.promises.writeFile("/repo/.git/index", "published");
++        } finally {
++          fs.endObjectWrites();
++        }
++        return 0;
++      },
++    );
++    const shell = new Shell({ fileSystem: vfs, commands: [probe] });
++    expect((await shell.executeText({ script: "probe", umask })).exitCode).toBe(0);
++    expect(vfs.stat(path).mode & 0o777).toBe(0o640);
++  },
++);
+--- /dev/null
++++ b/test/shell-batch-writes.test.ts
+@@ -0,0 +1,36 @@
++import { expect, it } from "vitest";
++import { defineApplet } from "../src/shell/commands/applet.js";
++import { Shell } from "../src/shell/shell.js";
++import { createTestFileSystem } from "./helpers/node-sql.js";
++
++it.each(["root", "device", "mutations"] as const)(
++  "refuses an entire scoped write batch at the %s boundary",
++  async (boundary) => {
++    const vfs = createTestFileSystem();
++    vfs.mkdir("/repo");
++    const second =
++      boundary === "root" ? "/outside" : boundary === "device" ? "/dev/null" : "/repo/b";
++    const probe = defineApplet(
++      { name: "probe", usage: "", summary: "checks scoped batches" },
++      async (context) => {
++        if (context.fileSystem.writeFiles === undefined)
++          throw new Error("missing batch capability");
++        await context.fileSystem.writeFiles([
++          { path: "/repo/a", body: "a" },
++          { path: second, body: "b" },
++        ]);
++        return 0;
++      },
++    );
++    const shell = new Shell({
++      fileSystem: vfs,
++      commands: [probe],
++      ...(boundary === "root" ? { policy: { writeRoots: ["/repo"] } } : {}),
++      ...(boundary === "mutations" ? { limits: { maxMutations: 1 } } : {}),
++    });
++    const result = await shell.executeText({ script: "probe" });
++    expect(result.exitCode).toBe(boundary === "root" ? 126 : 1);
++    expect(() => vfs.stat("/repo/a")).toThrow(/no such/);
++    expect(() => vfs.stat(second)).toThrow(/no such/);
++  },
++);

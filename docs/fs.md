@@ -61,8 +61,8 @@ const fs = createFsAdapter(fileSystem, { metadataCache });
 ```
 
 Wire the cache to **all** committed mutations of the filesystem before reading.
-When composing another observer, clear the cache first and then call that
-observer. Independent wrappers/instances writing the same SQLite database must
+When composing another observer, deliver the event to the cache first and
+then call that observer. Independent wrappers/instances writing the same SQLite database must
 also deliver their events to this cache. If complete delivery cannot be
 established, leave metadata caching disabled. External SQL writes are outside
 this contract. `clear()` permits explicit invalidation at a host boundary.
@@ -72,8 +72,12 @@ The bounded cache holds metadata only, for exactly one VFS/credential view.
 subsequent `lstat` and non-link `stat` calls reuse it. Opaque listings do not
 prime the cache because direct opaque stats additionally fetch object metadata.
 Following a link does not cache its target under the link's name. Trailing-slash
-assertions still go through the VFS. Every committed mutation clears the cache,
+assertions still go through the VFS. Existing-file content overwrites invalidate only the affected paths, including
+hard-link aliases. Namespace and metadata changes still clear the cache,
 including ancestor permission changes, subtree moves/removals and link repoints.
+If the cache has evicted entries since its last clear, content writes also clear
+it: preserving a tail of an oversized working set would make the next sequential
+scan evict entries it has yet to visit.
 Rolled-back changes are not announced and do not invalidate committed metadata.
 Errors and file bytes are never cached. Cache eviction changes only cost.
 
@@ -154,3 +158,20 @@ opaque descriptor truncate remain unsupported; streaming opaque append replaces
 the object and therefore costs O(file size). These are storage model limits,
 not a claim of complete POSIX compliance. The shell preserves physical dot
 traversal for file operands; `cd` retains Bash's logical-directory behavior.
+
+## Optional bulk-operation eligibility
+
+The underlying `VirtualFileSystem` can expose
+`canUseBulkOperation(operation, path): boolean`. `"copy-source"` means recursive
+copy of that path sees the same bytes as individual reads, including descendants;
+`"write-target"` means `writeFiles` can replace `writeFile` for that target without
+bypassing overlays. This read-only hint neither authorizes nor reserves an
+operation. Missing methods and false results select individual I/O.
+
+SQL implementations report eligibility. The collaborative wrapper refuses open
+documents (and open descendants for copy), including through resolved aliases.
+Wrappers that change read/write behavior must override or omit the hint rather
+than blindly forwarding it. Callers must still enforce permissions, modes,
+budgets and quotas, and hosts must serialize changes to overlays and repositories
+with the operation. These hints are an optional VFS extension, not a new method
+on `fs.promises`.

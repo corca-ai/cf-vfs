@@ -7,6 +7,8 @@ import type { FunctionDefinitionNode } from "./parser.js";
 
 export type ShellFileSystem = Pick<
   VirtualFileSystem,
+  | "canUseBulkOperation"
+  | "availableWriteBufferBytes"
   | "getMutationToken"
   | "stat"
   | "list"
@@ -30,6 +32,10 @@ export type ShellFileSystem = Pick<
   | "symlink"
   | "realpath"
 > & {
+  /** Optional atomic writes through the same roots and mutation budget. */
+  writeFiles?: (
+    entries: Parameters<VirtualFileSystem["writeFiles"]>[0],
+  ) => ReturnType<VirtualFileSystem["writeFiles"]>;
   inspectWriteTarget(path: string, follow?: boolean): VfsStat | null;
   /**
    * Enforces the declared roots without reading or writing anything.
@@ -399,6 +405,8 @@ export interface ShellBudget {
   checkExpansionOutput(characters: number, fields?: number): void;
   expansionOutput(characters: number, fields?: number): void;
   buffered(bytes: number): () => void;
+  /** Available space for optional optimizations; absent means use the normal path. */
+  remainingBufferedBytes?(): number;
   checkDeadline(): void;
   remainingDeadlineMs(): number;
 }

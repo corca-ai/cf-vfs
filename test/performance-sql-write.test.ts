@@ -6,6 +6,26 @@ import { readAllBytes } from "../src/vfs/streams.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 import { meteredFileSystem } from "./helpers/performance.js";
 
+it.each([3, 100, 1000])(
+  "keeps string append cost constant across %i stored chunks",
+  async (chunks) => {
+    const { fileSystem, meter } = meteredFileSystem({ chunkBytes: 4 });
+    await fileSystem.writeFile("/body", "abcd".repeat(chunks));
+    const snapshot = fileSystem.readFile("/body").stream;
+    meter.reset();
+    await fileSystem.appendFile("/body", "e");
+    expect(meter).toMatchObject({ statements: 8, rows: 4 });
+    expect(new TextDecoder().decode(await readAllBytes(snapshot, chunks * 4))).toBe(
+      "abcd".repeat(chunks),
+    );
+    expect(
+      new TextDecoder().decode(
+        await readAllBytes(fileSystem.readFile("/body").stream, chunks * 4 + 1),
+      ),
+    ).toBe("abcd".repeat(chunks) + "e");
+  },
+);
+
 it("batches inline chunk writes at the bound-parameter ceiling", async () => {
   async function statements(chunks: number, append: boolean): Promise<number> {
     const { fileSystem, meter } = meteredFileSystem({ chunkBytes: 4 });
@@ -201,7 +221,7 @@ it("skips subtree summaries without slowing a rejected directory removal", async
       true,
     ),
   }).toEqual({
-    file: 11,
+    file: 9,
     emptyDirectory: 12,
     recursiveDirectory: 12,
     rejectedDirectory: 4,
@@ -244,5 +264,19 @@ it("reads a catch-up page with one indexed query", async () => {
   expect(page.more).toBe(true);
   // One statement however many entries the page carries: the change row
   // records presence directly, without a lookup per path.
+  expect(meter.statements).toBe(1);
+});
+
+it("reads a small inline snapshot with one statement and leaves empty bodies empty", async () => {
+  const { fileSystem, meter } = meteredFileSystem();
+  await fileSystem.writeFile("/small", Uint8Array.of(1, 2, 3));
+  meter.reset();
+  const snapshot = fileSystem.readFile("/small");
+  expect(meter.statements).toBe(1);
+  await fileSystem.writeFile("/small", Uint8Array.of(9));
+  expect([...(await readAllBytes(snapshot.stream, 10))]).toEqual([1, 2, 3]);
+  await fileSystem.writeFile("/empty", "");
+  meter.reset();
+  expect([...(await readAllBytes(fileSystem.readFile("/empty").stream, 10))]).toEqual([]);
   expect(meter.statements).toBe(1);
 });

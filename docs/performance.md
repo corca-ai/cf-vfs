@@ -35,6 +35,20 @@ in the suite.
 
 ## Structural guards versus wall-clock benchmarks
 
+The [extension API removal evaluation](../bench/extension-api-evaluation-2026-10-08.md)
+compares the current aggregate, digest, range, pagination, batch, and unchanged-write
+paths with simpler replacements after the POSIX improvements. Large-file and
+large-directory benefits remain. Batch writes and unchanged-write suppression
+also preserve contracts independent of latency, so no public API was removed.
+Reproduce the Node comparisons with `npm run build` followed by
+`node bench/extension-api-evaluation.mjs`.
+
+The [string-write follow-up](../bench/extension-write-optimization-2026-10-08.md)
+removes per-string asynchronous collection from `writeFiles`, shares the owned
+UTF-8 buffer across chunk views, and hashes contiguous views without assembling
+another buffer. Byte and stream inputs still snapshot their caller-owned data,
+and batch publication still revalidates every path before committing.
+
 The [September SQL follow-up](../bench/sql-optimizations-2026-09-05.md) measures
 batch usage aggregation, synchronous string append, cursor seeking and find
 filtering, and indexed maintenance scheduling. Its workerd cases run with
@@ -373,6 +387,14 @@ deployment.
 
 ## POSIX performance experiments
 
+The [current Git filesystem comparison](../bench/git-current-comparison-2026-10-08.md)
+runs the same isomorphic-git engine on native APFS and the current Node VFS.
+Trace-free timing uses 1,000 and 10,000 files; separate instrumented diagnostics
+also include 100 files. It records seven matched trials after two warmups,
+uncached and optional cached adapters, a larger-cache follow-up, and byte-for-byte
+clone verification. These are local in-memory SQLite measurements; they do not
+include Durable Object RPC or R2 network latency.
+
 The [POSIX experiment report](../bench/posix-evaluation-2026-10-08.md) compares
 native Linux files with the VFS, records all ten independent trials, and keeps
 their raw measurements and rejected prototypes. Run `npm run bench:posix` for
@@ -421,3 +443,57 @@ ratios and returned rows/BLOB bytes. These are Node adapter measurements; the
 workerd benchmark separately guards statements and billed rows under
 `npm run bench:check`. Truncate still deletes every removed storage row, and
 partial boundary writes still read the bytes they must preserve.
+
+
+The [public Cloudflare evaluation](../bench/public-benchmark-evaluation-2026-10-08.md)
+records the deployed file/Git workload at `https://vfs.borca.ai/benchmarks/`.
+Its saved result is refreshed only on an explicit request once the VFS result
+file is at least ten minutes old. Durable alarms and VFS checkpoints let a run
+continue without an open browser. The report distinguishes local metadata
+reuse gains, rejected checkout candidates, production RPC timings and the
+Git compression concurrency needed to fit a real isolate.
+
+
+For iterative production optimization, use the authenticated public-suite
+workflow in [the demo README](../demo/README.md#repeated-production-performance-evaluation).
+Capture a baseline, change one measured bottleneck, run correctness checks,
+deploy, and compare raw CF samples using `npm run bench:public`. Keep an
+implementation change only when representative repeated production measurements
+support it; a single noisy three-sample ratio is insufficient. Results identify
+the deployed Worker version, and deployment changes interrupt in-flight runs
+instead of combining samples from different implementations. Public requests
+continue to observe the ten-minute VFS mtime cache; authenticated evaluation can
+request a fresh run immediately.
+
+The [ten-round production evaluation](../bench/cf-optimization-2026-10-08/report.md)
+archives every candidate and actual CF run, including rejected optimizations.
+Worker and Durable Object source fingerprints prevent measurements from mixing
+implementations while deployment propagates. Smaller SQL call counts can have
+higher billed row costs; the report records both. Chunk-size reconfiguration
+regressions have dedicated byte, snapshot and hard-link tests, and POSIX
+comparison remains 46/46.
+
+The [two-hour Git and filesystem evaluation](../bench/cf-improvement-2026-10-09/report.md)
+records selected-path staging, bounded removal staging, command-local missing
+ignore probes, default-mode Git writes and exact single-file removal. It also
+compares unchanged local pull on CF and records the remaining local checkout
+gap against the actual filesystem. The public suite separates shell Git from
+direct-engine Git so applet improvements are measured directly.
+
+The [whole-worktree Git add evaluation](../bench/git-add-optimization-2026-10-09/report.md)
+compares new-blob inspection, small-body staging batches, overlapping config
+reads and bounded body/hash inspection without adding filesystem APIs. It
+records ten actual CF evaluations, rejected probes, unchanged bundle budgets,
+exact logical I/O accounting and remaining timing outliers.
+
+The [Git add follow-up](../bench/git-add-next-2026-10-09/report.md) separates actual
+CF inspection/staging wall times, index serialization and command-local body/hash
+reuse. Larger compression batches and body/hash caches are rejected. Deletion-only
+staging reduces index serialization for up to 1,024 paths without retaining bodies;
+the report records alternating CF controls and the small-buffer cache regression.
+
+The [Git API experiments](../bench/git-api-experiments-2026-10-09/report.md)
+compare bounded one-serialization engine staging, loose-object `writeFiles`
+and multi-path metadata queries. Only object batching is retained, with advisory
+backend buffer headroom and small-set fallback. The new capacity property is
+optional; it does not alter POSIX operations, atomic write semantics or quotas.

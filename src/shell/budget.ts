@@ -210,6 +210,10 @@ export class ExecutionBudget implements ShellBudget {
     this.expansionFields += fields;
   }
 
+  remainingBufferedBytes(): number {
+    return this.limits.maxBufferedBytes - this.bufferedBytes;
+  }
+
   buffered(bytes: number): () => void {
     this.checkDeadline();
     this.bufferedBytes += bytes;

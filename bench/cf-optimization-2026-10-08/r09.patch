@@ -1,0 +1,108 @@
+--- /tmp/cf-vfs-ten-rounds/r05-src/vfs/sql-read-base.ts	2026-10-08 20:47:17
++++ /tmp/cf-vfs-ten-rounds/r09-src/vfs/sql-read-base.ts	2026-10-08 21:24:36
+@@ -250,7 +250,7 @@
+       .toArray();
+   }
+ 
+-  private storedChunkBytes(entry: InlineEntryRow, path: string): number {
++  protected storedChunkBytes(entry: InlineEntryRow, path: string): number {
+     const cached = this.lastInlineChunkLayout;
+     const chunkBytes =
+       cached !== undefined && cached.id === entry.id && cached.revision === entry.revision
+--- /tmp/cf-vfs-ten-rounds/r05-src/vfs/sql-write-base.ts	2026-10-08 17:49:09
++++ /tmp/cf-vfs-ten-rounds/r09-src/vfs/sql-write-base.ts	2026-10-08 21:24:36
+@@ -21,6 +21,18 @@
+   WriteFilesOptions,
+   WriteResult,
+ } from "./types.js";
++
++function matchesChunkTail(
++  sizeBytes: number,
++  width: number,
++  index: number,
++  tailBytes: number,
++): boolean {
++  const expectedIndex = Math.floor((sizeBytes - 1) / width);
++  return (
++    sizeBytes > 0 && index === expectedIndex && tailBytes === sizeBytes - expectedIndex * width
++  );
++}
+ 
+ export abstract class SqlWrite extends SqlWritePlan {
+   /** Uses the same write planner as publication without changing storage. Returns the effective mode. */
+@@ -302,16 +314,17 @@
+     }
+     const index = integerColumn(lastChunk, "chunk_index");
+     const tail = new Uint8Array(blobColumn(lastChunk, "body"));
+-    const expectedIndex = Math.floor((current.sizeBytes - 1) / this.chunkBytes);
+-    const expectedBytes = current.sizeBytes - expectedIndex * this.chunkBytes;
+-    if (current.sizeBytes === 0 || index !== expectedIndex || tail.byteLength !== expectedBytes) {
+-      throw new VfsError("EIO", "inline file chunks do not match its size", path);
++    let width = this.chunkBytes;
++    if (!matchesChunkTail(current.sizeBytes, width, index, tail.byteLength)) {
++      width = this.storedChunkBytes(current, path);
++      if (!matchesChunkTail(current.sizeBytes, width, index, tail.byteLength))
++        throw new VfsError("EIO", "inline file chunks do not match its size", path);
+     }
+-    return tail.byteLength === this.chunkBytes
+-      ? { firstChunkIndex: index + 1, chunks: suffixChunks }
+-      : {
+-          firstChunkIndex: index,
+-          chunks: rechunk([tail, ...suffixChunks], this.chunkBytes),
+-        };
++    return tail.byteLength === width
++      ? {
++          firstChunkIndex: index + 1,
++          chunks: width === this.chunkBytes ? suffixChunks : rechunk(suffixChunks, width),
++        }
++      : { firstChunkIndex: index, chunks: rechunk([tail, ...suffixChunks], width) };
+   }
+ }
+--- /tmp/cf-vfs-ten-rounds/r05-src/vfs/sql-write-plan-base.ts	2026-10-08 16:49:14
++++ /tmp/cf-vfs-ten-rounds/r09-src/vfs/sql-write-plan-base.ts	2026-10-08 21:24:36
+@@ -294,16 +294,6 @@
+     const unchanged = this.unchangedInlineWrite(plan, current, chunks, sizeBytes, digest);
+     if (unchanged !== null) return unchanged;
+     const mutation = this.inlineMutationPlan(plan, state, sizeBytes, posix, deferCapacity);
+-    if (
+-      current?.contentClass === "inline" &&
+-      chunks.length < Math.ceil(current.sizeBytes / this.chunkBytes)
+-    ) {
+-      this.sql.exec(
+-        "DELETE FROM vfs_inline_chunks WHERE entry_id = ? AND chunk_index >= ?",
+-        current.id,
+-        chunks.length,
+-      );
+-    }
+     const written = this.writeInlineEntry(plan, current, mutation, sizeBytes, digest, now);
+     if (written === undefined) {
+       this.planInlineWrite(
+@@ -318,6 +308,17 @@
+       );
+       throw new VfsError("EREVISION", "path changed after it was read", plan.path);
+     }
++    if (current?.contentClass === "inline") {
++      // Existing chunks may have been written with another chunk width.
++      // The UPDATE returns their actual last index, avoiding a second lookup.
++      const lastChunk = nullableIntegerColumn(written, "last_chunk_index");
++      if (lastChunk !== null && lastChunk >= chunks.length)
++        this.sql.exec(
++          "DELETE FROM vfs_inline_chunks WHERE entry_id = ? AND chunk_index >= ?",
++          current.id,
++          chunks.length,
++        );
++    }
+     return this.finishInlineWrite(plan, current, mutation, written, chunks, sizeBytes, now);
+   }
+ 
+@@ -400,7 +401,9 @@
+              size_bytes = ?, mode = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,
+              body_digest = ?, body_digest_revision = revision + 1, mutation_version = ?
+            WHERE id = ? AND mutation_version = ?
+-           RETURNING id, revision`,
++           RETURNING id, revision,
++             (SELECT MAX(chunk_index) FROM vfs_inline_chunks
++              WHERE entry_id = vfs_entries.id) AS last_chunk_index`,
+           sizeBytes,
+           mutation.mode,
+           now,

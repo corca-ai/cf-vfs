@@ -1,0 +1,91 @@
+- main
+  - navigation "Main navigation" [ref=e1]
+    - link "File & Git benchmarks ↗" [ref=e6]
+  - region "Virtual Filesystem and Container based on Durable Object SQL." [ref=e2]
+    - heading "Virtual Filesystem and Container based on Durable Object SQL." [level=1, ref=e7]
+      - StaticText "Virtual Filesystem and Container"
+      - LineBreak "\n"
+      - emphasis
+        - StaticText "based on Durable Object SQL."
+  - region "Interactive cf-vfs terminal" [ref=e3]
+    - application "Terminal input"
+      - generic
+        - generic
+          - textbox "Terminal input" [ref=e39]
+    - generic "Example commands"
+      - StaticText "TRY"
+      - generic
+        - button "identity" [ref=e13]
+        - button "write a file" [ref=e14]
+        - button "pipeline" [ref=e15]
+        - button "make a tree" [ref=e16]
+        - button "brace range" [ref=e17]
+        - button "find and edit" [ref=e18]
+        - button "what is here" [ref=e19]
+        - button "applet directory" [ref=e20]
+        - button "a device" [ref=e21]
+        - button "symlink" [ref=e22]
+        - button "heredoc" [ref=e23]
+        - button "arithmetic" [ref=e24]
+        - button "a loop" [ref=e25]
+        - button "fetch a page" [ref=e26]
+        - button "fetch some JSON" [ref=e27]
+        - button "query it" [ref=e28]
+        - button "shape it" [ref=e29]
+        - button "jq on a literal" [ref=e30]
+        - button "jq refuses the rest" [ref=e31]
+        - button "refused origin" [ref=e32]
+        - button "refused method" [ref=e33]
+        - button "disk usage" [ref=e34]
+  - region "Edit a file while the shell does" [ref=e4]
+    - heading "Edit a file while the shell does" [level=2, ref=e8]
+    - form
+      - LabelText
+        - StaticText "File to open"
+      - textbox "File to open" [ref=e11]: README.txt
+        - StaticText "README.txt"
+      - button "Open" [ref=e12]
+    - status
+      - StaticText "Open a file, then change it from the terminal — "
+      - code
+        - StaticText "sed -i"
+      - StaticText " lands here as an edit instead of overwriting what you typed."
+    - LabelText
+      - StaticText "File contents"
+    - textbox "File contents" [disabled, ref=e9]
+  - paragraph
+    - StaticText "Everyone visiting from the same country shares one workspace here, so what you write is what the next person finds — and can change. It holds fifty kilobytes; when it is full, deleting something makes room. A public whiteboard, not your own. Commands run one at a time across this workspace, and edits wait for the current command to finish. Ctrl-C cancels your running or waiting command."
+  - region "What this is" [ref=e5]
+    - list
+      - listitem [level=1]
+        - heading "A sandbox for an agent, without a container" [level=2, ref=e35]
+        - paragraph
+          - StaticText "Files and a shell inside one Durable Object. Nothing to build, boot, or clean up — and no machine underneath for anything to escape onto."
+      - listitem [level=1]
+        - heading "Ready the moment you name one" [level=2, ref=e36]
+        - paragraph
+          - StaticText "The filesystem is rows in SQLite, so there is no image to pull and nothing kept warm between uses. A workspace starts in milliseconds and costs nothing while idle."
+      - listitem [level=1]
+        - heading "The commands behave like the ones they are named after" [level=2, ref=e37]
+        - paragraph
+          - StaticText "Seventy-five of them — "
+          - code
+            - StaticText "grep"
+          - StaticText ", "
+          - code
+            - StaticText "sed"
+          - StaticText ", "
+          - code
+            - StaticText "jq"
+          - StaticText ", "
+          - code
+            - StaticText "find"
+          - StaticText " — answering to recordings from real GNU, Bash, and jq. Where this differs on purpose it says so rather than guessing."
+      - listitem [level=1]
+        - heading "A runaway command stops itself" [level=2, ref=e38]
+        - paragraph
+          - StaticText "Every run carries ceilings on time, output, memory in flight, and how much it may change. Try "
+          - code
+            - StaticText "while true; do :; done"
+          - StaticText " — it ends on its own instead of taking the object with it."
+    - link "View source" [ref=e10]

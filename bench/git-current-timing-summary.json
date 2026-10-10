@@ -1,0 +1,4998 @@
+{
+  "datasets": [
+    {
+      "label": "uncached",
+      "metadata": {
+        "node": "v24.18.0",
+        "variant": "fs",
+        "timingOnly": true,
+        "gitEngine": "1.43.1",
+        "nativeGit": "git version 2.50.1 (Apple Git-155)",
+        "cpu": "Apple M5 Max",
+        "platform": "darwin",
+        "arch": "arm64",
+        "osVersion": "Darwin Kernel Version 25.6.0: Fri Jul 31 19:19:08 PDT 2026; root:xnu-12377.161.14~5/RELEASE_ARM64_T6050",
+        "nativeVolume": "Filesystem   512-blocks       Used  Available Capacity  Mounted on\n/dev/disk3s5 3896808080 2560097648 1277943240    67%    /System/Volumes/Data",
+        "protocolSha256": "2ea524bea0f66bdc228a943193bef7d9947a793407ade454c5223a5e1e3be2a8",
+        "sourceCommit": "78d7da1e6ee7d913319ec12736733a66648c623b",
+        "counts": [
+          1000,
+          10000
+        ],
+        "trials": 7,
+        "warmups": 2,
+        "metadataCacheEntries": 0
+      },
+      "operations": [
+        {
+          "count": 1000,
+          "name": "populate",
+          "nativeMs": {
+            "median": 73.12075000000004,
+            "p10": 72.4964171999989,
+            "p90": 74.33609180000022
+          },
+          "vfsMs": {
+            "median": 21.924082999999882,
+            "p10": 21.375408000000608,
+            "p90": 22.766117199999826
+          },
+          "ratio": {
+            "median": 0.2977115028939551,
+            "p10": 0.2916809621559395,
+            "p90": 0.31301619276718606,
+            "ci95": [
+              0.29481833321086026,
+              0.30724293719634466
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              74.59291699999994,
+              73.12075000000004,
+              73.6420420000004,
+              74.1648750000004,
+              72.9601249999996,
+              72.71158399999877,
+              72.17366699999911
+            ],
+            "vfs": [
+              22.337167000000136,
+              22.46583399999963,
+              21.924082999999882,
+              21.283457999999882,
+              21.54437500000131,
+              21.43670800000109,
+              23.216542000000118
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "add-all",
+          "nativeMs": {
+            "median": 137.12162500000022,
+            "p10": 132.41322540000039,
+            "p90": 140.62710000000007
+          },
+          "vfsMs": {
+            "median": 125.45266600000014,
+            "p10": 123.14245800000026,
+            "p90": 127.14332520000062
+          },
+          "ratio": {
+            "median": 0.9177963795104969,
+            "p10": 0.8790807945634307,
+            "p90": 0.9481061705053521,
+            "ci95": [
+              0.8837463194773095,
+              0.9410709108210846
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              137.12162500000022,
+              143.85412500000075,
+              129.82087500000034,
+              137.1153749999994,
+              134.1414590000004,
+              138.4757499999996,
+              137.8267079999987
+            ],
+            "vfs": [
+              125.1306669999999,
+              125.45266600000014,
+              124.45395800000006,
+              121.17520800000057,
+              126.23662499999955,
+              127.09254200000032,
+              127.21950000000106
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "commit-initial",
+          "nativeMs": {
+            "median": 4.344082999999955,
+            "p10": 4.2297835999997915,
+            "p90": 4.5798668000001275
+          },
+          "vfsMs": {
+            "median": 4.27533399999993,
+            "p10": 4.229750400000194,
+            "p90": 4.535949999999502
+          },
+          "ratio": {
+            "median": 0.9738151872328178,
+            "p10": 0.9515151311625102,
+            "p90": 1.0503045339041241,
+            "ci95": [
+              0.9531218213439615,
+              1.0137530045650316
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              4.605917000000318,
+              4.302541000000019,
+              4.5625,
+              4.344082999999955,
+              4.238084000000526,
+              4.217332999998689,
+              4.402541000001293
+            ],
+            "vfs": [
+              4.389999999999418,
+              4.754874999999629,
+              4.330291999999645,
+              4.230333999999857,
+              4.259374999999636,
+              4.27533399999993,
+              4.2288750000006985
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "status-clean-0",
+          "nativeMs": {
+            "median": 21.345542000000023,
+            "p10": 20.904675199999293,
+            "p90": 21.54768320000112
+          },
+          "vfsMs": {
+            "median": 19.853540999999495,
+            "p10": 19.669075000000156,
+            "p90": 20.23204980000046
+          },
+          "ratio": {
+            "median": 0.9301024541798693,
+            "p10": 0.9126090679179828,
+            "p90": 0.9620608431026025,
+            "ci95": [
+              0.9159111595497794,
+              0.9588351476766185
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              20.832874999999603,
+              21.351957999999286,
+              21.345542000000023,
+              21.51600000000144,
+              21.08191699999952,
+              20.952541999999085,
+              21.59520800000064
+            ],
+            "vfs": [
+              19.908833999999842,
+              19.762375000000247,
+              19.853540999999495,
+              19.529125000000022,
+              20.214083000000755,
+              20.259000000000015,
+              19.77929199999926
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "status-clean-1",
+          "nativeMs": {
+            "median": 20.144874999999956,
+            "p10": 19.880442000000404,
+            "p90": 20.501550199999475
+          },
+          "vfsMs": {
+            "median": 20.524083999999675,
+            "p10": 19.89725819999985,
+            "p90": 20.851116399999956
+          },
+          "ratio": {
+            "median": 0.9916399173507635,
+            "p10": 0.9841239617975904,
+            "p90": 1.049119742846142,
+            "ci95": [
+              0.985781017164858,
+              1.0430295897486999
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              20.82012500000019,
+              20.145375000000058,
+              20.110207999999147,
+              20.289166999998997,
+              20.144874999999956,
+              19.624917000001005,
+              20.050792
+            ],
+            "vfs": [
+              20.524083999999675,
+              19.976958000000195,
+              20.975542000000132,
+              19.91662499999984,
+              20.619707999998354,
+              20.768165999999837,
+              19.868207999999868
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "status-clean-2",
+          "nativeMs": {
+            "median": 19.07483299999967,
+            "p10": 18.52303320000028,
+            "p90": 19.60670840000021
+          },
+          "vfsMs": {
+            "median": 20.026625000000422,
+            "p10": 19.825091600000086,
+            "p90": 20.311624999999548
+          },
+          "ratio": {
+            "median": 1.0413699558994962,
+            "p10": 1.024579921984752,
+            "p90": 1.0864206908260672,
+            "ci95": [
+              1.0264790683068086,
+              1.083887426929995
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              19.507249999999658,
+              18.625500000000102,
+              19.07483299999967,
+              19.56420799999978,
+              18.667874999999185,
+              19.670459000000847,
+              18.36933300000055
+            ],
+            "vfs": [
+              19.931166000000303,
+              19.76679200000035,
+              19.86395799999991,
+              20.082250000000386,
+              20.233874999999898,
+              20.428249999999025,
+              20.026625000000422
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "status-one-change",
+          "nativeMs": {
+            "median": 20.404375000000073,
+            "p10": 19.97936660000014,
+            "p90": 20.846349999999074
+          },
+          "vfsMs": {
+            "median": 20.42029100000036,
+            "p10": 20.07220899999993,
+            "p90": 20.741791800000282
+          },
+          "ratio": {
+            "median": 1.014126954668331,
+            "p10": 0.9779266512144745,
+            "p90": 1.0190942295825929,
+            "ci95": [
+              0.9872250077970021,
+              1.0147149814684464
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              20.853624999999738,
+              19.744666999999936,
+              20.404375000000073,
+              20.841499999998632,
+              20.27716700000019,
+              20.135833000000275,
+              20.51708399999916
+            ],
+            "vfs": [
+              20.102458999999726,
+              20.026834000000235,
+              20.704625000000306,
+              20.57524999999987,
+              20.79754200000025,
+              20.42029100000036,
+              20.34191699999974
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "diff-one-change",
+          "nativeMs": {
+            "median": 19.980084000000716,
+            "p10": 19.680625199999668,
+            "p90": 20.250450000000274
+          },
+          "vfsMs": {
+            "median": 21.15220799999952,
+            "p10": 20.73425840000018,
+            "p90": 22.054908199999954
+          },
+          "ratio": {
+            "median": 1.0586768284120494,
+            "p10": 1.0391256934439503,
+            "p90": 1.1067107912724679,
+            "ci95": [
+              1.0403110616048463,
+              1.072235343968087
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              20.536125000000084,
+              20.0600000000004,
+              19.74554199999966,
+              19.989000000001397,
+              19.980084000000716,
+              19.880333000000974,
+              19.58324999999968
+            ],
+            "vfs": [
+              21.36395799999991,
+              21.509041000000252,
+              22.873708999999508,
+              20.73554200000035,
+              21.131499999999505,
+              21.15220799999952,
+              20.732332999999926
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "add-one",
+          "nativeMs": {
+            "median": 1.4202499999992142,
+            "p10": 1.3955332000001364,
+            "p90": 1.4595504000005348
+          },
+          "vfsMs": {
+            "median": 1.2246250000007421,
+            "p10": 1.1443918000004487,
+            "p90": 1.3153245999998036
+          },
+          "ratio": {
+            "median": 0.8622601654648264,
+            "p10": 0.7841118951086109,
+            "p90": 0.9376139225254262,
+            "ci95": [
+              0.7890518220096997,
+              0.9026507847756035
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              1.4515839999999116,
+              1.4362499999997453,
+              1.391458000000057,
+              1.411167000000205,
+              1.4715000000014697,
+              1.4202499999992142,
+              1.3982500000001892
+            ],
+            "vfs": [
+              1.1453750000000582,
+              1.2454999999999927,
+              1.37762500000008,
+              1.273790999999619,
+              1.1429170000010345,
+              1.2246250000007421,
+              1.1511660000014672
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "commit-one",
+          "nativeMs": {
+            "median": 3.3326670000005834,
+            "p10": 3.267441800000961,
+            "p90": 3.510725199999797
+          },
+          "vfsMs": {
+            "median": 2.752542000000176,
+            "p10": 2.707458200000656,
+            "p90": 2.958800399999564
+          },
+          "ratio": {
+            "median": 0.8370914490412112,
+            "p10": 0.788062537714279,
+            "p90": 0.8873371712988498,
+            "ci95": [
+              0.8044964002664728,
+              0.8656476973052742
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              3.496791999999914,
+              3.3326670000005834,
+              3.2784160000001066,
+              3.374832999999853,
+              3.5316249999996217,
+              3.2626670000008744,
+              3.2706250000010186
+            ],
+            "vfs": [
+              2.8875839999991513,
+              3.065625000000182,
+              2.7443339999999807,
+              2.715041000000383,
+              2.696084000001065,
+              2.752542000000176,
+              2.8312089999999444
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "branch-create",
+          "nativeMs": {
+            "median": 0.4730409999992844,
+            "p10": 0.46158339999983583,
+            "p90": 0.4897420000001148
+          },
+          "vfsMs": {
+            "median": 0.22529200000008132,
+            "p10": 0.2138332000002265,
+            "p90": 0.24650859999983368
+          },
+          "ratio": {
+            "median": 0.4772653700260878,
+            "p10": 0.4545804545374907,
+            "p90": 0.5116931004344372,
+            "ci95": [
+              0.45938522788187425,
+              0.48821777929946736
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              0.46145800000022064,
+              0.48879200000010314,
+              0.4730409999992844,
+              0.47154199999931734,
+              0.48058299999865994,
+              0.4616669999995793,
+              0.49116700000013225
+            ],
+            "vfs": [
+              0.22529200000008132,
+              0.2383749999999054,
+              0.2587089999997261,
+              0.22450000000026193,
+              0.21500000000014552,
+              0.21208300000034797,
+              0.2344169999996666
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "checkout-old",
+          "nativeMs": {
+            "median": 16.439292000000023,
+            "p10": 16.061925200000406,
+            "p90": 16.828566400000273
+          },
+          "vfsMs": {
+            "median": 28.584541000000172,
+            "p10": 28.331508600000234,
+            "p90": 31.762275000000592
+          },
+          "ratio": {
+            "median": 1.744309536617369,
+            "p10": 1.6929616314326417,
+            "p90": 1.9320529425239046,
+            "ci95": [
+              1.7131622840532446,
+              1.8994963408399914
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              17.043541000000005,
+              15.792875000000095,
+              16.439292000000023,
+              16.266249999998763,
+              16.68525000000045,
+              16.440166000000318,
+              16.241292000000612
+            ],
+            "vfs": [
+              28.337625000000116,
+              28.77574999999979,
+              31.22637500000019,
+              28.373375000000124,
+              28.584541000000172,
+              32.56612500000119,
+              28.32233400000041
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "checkout-main",
+          "nativeMs": {
+            "median": 17.910874999999578,
+            "p10": 16.723825200000284,
+            "p90": 18.57268340000046
+          },
+          "vfsMs": {
+            "median": 28.037375000001703,
+            "p10": 27.874499999999717,
+            "p90": 30.3828504000001
+          },
+          "ratio": {
+            "median": 1.6539955207805705,
+            "p10": 1.5368706089322326,
+            "p90": 1.6771727780441925,
+            "ci95": [
+              1.5600647651217618,
+              1.6591379446240169
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              16.304625000000215,
+              17.00329200000033,
+              18.188208000000486,
+              17.910874999999578,
+              18.66570800000045,
+              18.510667000000467,
+              17.287834000000657
+            ],
+            "vfs": [
+              27.7867499999993,
+              27.932999999999993,
+              30.1635839999999,
+              27.942124999999578,
+              28.037375000001703,
+              30.711750000000393,
+              28.59399999999914
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "push",
+          "nativeMs": {
+            "median": 167.58554200000071,
+            "p10": 165.8616587999997,
+            "p90": 173.70585820000014
+          },
+          "vfsMs": {
+            "median": 132.1217919999999,
+            "p10": 129.6846672000007,
+            "p90": 134.64055020000015
+          },
+          "ratio": {
+            "median": 0.7786048553126118,
+            "p10": 0.7614977533784164,
+            "p90": 0.8131741325934106,
+            "ci95": [
+              0.7709043122586294,
+              0.8063666569069853
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              172.24762499999997,
+              175.8932080000004,
+              164.9438339999997,
+              167.58554200000071,
+              166.47354199999972,
+              167.71754099999998,
+              166.9817920000005
+            ],
+            "vfs": [
+              133.01966700000048,
+              131.46045800000047,
+              133.0052080000005,
+              129.1924170000002,
+              137.07187499999964,
+              132.1217919999999,
+              130.01283400000102
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "add-20-individually-existing",
+          "nativeMs": {
+            "median": 25.067166999999245,
+            "p10": 24.9707748000008,
+            "p90": 25.919274800000313
+          },
+          "vfsMs": {
+            "median": 21.73908399999982,
+            "p10": 21.514099599999827,
+            "p90": 22.078583399999296
+          },
+          "ratio": {
+            "median": 0.8681324000024332,
+            "p10": 0.8313696324929083,
+            "p90": 0.8832174076591798,
+            "ci95": [
+              0.8439940581143346,
+              0.882078497342737
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              26.539624999999887,
+              25.041207999999642,
+              25.12054100000023,
+              25.013458000001265,
+              25.067166999999245,
+              25.505708000000595,
+              24.906750000000102
+            ],
+            "vfs": [
+              21.561666999999943,
+              21.73908399999982,
+              21.495249999999942,
+              22.056832999999642,
+              22.11120899999878,
+              21.52666599999975,
+              22.040625000001455
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "add-20-bulk-existing",
+          "nativeMs": {
+            "median": 2.046542000000045,
+            "p10": 2.0103252000000795,
+            "p90": 2.092125399999895
+          },
+          "vfsMs": {
+            "median": 1.8227920000008453,
+            "p10": 1.8059499999995752,
+            "p90": 1.9297085999996852
+          },
+          "ratio": {
+            "median": 0.9081742243436267,
+            "p10": 0.8817665007322472,
+            "p90": 0.9380989983169568,
+            "ci95": [
+              0.8926350393105192,
+              0.9260948468192702
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              2.0949999999998,
+              2.0132919999996375,
+              2.046542000000045,
+              2.0180419999996957,
+              2.005875000000742,
+              2.090208999999959,
+              2.0607920000002196
+            ],
+            "vfs": [
+              1.9026249999997162,
+              1.8198750000001382,
+              1.8952919999992446,
+              1.8013750000000073,
+              1.8227920000008453,
+              1.808999999999287,
+              1.9703339999996388
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "clone",
+          "nativeMs": {
+            "median": 137.5828330000004,
+            "p10": 127.58855779999976,
+            "p90": 145.95115860000004
+          },
+          "vfsMs": {
+            "median": 127.65112500000032,
+            "p10": 123.34493380000022,
+            "p90": 131.34453319999994
+          },
+          "ratio": {
+            "median": 0.9399955443569032,
+            "p10": 0.8678889075096969,
+            "p90": 1.0146445217464022,
+            "ci95": [
+              0.900700698926704,
+              0.9931804598395848
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              138.28762499999993,
+              120.33270799999991,
+              146.33845800000017,
+              132.5706250000003,
+              145.69295899999997,
+              137.5828330000004,
+              132.42579099999966
+            ],
+            "vfs": [
+              125.70616700000028,
+              125.96916599999986,
+              119.80308400000013,
+              127.65112500000032,
+              131.2257499999996,
+              129.32725000000028,
+              131.52270800000042
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "populate",
+          "nativeMs": {
+            "median": 743.7573749999865,
+            "p10": 735.0425662000009,
+            "p90": 789.3421501999983
+          },
+          "vfsMs": {
+            "median": 226.54620799999975,
+            "p10": 225.33779179999837,
+            "p90": 229.1994413999899
+          },
+          "ratio": {
+            "median": 0.30382382292343635,
+            "p10": 0.2903683496706264,
+            "p90": 0.3084339254667749,
+            "ci95": [
+              0.29062123506247917,
+              0.30839201889263224
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              735.5739160000012,
+              735.5008330000055,
+              734.3551659999939,
+              743.7573749999865,
+              749.6828749999986,
+              791.4619999999995,
+              787.9289169999975
+            ],
+            "vfs": [
+              226.84512499999983,
+              224.38766600000235,
+              226.54620799999975,
+              225.97120899999572,
+              226.20129200001247,
+              229.51529100000334,
+              228.9888749999809
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "add-all",
+          "nativeMs": {
+            "median": 1927.6600420000032,
+            "p10": 1826.333483399998,
+            "p90": 2010.9230501999962
+          },
+          "vfsMs": {
+            "median": 1578.5277910000004,
+            "p10": 1521.055617200001,
+            "p90": 1691.9403077999973
+          },
+          "ratio": {
+            "median": 0.841109720929296,
+            "p10": 0.8200813399777662,
+            "p90": 0.8613322439462329,
+            "ci95": [
+              0.8208803187792229,
+              0.8565747516891843
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              1811.0988329999964,
+              1836.489916999999,
+              1847.829291999995,
+              1927.6600420000032,
+              1932.5060830000002,
+              2058.2583749999903,
+              1979.3661670000001
+            ],
+            "vfs": [
+              1523.3328340000007,
+              1517.6397920000018,
+              1561.5995420000108,
+              1578.5277910000004,
+              1678.320624999993,
+              1689.5837909999973,
+              1695.4750829999975
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "commit-initial",
+          "nativeMs": {
+            "median": 43.02683300001081,
+            "p10": 32.665999799995916,
+            "p90": 48.46985860001005
+          },
+          "vfsMs": {
+            "median": 29.694250000000466,
+            "p10": 28.54132480000262,
+            "p90": 31.335858600001664
+          },
+          "ratio": {
+            "median": 0.6893482952143414,
+            "p10": 0.6094401191386921,
+            "p90": 0.9107484063858299,
+            "ci95": [
+              0.6340124657289632,
+              0.893098211132983
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              31.792124999999942,
+              33.24858299999323,
+              49.85620900000504,
+              45.19262499999604,
+              47.54562500001339,
+              43.02683300001081,
+              35.2791670000006
+            ],
+            "vfs": [
+              29.796332999998413,
+              29.694250000000466,
+              31.60945799999172,
+              31.153459000008297,
+              27.223750000004657,
+              29.419708000001265,
+              29.615125000011176
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "status-clean-0",
+          "nativeMs": {
+            "median": 223.310249999995,
+            "p10": 221.18306639999793,
+            "p90": 231.75171700000064
+          },
+          "vfsMs": {
+            "median": 210.78125,
+            "p10": 208.59440840000462,
+            "p90": 221.29028379999508
+          },
+          "ratio": {
+            "median": 0.943894201005125,
+            "p10": 0.9116658449388105,
+            "p90": 0.9774384296582048,
+            "ci95": [
+              0.9245774963795342,
+              0.9766328467459442
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              218.43516599999566,
+              226.48799999999756,
+              223.0637080000015,
+              223.310249999995,
+              231.25391699999454,
+              223.01499999999942,
+              232.4984170000098
+            ],
+            "vfs": [
+              213.33095799999865,
+              209.4057080000057,
+              209.35204199999862,
+              210.78125,
+              225.84633400000166,
+              218.2529169999907,
+              207.4579580000136
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "status-clean-1",
+          "nativeMs": {
+            "median": 221.89337499999965,
+            "p10": 218.67556639999384,
+            "p90": 227.18113360000135
+          },
+          "vfsMs": {
+            "median": 198.10783300000185,
+            "p10": 197.16805799999855,
+            "p90": 199.04295840000123
+          },
+          "ratio": {
+            "median": 0.8947283441878525,
+            "p10": 0.8728355168232184,
+            "p90": 0.9041359941297917,
+            "ci95": [
+              0.8745230358780695,
+              0.9006605763171426
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              220.09762500000215,
+              221.89337499999965,
+              226.31908400000248,
+              218.0926669999899,
+              224.86770899999829,
+              228.47420799999963,
+              219.06416599999648
+            ],
+            "vfs": [
+              197.46687499999825,
+              198.53429200000392,
+              196.96645800000988,
+              198.32237500000338,
+              198.10783300000185,
+              199.8059579999972,
+              197.30245799999102
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "status-clean-2",
+          "nativeMs": {
+            "median": 217.06620799998927,
+            "p10": 215.05836699999927,
+            "p90": 221.38219980000576
+          },
+          "vfsMs": {
+            "median": 196.46804199999315,
+            "p10": 195.7052164000037,
+            "p90": 198.77346700000345
+          },
+          "ratio": {
+            "median": 0.9002067697336718,
+            "p10": 0.8863115802664403,
+            "p90": 0.9214190571738529,
+            "ci95": [
+              0.8918243121150679,
+              0.9153482194705387
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              219.79908300000534,
+              216.87216600000102,
+              219.73054099999717,
+              223.7568750000064,
+              215.93266700000095,
+              213.74691699999676,
+              217.06620799998927
+            ],
+            "vfs": [
+              196.02216600000247,
+              195.22979200000555,
+              196.19804200000362,
+              196.46804199999315,
+              196.57787500000268,
+              198.89691699999094,
+              198.69116700001177
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "status-one-change",
+          "nativeMs": {
+            "median": 214.14916599998833,
+            "p10": 212.239841600004,
+            "p90": 216.79326720000245
+          },
+          "vfsMs": {
+            "median": 208.16654199999175,
+            "p10": 207.23370019999857,
+            "p90": 209.48412499999978
+          },
+          "ratio": {
+            "median": 0.9709209806903905,
+            "p10": 0.9592958110782122,
+            "p90": 0.9817729575265544,
+            "ci95": [
+              0.9594252830355184,
+              0.9770587755204414
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              212.43595800000185,
+              214.14783399999578,
+              215.55654200000572,
+              214.14916599998833,
+              215.9168340000033,
+              211.94566700000723,
+              218.10791700000118
+            ],
+            "vfs": [
+              207.56241699999373,
+              207.92062499999884,
+              206.74062500000582,
+              208.16654199999175,
+              209.41937499999767,
+              209.5812500000029,
+              209.2582500000135
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "diff-one-change",
+          "nativeMs": {
+            "median": 216.93124999999418,
+            "p10": 214.95514980000445,
+            "p90": 218.74854959999502
+          },
+          "vfsMs": {
+            "median": 210.2960829999938,
+            "p10": 207.88616679999103,
+            "p90": 211.8193086000014
+          },
+          "ratio": {
+            "median": 0.964750421574751,
+            "p10": 0.9586167551334496,
+            "p90": 0.9814382678549556,
+            "ci95": [
+              0.9599272680403388,
+              0.9711984372929863
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              215.88820800000394,
+              213.86475000000064,
+              218.94374999999127,
+              215.68208300000697,
+              217.5065830000094,
+              216.93124999999418,
+              218.61841599999752
+            ],
+            "vfs": [
+              206.52966699999524,
+              213.17995800000062,
+              210.2960829999938,
+              209.30624999999418,
+              208.79049999998824,
+              210.68329100000847,
+              210.9122090000019
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "add-one",
+          "nativeMs": {
+            "median": 9.177707999988343,
+            "p10": 9.029833200003486,
+            "p90": 9.594791199998872
+          },
+          "vfsMs": {
+            "median": 9.337082999991253,
+            "p10": 9.243308399994566,
+            "p90": 9.935641000012401
+          },
+          "ratio": {
+            "median": 1.0147346128370798,
+            "p10": 0.9704059891318981,
+            "p90": 1.099568383154187,
+            "ci95": [
+              0.9979551110277598,
+              1.0485578647415936
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              9.291457999999693,
+              8.97558299999946,
+              9.24725000000035,
+              10.04979099999764,
+              9.177707999988343,
+              9.06600000000617,
+              9.081082999997307
+            ],
+            "vfs": [
+              9.27245799999946,
+              10.55604100000346,
+              9.31325000000652,
+              9.337082999991253,
+              9.489417000004323,
+              9.199583999987226,
+              9.522041000018362
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "commit-one",
+          "nativeMs": {
+            "median": 24.87929100000474,
+            "p10": 24.267667000000074,
+            "p90": 25.541475200001152
+          },
+          "vfsMs": {
+            "median": 24.442167000001064,
+            "p10": 23.00367500000284,
+            "p90": 24.74275820000621
+          },
+          "ratio": {
+            "median": 0.9776171479445694,
+            "p10": 0.9263609575367101,
+            "p90": 0.9898679906440723,
+            "ci95": [
+              0.9264476693866639,
+              0.9824302067127397
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              24.804167000002053,
+              24.877416999996058,
+              25.226792000001296,
+              23.462916999997105,
+              25.041542000006302,
+              24.87929100000474,
+              26.01350000000093
+            ],
+            "vfs": [
+              24.829583000006096,
+              23.04762500000652,
+              23.36583399999654,
+              22.937749999997322,
+              24.542625000001863,
+              24.442167000001064,
+              24.684875000006286
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "branch-create",
+          "nativeMs": {
+            "median": 0.5206670000043232,
+            "p10": 0.4965498000063235,
+            "p90": 0.5460584000000381
+          },
+          "vfsMs": {
+            "median": 0.26529199999640696,
+            "p10": 0.25899159999826227,
+            "p90": 1.0426002000109298
+          },
+          "ratio": {
+            "median": 0.49367638047923507,
+            "p10": 0.482354454832945,
+            "p90": 2.088286229837036,
+            "ci95": [
+              0.4857914395631896,
+              0.5766996332513817
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              0.5206670000043232,
+              0.545458000000508,
+              0.49883300000510644,
+              0.4931250000081491,
+              0.5014170000067679,
+              0.5440830000006827,
+              0.5469589999993332
+            ],
+            "vfs": [
+              0.25704099999711616,
+              0.2602919999990263,
+              2.1727500000124564,
+              0.2606670000095619,
+              0.28916700000991113,
+              0.26529199999640696,
+              0.2657079999917187
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "checkout-old",
+          "nativeMs": {
+            "median": 165.25733400000172,
+            "p10": 164.07044100000493,
+            "p90": 169.21908280000497
+          },
+          "vfsMs": {
+            "median": 263.5989590000099,
+            "p10": 259.2836667999989,
+            "p90": 264.56178320000765
+          },
+          "ratio": {
+            "median": 1.5708088485920781,
+            "p10": 1.55126164659287,
+            "p90": 1.6107144383319822,
+            "ci95": [
+              1.5536590194792466,
+              1.5986564169958
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              165.25733400000172,
+              165.07679100000678,
+              168.13266600000497,
+              162.56091600000218,
+              165.67900000000373,
+              165.12504199999967,
+              170.848708000005
+            ],
+            "vfs": [
+              259.2530410000036,
+              259.3040839999958,
+              261.2208329999994,
+              264.77945900001214,
+              263.5989590000099,
+              263.97820800000045,
+              264.4166660000046
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "checkout-main",
+          "nativeMs": {
+            "median": 166.74083300000348,
+            "p10": 165.59723319999466,
+            "p90": 168.62760819999966
+          },
+          "vfsMs": {
+            "median": 262.49095799999486,
+            "p10": 260.2899917999981,
+            "p90": 267.8891166000045
+          },
+          "ratio": {
+            "median": 1.573859781602916,
+            "p10": 1.5614480481973443,
+            "p90": 1.6007865739865816,
+            "ci95": [
+              1.5645211056635462,
+              1.5942149248426634
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              166.66929199999868,
+              166.74083300000348,
+              169.81408300000476,
+              166.78166700000293,
+              165.73374999999942,
+              165.39245799998753,
+              167.83662499999627
+            ],
+            "vfs": [
+              260.75762499999837,
+              259.5885419999977,
+              273.510042000009,
+              262.49095799999486,
+              262.44637499999953,
+              263.6711249999935,
+              264.1418330000015
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "push",
+          "nativeMs": {
+            "median": 1547.624541000012,
+            "p10": 1400.5962415999995,
+            "p90": 1608.0931082000025
+          },
+          "vfsMs": {
+            "median": 1077.955415999997,
+            "p10": 997.4192165999979,
+            "p90": 1186.0856332000083
+          },
+          "ratio": {
+            "median": 0.7318152867812008,
+            "p10": 0.6963158935103307,
+            "p90": 0.7491178713587938,
+            "ci95": [
+              0.7010377853928473,
+              0.7436543161499629
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              1358.8692919999958,
+              1428.414208000002,
+              1460.5559999999969,
+              1563.9926250000135,
+              1547.624541000012,
+              1597.9683749999967,
+              1623.280208000011
+            ],
+            "vfs": [
+              991.4895419999957,
+              1001.3723329999993,
+              1068.8572080000013,
+              1077.955415999997,
+              1172.036500000002,
+              1171.385500000004,
+              1207.1593330000178
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "clone",
+          "nativeMs": {
+            "median": 1562.3507919999975,
+            "p10": 1302.1410334000043,
+            "p90": 1780.1083329999994
+          },
+          "vfsMs": {
+            "median": 1609.9132500000123,
+            "p10": 1373.4955997999991,
+            "p90": 1761.1641496000054
+          },
+          "ratio": {
+            "median": 1.0304428802056222,
+            "p10": 1.001708144818278,
+            "p90": 1.0936755121646173,
+            "ci95": [
+              1.0269339306727174,
+              1.0899287432484017
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              1210.1002090000038,
+              1363.5015830000048,
+              1407.4510830000072,
+              1562.3507919999975,
+              1607.2702500000014,
+              1767.7545830000017,
+              1798.638957999996
+            ],
+            "vfs": [
+              1318.9230000000025,
+              1409.8773329999967,
+              1547.2048749999958,
+              1609.9132500000123,
+              1655.4992079999938,
+              1703.884665999998,
+              1847.0833750000165
+            ]
+          }
+        }
+      ],
+      "totals": [
+        {
+          "count": 1000,
+          "category": "common-measured-workflow",
+          "nativeMs": {
+            "median": 659.7586239999991,
+            "p10": 654.3369584000018,
+            "p90": 665.9611354000002
+          },
+          "vfsMs": {
+            "median": 573.5586269999994,
+            "p10": 569.402015800001,
+            "p90": 584.3058414000028
+          },
+          "ratio": {
+            "median": 0.8732518730246249,
+            "p10": 0.8584729235677782,
+            "p90": 0.8850507710697785,
+            "ci95": [
+              0.8592747806339399,
+              0.8845560892297912
+            ]
+          },
+          "rawMs": {
+            "native": [
+              668.1637089999999,
+              655.4847080000018,
+              659.7586239999991,
+              657.4150419999987,
+              664.4927530000004,
+              661.0645420000001,
+              652.6153340000019
+            ],
+            "vfs": [
+              572.7967949999984,
+              572.4032490000009,
+              573.5586269999994,
+              564.9001660000013,
+              584.0106250000026,
+              584.7486660000031,
+              578.0819600000032
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "category": "git-operations",
+          "nativeMs": {
+            "median": 586.1165819999987,
+            "p10": 581.5950416000021,
+            "p90": 592.3478936000005
+          },
+          "vfsMs": {
+            "median": 551.6345439999996,
+            "p10": 547.4091322000013,
+            "p90": 562.8045332000016
+          },
+          "ratio": {
+            "median": 0.9443191108334346,
+            "p10": 0.9301762645082131,
+            "p90": 0.9565374692041656,
+            "ci95": [
+              0.9320472393452447,
+              0.9559365730372358
+            ]
+          },
+          "rawMs": {
+            "native": [
+              593.570792,
+              582.3639580000017,
+              586.1165819999987,
+              583.2501669999983,
+              591.5326280000008,
+              588.3529580000013,
+              580.4416670000028
+            ],
+            "vfs": [
+              550.4596279999982,
+              549.9374150000012,
+              551.6345439999996,
+              543.6167080000014,
+              562.4662500000013,
+              563.311958000002,
+              554.865418000003
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "category": "common-measured-workflow",
+          "nativeMs": {
+            "median": 7301.292915999991,
+            "p10": 6754.235731800009,
+            "p90": 7709.541282399997
+          },
+          "vfsMs": {
+            "median": 6106.371501000001,
+            "p10": 5722.266465800007,
+            "p90": 6491.529381400015
+          },
+          "ratio": {
+            "median": 0.85602606377623,
+            "p10": 0.8346840090244027,
+            "p90": 0.8638993693953672,
+            "ci95": [
+              0.8363411208470422,
+              0.8635968321536898
+            ]
+          },
+          "rawMs": {
+            "native": [
+              6600.6333330000125,
+              6856.637331000005,
+              6976.5809990000125,
+              7301.292915999991,
+              7356.240501000037,
+              7717.590081999995,
+              7704.175415999998
+            ],
+            "vfs": [
+              5665.66866499999,
+              5759.998333000018,
+              6024.953250000035,
+              6106.371501000001,
+              6358.389835000024,
+              6422.565664999973,
+              6594.974956000078
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "category": "git-operations",
+          "nativeMs": {
+            "median": 6557.535541000005,
+            "p10": 6018.705665600004,
+            "p90": 6920.1991321999985
+          },
+          "vfsMs": {
+            "median": 5880.400292000006,
+            "p10": 5496.895816200005,
+            "p90": 6262.224656800021
+          },
+          "ratio": {
+            "median": 0.9204394438400274,
+            "p10": 0.8957066801578653,
+            "p90": 0.9284785650515524,
+            "ci95": [
+              0.8967393703371773,
+              0.9281972382813778
+            ]
+          },
+          "rawMs": {
+            "native": [
+              5865.059417000011,
+              6121.136498,
+              6242.225833000019,
+              6557.535541000005,
+              6606.557626000038,
+              6926.128081999996,
+              6916.246499000001
+            ],
+            "vfs": [
+              5438.82353999999,
+              5535.610667000015,
+              5798.407042000035,
+              5880.400292000006,
+              6132.188543000011,
+              6193.050373999969,
+              6365.986081000097
+            ]
+          }
+        }
+      ],
+      "verifiedRepositories": 28,
+      "verifiedFileComparisons": 154000,
+      "compatibilityProbes": [
+        {
+          "kind": "vfs",
+          "count": 6,
+          "trial": 0,
+          "name": "push-large",
+          "ms": 640.9649999999965,
+          "calls": {},
+          "readBytes": 0,
+          "writeBytes": 0,
+          "indexReadBytes": 0,
+          "indexWriteBytes": 0,
+          "fsCallMs": 0,
+          "sql": 0,
+          "returnedRows": 0,
+          "failures": [],
+          "error": null
+        },
+        {
+          "kind": "vfs",
+          "count": 6,
+          "trial": 0,
+          "name": "clone-large",
+          "ms": 416.7408750000177,
+          "calls": {},
+          "readBytes": 0,
+          "writeBytes": 0,
+          "indexReadBytes": 0,
+          "indexWriteBytes": 0,
+          "fsCallMs": 0,
+          "sql": 0,
+          "returnedRows": 0,
+          "failures": [],
+          "error": {
+            "code": "EFBIG",
+            "message": "stream exceeds the 8388608-byte limit"
+          }
+        },
+        {
+          "kind": "vfs",
+          "count": 6,
+          "trial": 0,
+          "name": "write-9MiB",
+          "ms": 1.1585000000195578,
+          "calls": {},
+          "readBytes": 0,
+          "writeBytes": 0,
+          "indexReadBytes": 0,
+          "indexWriteBytes": 0,
+          "fsCallMs": 0,
+          "sql": 0,
+          "returnedRows": 0,
+          "failures": [],
+          "error": {
+            "code": "EFBIG",
+            "message": "stream exceeds the 8388608-byte limit"
+          }
+        },
+        {
+          "kind": "vfs",
+          "count": 6,
+          "trial": 0,
+          "name": "diff-1200-lines",
+          "ms": 0.10341700000572018,
+          "calls": {},
+          "readBytes": 0,
+          "writeBytes": 0,
+          "indexReadBytes": 0,
+          "indexWriteBytes": 0,
+          "fsCallMs": 0,
+          "sql": 0,
+          "returnedRows": 0,
+          "failures": [],
+          "error": {
+            "code": "E2BIG",
+            "message": "diff requires 1442401 comparison cells; limit is 1000000"
+          }
+        },
+        {
+          "kind": "vfs",
+          "name": "same-second-same-size-change",
+          "detected": false,
+          "matrix": [
+            [
+              "a",
+              1,
+              1,
+              1
+            ]
+          ],
+          "before": "old",
+          "after": "new\n"
+        }
+      ]
+    },
+    {
+      "label": "cached-tiered",
+      "metadata": {
+        "node": "v24.18.0",
+        "variant": "combined",
+        "timingOnly": true,
+        "gitEngine": "1.43.1",
+        "nativeGit": "git version 2.50.1 (Apple Git-155)",
+        "cpu": "Apple M5 Max",
+        "platform": "darwin",
+        "arch": "arm64",
+        "osVersion": "Darwin Kernel Version 25.6.0: Fri Jul 31 19:19:08 PDT 2026; root:xnu-12377.161.14~5/RELEASE_ARM64_T6050",
+        "nativeVolume": "Filesystem   512-blocks       Used  Available Capacity  Mounted on\n/dev/disk3s5 3896808080 2560106872 1277934016    67%    /System/Volumes/Data",
+        "protocolSha256": "2ea524bea0f66bdc228a943193bef7d9947a793407ade454c5223a5e1e3be2a8",
+        "sourceCommit": "78d7da1e6ee7d913319ec12736733a66648c623b",
+        "counts": [
+          1000,
+          10000
+        ],
+        "trials": 7,
+        "warmups": 2,
+        "metadataCacheEntries": 4096
+      },
+      "operations": [
+        {
+          "count": 1000,
+          "name": "populate",
+          "nativeMs": {
+            "median": 73.56545900000128,
+            "p10": 72.38444160000017,
+            "p90": 73.85782480000053
+          },
+          "vfsMs": {
+            "median": 25.670791999999892,
+            "p10": 24.959958199999893,
+            "p90": 26.853358200000184
+          },
+          "ratio": {
+            "median": 0.3529994273678778,
+            "p10": 0.34192114914563576,
+            "p90": 0.3659278866784672,
+            "ci95": [
+              0.3432189618297719,
+              0.35850635637765815
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              73.10725000000002,
+              73.91499999999996,
+              72.20691600000009,
+              72.50279200000023,
+              73.8197080000009,
+              73.56545900000128,
+              73.57854199999929
+            ],
+            "vfs": [
+              27.56583300000011,
+              25.670791999999892,
+              25.489000000000487,
+              24.88433299999997,
+              26.31079200000022,
+              25.01037499999984,
+              26.378375000000233
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "add-all",
+          "nativeMs": {
+            "median": 134.82466699999986,
+            "p10": 130.74209960000007,
+            "p90": 137.1236582000005
+          },
+          "vfsMs": {
+            "median": 129.32025000000067,
+            "p10": 127.89771720000007,
+            "p90": 131.67325820000005
+          },
+          "ratio": {
+            "median": 0.9709860807592435,
+            "p10": 0.9424481796796095,
+            "p90": 0.9850319752570698,
+            "ci95": [
+              0.9531549426575162,
+              0.9811402018057622
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              129.7227499999999,
+              139.0489580000003,
+              132.27204099999926,
+              134.82466699999986,
+              131.4216660000002,
+              135.84012500000063,
+              135.67599999999948
+            ],
+            "vfs": [
+              128.53833399999985,
+              128.8132910000004,
+              129.77741699999933,
+              130.91287499999999,
+              126.93679200000042,
+              132.81383300000016,
+              129.32025000000067
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "commit-initial",
+          "nativeMs": {
+            "median": 4.442665999999917,
+            "p10": 4.277308200000334,
+            "p90": 4.603741999998965
+          },
+          "vfsMs": {
+            "median": 3.5859590000000026,
+            "p10": 3.5028752000005623,
+            "p90": 3.7736584000002042
+          },
+          "ratio": {
+            "median": 0.8056222109843552,
+            "p10": 0.7817488438778577,
+            "p90": 0.8595910076887068,
+            "ci95": [
+              0.7843007533471145,
+              0.8276346319095801
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              4.442665999999917,
+              4.380041000000347,
+              4.621291999999812,
+              4.238334000000577,
+              4.451166999999259,
+              4.303291000000172,
+              4.592041999998401
+            ],
+            "vfs": [
+              4.031833000000006,
+              3.514791999999943,
+              3.594999999999345,
+              3.507792000000336,
+              3.5859590000000026,
+              3.495500000000902,
+              3.601542000000336
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "status-clean-0",
+          "nativeMs": {
+            "median": 20.958916000000045,
+            "p10": 20.409774600000674,
+            "p90": 21.55280000000039
+          },
+          "vfsMs": {
+            "median": 11.738333000000239,
+            "p10": 11.52942460000013,
+            "p90": 12.061283199999707
+          },
+          "ratio": {
+            "median": 0.5647543082547889,
+            "p10": 0.540460750744709,
+            "p90": 0.5771281280932729,
+            "ci95": [
+              0.5466479508768396,
+              0.5721945700773291
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              20.958916000000045,
+              21.375875000000633,
+              20.51458299999922,
+              21.4970000000003,
+              20.50604100000055,
+              21.636500000000524,
+              20.26537500000086
+            ],
+            "vfs": [
+              12.251083000000108,
+              11.93474999999944,
+              11.738333000000239,
+              11.751290999999583,
+              11.58087499999965,
+              11.492874999999913,
+              11.553791000000274
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "status-clean-1",
+          "nativeMs": {
+            "median": 20.187582999999904,
+            "p10": 19.525541999999767,
+            "p90": 20.537341600000946
+          },
+          "vfsMs": {
+            "median": 12.366667000000234,
+            "p10": 12.065766200000144,
+            "p90": 13.042641800000274
+          },
+          "ratio": {
+            "median": 0.6158663744654649,
+            "p10": 0.5933472834809573,
+            "p90": 0.6573667829228428,
+            "ci95": [
+              0.5982527614417664,
+              0.6517686054589388
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              20.187582999999904,
+              19.40704200000073,
+              20.53320800000074,
+              20.198959000001196,
+              19.90637500000048,
+              20.543542000001253,
+              19.604541999999128
+            ],
+            "vfs": [
+              13.440166999999747,
+              12.366667000000234,
+              12.513457999999446,
+              12.084082999999737,
+              12.259667000000263,
+              12.038291000000754,
+              12.777625000000626
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "status-clean-2",
+          "nativeMs": {
+            "median": 18.762042000000292,
+            "p10": 18.05870799999975,
+            "p90": 19.746316600000135
+          },
+          "vfsMs": {
+            "median": 12.25012500000048,
+            "p10": 12.024074599999585,
+            "p90": 12.875049599999693
+          },
+          "ratio": {
+            "median": 0.6695788230300099,
+            "p10": 0.6162178089764185,
+            "p90": 0.6881744989527727,
+            "ci95": [
+              0.6198801283528481,
+              0.6862158511667557
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              19.30745799999977,
+              19.867417000000387,
+              18.19670799999949,
+              19.66558299999997,
+              17.851708000000144,
+              18.505750000000262,
+              18.762042000000292
+            ],
+            "vfs": [
+              13.34362499999952,
+              12.315416999999798,
+              12.20166700000027,
+              12.01024999999936,
+              12.25012500000048,
+              12.033290999999736,
+              12.562665999999808
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "status-one-change",
+          "nativeMs": {
+            "median": 19.832875000000058,
+            "p10": 19.62505839999958,
+            "p90": 20.276850000000557
+          },
+          "vfsMs": {
+            "median": 12.261666999999761,
+            "p10": 12.126866199999858,
+            "p90": 12.715099999999438
+          },
+          "ratio": {
+            "median": 0.6109030017364794,
+            "p10": 0.6040121440377487,
+            "p90": 0.6463868889676327,
+            "ci95": [
+              0.608686226528131,
+              0.6204323881434531
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              19.434208000000126,
+              20.459625000000415,
+              19.786208000000443,
+              19.752291999999215,
+              20.155000000000655,
+              20.02400000000125,
+              19.832875000000058
+            ],
+            "vfs": [
+              13.318624999999884,
+              12.21441700000014,
+              12.261666999999761,
+              12.03466599999956,
+              12.312749999999141,
+              12.188333000000057,
+              12.304958000000624
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "diff-one-change",
+          "nativeMs": {
+            "median": 20.165917000000263,
+            "p10": 19.7856915999997,
+            "p90": 20.494233800000437
+          },
+          "vfsMs": {
+            "median": 13.261500000000524,
+            "p10": 13.033324999999603,
+            "p90": 13.788175400000183
+          },
+          "ratio": {
+            "median": 0.6537445601378933,
+            "p10": 0.64155788389785,
+            "p90": 0.6953242336466418,
+            "ci95": [
+              0.6432927595424327,
+              0.672966528514894
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              19.871250000000146,
+              20.315082999999504,
+              19.799957999999606,
+              19.76429199999984,
+              20.614709000001312,
+              20.413916999999856,
+              20.165917000000263
+            ],
+            "vfs": [
+              14.483374999999796,
+              13.280874999999469,
+              13.32470900000044,
+              13.193959000000177,
+              13.261500000000524,
+              13.132125000000087,
+              12.88512499999888
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "add-one",
+          "nativeMs": {
+            "median": 1.466667000000598,
+            "p10": 1.4471249999995053,
+            "p90": 2.2603168000001466
+          },
+          "vfsMs": {
+            "median": 1.2140410000001793,
+            "p10": 1.1971001999998407,
+            "p90": 1.2438917999990735
+          },
+          "ratio": {
+            "median": 0.8286595909919928,
+            "p10": 0.6113291665255904,
+            "p90": 0.8521137251283639,
+            "ci95": [
+              0.7796762589922998,
+              0.84776401487454
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              1.4448750000001382,
+              1.466667000000598,
+              3.3572919999996884,
+              1.4503339999992022,
+              1.529000000000451,
+              1.4486249999990832,
+              1.473041999999623
+            ],
+            "vfs": [
+              1.2406249999994543,
+              1.2140410000001793,
+              1.2046250000003056,
+              1.2160839999996824,
+              1.192124999999578,
+              1.2004170000000158,
+              1.2487919999985024
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "commit-one",
+          "nativeMs": {
+            "median": 3.372790999999779,
+            "p10": 3.2798667999992177,
+            "p90": 3.5639499999997497
+          },
+          "vfsMs": {
+            "median": 2.901832999999897,
+            "p10": 2.7929832000001626,
+            "p90": 2.9866411999988487
+          },
+          "ratio": {
+            "median": 0.8407617353931972,
+            "p10": 0.8097884441680903,
+            "p90": 0.899938554357155,
+            "ci95": [
+              0.8293623599490261,
+              0.8932634722991714
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              3.621624999999767,
+              3.525499999999738,
+              3.3738750000002256,
+              3.2974169999997684,
+              3.291083999998591,
+              3.2630410000001575,
+              3.372790999999779
+            ],
+            "vfs": [
+              2.826415999999881,
+              2.923917000000074,
+              2.8366249999999127,
+              2.901832999999897,
+              2.7428340000005846,
+              2.9692079999986163,
+              3.012790999999197
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "branch-create",
+          "nativeMs": {
+            "median": 0.47195800000008603,
+            "p10": 0.45055020000036167,
+            "p90": 0.4949082000000999
+          },
+          "vfsMs": {
+            "median": 0.24683300000015151,
+            "p10": 0.22691659999982222,
+            "p90": 0.2582914000002347
+          },
+          "ratio": {
+            "median": 0.5394057628989057,
+            "p10": 0.4634567205180422,
+            "p90": 0.5510971526008546,
+            "ci95": [
+              0.47472977893208573,
+              0.5467491690095401
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              0.4888750000000073,
+              0.47195800000008603,
+              0.5039580000002388,
+              0.4546669999999722,
+              0.4546669999999722,
+              0.4806250000001455,
+              0.4443750000009459
+            ],
+            "vfs": [
+              0.2672919999995429,
+              0.25229100000069593,
+              0.22504100000060134,
+              0.24683300000015151,
+              0.2452499999999418,
+              0.2281669999993028,
+              0.2477920000001177
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "checkout-old",
+          "nativeMs": {
+            "median": 16.811625000000276,
+            "p10": 16.483849599999665,
+            "p90": 17.333141800000156
+          },
+          "vfsMs": {
+            "median": 19.650124999999207,
+            "p10": 19.54624959999983,
+            "p90": 20.2640164000004
+          },
+          "ratio": {
+            "median": 1.1674555506751234,
+            "p10": 1.1341057449071785,
+            "p90": 1.2234756334523846,
+            "ci95": [
+              1.1422309978953453,
+              1.1981344704179777
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              16.685791999999765,
+              16.831583000000137,
+              16.811625000000276,
+              16.5289159999993,
+              17.408917000000656,
+              17.282624999999825,
+              16.41625000000022
+            ],
+            "vfs": [
+              21.048915999999736,
+              19.650124999999207,
+              19.578749999999673,
+              19.556165999999394,
+              19.53137500000048,
+              19.740750000000844,
+              19.66887499999939
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "checkout-main",
+          "nativeMs": {
+            "median": 17.406875000000582,
+            "p10": 16.89655019999991,
+            "p90": 20.444875200000027
+          },
+          "vfsMs": {
+            "median": 19.66166599999997,
+            "p10": 19.483241599999566,
+            "p90": 20.474641599999813
+          },
+          "ratio": {
+            "median": 1.129534508635198,
+            "p10": 0.9712669657078994,
+            "p90": 1.186536816502994,
+            "ci95": [
+              1.0666728534589958,
+              1.1855411143746744
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              18.258624999999938,
+              23.66662499999984,
+              18.297042000000147,
+              17.2901669999992,
+              16.910667000000103,
+              16.87537499999962,
+              17.406875000000582
+            ],
+            "vfs": [
+              21.113917000000583,
+              19.599708000000646,
+              19.51695799999925,
+              19.432667000000038,
+              20.048290999999153,
+              20.0484579999993,
+              19.66166599999997
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "push",
+          "nativeMs": {
+            "median": 170.95987500000047,
+            "p10": 169.0209839999996,
+            "p90": 173.55390020000033
+          },
+          "vfsMs": {
+            "median": 132.41170799999963,
+            "p10": 131.44211659999965,
+            "p90": 137.39826659999926
+          },
+          "ratio": {
+            "median": 0.7745192139383541,
+            "p10": 0.765324311365382,
+            "p90": 0.810531594076666,
+            "ci95": [
+              0.7674365453029102,
+              0.8011001160400152
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              175.39212499999985,
+              170.95987500000047,
+              172.32841700000063,
+              171.79674999999952,
+              169.11383399999977,
+              168.88170899999932,
+              169.9517080000005
+            ],
+            "vfs": [
+              135.30175000000054,
+              132.41170799999963,
+              132.25112499999977,
+              130.9359169999998,
+              131.77958299999955,
+              139.27316699999938,
+              136.14833299999918
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "add-20-individually-existing",
+          "nativeMs": {
+            "median": 26.29399999999987,
+            "p10": 25.3916078000002,
+            "p90": 27.268258999999762
+          },
+          "vfsMs": {
+            "median": 22.557291999999507,
+            "p10": 22.36493360000004,
+            "p90": 23.264866999999686
+          },
+          "ratio": {
+            "median": 0.8678411605046803,
+            "p10": 0.8276399840454383,
+            "p90": 0.9004168484658346,
+            "ci95": [
+              0.8485202482096059,
+              0.8871640775290315
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              26.765458999999737,
+              26.5615829999997,
+              26.29399999999987,
+              28.0224589999998,
+              25.65520799999831,
+              25.426290999999765,
+              25.339583000000857
+            ],
+            "vfs": [
+              23.228167000000212,
+              22.538040999999794,
+              22.398334000000432,
+              22.314832999999453,
+              22.758708999999726,
+              22.557291999999507,
+              23.319916999998895
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "add-20-bulk-existing",
+          "nativeMs": {
+            "median": 2.0567080000000715,
+            "p10": 1.9716167999995378,
+            "p90": 2.2845254000007116
+          },
+          "vfsMs": {
+            "median": 1.9605420000007143,
+            "p10": 1.910525200000302,
+            "p90": 2.0148499999992056
+          },
+          "ratio": {
+            "median": 0.9523187218373055,
+            "p10": 0.8398255232459723,
+            "p90": 1.0220220232896822,
+            "ci95": [
+              0.863512401921693,
+              1.0080787679876921
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              2.42712500000016,
+              2.0614590000004682,
+              2.030959000000621,
+              2.1894590000010794,
+              1.9582919999993464,
+              2.0567080000000715,
+              1.9804999999996653
+            ],
+            "vfs": [
+              1.9521249999997963,
+              1.9631660000004558,
+              1.9237920000005033,
+              1.890625,
+              2.0423749999990832,
+              1.9605420000007143,
+              1.996499999999287
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "name": "clone",
+          "nativeMs": {
+            "median": 131.91954100000112,
+            "p10": 122.98579999999966,
+            "p90": 140.37449179999984
+          },
+          "vfsMs": {
+            "median": 131.48941699999978,
+            "p10": 129.88582539999953,
+            "p90": 134.04334959999943
+          },
+          "ratio": {
+            "median": 1.0089407572483287,
+            "p10": 0.9329398550322551,
+            "p90": 1.0881313927629925,
+            "ci95": [
+              0.9908726031725504,
+              1.0843384709062662
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              124.78670799999963,
+              152.05104200000005,
+              132.59012499999972,
+              131.91954100000112,
+              122.3502499999995,
+              132.23141699999906,
+              123.40949999999975
+            ],
+            "vfs": [
+              130.80612500000007,
+              128.64137500000015,
+              131.48941699999978,
+              130.7154589999991,
+              132.66908299999886,
+              133.41366599999856,
+              134.9878750000007
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "populate",
+          "nativeMs": {
+            "median": 748.0308330000116,
+            "p10": 737.0213503999985,
+            "p90": 797.6734666000004
+          },
+          "vfsMs": {
+            "median": 256.4056669999991,
+            "p10": 253.39140819999156,
+            "p90": 264.94685840000164
+          },
+          "ratio": {
+            "median": 0.33883747008592335,
+            "p10": 0.32473040374193984,
+            "p90": 0.3574811188809448,
+            "ci95": [
+              0.330946707944347,
+              0.351408496708385
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              732.7178750000021,
+              743.6573340000032,
+              739.8903339999961,
+              748.0308330000116,
+              751.4327500000072,
+              804.3846670000057,
+              793.1993329999968
+            ],
+            "vfs": [
+              268.60708400000294,
+              256.4056669999991,
+              260.0037500000035,
+              253.46087499998976,
+              253.28720799999428,
+              253.70770800000173,
+              262.5067080000008
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "add-all",
+          "nativeMs": {
+            "median": 1949.9755830000067,
+            "p10": 1817.1979415999988,
+            "p90": 2005.638142000002
+          },
+          "vfsMs": {
+            "median": 1654.2458329999936,
+            "p10": 1618.8286586000002,
+            "p90": 1761.8785000000032
+          },
+          "ratio": {
+            "median": 0.875468322308673,
+            "p10": 0.858879471446821,
+            "p90": 0.9094667106255749,
+            "ci95": [
+              0.8734131934972004,
+              0.9074101442222985
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              1843.7377080000006,
+              1777.388291999996,
+              1870.4380000000092,
+              1976.2125839999935,
+              1949.9755830000067,
+              2001.8907920000056,
+              2011.2591669999965
+            ],
+            "vfs": [
+              1614.1339579999985,
+              1621.9584590000013,
+              1635.3820829999895,
+              1654.2458329999936,
+              1769.4276249999966,
+              1756.8457500000077,
+              1756.660291999986
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "commit-initial",
+          "nativeMs": {
+            "median": 31.676250000004075,
+            "p10": 30.425975200001268,
+            "p90": 33.34649139999819
+          },
+          "vfsMs": {
+            "median": 27.806458999984898,
+            "p10": 26.843358599994097,
+            "p90": 30.696499799989397
+          },
+          "ratio": {
+            "median": 0.8759228965188577,
+            "p10": 0.8549917487896302,
+            "p90": 0.9545591431132031,
+            "ci95": [
+              0.8629138550178023,
+              0.9040609564087267
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              30.34937500000524,
+              32.20229099999415,
+              30.47704199999862,
+              31.676250000004075,
+              31.259875000003376,
+              33.89491600000474,
+              32.98087499999383
+            ],
+            "vfs": [
+              26.38195799999812,
+              29.112834000006842,
+              27.150958999991417,
+              27.333875000011176,
+              32.2072499999922,
+              29.689332999987528,
+              27.806458999984898
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "status-clean-0",
+          "nativeMs": {
+            "median": 223.32508300000336,
+            "p10": 221.77018320000496,
+            "p90": 233.36188360000088
+          },
+          "vfsMs": {
+            "median": 206.27858300000662,
+            "p10": 203.28265880000544,
+            "p90": 209.76469960000105
+          },
+          "ratio": {
+            "median": 0.927139017352067,
+            "p10": 0.8719628896296389,
+            "p90": 0.9361643168491088,
+            "ci95": [
+              0.8808012780307278,
+              0.9344054690740251
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              223.32508300000336,
+              225.99770900000294,
+              221.9615000000049,
+              222.99116700000013,
+              221.4832080000051,
+              228.78949999999895,
+              240.22045900000376
+            ],
+            "vfs": [
+              209.65816600000107,
+              209.924500000001,
+              205.78916699999536,
+              208.3641659999994,
+              204.45904200000223,
+              201.51808400001028,
+              206.27858300000662
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "status-clean-1",
+          "nativeMs": {
+            "median": 220.06166700000176,
+            "p10": 216.7005082000018,
+            "p90": 226.2401831999974
+          },
+          "vfsMs": {
+            "median": 197.2590840000048,
+            "p10": 194.9922579999984,
+            "p90": 198.70992499999846
+          },
+          "ratio": {
+            "median": 0.8871869039624732,
+            "p10": 0.8680597668007102,
+            "p90": 0.912080093277015,
+            "ci95": [
+              0.8762650129823917,
+              0.9117472199948473
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              220.06166700000176,
+              216.91112499999872,
+              227.93020800000522,
+              219.93545900000026,
+              225.1134999999922,
+              216.3845830000064,
+              221.57370799999626
+            ],
+            "vfs": [
+              199.8518750000003,
+              197.94862499999726,
+              195.05170799999905,
+              194.90308299999742,
+              197.2590840000048,
+              197.28804200000013,
+              196.57729200000176
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "status-clean-2",
+          "nativeMs": {
+            "median": 215.97362499999872,
+            "p10": 212.3184332000019,
+            "p90": 216.77182459999457
+          },
+          "vfsMs": {
+            "median": 195.2107920000126,
+            "p10": 193.8739500000025,
+            "p90": 196.8019169999985
+          },
+          "ratio": {
+            "median": 0.903625797137516,
+            "p10": 0.8956904617555969,
+            "p90": 0.929532999046294,
+            "ci95": [
+              0.8960153961953788,
+              0.9290478828300788
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              213.62116600000445,
+              216.14229099999648,
+              215.97362499999872,
+              214.83924999999,
+              216.07958399999188,
+              210.36433399999805,
+              217.71612499999173
+            ],
+            "vfs": [
+              198.46429199999693,
+              195.31175000000076,
+              193.34025000000838,
+              195.2107920000126,
+              194.2297499999986,
+              195.69366699999955,
+              195.07699999999022
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "status-one-change",
+          "nativeMs": {
+            "median": 214.86749999999302,
+            "p10": 212.2788167999999,
+            "p90": 215.09194139999744
+          },
+          "vfsMs": {
+            "median": 229.05749999999534,
+            "p10": 228.0375251999998,
+            "p90": 230.82381680000108
+          },
+          "ratio": {
+            "median": 1.0660406995008682,
+            "p10": 1.0604412021638012,
+            "p90": 1.0881437592541106,
+            "ci95": [
+              1.062960985398088,
+              1.088102212686326
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              212.59208400000352,
+              211.8089159999945,
+              215.00816599999962,
+              214.53354200000467,
+              215.0886249999894,
+              215.09691600000951,
+              214.86749999999302
+            ],
+            "vfs": [
+              231.32191700000112,
+              230.49175000000105,
+              228.54529199999524,
+              230.0187500000029,
+              227.27587500000664,
+              228.87924999999814,
+              229.05749999999534
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "diff-one-change",
+          "nativeMs": {
+            "median": 215.87320799998997,
+            "p10": 213.58490840000158,
+            "p90": 220.70816700000142
+          },
+          "vfsMs": {
+            "median": 230.35912500000268,
+            "p10": 229.53982540000578,
+            "p90": 232.75743359999615
+          },
+          "ratio": {
+            "median": 1.06710382049825,
+            "p10": 1.0406577120295861,
+            "p90": 1.0855427087458547,
+            "ci95": [
+              1.0424683255580443,
+              1.0842340335423735
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              213.70079200000328,
+              213.41108299999905,
+              215.16787499999919,
+              215.87320799998997,
+              221.45216699999582,
+              220.21216700000514,
+              217.78437499998836
+            ],
+            "vfs": [
+              232.40083400000003,
+              230.68337500000052,
+              233.29233299999032,
+              230.35912500000268,
+              229.85445899999468,
+              229.56420900000376,
+              229.50325000000885
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "add-one",
+          "nativeMs": {
+            "median": 9.240208999995957,
+            "p10": 9.101358400000027,
+            "p90": 9.974299800005975
+          },
+          "vfsMs": {
+            "median": 9.61629200000607,
+            "p10": 9.344575400001485,
+            "p90": 9.791033000007156
+          },
+          "ratio": {
+            "median": 1.0107639765592036,
+            "p10": 0.9703528175742852,
+            "p90": 1.0621457298927544,
+            "ci95": [
+              0.9934557211008923,
+              1.040968261608351
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              10.323749999995925,
+              9.106041999999434,
+              9.237833999999566,
+              9.094333000000915,
+              9.406374999991385,
+              9.240208999995957,
+              9.741333000012673
+            ],
+            "vfs": [
+              9.659917000004498,
+              9.961208000000624,
+              9.61629200000607,
+              9.188374999997905,
+              9.50762499999837,
+              9.448709000003873,
+              9.67758300001151
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "commit-one",
+          "nativeMs": {
+            "median": 24.234458999999333,
+            "p10": 23.10505000000121,
+            "p90": 25.27675820000586
+          },
+          "vfsMs": {
+            "median": 23.806499999998778,
+            "p10": 23.538399999999093,
+            "p90": 25.104266999999528
+          },
+          "ratio": {
+            "median": 1.0094653230272985,
+            "p10": 0.9707819959826933,
+            "p90": 1.0185129417761856,
+            "ci95": [
+              0.9791120156633482,
+              1.014030688724237
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              23.22049999999581,
+              24.265082999998413,
+              24.217875000002095,
+              24.234458999999333,
+              25.042125000007218,
+              22.931875000009313,
+              25.628708000003826
+            ],
+            "vfs": [
+              23.806499999998778,
+              24.592917000001762,
+              23.786999999996624,
+              23.728250000000116,
+              23.99754200001189,
+              23.253624999997555,
+              25.871291999996174
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "branch-create",
+          "nativeMs": {
+            "median": 0.5201250000027358,
+            "p10": 0.5074661999999079,
+            "p90": 0.546841199992923
+          },
+          "vfsMs": {
+            "median": 0.2898330000025453,
+            "p10": 0.2711499999917578,
+            "p90": 0.3180503999989014
+          },
+          "ratio": {
+            "median": 0.5697747954431609,
+            "p10": 0.5190432917842457,
+            "p90": 0.6126048630352483,
+            "ci95": [
+              0.531253264908147,
+              0.6110105083280059
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              0.5075829999987036,
+              0.5201250000027358,
+              0.51854099999764,
+              0.5072910000017146,
+              0.551541000008001,
+              0.5372500000084983,
+              0.5437079999828711
+            ],
+            "vfs": [
+              0.28920799999468727,
+              0.31987500000104774,
+              0.31683399999747053,
+              0.26950000000942964,
+              0.31674999999813735,
+              0.2898330000025453,
+              0.27224999997997656
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "checkout-old",
+          "nativeMs": {
+            "median": 167.5660420000204,
+            "p10": 164.50344219999388,
+            "p90": 168.55548340000095
+          },
+          "vfsMs": {
+            "median": 312.09133300000394,
+            "p10": 310.3742168000026,
+            "p90": 319.1732997999963
+          },
+          "ratio": {
+            "median": 1.8770214903316111,
+            "p10": 1.8426918927917237,
+            "p90": 1.9287833557903835,
+            "ci95": [
+              1.8442056724677187,
+              1.9278281019481507
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              168.52416699999594,
+              165.47166700000525,
+              163.38329199999862,
+              168.32395899998664,
+              165.25020899999072,
+              168.60245800000848,
+              167.5660420000204
+            ],
+            "vfs": [
+              324.88562499999534,
+              310.59387500000594,
+              315.36508299999696,
+              310.42399999999907,
+              312.09133300000394,
+              310.29954200000793,
+              313.0454160000081
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "checkout-main",
+          "nativeMs": {
+            "median": 168.6615829999937,
+            "p10": 167.06537519999839,
+            "p90": 169.58400020000119
+          },
+          "vfsMs": {
+            "median": 310.48341600000276,
+            "p10": 307.6624248000022,
+            "p90": 317.49125020000355
+          },
+          "ratio": {
+            "median": 1.856682851421762,
+            "p10": 1.8251339066721395,
+            "p90": 1.8754231646612527,
+            "ci95": [
+              1.8317706156483167,
+              1.8726132613140254
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              168.6615829999937,
+              165.92775000000256,
+              169.15316699999676,
+              170.2302500000078,
+              168.54195899999468,
+              167.8237919999956,
+              168.91829199998756
+            ],
+            "vfs": [
+              315.8379170000044,
+              308.075208000002,
+              307.04325000000244,
+              319.9712500000023,
+              308.7302079999936,
+              314.10575000000244,
+              310.48341600000276
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "push",
+          "nativeMs": {
+            "median": 1496.4492920000048,
+            "p10": 1389.8596830000024,
+            "p90": 1624.8543000000004
+          },
+          "vfsMs": {
+            "median": 1056.1375420000113,
+            "p10": 995.7728748000009,
+            "p90": 1133.4926249999903
+          },
+          "ratio": {
+            "median": 0.7139835515831927,
+            "p10": 0.6956064993914134,
+            "p90": 0.7223264579389436,
+            "ci95": [
+              0.7057623319721601,
+              0.7202925373638928
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              1361.5192080000052,
+              1408.7533330000006,
+              1431.0948749999952,
+              1496.4492920000048,
+              1520.237832999992,
+              1641.1781250000058,
+              1613.971749999997
+            ],
+            "vfs": [
+              980.6921250000014,
+              1005.8267080000005,
+              1038.0837919999904,
+              1056.1375420000113,
+              1084.7314170000027,
+              1116.6128749999916,
+              1158.8122499999881
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "clone",
+          "nativeMs": {
+            "median": 1579.4126249999972,
+            "p10": 1338.7739915999991,
+            "p90": 1804.3761251999938
+          },
+          "vfsMs": {
+            "median": 1602.88612499999,
+            "p10": 1356.7077084000018,
+            "p90": 1881.41059179999
+          },
+          "ratio": {
+            "median": 1.018620083416204,
+            "p10": 1.0107482702594435,
+            "p90": 1.1109329348455947,
+            "ci95": [
+              1.0111465097571686,
+              1.1087063839327673
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              1282.280292000003,
+              1376.4364579999965,
+              1409.1494579999999,
+              1579.4126249999972,
+              1592.4012079999957,
+              1793.9097919999913,
+              1820.0756249999977
+            ],
+            "vfs": [
+              1306.1564579999977,
+              1390.4085420000047,
+              1562.3329999999987,
+              1602.88612499999,
+              1774.3692909999954,
+              1813.9056249999994,
+              1982.6680419999757
+            ]
+          }
+        }
+      ],
+      "totals": [
+        {
+          "count": 1000,
+          "category": "common-measured-workflow",
+          "nativeMs": {
+            "median": 655.1817109999993,
+            "p10": 642.8850428000005,
+            "p90": 668.2745170000028
+          },
+          "vfsMs": {
+            "median": 528.0037919999986,
+            "p10": 525.152191199998,
+            "p90": 539.278239999998
+          },
+          "ratio": {
+            "median": 0.8226487803639068,
+            "p10": 0.7863675342476366,
+            "p90": 0.8321987397195733,
+            "ci95": [
+              0.8018908329997589,
+              0.8316286469721025
+            ]
+          },
+          "rawMs": {
+            "native": [
+              647.7107059999989,
+              687.7422910000032,
+              655.1932479999996,
+              655.1817109999993,
+              639.7847930000025,
+              655.2960010000024,
+              644.9518759999992
+            ],
+            "vfs": [
+              539.5779159999988,
+              524.8041659999999,
+              528.0037919999986,
+              525.3842079999968,
+              526.7070009999989,
+              539.0784559999975,
+              536.3604559999985
+            ]
+          }
+        },
+        {
+          "count": 1000,
+          "category": "git-operations",
+          "nativeMs": {
+            "median": 581.7305420000012,
+            "p10": 569.2100344000006,
+            "p90": 595.322715600001
+          },
+          "vfsMs": {
+            "median": 502.5147919999981,
+            "p10": 499.8910749999992,
+            "p90": 512.8344821999983
+          },
+          "ratio": {
+            "median": 0.8836876249141421,
+            "p10": 0.8406378624493932,
+            "p90": 0.8916641578894963,
+            "ci95": [
+              0.8589634165227069,
+              0.8910703158040172
+            ]
+          },
+          "rawMs": {
+            "native": [
+              574.6034559999989,
+              613.8272910000032,
+              582.9863319999995,
+              582.678918999999,
+              565.9650850000016,
+              581.7305420000012,
+              571.3733339999999
+            ],
+            "vfs": [
+              512.0120829999987,
+              499.133374,
+              502.5147919999981,
+              500.4998749999968,
+              500.39620899999863,
+              514.0680809999976,
+              509.9820809999983
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "category": "common-measured-workflow",
+          "nativeMs": {
+            "median": 7292.344501999993,
+            "p10": 6754.8568325999995,
+            "p90": 7743.563625600014
+          },
+          "vfsMs": {
+            "median": 6316.50154100002,
+            "p10": 5989.828309400013,
+            "p90": 6770.380134399983
+          },
+          "ratio": {
+            "median": 0.8870971917259467,
+            "p10": 0.8651985278488039,
+            "p90": 0.9009527245982238,
+            "ci95": [
+              0.866182547912768,
+              0.8979634748328552
+            ]
+          },
+          "rawMs": {
+            "native": [
+              6705.142833000013,
+              6787.9994989999905,
+              6943.601792000001,
+              7292.344501999993,
+              7313.316541999971,
+              7735.241376000049,
+              7756.046999999962
+            ],
+            "vfs": [
+              5942.147833999996,
+              6021.615293000024,
+              6235.100792999961,
+              6316.50154100002,
+              6621.744458999994,
+              6681.102002000014,
+              6904.297332999937
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "category": "git-operations",
+          "nativeMs": {
+            "median": 6544.313668999981,
+            "p10": 6015.575282199997,
+            "p90": 6943.653092200012
+          },
+          "vfsMs": {
+            "median": 6063.04066600003,
+            "p10": 5728.542075600012,
+            "p90": 6513.152826399982
+          },
+          "ratio": {
+            "median": 0.9538192029206601,
+            "p10": 0.9269993133366249,
+            "p90": 0.9660983449747704,
+            "ci95": [
+              0.9273592809462846,
+              0.9631487672262324
+            ]
+          },
+          "rawMs": {
+            "native": [
+              5972.4249580000105,
+              6044.342164999987,
+              6203.711458000005,
+              6544.313668999981,
+              6561.883791999964,
+              6930.856709000043,
+              6962.847666999965
+            ],
+            "vfs": [
+              5673.540749999993,
+              5765.209626000025,
+              5975.097042999958,
+              6063.04066600003,
+              6368.457251,
+              6427.394294000012,
+              6641.790624999936
+            ]
+          }
+        }
+      ],
+      "verifiedRepositories": 28,
+      "verifiedFileComparisons": 154000,
+      "compatibilityProbes": [
+        {
+          "kind": "vfs",
+          "count": 6,
+          "trial": 0,
+          "name": "push-large",
+          "ms": 645.5410409999895,
+          "calls": {},
+          "readBytes": 0,
+          "writeBytes": 0,
+          "indexReadBytes": 0,
+          "indexWriteBytes": 0,
+          "fsCallMs": 0,
+          "sql": 0,
+          "returnedRows": 0,
+          "failures": [],
+          "error": null
+        },
+        {
+          "kind": "vfs",
+          "count": 6,
+          "trial": 0,
+          "name": "clone-large",
+          "ms": 513.0479580000101,
+          "calls": {},
+          "readBytes": 0,
+          "writeBytes": 0,
+          "indexReadBytes": 0,
+          "indexWriteBytes": 0,
+          "fsCallMs": 0,
+          "sql": 0,
+          "returnedRows": 0,
+          "failures": [],
+          "error": null
+        },
+        {
+          "kind": "vfs",
+          "count": 6,
+          "trial": 0,
+          "name": "write-9MiB",
+          "ms": 3.493958000006387,
+          "calls": {},
+          "readBytes": 0,
+          "writeBytes": 0,
+          "indexReadBytes": 0,
+          "indexWriteBytes": 0,
+          "fsCallMs": 0,
+          "sql": 0,
+          "returnedRows": 0,
+          "failures": [],
+          "error": null
+        },
+        {
+          "kind": "vfs",
+          "count": 6,
+          "trial": 0,
+          "name": "diff-1200-lines",
+          "ms": 0.13950000001932494,
+          "calls": {},
+          "readBytes": 0,
+          "writeBytes": 0,
+          "indexReadBytes": 0,
+          "indexWriteBytes": 0,
+          "fsCallMs": 0,
+          "sql": 0,
+          "returnedRows": 0,
+          "failures": [],
+          "error": {
+            "code": "E2BIG",
+            "message": "diff requires 1442401 comparison cells; limit is 1000000"
+          }
+        },
+        {
+          "kind": "vfs",
+          "name": "opaque-operation-counts",
+          "puts": 2,
+          "heads": 2,
+          "gets": 1,
+          "deleteRequests": 0,
+          "deletedKeys": 0
+        },
+        {
+          "kind": "vfs",
+          "name": "same-second-same-size-change",
+          "detected": false,
+          "matrix": [
+            [
+              "a",
+              1,
+              1,
+              1
+            ]
+          ],
+          "before": "old",
+          "after": "new\n"
+        }
+      ]
+    },
+    {
+      "label": "cached-large",
+      "metadata": {
+        "node": "v24.18.0",
+        "variant": "combined",
+        "timingOnly": true,
+        "gitEngine": "1.43.1",
+        "nativeGit": "git version 2.50.1 (Apple Git-155)",
+        "cpu": "Apple M5 Max",
+        "platform": "darwin",
+        "arch": "arm64",
+        "osVersion": "Darwin Kernel Version 25.6.0: Fri Jul 31 19:19:08 PDT 2026; root:xnu-12377.161.14~5/RELEASE_ARM64_T6050",
+        "nativeVolume": "Filesystem   512-blocks       Used  Available Capacity  Mounted on\n/dev/disk3s5 3896808080 2560141960 1277898928    67%    /System/Volumes/Data",
+        "protocolSha256": "2ea524bea0f66bdc228a943193bef7d9947a793407ade454c5223a5e1e3be2a8",
+        "sourceCommit": "78d7da1e6ee7d913319ec12736733a66648c623b",
+        "counts": [
+          10000
+        ],
+        "trials": 7,
+        "warmups": 2,
+        "metadataCacheEntries": 16384
+      },
+      "operations": [
+        {
+          "count": 10000,
+          "name": "populate",
+          "nativeMs": {
+            "median": 750.487291999998,
+            "p10": 734.9064661999961,
+            "p90": 784.4238166000025
+          },
+          "vfsMs": {
+            "median": 255.3917080000101,
+            "p10": 254.74210019999737,
+            "p90": 257.09683359999764
+          },
+          "ratio": {
+            "median": 0.34163270015769526,
+            "p10": 0.32550008745383957,
+            "p90": 0.3490469863304949,
+            "ci95": [
+              0.33338463334741514,
+              0.34568504522801863
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              729.067916,
+              744.7979160000032,
+              750.487291999998,
+              738.7988329999935,
+              763.2096670000028,
+              750.669167,
+              816.245041000002
+            ],
+            "vfs": [
+              258.1555840000001,
+              254.94191699999647,
+              256.390999999996,
+              255.3917080000101,
+              254.44237499999872,
+              255.12441699999908,
+              256.0342500000115
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "add-all",
+          "nativeMs": {
+            "median": 1795.2789580000099,
+            "p10": 1721.3601079999978,
+            "p90": 1872.7502333999962
+          },
+          "vfsMs": {
+            "median": 1474.9702079999988,
+            "p10": 1428.1709001999975,
+            "p90": 1565.1765412000009
+          },
+          "ratio": {
+            "median": 0.824753848820573,
+            "p10": 0.8174562954429213,
+            "p90": 0.8557272366925038,
+            "ci95": [
+              0.8215827414605005,
+              0.8540537081894627
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              1693.6148329999996,
+              1739.8569579999967,
+              1767.9560830000046,
+              1795.2789580000099,
+              1809.6030000000028,
+              1837.1664170000004,
+              1926.1259579999896
+            ],
+            "vfs": [
+              1425.5856249999997,
+              1429.8944169999959,
+              1458.1285839999982,
+              1474.9702079999988,
+              1553.0692080000008,
+              1569.038790999999,
+              1562.601708000002
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "commit-initial",
+          "nativeMs": {
+            "median": 32.446374999999534,
+            "p10": 30.86799979999778,
+            "p90": 45.70698380000686
+          },
+          "vfsMs": {
+            "median": 30.401417000000947,
+            "p10": 27.740942199990968,
+            "p90": 31.817941400001292
+          },
+          "ratio": {
+            "median": 0.9167161565735958,
+            "p10": 0.6296559902883739,
+            "p90": 0.9814783541405504,
+            "ci95": [
+              0.6390465877722195,
+              0.976829611568082
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              47.57308399999965,
+              30.594875000002503,
+              32.446374999999534,
+              32.399499999999534,
+              44.46291700001166,
+              31.05008299999463,
+              34.22583399999712
+            ],
+            "vfs": [
+              30.401417000000947,
+              29.287334000000556,
+              32.0716670000038,
+              31.64879099999962,
+              27.37004199999501,
+              27.988208999988274,
+              31.37537500000326
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "status-clean-0",
+          "nativeMs": {
+            "median": 224.2445000000007,
+            "p10": 222.7175750000024,
+            "p90": 229.08964199999755
+          },
+          "vfsMs": {
+            "median": 189.8496659999946,
+            "p10": 187.54158279999973,
+            "p90": 192.5617750000034
+          },
+          "ratio": {
+            "median": 0.8431216458414689,
+            "p10": 0.8227352108855511,
+            "p90": 0.8635021056953558,
+            "ci95": [
+              0.8289510244398478,
+              0.8543167469923219
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              224.04408300000068,
+              224.2445000000007,
+              223.43937500000175,
+              226.21654199999466,
+              224.68654199999582,
+              233.39929200000188,
+              221.63487500000338
+            ],
+            "vfs": [
+              188.89641600000323,
+              185.88770800000202,
+              190.887999999999,
+              191.31237500000861,
+              188.64416599999822,
+              189.8496659999946,
+              194.43587499999558
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "status-clean-1",
+          "nativeMs": {
+            "median": 220.6219160000037,
+            "p10": 218.58261639999984,
+            "p90": 224.2285909999977
+          },
+          "vfsMs": {
+            "median": 239.85924999999406,
+            "p10": 238.56739160000143,
+            "p90": 241.41201719999808
+          },
+          "ratio": {
+            "median": 1.091367477744107,
+            "p10": 1.0720729790365895,
+            "p90": 1.0967210006420909,
+            "ci95": [
+              1.077438457665801,
+              1.095216878014062
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              217.37754100000166,
+              219.46250000000146,
+              220.6219160000037,
+              219.3859999999986,
+              223.7532910000009,
+              224.94154099999287,
+              221.9072920000035
+            ],
+            "vfs": [
+              238.892958000004,
+              239.85924999999406,
+              240.77958399999625,
+              240.2752499999915,
+              238.07904199999757,
+              242.36066700000083,
+              239.752542000002
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "status-clean-2",
+          "nativeMs": {
+            "median": 215.49416700000074,
+            "p10": 213.97358360000652,
+            "p90": 218.8793000000005
+          },
+          "vfsMs": {
+            "median": 181.37766600000032,
+            "p10": 180.64063279999974,
+            "p90": 184.94485859999259
+          },
+          "ratio": {
+            "median": 0.8397195549149002,
+            "p10": 0.8317775627650171,
+            "p90": 0.8559031608592772,
+            "ci95": [
+              0.8351749858696066,
+              0.8534808607991945
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              215.49416700000074,
+              212.82458300000144,
+              215.3110000000015,
+              218.08024999999907,
+              220.07787500000268,
+              217.17324999999255,
+              214.73958400000993
+            ],
+            "vfs": [
+              180.95466599999781,
+              181.01304199999868,
+              180.1695830000026,
+              187.44795899999735,
+              181.93429200000537,
+              181.37766600000032,
+              183.2761249999894
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "status-one-change",
+          "nativeMs": {
+            "median": 215.6108749999985,
+            "p10": 209.6854578000013,
+            "p90": 217.9145666000055
+          },
+          "vfsMs": {
+            "median": 245.08924999999726,
+            "p10": 244.67189180000423,
+            "p90": 246.83450840000296
+          },
+          "ratio": {
+            "median": 1.1395549149775466,
+            "p10": 1.1260164162038064,
+            "p90": 1.1685961184812867,
+            "ci95": [
+              1.1305887128405547,
+              1.16427745790454
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              208.4669580000009,
+              215.39491700000508,
+              210.4977910000016,
+              216.02333300000464,
+              220.75141700000677,
+              215.6108749999985,
+              215.99383300000045
+            ],
+            "vfs": [
+              244.96412500000588,
+              245.08924999999726,
+              245.077833000003,
+              244.23354200000176,
+              247.05570799999987,
+              246.68704200000502,
+              246.1368339999899
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "diff-one-change",
+          "nativeMs": {
+            "median": 215.53941599999962,
+            "p10": 212.9876665999982,
+            "p90": 217.46293359999837
+          },
+          "vfsMs": {
+            "median": 246.16712499999994,
+            "p10": 245.38478280000564,
+            "p90": 248.29834980000305
+          },
+          "ratio": {
+            "median": 1.1426917045917346,
+            "p10": 1.1327912572603105,
+            "p90": 1.1577521837709523,
+            "ci95": [
+              1.1409280614995783,
+              1.1528960098274859
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              216.06650000000081,
+              212.1881659999999,
+              213.52066699999705,
+              215.53941599999962,
+              215.41933399999107,
+              215.593584000002,
+              219.55758399999468
+            ],
+            "vfs": [
+              246.51633299999958,
+              244.41220800000156,
+              246.16712499999994,
+              246.07491699999082,
+              250.97137500000827,
+              246.3570000000036,
+              246.03316600000835
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "add-one",
+          "nativeMs": {
+            "median": 9.364625000001979,
+            "p10": 9.194383400006336,
+            "p90": 10.32845820000657
+          },
+          "vfsMs": {
+            "median": 9.678791999998793,
+            "p10": 9.574616599996807,
+            "p90": 9.831924600002822
+          },
+          "ratio": {
+            "median": 1.029601719235933,
+            "p10": 0.9389162369570921,
+            "p90": 1.052609054893969,
+            "ci95": [
+              0.9428044434337806,
+              1.0375460508001357
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              10.430582999997569,
+              9.73333399999683,
+              9.364625000001979,
+              9.360583000001498,
+              9.142958000011276,
+              10.260375000012573,
+              9.228667000003043
+            ],
+            "vfs": [
+              9.834000000002561,
+              9.678791999998793,
+              9.641834000001836,
+              9.6907910000009,
+              9.830541000002995,
+              9.573790999987978,
+              9.575167000002693
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "commit-one",
+          "nativeMs": {
+            "median": 24.115083000004233,
+            "p10": 23.30663340000392,
+            "p90": 24.537092000004485
+          },
+          "vfsMs": {
+            "median": 23.374541999997746,
+            "p10": 22.771175200001743,
+            "p90": 23.628350000004865
+          },
+          "ratio": {
+            "median": 0.9758831207541383,
+            "p10": 0.9549705553864505,
+            "p90": 0.9791875227040513,
+            "ci95": [
+              0.9615258231656199,
+              0.976956621231071
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              23.481167000001733,
+              23.925875000000815,
+              24.115083000004233,
+              24.498042000006535,
+              24.595667000001413,
+              23.044833000007202,
+              24.324250000005122
+            ],
+            "vfs": [
+              23.071042000003217,
+              23.374541999997746,
+              23.53925000000163,
+              23.555500000002212,
+              23.24629100000311,
+              22.321374999999534,
+              23.737625000008848
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "branch-create",
+          "nativeMs": {
+            "median": 0.5598329999993439,
+            "p10": 0.529550000000745,
+            "p90": 0.5885084000023199
+          },
+          "vfsMs": {
+            "median": 0.3205420000012964,
+            "p10": 0.3063334000034956,
+            "p90": 0.3446421999979066
+          },
+          "ratio": {
+            "median": 0.601768084011175,
+            "p10": 0.5252911976773614,
+            "p90": 0.630582486761949,
+            "ci95": [
+              0.5357017628282145,
+              0.6078455539440715
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              0.5598329999993439,
+              0.5817920000044978,
+              0.5985829999990528,
+              0.5634159999899566,
+              0.5262500000098953,
+              0.5317499999946449,
+              0.532666999992216
+            ],
+            "vfs": [
+              0.34029200000077253,
+              0.31166700000176206,
+              0.3050829999992857,
+              0.3412089999910677,
+              0.3497920000081649,
+              0.30716700000630226,
+              0.3205420000012964
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "checkout-old",
+          "nativeMs": {
+            "median": 164.50291600000128,
+            "p10": 162.71574979999423,
+            "p90": 167.0242084000056
+          },
+          "vfsMs": {
+            "median": 248.06733299999905,
+            "p10": 245.1943168000027,
+            "p90": 250.18765780000248
+          },
+          "ratio": {
+            "median": 1.5079813721964486,
+            "p10": 1.4772512214378206,
+            "p90": 1.5282378935766006,
+            "ci95": [
+              1.478336119711507,
+              1.519099020832094
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              164.50291600000128,
+              165.13070799999696,
+              163.1305829999983,
+              165.74920800000837,
+              163.61883300000045,
+              168.93670900000143,
+              162.09349999998813
+            ],
+            "vfs": [
+              248.06733299999905,
+              246.41749999999593,
+              251.53858300000138,
+              245.03304099998786,
+              248.5532089999906,
+              249.28704100000323,
+              245.3018340000126
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "checkout-main",
+          "nativeMs": {
+            "median": 167.44020799999998,
+            "p10": 166.351841400002,
+            "p90": 169.8536254000006
+          },
+          "vfsMs": {
+            "median": 241.67458400000032,
+            "p10": 240.6823159999971,
+            "p90": 246.33477540000166
+          },
+          "ratio": {
+            "median": 1.451221847062448,
+            "p10": 1.4275037608613073,
+            "p90": 1.4589046464553772,
+            "ci95": [
+              1.4312935587953068,
+              1.4545332904860102
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              166.15266599999813,
+              166.4846250000046,
+              170.69087500000023,
+              169.29545900000085,
+              167.44020799999998,
+              168.47004100000777,
+              167.33341599999403
+            ],
+            "vfs": [
+              241.67458400000032,
+              241.6061250000057,
+              248.00587500000256,
+              242.31149999999616,
+              241.44791600000462,
+              239.53391599998577,
+              245.22070900000108
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "push",
+          "nativeMs": {
+            "median": 1404.442332999999,
+            "p10": 1306.574058199997,
+            "p90": 1498.3455333999998
+          },
+          "vfsMs": {
+            "median": 1010.258249999999,
+            "p10": 934.6849919999993,
+            "p90": 1098.598491400003
+          },
+          "ratio": {
+            "median": 0.7221874212509634,
+            "p10": 0.7161788495118778,
+            "p90": 0.7481485422808816,
+            "ci95": [
+              0.7193305316011146,
+              0.7476710967370718
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              1270.1363329999986,
+              1330.8658749999959,
+              1358.4054169999945,
+              1404.442332999999,
+              1433.3730829999986,
+              1483.2999169999966,
+              1520.9139580000046
+            ],
+            "vfs": [
+              916.4430420000062,
+              946.8462919999947,
+              990.3841249999969,
+              1010.258249999999,
+              1071.6916250000068,
+              1071.2205419999955,
+              1138.9587909999973
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "name": "clone",
+          "nativeMs": {
+            "median": 1383.3063750000001,
+            "p10": 1172.9589412,
+            "p90": 1548.326950199998
+          },
+          "vfsMs": {
+            "median": 1412.847332999998,
+            "p10": 1205.6145335999972,
+            "p90": 1566.270199999999
+          },
+          "ratio": {
+            "median": 1.0253299805956815,
+            "p10": 0.9971809539472236,
+            "p90": 1.089687563119012,
+            "ci95": [
+              1.0087318046040856,
+              1.077360938715579
+            ]
+          },
+          "vfsSql": null,
+          "vfsReturnedRows": null,
+          "nativeReadBytes": null,
+          "vfsReadBytes": null,
+          "nativeWriteBytes": null,
+          "vfsWriteBytes": null,
+          "nativeIndexReadBytes": null,
+          "vfsIndexReadBytes": null,
+          "nativeIndexWriteBytes": null,
+          "vfsIndexWriteBytes": null,
+          "rawMs": {
+            "native": [
+              1102.8714159999981,
+              1219.6839580000014,
+              1256.8352920000034,
+              1387.550292,
+              1383.3063750000001,
+              1529.6624169999996,
+              1576.323749999996
+            ],
+            "vfs": [
+              1168.5353340000001,
+              1230.3339999999953,
+              1354.0652499999924,
+              1412.847332999998,
+              1532.9489999999932,
+              1498.846875000003,
+              1616.2520000000077
+            ]
+          }
+        }
+      ],
+      "totals": [
+        {
+          "count": 10000,
+          "category": "common-measured-workflow",
+          "nativeMs": {
+            "median": 6823.182165000006,
+            "p10": 6425.398347600007,
+            "p90": 7198.358234199995
+          },
+          "vfsMs": {
+            "median": 5815.392373999974,
+            "p10": 5474.305526799995,
+            "p90": 6137.385766400022
+          },
+          "ratio": {
+            "median": 0.8522991521214894,
+            "p10": 0.8487435500278002,
+            "p90": 0.8709403217192121,
+            "ci95": [
+              0.8509192160436421,
+              0.8654660800960114
+            ]
+          },
+          "rawMs": {
+            "native": [
+              6289.839995999999,
+              6515.770582000012,
+              6617.420957000009,
+              6823.182165000006,
+              6903.967417000036,
+              7109.810251000003,
+              7331.180208999984
+            ],
+            "vfs": [
+              5422.332751000024,
+              5508.954043999976,
+              5727.153375999995,
+              5815.392373999974,
+              6069.634582000013,
+              6049.874164999972,
+              6239.0125430000335
+            ]
+          }
+        },
+        {
+          "count": 10000,
+          "category": "git-operations",
+          "nativeMs": {
+            "median": 6084.383332000012,
+            "p10": 5686.892431600005,
+            "p90": 6421.458717599994
+          },
+          "vfsMs": {
+            "median": 5560.0006659999635,
+            "p10": 5218.078142999997,
+            "p90": 5882.306641400018
+          },
+          "ratio": {
+            "median": 0.9183480938363251,
+            "p10": 0.9109165639943784,
+            "p90": 0.9382774612728867,
+            "ci95": [
+              0.91124723786675,
+              0.9324738761981534
+            ]
+          },
+          "rawMs": {
+            "native": [
+              5560.772079999999,
+              5770.972666000009,
+              5866.933665000011,
+              6084.383332000012,
+              6140.757750000033,
+              6359.141084000003,
+              6514.935167999982
+            ],
+            "vfs": [
+              5164.1771670000235,
+              5254.01212699998,
+              5470.762375999999,
+              5560.0006659999635,
+              5815.192207000015,
+              5794.749747999973,
+              5982.978293000022
+            ]
+          }
+        }
+      ],
+      "verifiedRepositories": 14,
+      "verifiedFileComparisons": 140000,
+      "compatibilityProbes": [
+        {
+          "kind": "vfs",
+          "count": 6,
+          "trial": 0,
+          "name": "push-large",
+          "ms": 613.0345410000009,
+          "calls": {},
+          "readBytes": 0,
+          "writeBytes": 0,
+          "indexReadBytes": 0,
+          "indexWriteBytes": 0,
+          "fsCallMs": 0,
+          "sql": 0,
+          "returnedRows": 0,
+          "failures": [],
+          "error": null
+        },
+        {
+          "kind": "vfs",
+          "count": 6,
+          "trial": 0,
+          "name": "clone-large",
+          "ms": 514.1685839999991,
+          "calls": {},
+          "readBytes": 0,
+          "writeBytes": 0,
+          "indexReadBytes": 0,
+          "indexWriteBytes": 0,
+          "fsCallMs": 0,
+          "sql": 0,
+          "returnedRows": 0,
+          "failures": [],
+          "error": null
+        },
+        {
+          "kind": "vfs",
+          "count": 6,
+          "trial": 0,
+          "name": "write-9MiB",
+          "ms": 2.607749999995576,
+          "calls": {},
+          "readBytes": 0,
+          "writeBytes": 0,
+          "indexReadBytes": 0,
+          "indexWriteBytes": 0,
+          "fsCallMs": 0,
+          "sql": 0,
+          "returnedRows": 0,
+          "failures": [],
+          "error": null
+        },
+        {
+          "kind": "vfs",
+          "count": 6,
+          "trial": 0,
+          "name": "diff-1200-lines",
+          "ms": 0.09633299999404699,
+          "calls": {},
+          "readBytes": 0,
+          "writeBytes": 0,
+          "indexReadBytes": 0,
+          "indexWriteBytes": 0,
+          "fsCallMs": 0,
+          "sql": 0,
+          "returnedRows": 0,
+          "failures": [],
+          "error": {
+            "code": "E2BIG",
+            "message": "diff requires 1442401 comparison cells; limit is 1000000"
+          }
+        },
+        {
+          "kind": "vfs",
+          "name": "opaque-operation-counts",
+          "puts": 2,
+          "heads": 2,
+          "gets": 1,
+          "deleteRequests": 0,
+          "deletedKeys": 0
+        },
+        {
+          "kind": "vfs",
+          "name": "same-second-same-size-change",
+          "detected": false,
+          "matrix": [
+            [
+              "a",
+              1,
+              1,
+              1
+            ]
+          ],
+          "before": "old",
+          "after": "new\n"
+        }
+      ]
+    }
+  ]
+}

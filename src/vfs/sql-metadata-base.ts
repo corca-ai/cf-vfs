@@ -229,16 +229,16 @@ export abstract class SqlMetadata extends SqlWrite {
     // EEXIST rather than creating a directory at whatever it points at.
     const access = this.resolveAccess(path, true, false);
     const normalized = access.path;
-    return this.transaction(() => {
-      const existing = access.row ?? this.oneEntry(normalized);
-      if (existing !== null) {
-        this.assertTraverse(normalized, access.followed, posix);
-        if (recursive && existing.kind === "directory") {
-          this.assertPermission(existing, posix, EXECUTE_PERMISSION, normalized);
-          return rowToStat(existing);
-        }
-        throw new VfsError("EEXIST", "file or directory already exists", normalized);
+    const existing = access.row ?? this.oneEntry(normalized);
+    if (existing !== null) {
+      this.assertTraverse(normalized, access.followed, posix);
+      if (recursive && existing.kind === "directory") {
+        this.assertPermission(existing, posix, EXECUTE_PERMISSION, normalized);
+        return rowToStat(existing);
       }
+      throw new VfsError("EEXIST", "file or directory already exists", normalized);
+    }
+    return this.transaction(() => {
       const now = this.now();
       const parent = this.prepareParents(normalized, recursive, now, access.followed, posix);
       this.assertCapacity(0, 1, normalized);

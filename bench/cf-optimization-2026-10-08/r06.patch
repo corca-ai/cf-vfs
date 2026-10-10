@@ -1,0 +1,38 @@
+--- src/vfs/sql-model.ts
++++ src/vfs/sql-model.ts
+@@ -337,7 +337,7 @@
+     opaqueObjectId === null &&
+     linkTarget === null
+   ) {
+-    return { ...common, kind, contentClass, opaqueObjectId, linkTarget };
++    return Object.assign(common, { kind, contentClass, opaqueObjectId, linkTarget } as const);
+   }
+   if (
+     kind === "symlink" &&
+@@ -345,7 +345,7 @@
+     opaqueObjectId === null &&
+     linkTarget !== null
+   ) {
+-    return { ...common, kind, contentClass, opaqueObjectId, linkTarget };
++    return Object.assign(common, { kind, contentClass, opaqueObjectId, linkTarget } as const);
+   }
+   if (
+     kind === "file" &&
+@@ -353,7 +353,7 @@
+     opaqueObjectId === null &&
+     linkTarget === null
+   ) {
+-    return { ...common, kind, contentClass, opaqueObjectId, linkTarget };
++    return Object.assign(common, { kind, contentClass, opaqueObjectId, linkTarget } as const);
+   }
+   if (
+     kind === "file" &&
+@@ -361,7 +361,7 @@
+     opaqueObjectId !== null &&
+     linkTarget === null
+   ) {
+-    return { ...common, kind, contentClass, opaqueObjectId, linkTarget };
++    return Object.assign(common, { kind, contentClass, opaqueObjectId, linkTarget } as const);
+   }
+   throw new VfsError("EIO", "invalid SQLite entry state", path);
+ }

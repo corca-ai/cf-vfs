@@ -1,6 +1,10 @@
 import { isVfsError, VfsError } from "../core/errors.js";
 import { basename, dirname } from "../core/path.js";
-import { collectInlineBytes, collectInlineBytesSync } from "./buffering.js";
+import {
+  type BufferedChunksLease,
+  collectInlineBytes,
+  collectInlineBytesSync,
+} from "./buffering.js";
 import { DIRECTORY_MODE } from "./config.js";
 import { sha256Hex } from "./digest.js";
 import { emitVfsEvent } from "./events.js";
@@ -248,13 +252,14 @@ export abstract class SqlContent extends SqlMutation {
     }
   }
 
-  protected collectInlineSync(body: string) {
+  protected collectInlineSync(body: string, heldByCaller = 0) {
     try {
       return collectInlineBytesSync(
         body,
         this.maxInlineFileBytes,
         this.chunkBytes,
         this.inFlightBytes,
+        heldByCaller,
       );
     } catch (error) {
       this.throwInlineCollectionError(error);
@@ -315,10 +320,17 @@ export abstract class SqlContent extends SqlMutation {
    */
   protected async incomingDigest(
     options: { skipIfUnchanged?: boolean },
-    buffered: { chunks: readonly Uint8Array[]; sizeBytes: number },
+    buffered: BufferedChunksLease,
   ): Promise<string | undefined> {
-    if (options.skipIfUnchanged !== true) return undefined;
-    return sha256Hex(buffered.chunks, buffered.sizeBytes);
+    try {
+      if (options.skipIfUnchanged !== true) return undefined;
+      return await sha256Hex(buffered.chunks, buffered.sizeBytes);
+    } catch (error) {
+      // Hashing precedes publication, so its caller has not yet installed the
+      // commit's release guard. Failed hashing must return this lease too.
+      buffered.release();
+      throw error;
+    }
   }
 
   /**

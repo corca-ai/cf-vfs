@@ -1,0 +1,34 @@
+Reliability: 0 scenarios checked
+begin /setup { files: '1000', mixed: 'false' }
+done /setup 
+begin /change { all: 'true' }
+done /change 
+begin /execute {}
+done /execute 0
+begin /execute {}
+done /execute 0
+begin /execute {}
+done /execute 0
+begin /execute {}
+done /execute 0
+begin /execute {}
+done /execute 0
+begin /clear {}
+done /clear 
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Invalid phase clock: {"exitCode":0,"stdout":"","stderr":"","instance":"ce175fc6-cf25-43be-a1a5-65d5e4a9f5bd","queueMs":0,"executionMs":2447,"totalMs":2447,"savedBefore":true,"savedAfter":true,"clientMs":1707.890041999999}
+    at execute (file:///Users/ak/prjs/cc/cf-vfs/bench/coding-durability-2026-10-10/run.mjs:36:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/ak/prjs/cc/cf-vfs/bench/coding-durability-2026-10-10/run.mjs:142:25 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.18.0

@@ -4,6 +4,7 @@ import { depthFrom, normalizePath, pathRequiresDirectory } from "../core/path.js
 import { validateByteRange } from "../vfs/range.js";
 import type {
   AppendFileOptions,
+  BulkOperation,
   ByteBody,
   CopyOptions,
   CopyResult,
@@ -30,6 +31,8 @@ import type {
   WriteResult,
 } from "../vfs/types.js";
 import { NO_ENTRY_IDENTITY } from "../vfs/types.js";
+import { writeCheckedBatch } from "./batch-writes.js";
+import { aliasSink, nullSink } from "./device-sinks.js";
 import type { ShellFileDescriptors, ShellFileSystem, ShellSink } from "./types.js";
 
 /**
@@ -337,6 +340,20 @@ export class ReservedPathFileSystem implements ShellFileSystem {
     return this.#statAt(path) ?? this.#inner.stat(path);
   }
 
+  canUseBulkOperation(operation: BulkOperation, path: string): boolean {
+    return (
+      this.#at(path) === undefined && this.#inner.canUseBulkOperation?.(operation, path) === true
+    );
+  }
+
+  get availableWriteBufferBytes(): number {
+    return this.#inner.availableWriteBufferBytes ?? 0;
+  }
+
+  writeFiles(entries: Parameters<NonNullable<ShellFileSystem["writeFiles"]>>[0]) {
+    return writeCheckedBatch(this.#inner, entries, (path) => this.#refuseMutation(path));
+  }
+
   lstat(path: string): VfsStat {
     return this.#statAt(path, false) ?? this.#inner.lstat(path);
   }
@@ -638,51 +655,12 @@ export function deviceInput(
 }
 
 /**
- * A sink that discards everything written to it.
- *
- * Nothing is buffered, no chunk is retained, and nothing is charged: the bytes
- * were already metered when whatever produced them read or generated them, and
- * charging again would make `cmd > /dev/null` fail budgets that `cmd > file`
- * passes. `close` and `abort` do nothing because there is nothing to publish or
- * undo, which is also what makes it safe to hand the same sink to two
- * descriptors.
- */
-function nullSink(): ShellSink {
-  const sink: ShellSink = {
-    async write(): Promise<void> {},
-    async close(): Promise<void> {},
-    async abort(): Promise<void> {},
-    clone: () => sink,
-  };
-  return sink;
-}
-
-/**
  * The sink a device is written to as a redirection target.
  *
  * A descriptor alias is a duplicate taken through the same reference counting
  * `2>&1` uses: `> /dev/stderr` writes where standard error currently goes, and
  * releasing the duplicate does not close what it was duplicated from.
  */
-/**
- * A duplicate that can release its own reference but never destroy the stream.
- *
- * `abort` on a shared sink tears down the underlying stream for every holder,
- * which is right for a file being abandoned and catastrophic for a duplicate:
- * a redirection that fails after `> /dev/stdout` was applied would abort the
- * execution's own standard output and discard everything already written to
- * it. `2>&1` avoids this by keeping its duplicate out of the aborted set; a
- * duplicate that closes instead of aborting is safe wherever it is held.
- */
-function aliasSink(inner: ShellSink): ShellSink {
-  return {
-    write: (chunk) => inner.write(chunk),
-    close: () => inner.close(),
-    abort: () => inner.close(),
-    clone: () => aliasSink(inner.clone()),
-  };
-}
-
 export function deviceSink(
   device: ShellDevice,
   fds: ShellFileDescriptors,

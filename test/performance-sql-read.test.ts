@@ -223,7 +223,7 @@ it("reuses text-edit snapshots and redirection preflights", async () => {
 
   meter.reset();
   expect((await shell.executeText({ script: "sed -i s/gamma/delta/ /target" })).exitCode).toBe(0);
-  expect(meter.statements).toBe(6);
+  expect(meter.statements).toBe(5);
 
   await fileSystem.writeFile(
     "/change.patch",
@@ -231,7 +231,7 @@ it("reuses text-edit snapshots and redirection preflights", async () => {
   );
   meter.reset();
   expect((await shell.executeText({ script: "patch /target /change.patch" })).exitCode).toBe(0);
-  expect(meter.statements).toBe(9);
+  expect(meter.statements).toBe(7);
 });
 
 it("adds only fixed-cost credential checks to a directory listing", async () => {

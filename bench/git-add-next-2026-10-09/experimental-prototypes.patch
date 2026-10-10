@@ -1,0 +1,215 @@
+--- baseline/git-worktree.js
++++ index-once/git-worktree.js
+@@ -79,7 +79,7 @@
+     // to 128 only while their inspected total fits one MiB. Hosts serialize
+     // repository edits; this is not a cross-command size cache.
+     let bytes = rows.slice(start, end).reduce((total, [path]) => total + (sizes.get(path) ?? 0), 0);
+-    while (end < rows.length && end - start < 128) {
++    while (end < rows.length && end - start < 1024) {
+         const size = sizes.get(rows[end]?.[0] ?? "") ?? 0;
+         if (bytes + size > 1024 * 1024)
+             break;
+--- baseline/git-worktree.js
++++ index-bounded/git-worktree.js
+@@ -39,7 +39,8 @@
+         paths.some((prefix) => prefix === "." || path === prefix || path.startsWith(`${prefix}/`)));
+     // The cache is never reused across shell executions or repository edits.
+     // Removing index entries holds no file bodies or compression streams.
+-    for (const batch of stagingBatches(selected, sizes)) {
++    options.fs = boundedStage(repo, selected);
++    for (const batch of [selected]) {
+         repo.fs.check();
+         // Matrix already checked ignore rules for new paths; indexed paths are
+         // tracked regardless of those rules. Avoid reading every ignore file a
+@@ -234,3 +235,17 @@
+         return await git.resolveRef({ ...repo, ref: `refs/remotes/origin/${ref}` });
+     }
+ }
++
++function boundedStage(repo, selected) {
++    const paths = new Set(selected.filter(([, , work]) => work !== 0).map(([p]) => `${repo.dir}/${p}`));
++    let active=0, failed;
++    const waiting=[];
++    function stop(error) { failed=error; for (const [,reject] of waiting.splice(0)) reject(error); }
++    async function enter() { if(failed) throw failed; repo.fs.check(); if(active<128) active++; else await new Promise((resolve,reject)=>waiting.push([resolve,reject])); }
++    function leave() { const next=waiting.shift(); if(next) next[0](); else if(active>0) active--; }
++    const promises={...repo.fs.promises};
++    promises.lstat=async path=>{ if(!paths.has(path)) return repo.fs.promises.lstat(path); await enter(); try{return await repo.fs.promises.lstat(path);}catch(e){stop(e);leave();throw e;} };
++    promises.stat=async path=>{if(!path.startsWith(`${repo.gitdir}/objects/`))return repo.fs.promises.stat(path); try{return await repo.fs.promises.stat(path);}finally{leave();}};
++    for (const key of ['readFile','readlink','writeFile']) promises[key]=async (...args)=>{ try{return await repo.fs.promises[key](...args);}catch(e){if(typeof args[0] === "string" && !["ENOENT","EEXIST","EISDIR","ENOTDIR"].includes(e.code)) stop(e);throw e;} };
++    return { promises };
++}
+--- baseline/git-worktree.js
++++ content-reuse/git-worktree.js
+@@ -1,4 +1,5 @@
+ import * as git from "isomorphic-git";
++import { collectStream, commandPath } from "./helpers.js";
+ import { VfsError } from "../../core/errors.js";
+ import { createLineDiff, renderLineDiff } from "../../core/line-diff.js";
+ import { isDescendant, normalizeFileSystemPath, normalizePath } from "../../core/path.js";
+@@ -32,11 +33,14 @@
+     const paths = args.operands.length === 0 ? ["."] : args.operands.map((path) => relativePath(repo, path));
+     // Share the index snapshot between inspection and mutation in this command.
+     repo.fs.coalesceConfigReads(repo.gitdir);
+-    const options = { ...repo, cache: {} };
++    const reuse = contentReuse(repo);
++    const options = { ...repo, fs: reuse.fs, cache: {} };
+     const sizes = new Map();
+     const matrix = await gitMatrix(options, paths, sizes);
+     const selected = matrix.filter(([path, , work, stage]) => work !== stage &&
+         paths.some((prefix) => prefix === "." || path === prefix || path.startsWith(`${prefix}/`)));
++    reuse.select(selected.map(([path]) => `${repo.dir}/${path}`));
++    try {
+     // The cache is never reused across shell executions or repository edits.
+     // Removing index entries holds no file bodies or compression streams.
+     for (const batch of stagingBatches(selected, sizes)) {
+@@ -62,6 +66,7 @@
+         if (path !== "." && !matrix.some(([name]) => name === path || name.startsWith(`${path}/`)))
+             await git.add({ ...options, filepath: path });
+     }
++    } finally { reuse.close(); }
+ }
+ function* stagingBatches(rows, sizes) {
+     const removalOnly = rows.every(([, , work]) => work === 0);
+@@ -234,3 +239,30 @@
+         return await git.resolveRef({ ...repo, ref: `refs/remotes/origin/${ref}` });
+     }
+ }
++
++function contentReuse(repo) {
++    const stored=new Map(); let bytes=0, inspecting=true;
++    const drop=path=>{const value=stored.get(path);if(value){bytes-=value.body.byteLength;value.release();stored.delete(path);}};
++    const eligible=path=>typeof path === 'string' && path.startsWith(`${repo.dir}/`) && !path.startsWith(`${repo.gitdir}/`);
++    const fs=Object.create(repo.fs);
++    fs.promises={...repo.fs.promises, readFile:async (path,options)=>{
++        if(!eligible(path) || typeof options === 'string' || options?.encoding !== undefined)return repo.fs.promises.readFile(path,options);
++        repo.fs.check();
++        const cached=stored.get(path);
++        if(!inspecting && !cached) return repo.fs.promises.readFile(path,options);
++        const read=repo.fs.context.fileSystem.readFile(commandPath(repo.fs.context,path));
++        if(cached && read.stat.mutationToken === cached.token){
++            await read.stream.cancel(); repo.fs.context.budget.io(cached.body.byteLength);drop(path);return cached.body;
++        }
++        drop(path);
++        const lease=await collectStream(repo.fs.context,read.stream);
++        try {
++            if(inspecting && bytes+lease.value.byteLength<=1024*1024 && stored.size<1024){
++                const release=repo.fs.context.budget.buffered(lease.value.byteLength);
++                bytes+=lease.value.byteLength;stored.set(path,{body:lease.value,token:read.stat.mutationToken,release});
++            }
++            return lease.value;
++        }finally{lease.release();}
++    }};
++    return {fs, select:paths=>{inspecting=false; const selected=new Set(paths);for(const path of stored.keys())if(!selected.has(path))drop(path);},close:()=>{for(const path of stored.keys())drop(path);}};
++}
+--- baseline/git-worktree.js
++++ hash-reuse/git-worktree.js
+@@ -1,4 +1,5 @@
+-import * as git from "isomorphic-git";
++import * as git from "/tmp/cf-vfs-add-hash-reuse/engine.mjs";
++import { collectStream, commandPath } from "./helpers.js";
+ import { VfsError } from "../../core/errors.js";
+ import { createLineDiff, renderLineDiff } from "../../core/line-diff.js";
+ import { isDescendant, normalizeFileSystemPath, normalizePath } from "../../core/path.js";
+@@ -27,16 +28,20 @@
+     return relative;
+ }
+ export async function gitAdd(repo, argv) {
++    git.clearInspectionOids();
+     const args = gitArguments(argv, ["-A", "--all"]);
+     gitOperands(args, args.flags.size === 0 ? 1 : 0, Number.MAX_SAFE_INTEGER);
+     const paths = args.operands.length === 0 ? ["."] : args.operands.map((path) => relativePath(repo, path));
+     // Share the index snapshot between inspection and mutation in this command.
+     repo.fs.coalesceConfigReads(repo.gitdir);
+-    const options = { ...repo, cache: {} };
++    const reuse = contentReuse(repo);
++    const options = { ...repo, fs: reuse.fs, cache: {} };
+     const sizes = new Map();
+     const matrix = await gitMatrix(options, paths, sizes);
+     const selected = matrix.filter(([path, , work, stage]) => work !== stage &&
+         paths.some((prefix) => prefix === "." || path === prefix || path.startsWith(`${prefix}/`)));
++    reuse.select(selected.map(([path]) => `${repo.dir}/${path}`));
++    try {
+     // The cache is never reused across shell executions or repository edits.
+     // Removing index entries holds no file bodies or compression streams.
+     for (const batch of stagingBatches(selected, sizes)) {
+@@ -62,6 +67,7 @@
+         if (path !== "." && !matrix.some(([name]) => name === path || name.startsWith(`${path}/`)))
+             await git.add({ ...options, filepath: path });
+     }
++    } finally { reuse.close(); git.clearInspectionOids(); }
+ }
+ function* stagingBatches(rows, sizes) {
+     const removalOnly = rows.every(([, , work]) => work === 0);
+@@ -234,3 +240,30 @@
+         return await git.resolveRef({ ...repo, ref: `refs/remotes/origin/${ref}` });
+     }
+ }
++
++function contentReuse(repo) {
++    const stored=new Map(); let bytes=0, inspecting=true;
++    const drop=path=>{const value=stored.get(path);if(value){bytes-=value.body.byteLength;value.release();stored.delete(path);}};
++    const eligible=path=>typeof path === 'string' && path.startsWith(`${repo.dir}/`) && !path.startsWith(`${repo.gitdir}/`);
++    const fs=Object.create(repo.fs);
++    fs.promises={...repo.fs.promises, readFile:async (path,options)=>{
++        if(!eligible(path) || typeof options === 'string' || options?.encoding !== undefined)return repo.fs.promises.readFile(path,options);
++        repo.fs.check();
++        const cached=stored.get(path);
++        if(!inspecting && !cached) return repo.fs.promises.readFile(path,options);
++        const read=repo.fs.context.fileSystem.readFile(commandPath(repo.fs.context,path));
++        if(cached && read.stat.mutationToken === cached.token){
++            await read.stream.cancel(); repo.fs.context.budget.io(cached.body.byteLength);drop(path);return cached.body;
++        }
++        drop(path);
++        const lease=await collectStream(repo.fs.context,read.stream);
++        try {
++            if(inspecting && bytes+lease.value.byteLength<=1024*1024 && stored.size<1024){
++                const release=repo.fs.context.budget.buffered(lease.value.byteLength);
++                bytes+=lease.value.byteLength;stored.set(path,{body:lease.value,token:read.stat.mutationToken,release});
++            }
++            return lease.value;
++        }finally{lease.release();}
++    }};
++    return {fs, select:paths=>{inspecting=false; const selected=new Set(paths);for(const path of stored.keys())if(!selected.has(path))drop(path);},close:()=>{for(const path of stored.keys())drop(path);}};
++}
+--- baseline/git-status.js
++++ hash-reuse/git-status.js
+@@ -1,4 +1,4 @@
+-import * as git from "isomorphic-git";
++import * as git from "/tmp/cf-vfs-add-hash-reuse/engine.mjs";
+ import { VfsError } from "../../core/errors.js";
+ import { compareUtf8 } from "../../core/path.js";
+ /** Compare actual bytes: the engine's stat cache compares only whole seconds. */
+--- baseline/isomorphic-git-1.43.1.js
++++ hash-reuse/engine.mjs
+@@ -5936,11 +5936,12 @@
+   oid = undefined,
+   dryRun = false,
+ }) {
++  const inspectedOid = type === 'blob' && format === 'content' ? inspectionOids.get(Buffer.from(object).toString('base64')) : undefined;
+   if (format !== 'deflated') {
+     if (format !== 'wrapped') {
+       object = GitObject.wrap({ type, object });
+     }
+-    oid = await shasum(object);
++    oid = inspectedOid ?? await shasum(object);
+     object = Buffer.from(await deflate(object));
+   }
+   if (!dryRun) {
+@@ -12651,6 +12652,8 @@
+  * console.log('format', format)
+  *
+  */
++const inspectionOids = new Map(); let inspectionBytes = 0;
++export function clearInspectionOids() { inspectionOids.clear(); inspectionBytes = 0; }
+ async function hashBlob({ object }) {
+   try {
+     assertParameter('object', object);
+@@ -12669,6 +12672,7 @@
+       object,
+     });
+ 
++    if (inspectionBytes + object.byteLength <= 1024*1024 && inspectionOids.size < 1024) { inspectionBytes += object.byteLength; inspectionOids.set(Buffer.from(object).toString('base64'), oid); }
+     return { oid, type, object: _object, format: 'wrapped' }
+   } catch (err) {
+     err.caller = 'git.hashBlob';

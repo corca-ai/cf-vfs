@@ -1,0 +1,101 @@
+--- src/vfs/buffering.ts
++++ src/vfs/buffering.ts
+@@ -107,25 +107,35 @@
+ 
+ /** Takes the same bounded lease without introducing an async boundary for materialized input. */
+ export function collectInlineBytesSync(
+-  body: string,
++  body: Exclude<ByteBody, ReadableStream<Uint8Array>>,
+   maximumBytes: number,
+   chunkBytes: number,
+   budget: InFlightByteBudget,
+   heldByCaller = 0,
+ ): BufferedChunksLease {
+   validatePositiveInteger(chunkBytes, "chunkBytes");
+-  const input = encodeUtf8(body);
++  const input =
++    typeof body === "string"
++      ? encodeUtf8(body)
++      : body instanceof ArrayBuffer
++        ? new Uint8Array(body)
++        : new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
+   const sizeBytes = input.byteLength;
+   budget.acquire(sizeBytes, heldByCaller);
+   if (sizeBytes > maximumBytes) {
+     budget.release(sizeBytes);
+     throw new VfsError("EFBIG", `stream exceeds the ${maximumBytes}-byte limit`);
+   }
+-  // The encoder owns this buffer; unlike a caller's byte view it cannot be
+-  // changed while collecting. Chunk views need no second body-sized copy.
+-  const chunks: Uint8Array[] = [];
+-  for (let offset = 0; offset < sizeBytes; offset += chunkBytes) {
+-    chunks.push(input.subarray(offset, offset + chunkBytes));
++  try {
++    // Strings are privately encoded. Byte input is copied before returning so
++    // later caller mutations never reach a committed file or an async batch.
++    const owned = typeof body === "string" ? input : input.slice();
++    const chunks: Uint8Array[] = [];
++    for (let offset = 0; offset < sizeBytes; offset += chunkBytes)
++      chunks.push(owned.subarray(offset, offset + chunkBytes));
++    return leasedChunks(chunks, sizeBytes, budget, sizeBytes);
++  } catch (error) {
++    budget.release(sizeBytes);
++    throw error;
+   }
+-  return leasedChunks(chunks, sizeBytes, budget, sizeBytes);
+ }
+--- src/vfs/sql-content-base.ts
++++ src/vfs/sql-content-base.ts
+@@ -252,7 +252,10 @@
+     }
+   }
+ 
+-  protected collectInlineSync(body: string, heldByCaller = 0) {
++  protected collectInlineSync(
++    body: Exclude<ByteBody, ReadableStream<Uint8Array>>,
++    heldByCaller = 0,
++  ) {
+     try {
+       return collectInlineBytesSync(
+         body,
+--- src/vfs/sql-write-base.ts
++++ src/vfs/sql-write-base.ts
+@@ -68,8 +68,11 @@
+         : undefined;
+     const plan = this.planInlineWrite(path, options, options, posix, snapshot);
+     const buffered =
+-      typeof body === "string" ? this.collectInlineSync(body) : await this.collectInline(body);
+-    const digest = materialized ? undefined : await this.incomingDigest(options, buffered);
++      body instanceof ReadableStream
++        ? await this.collectInline(body)
++        : this.collectInlineSync(body);
++    const digest =
++      options.skipIfUnchanged === true ? await this.incomingDigest(options, buffered) : undefined;
+     let queued = false;
+     const result = this.useBuffered(buffered, (chunks, sizeBytes) =>
+       this.transaction(() => {
+@@ -143,9 +146,9 @@
+         // that merely collided with a concurrent read or batch.
+         const body = entry.body;
+         const lease =
+-          typeof body === "string"
+-            ? this.collectInlineSync(body, held)
+-            : await this.collectInline(body, held);
++          body instanceof ReadableStream
++            ? await this.collectInline(body, held)
++            : this.collectInlineSync(body, held);
+         held += lease.sizeBytes;
+         const item: CollectedWrite = { plan, lease, digest: undefined };
+         collected.push(item);
+@@ -179,7 +182,10 @@
+     this.validateGuard(normalized, before, options, path);
+     const capturedToken = before.mutationToken;
+     const materialized = typeof body === "string";
+-    const buffered = materialized ? this.collectInlineSync(body) : await this.collectInline(body);
++    const buffered =
++      body instanceof ReadableStream
++        ? await this.collectInline(body)
++        : this.collectInlineSync(body);
+     return this.useBuffered(buffered, (chunks, bytes) =>
+       this.commitAppend(
+         normalized,

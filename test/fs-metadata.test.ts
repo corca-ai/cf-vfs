@@ -103,6 +103,66 @@ it("bounds the cache and retains correctness after eviction", async () => {
   expect(() => new FsMetadataCache(0)).toThrow(expect.objectContaining({ code: "EINVAL" }));
 });
 
+it("preserves unrelated metadata across a content overwrite", async () => {
+  const { cache, fileSystem, count } = cached();
+  await fileSystem.writeFiles([
+    { path: "/a", body: "old" },
+    { path: "/b", body: "unchanged" },
+  ]);
+  cache.list(fileSystem, "/");
+  await fileSystem.writeFile("/a", "longer");
+  const before = count();
+  expect(cache.stat(fileSystem, "/b", false).sizeBytes).toBe(9);
+  expect(count()).toBe(before);
+  expect(cache.stat(fileSystem, "/a", false).sizeBytes).toBe(6);
+  expect(count()).toBeGreaterThan(before);
+});
+
+it("invalidates every hard-link alias on a content overwrite", async () => {
+  const { createFsAdapter } = await import("../src/fs/index.js");
+  const { cache, fileSystem } = cached();
+  await fileSystem.writeFile("/a", "old");
+  await createFsAdapter(fileSystem).promises.link("/a", "/alias");
+  cache.list(fileSystem, "/");
+  await fileSystem.writeFile("/a", "longer");
+  expect(cache.stat(fileSystem, "/alias", false).sizeBytes).toBe(6);
+});
+
+it("invalidates directory and root permission checks", async () => {
+  const { cache, fileSystem } = cached();
+  await fileSystem.writeFile("/dir/a", "secret", { createParents: true });
+  await fileSystem.writeFile("/dir-other/a", "public", { createParents: true });
+  const user = fileSystem.forCredentials({ uid: 1, gid: 1 });
+  cache.list(user, "/dir");
+  cache.list(user, "/dir-other");
+  fileSystem.setMetadata("/dir", { mode: 0o040700 });
+  expect(cache.stat(user, "/dir-other/a", false).sizeBytes).toBe(6);
+  expect(() => cache.stat(user, "/dir/a", false)).toThrow(
+    expect.objectContaining({ code: "EACCES" }),
+  );
+  fileSystem.setMetadata("/", { mode: 0o040700 });
+  expect(() => cache.stat(user, "/dir-other/a", false)).toThrow(
+    expect.objectContaining({ code: "EACCES" }),
+  );
+});
+
+it("invalidates deep paths after eviction and ancestor changes", async () => {
+  const { cache, fileSystem } = cached(2);
+  const parent = `/deep/${"nested/".repeat(12)}dir`;
+  await fileSystem.writeFile(`${parent}/a`, "a", { createParents: true });
+  await fileSystem.writeFile(`${parent}/b`, "b");
+  await fileSystem.writeFile(`${parent}/c`, "c");
+  const user = fileSystem.forCredentials({ uid: 1, gid: 1 });
+  cache.list(user, parent);
+  expect(cache.stat(user, `${parent}/a`, false).sizeBytes).toBe(1);
+  cache.clear();
+  cache.list(user, parent);
+  fileSystem.setMetadata("/deep", { mode: 0o040700 });
+  expect(() => cache.stat(user, `${parent}/c`, false)).toThrow(
+    expect.objectContaining({ code: "EACCES" }),
+  );
+});
+
 it("does not discard opaque object metadata when warming from a listing", async () => {
   const { MemoryOpaqueStore } = await import("../src/testing/opaque-store.js");
   const { putOpaque } = await import("../src/vfs/opaque.js");

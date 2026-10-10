@@ -12,6 +12,7 @@ import {
 } from "./sql-posix.js";
 import type {
   AppendFileOptions,
+  BulkOperation,
   ByteBody,
   ChangePage,
   CopyOptions,
@@ -57,6 +58,10 @@ export type {
 
 export class SqlFileSystem extends SqlGc implements PosixVirtualFileSystem {
   private handles: HandleProvider | undefined;
+  canUseBulkOperation(_operation: BulkOperation, _path: string): boolean {
+    return true;
+  }
+
   /** Hosts await this at startup to arm recovery maintenance before serving work. */
   async initialize(): Promise<void> {
     if (!this.recoveredDetached) return;
@@ -151,6 +156,10 @@ class PosixFileSystemView implements VirtualFileSystem {
     private readonly access: PosixAccessContext,
   ) {}
 
+  canUseBulkOperation(operation: BulkOperation, path: string): boolean {
+    return this.inner.canUseBulkOperation(operation, path);
+  }
+
   linkFile(from: string, to: string): void {
     this.inner.linkFile(from, to, this.access);
   }
@@ -161,6 +170,10 @@ class PosixFileSystemView implements VirtualFileSystem {
 
   getMutationToken(path: string, options?: MutationTokenOptions): string {
     return this.inner.getMutationToken(path, options, this.access);
+  }
+
+  get availableWriteBufferBytes(): number {
+    return this.inner.availableWriteBufferBytes;
   }
 
   stat(path: string): VfsStat {

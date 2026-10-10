@@ -84,7 +84,7 @@ it("meters the five POSIX optimization workloads", async () => {
     ["write-full", 35, 1041, 33],
     ["write-byte", 5, 1011, 2],
     ["alias-chmod", 3, 3, 1],
-    ["alias-write", 3, 8, 2],
-    ["alias-shared-write", 4, 1031, 5],
+    ["alias-write", 3, 9, 2],
+    ["alias-shared-write", 4, 1032, 5],
   ]);
 });

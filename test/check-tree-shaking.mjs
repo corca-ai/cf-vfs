@@ -20,6 +20,7 @@ const record = process.argv.includes("--record");
 // that reworded comments or diagnostics cannot weaken.
 const M = {
   applet: "shell/commands/applet",
+  git: "shell/commands/git",
   awk: "shell/commands/awk",
   options: "shell/commands/options",
   helpers: "shell/commands/helpers",
@@ -100,6 +101,13 @@ function familyMembers(modules, family) {
 }
 
 const PRESETS = [
+  {
+    name: "git",
+    config: "wrangler.git-tree-shake.jsonc",
+    describe: "the opt-in Git applet and engine, with no shell or SQL owner",
+    include: [M.git, M.applet],
+    exclude: [M.shell, M.registry, M.sql, M.doSql, M.r2, M.interactive],
+  },
   {
     name: "ls",
     config: "wrangler.tree-shake.jsonc",
@@ -454,7 +462,7 @@ async function bundle(config) {
         `${config} produced no library modules; the source map may have changed shape`,
       );
     }
-    return { source, modules };
+    return { source, modules, sources };
   } finally {
     await rm(outputDirectory, { recursive: true, force: true });
   }
@@ -463,12 +471,18 @@ async function bundle(config) {
 const measured = [];
 const failures = [];
 for (const preset of PRESETS) {
-  const { source, modules } = await bundle(preset.config);
+  const { source, modules, sources } = await bundle(preset.config);
   for (const family of preset.include) {
     assert(familyMembers(modules, family).length > 0, `${preset.name} bundle is missing ${family}`);
   }
   const optionalFs = preset.name.startsWith("fs-") ? [] : [M.fsPromises, M.fsMetadata, M.fsContent];
-  for (const family of [...preset.exclude, ...NEVER_BUNDLED, ...optionalFs]) {
+  const optionalGit = preset.name === "git" ? [] : [M.git];
+  assert.equal(
+    sources.some((path) => path.includes("/isomorphic-git/")),
+    preset.name === "git",
+    `${preset.name}: Git engine reachability differs from its opt-in contract`,
+  );
+  for (const family of [...preset.exclude, ...NEVER_BUNDLED, ...optionalFs, ...optionalGit]) {
     const reached = familyMembers(modules, family);
     assert(reached.length === 0, `${preset.name} bundle reaches ${reached.join(", ")}`);
   }

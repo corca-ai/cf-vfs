@@ -1,0 +1,74 @@
+{
+  "node": "v24.18.0",
+  "files": 1000,
+  "mode": "initial",
+  "warmupPairs": 0,
+  "measuredPairs": 1,
+  "profiling": true,
+  "timingCaveat": "Instrumented counters only; wall times are not used for performance conclusions.",
+  "verifiedPerTrial": 1000,
+  "rows": [
+    {
+      "version": "baseline",
+      "trial": 0,
+      "ms": 190.744958,
+      "reads": 1040,
+      "calls": 19180,
+      "indexWrites": 8,
+      "indexBytes": 330304,
+      "batchCalls": 0,
+      "objectWriteAttempts": 1249,
+      "batchSizes": []
+    },
+    {
+      "version": "candidate",
+      "trial": 0,
+      "ms": 124.862708,
+      "reads": 1040,
+      "calls": 12726,
+      "indexWrites": 8,
+      "indexBytes": 330304,
+      "batchCalls": 8,
+      "objectWriteAttempts": 1000,
+      "batchSizes": [
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        128,
+        104
+      ]
+    }
+  ],
+  "summary": {
+    "baseline": {
+      "median": 190.744958,
+      "p10": 190.744958,
+      "p90": 190.744958
+    },
+    "candidate": {
+      "median": 124.862708,
+      "p10": 124.862708,
+      "p90": 124.862708
+    },
+    "ratio": {
+      "median": 0.6546055492591316,
+      "p10": 0.6546055492591316,
+      "p90": 0.6546055492591316,
+      "ci95": [
+        0.6546055492591316,
+        0.6546055492591316
+      ]
+    },
+    "reads": [
+      1040,
+      1040
+    ],
+    "calls": [
+      19180,
+      12726
+    ]
+  }
+}

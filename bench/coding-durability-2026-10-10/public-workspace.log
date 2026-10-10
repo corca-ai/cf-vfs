@@ -1,0 +1,21 @@
+shell mkdir /home/demo/queue-recovery-1791561266941; printf seed > /home/demo/queue-recovery-1791561266941/f
+shell sleep 1; cat /home/demo/queue-recovery-1791561266941/f
+shell printf later > /home/demo/queue-recovery-1791561266941/f
+shell cat /home/demo/queue-recovery-1791561266941/f
+shell sleep 1; cat /home/demo/queue-recovery-1791561266941/f
+shell cat /home/demo/queue-recovery-1791561266941/f
+shell sleep 1; printf shell > /home/demo/queue-recovery-1791561266941/f
+shell cat /home/demo/queue-recovery-1791561266941/f
+shell sleep 5
+shell test -e /home/demo/queue-recovery-1791561266941/cancelled; test $? -eq 1
+shell printf resumed
+shell printf released
+shell sleep 5
+shell test -e /home/demo/queue-recovery-1791561266941/disconnected; test $? -eq 1
+shell git init /home/demo/queue-recovery-1791561266941/repo; git -C /home/demo/queue-recovery-1791561266941/repo config user.name Smoke; git -C /home/demo/queue-recovery-1791561266941/repo config user.email smoke@example.invalid; printf committed > /home/demo/queue-recovery-1791561266941/repo/a; git -C /home/demo/queue-recovery-1791561266941/repo add a; git -C /home/demo/queue-recovery-1791561266941/repo commit -m initial; printf dirty > /home/demo/queue-recovery-1791561266941/repo/a; printf keep > /home/demo/queue-recovery-1791561266941/repo/untracked
+shell git -C /home/demo/queue-recovery-1791561266941/repo checkout main; test $? -ne 0
+shell git -C /home/demo/queue-recovery-1791561266941/repo checkout --force main
+shell cat /home/demo/queue-recovery-1791561266941/repo/a
+shell cat /home/demo/queue-recovery-1791561266941/repo/untracked
+shell rm -rf /home/demo/queue-recovery-1791561266941
+{"url":"https://vfs.borca.ai","root":"/home/demo/queue-recovery-1791561266941","checks":["Two shells run in order; the earlier command reads stable bytes","Editor change waits for the command and is flushed before the next command","Queued editor update based on pre-command version is refused","Cancelling a queued shell drops its mutation and leaves the session usable","Cancelling an active command releases the room queue","Disconnecting a queued caller prevents its mutation","Public Git force checkout repairs tracked bytes and keeps unrelated untracked content"]}

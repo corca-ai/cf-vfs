@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { DemoDocuments } from "../demo/document.js";
 import { parseClientMessage } from "../demo/protocol.js";
+import { WorkspaceOperations } from "../demo/workspace-operations.js";
 import { CollaborativeFileSystem } from "../src/collab/index.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { Shell } from "../src/shell/shell.js";
@@ -294,4 +295,61 @@ it("shares the registry document across equivalent path spellings", async () => 
   await storage.writeFile("/doc", "stored");
   expect(await documents.open("/./doc")).toBe(await documents.open("/doc"));
   expect(documents.openPaths()).toEqual(["/doc"]);
+});
+
+it("keeps deferred publication behind the host command queue", async () => {
+  vi.useFakeTimers();
+  const { documents, storage, editable, notices } = room();
+  const operations = new WorkspaceOperations();
+  documents.attach(
+    editable,
+    (notice) => notices.push(notice),
+    (operation) => operations.run(operation),
+  );
+  await storage.writeFile("/queued", "before");
+  const document = await documents.open("/queued");
+  documents.applyClientText("/queued", document.version(), "edited");
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const command = operations.run(() => gate);
+  await vi.advanceTimersByTimeAsync(500);
+  expect(await new Response(storage.readFile("/queued").stream).text()).toBe("before");
+  release();
+  await command;
+  await operations.run(() => undefined);
+  expect(await new Response(storage.readFile("/queued").stream).text()).toBe("edited");
+});
+
+it("flushes editor bytes before a command reads and commits them", async () => {
+  const { documents, storage } = room();
+  await storage.writeFile("/flush", "before");
+  const document = await documents.open("/flush");
+  documents.applyClientText("/flush", document.version(), "edited");
+  await documents.flush();
+  expect(await new Response(storage.readFile("/flush").stream).text()).toBe("edited");
+  expect(documents.registry.get("/flush")?.dirty).toBe(false);
+});
+
+it("reports failed publication while retaining edits so a command can free quota and retry", async () => {
+  let maximum = 1024;
+  const storage = createTestFileSystem({ maxInlineLogicalBytes: () => maximum });
+  const documents = new DemoDocuments();
+  rooms.push(documents);
+  const notices: { kind: string }[] = [];
+  const editable = new CollaborativeFileSystem(storage, documents.registry);
+  documents.attach(editable, (notice) => notices.push(notice));
+  await storage.writeFile("/edit", "before");
+  await storage.writeFile("/filler", "filler");
+  const document = await documents.open("/edit");
+  documents.applyClientText("/edit", document.version(), "edited and larger");
+  maximum = 20;
+  expect(await documents.flush()).toBe(false);
+  expect(documents.registry.get("/edit")?.dirty).toBe(true);
+  expect(notices).toContainEqual(expect.objectContaining({ kind: "error" }));
+  const shell = new Shell({ fileSystem: editable, commands: defaultShellCommands });
+  expect((await shell.executeText({ script: "rm /filler" })).exitCode).toBe(0);
+  expect(await documents.flush()).toBe(true);
+  expect(await new Response(storage.readFile("/edit").stream).text()).toBe("edited and larger");
 });

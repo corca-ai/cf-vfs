@@ -1,0 +1,169 @@
+--- a/src/vfs/sql-write-base.ts
++++ b/src/vfs/sql-write-base.ts
+@@ -1,5 +1,5 @@
+ import { VfsError } from "../core/errors.js";
+-import { normalizePath, pathRequiresDirectory } from "../core/path.js";
++import { hasDotSegments, normalizePath, pathRequiresDirectory } from "../core/path.js";
+ import { emitVfsEvent } from "./events.js";
+ import {
+   blobColumn,
+@@ -8,9 +8,11 @@
+   type InlineEntryRow,
+   type InlineWritePlan,
+   integerColumn,
++  parseEntry,
+   type SqlRow,
+ } from "./sql-model.js";
+ import { type PosixAccessContext, WRITE_PERMISSION } from "./sql-posix.js";
++import { ENTRY_COLUMNS } from "./sql-schema.js";
+ import { SqlWritePlan } from "./sql-write-plan-base.js";
+ import { rechunk } from "./streams.js";
+ import type {
+@@ -34,6 +36,8 @@
+   );
+ }
+ 
++type InlineTail = { readonly index: number; readonly body: Uint8Array } | null;
++
+ export abstract class SqlWrite extends SqlWritePlan {
+   /** Uses the same write planner as publication without changing storage. Returns the effective mode. */
+   validateInlineWrite(
+@@ -183,7 +187,16 @@
+     options: AppendFileOptions = {},
+     posix?: PosixAccessContext,
+   ): Promise<WriteResult> {
+-    const access = this.resolveAccess(path);
++    const direct =
++      typeof body === "string" &&
++      body.length > 0 &&
++      posix === undefined &&
++      !pathRequiresDirectory(path) &&
++      !hasDotSegments(path) &&
++      this.links() === 0
++        ? this.directAppend(path)
++        : undefined;
++    const access = direct?.access ?? this.resolveAccess(path);
+     const normalized = access.path;
+     this.assertTraverse(normalized, access.followed, posix);
+     const before = this.requireInline(normalized, access.row);
+@@ -203,6 +216,7 @@
+         options,
+         posix,
+         materialized ? before : undefined,
++        direct?.tail,
+       ),
+     );
+   }
+@@ -217,6 +231,7 @@
+     options: AppendFileOptions,
+     posix: PosixAccessContext | undefined,
+     snapshot?: InlineEntryRow,
++    tail?: InlineTail,
+   ): WriteResult {
+     return this.transaction(() => {
+       const current =
+@@ -236,7 +251,14 @@
+           created: false,
+         };
+       }
+-      return this.appendContent(current, path, suffixChunks, suffixBytes, snapshot !== undefined);
++      return this.appendContent(
++        current,
++        path,
++        suffixChunks,
++        suffixBytes,
++        snapshot !== undefined,
++        tail,
++      );
+     });
+   }
+ 
+@@ -246,11 +268,12 @@
+     suffixChunks: readonly Uint8Array[],
+     suffixBytes: number,
+     conditional: boolean,
++    tail?: InlineTail,
+   ): WriteResult {
+     const sizeBytes = current.sizeBytes + suffixBytes;
+     this.assertAppendSize(current, path, sizeBytes);
+     this.assertCapacity(suffixBytes * (current.linkCount ?? 1), 0, path);
+-    const plan = this.appendChunkPlan(current, path, suffixChunks);
++    const plan = this.appendChunkPlan(current, path, suffixChunks, tail);
+     const now = this.now();
+     const mutationVersion = current.mutationVersion + 1;
+     const written = this.sql.exec<SqlRow>(
+@@ -298,22 +321,16 @@
+     current: InlineEntryRow,
+     path: string,
+     suffixChunks: readonly Uint8Array[],
++    capturedTail?: InlineTail,
+   ): { firstChunkIndex: number; chunks: readonly Uint8Array[] } {
+-    const lastChunk = firstRow(
+-      this.sql.exec<SqlRow>(
+-        `SELECT chunk_index, body FROM vfs_inline_chunks
+-         WHERE entry_id = ? ORDER BY chunk_index DESC LIMIT 1`,
+-        current.id,
+-      ),
+-    );
+-    if (lastChunk === undefined) {
++    const lastChunk = capturedTail === undefined ? this.inlineTail(current.id) : capturedTail;
++    if (lastChunk === null) {
+       if (current.sizeBytes !== 0) {
+         throw new VfsError("EIO", "inline file is missing stored chunks", path);
+       }
+       return { firstChunkIndex: 0, chunks: suffixChunks };
+     }
+-    const index = integerColumn(lastChunk, "chunk_index");
+-    const tail = new Uint8Array(blobColumn(lastChunk, "body"));
++    const { index, body: tail } = lastChunk;
+     let width = this.chunkBytes;
+     if (!matchesChunkTail(current.sizeBytes, width, index, tail.byteLength)) {
+       width = this.storedChunkBytes(current, path);
+@@ -327,4 +344,47 @@
+         }
+       : { firstChunkIndex: index, chunks: rechunk([tail, ...suffixChunks], width) };
+   }
++
++  private inlineTail(entryId: number): InlineTail {
++    const row = firstRow(
++      this.sql.exec<SqlRow>(
++        `SELECT chunk_index, body FROM vfs_inline_chunks
++       WHERE entry_id = ? ORDER BY chunk_index DESC LIMIT 1`,
++        entryId,
++      ),
++    );
++    return row === undefined
++      ? null
++      : {
++          index: integerColumn(row, "chunk_index"),
++          body: new Uint8Array(blobColumn(row, "body")),
++        };
++  }
++
++  private directAppend(path: string) {
++    // A materialized string cannot yield between this snapshot and commit.
++    // The unique pathname lookup and descending chunk primary key seek one
++    // tail, even for large files; no cursor crosses an await.
++    const normalized = normalizePath(path);
++    const row = firstRow(
++      this.sql.exec<SqlRow>(
++        `SELECT ${ENTRY_COLUMNS}, c.chunk_index AS last_chunk_index, c.body AS last_body
++       FROM vfs_entries e INDEXED BY vfs_entries_path
++       LEFT JOIN vfs_inline_chunks c ON c.entry_id = e.id AND e.content_class = 'inline'
++       WHERE e.path = ? ORDER BY c.chunk_index DESC LIMIT 1`,
++        normalized,
++      ),
++    );
++    if (row === undefined) throw new VfsError("ENOENT", "no such file or directory", normalized);
++    return {
++      access: { path: normalized, row: parseEntry(row, this.mutationEpoch), followed: [] },
++      tail:
++        row["last_chunk_index"] === null
++          ? null
++          : {
++              index: integerColumn(row, "last_chunk_index"),
++              body: new Uint8Array(blobColumn(row, "last_body")),
++            },
++    };
++  }
+ }

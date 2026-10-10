@@ -2,7 +2,7 @@ import { VfsError } from "../core/errors.js";
 import { encodeUtf8 } from "../core/unicode.js";
 import { validatePositiveInteger } from "./config.js";
 import { emitVfsEvent, type VfsEventSink } from "./events.js";
-import { collectRechunkedBytes, rechunk } from "./streams.js";
+import { collectRechunkedBytes } from "./streams.js";
 import type { ByteBody } from "./types.js";
 
 export interface BufferedChunksLease {
@@ -37,6 +37,10 @@ export class InFlightByteBudget {
     private readonly onEvent?: VfsEventSink,
   ) {
     validatePositiveInteger(maximumBytes, "maxInFlightBufferedBytes");
+  }
+
+  get remainingBytes(): number {
+    return this.maximumBytes - this.usedBytes;
   }
 
   /**
@@ -113,6 +117,7 @@ export function collectInlineBytesSync(
   budget: InFlightByteBudget,
   heldByCaller = 0,
 ): BufferedChunksLease {
+  validatePositiveInteger(chunkBytes, "chunkBytes");
   const input = encodeUtf8(body);
   const sizeBytes = input.byteLength;
   budget.acquire(sizeBytes, heldByCaller);
@@ -120,7 +125,11 @@ export function collectInlineBytesSync(
     budget.release(sizeBytes);
     throw new VfsError("EFBIG", `stream exceeds the ${maximumBytes}-byte limit`);
   }
-  const chunks =
-    sizeBytes === 0 ? [] : sizeBytes <= chunkBytes ? [input] : rechunk([input], chunkBytes);
+  // The encoder owns this buffer; unlike a caller's byte view it cannot be
+  // changed while collecting. Chunk views need no second body-sized copy.
+  const chunks: Uint8Array[] = [];
+  for (let offset = 0; offset < sizeBytes; offset += chunkBytes) {
+    chunks.push(input.subarray(offset, offset + chunkBytes));
+  }
   return leasedChunks(chunks, sizeBytes, budget, sizeBytes);
 }

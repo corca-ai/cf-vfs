@@ -1,0 +1,73 @@
+File & Git benchmarks ↗
+Virtual Filesystem and Container
+based on Durable Object SQL.
+cf-vfs:/home/demo$ reconnecting
+session disconnected; reconnecting…
+cf-vfs interactive demo
+Shared workspace country-KR — everyone in this country types into the same files.
+Files persist. Working directory, variables, and history do not survive a reconnect.
+Tab completes · Ctrl-R searches history · Ctrl-W/U/K edit · Ctrl-C cancels · Ctrl-D exits
+Try cat README.txt or printf 'hello\n' > hello.txt
+cf-vfs:/home/demo$ mkdir /home/demo/api-batch-smoke-20261009-final && cd /home/demo/api-batch-smoke-20261009-final && git init && git config us
+er.name ApiSmoke && git config user.email smoke@example.invalid && for n in {1..32}; do printf "file %s\n" "${n}" > f${n}; done && git add -A &
+& git status --porcelain | wc -l && git commit -m initial && git status --porcelain | wc -l && printf "changed\n" > f1 && git add f1 && git com
+mit -m changed && git status --porcelain | wc -l && cd /home/demo && rm -rf /home/demo/api-batch-smoke-20261009-final && printf "API_BATCH_SMOK
+E_OK\n"
+32
+ec5ec21d3a23825268fb69ade04fd9d13ba35362
+0
+c24c097f2afd7bbf9ef99cea4b546e0ee627cc2b
+0
+API_BATCH_SMOKE_OK
+cf-vfs:/home/demo$  
+TRY
+identity
+write a file
+pipeline
+make a tree
+brace range
+find and edit
+what is here
+applet directory
+a device
+symlink
+heredoc
+arithmetic
+a loop
+fetch a page
+fetch some JSON
+query it
+shape it
+jq on a literal
+jq refuses the rest
+refused origin
+refused method
+disk usage
+Edit a file while the shell does
+File to open
+Open
+
+Open a file, then change it from the terminal — sed -i lands here as an edit instead of overwriting what you typed.
+
+File contents
+
+Everyone visiting from the same country shares one workspace here, so what you write is what the next person finds — and can change. It holds fifty kilobytes; when it is full, deleting something makes room. A public whiteboard, not your own.
+
+A sandbox for an agent, without a container
+
+Files and a shell inside one Durable Object. Nothing to build, boot, or clean up — and no machine underneath for anything to escape onto.
+
+Ready the moment you name one
+
+The filesystem is rows in SQLite, so there is no image to pull and nothing kept warm between uses. A workspace starts in milliseconds and costs nothing while idle.
+
+The commands behave like the ones they are named after
+
+Seventy-five of them — grep, sed, jq, find — answering to recordings from real GNU, Bash, and jq. Where this differs on purpose it says so rather than guessing.
+
+A runaway command stops itself
+
+Every run carries ceilings on time, output, memory in flight, and how much it may change. Try while true; do :; done — it ends on its own instead of taking the object with it.
+
+View source
+↗

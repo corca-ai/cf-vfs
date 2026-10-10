@@ -1,14 +1,31 @@
+/** Reuses contiguous owned chunk views without joining another body-sized buffer. */
+function contiguousBody(chunks: readonly Uint8Array[], sizeBytes: number): Uint8Array | undefined {
+  const first = chunks[0];
+  if (first === undefined) return undefined;
+  let end = first.byteOffset;
+  for (const chunk of chunks) {
+    if (chunk.buffer !== first.buffer || chunk.byteOffset !== end) return undefined;
+    end += chunk.byteLength;
+  }
+  return end - first.byteOffset === sizeBytes
+    ? new Uint8Array(first.buffer, first.byteOffset, sizeBytes)
+    : undefined;
+}
+
 /** Lowercase hexadecimal SHA-256 over one buffered body. */
 export async function sha256Hex(chunks: readonly Uint8Array[], sizeBytes: number): Promise<string> {
   let source: Uint8Array;
   if (chunks.length === 1 && chunks[0] !== undefined) {
     source = chunks[0];
   } else {
-    source = new Uint8Array(sizeBytes);
-    let offset = 0;
-    for (const chunk of chunks) {
-      source.set(chunk, offset);
-      offset += chunk.byteLength;
+    const contiguous = contiguousBody(chunks, sizeBytes);
+    source = contiguous ?? new Uint8Array(sizeBytes);
+    if (contiguous === undefined) {
+      let offset = 0;
+      for (const chunk of chunks) {
+        source.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
     }
   }
   const digestInput: Uint8Array<ArrayBuffer> =

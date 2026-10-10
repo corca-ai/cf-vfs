@@ -60,3 +60,15 @@ it("refuses oversized glob patterns before compiling them", () => {
     expect.objectContaining({ code: "E2BIG" }),
   );
 });
+
+it("normalizes canonical ASCII boundaries without relaxing pathname validation", () => {
+  expect(normalizePath(`/a/${"b".repeat(250)}`)).toBe(`/a/${"b".repeat(250)}`);
+  expect(normalizePath("/.git/objects/ab/hash")).toBe("/.git/objects/ab/hash");
+  expect(normalizePath("/a\n/b\t")).toBe("/a\n/b\t");
+  expect(normalizePath("/a/../b//./c/")).toBe("/b/c");
+  expect(normalizePath("/가/😀/file")).toBe("/가/😀/file");
+  expect(() => normalizePath(`/a/${"x".repeat(256)}`)).toThrowError(
+    expect.objectContaining({ code: "ENAMETOOLONG" }),
+  );
+  expect(() => normalizePath("/a/\0b")).toThrowError(expect.objectContaining({ code: "EINVAL" }));
+});

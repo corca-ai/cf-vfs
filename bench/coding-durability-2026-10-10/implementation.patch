@@ -1,0 +1,147 @@
+--- a/src/shell/commands/git-worktree.ts
++++ b/src/shell/commands/git-worktree.ts
+@@ -3,6 +3,7 @@
+ import { createLineDiff, renderLineDiff } from "../../core/line-diff.js";
+ import { isDescendant, normalizeFileSystemPath, normalizePath } from "../../core/path.js";
+ import type { ShellFileDescriptors } from "../types.js";
++import { checkoutGit } from "./git-checkout.js";
+ import { gitArguments, gitOperands } from "./git-options.js";
+ import { type GitRepository, gitIdentity } from "./git-repository.js";
+ import { gitMatrix, gitStatusCode, requireCleanGitTree } from "./git-status.js";
+@@ -213,7 +214,7 @@
+     return;
+   }
+   if (!force) await requireCleanGitTree(repo);
+-  await git.checkout({ ...repo, ref, force });
++  await checkoutGit(repo, { ref, force });
+ }
+ 
+ export async function gitDiff(
+--- a/src/shell/commands/git-local.ts
++++ b/src/shell/commands/git-local.ts
+@@ -2,6 +2,7 @@
+ import { VfsError } from "../../core/errors.js";
+ import { basename, dirname, isDescendant, normalizePath } from "../../core/path.js";
+ import type { ShellFileDescriptors } from "../types.js";
++import { checkoutGit } from "./git-checkout.js";
+ import type { GitFileSystem } from "./git-fs.js";
+ import { gitArguments, gitOperands, localGitPath } from "./git-options.js";
+ import { type GitRepository, gitExists, gitHead, gitRepository } from "./git-repository.js";
+@@ -240,9 +241,9 @@
+   const ours = await gitHead(repo);
+   // An unchanged remote requires no checkout or reference publication.
+   if (ours === undefined || ours !== (await optionalRef(repo, theirs))) {
+-    await git.checkout({ ...repo, ref: theirs, dryRun: true });
++    await checkoutGit(repo, { ref: theirs, dryRun: true });
+     await git.merge({ ...repo, ours: branch, theirs, fastForwardOnly: true });
+-    await git.checkout({ ...repo, ref: branch });
++    await checkoutGit(repo, { ref: branch });
+   }
+   await writeText(fds[2], "Updated by fast-forward only.\n");
+ }
+@@ -259,12 +260,12 @@
+     const oid = await git.resolveRef({ ...source, ref: `refs/heads/${branch}` });
+     await git.writeRef({ ...target, ref: `refs/heads/${branch}`, value: oid, force: true });
+     await setTracking(target, branch, "origin", branch);
+-    if (!bare && !noCheckout) await git.checkout({ ...target, ref: branch });
++    if (!bare && !noCheckout) await checkoutGit(target, { ref: branch });
+   } else {
+     const oid = await gitHead(source);
+     if (oid !== undefined) {
+       await git.writeRef({ ...target, ref: "HEAD", value: oid, force: true });
+-      if (!bare && !noCheckout) await git.checkout({ ...target, ref: oid });
++      if (!bare && !noCheckout) await checkoutGit(target, { ref: oid });
+     }
+   }
+ }
+--- /dev/null
++++ b/src/shell/commands/git-checkout.ts
+@@ -0,0 +1,32 @@
++import * as git from "isomorphic-git";
++import type { GitRepository } from "./git-repository.js";
++
++/**
++ * The engine locks indexes by pathname in module state. A DO reset during
++ * checkout can abandon that lock while the module survives. Keep checkout's
++ * engine-only metadata paths unique; the adapter still accesses the real VFS.
++ * Hosts must serialize checkout with other repository operations and edits.
++ */
++export function checkoutGit(
++  repo: GitRepository,
++  options: Pick<Parameters<typeof git.checkout>[0], "ref" | "force" | "dryRun">,
++) {
++  const gitdir = `${repo.gitdir}/.checkout-${crypto.randomUUID()}`;
++  const translate = (path: string) =>
++    path === gitdir || path.startsWith(`${gitdir}/`)
++      ? repo.gitdir + path.slice(gitdir.length)
++      : path;
++  const promises = new Proxy(repo.fs.promises, {
++    get(target, property) {
++      const value: unknown = Reflect.get(target, property, target);
++      if (typeof value !== "function") return value;
++      return (...args: unknown[]) => {
++        const index = property === "symlink" ? 1 : 0;
++        const path = args[index];
++        if (typeof path === "string") args[index] = translate(path);
++        return Reflect.apply(value, target, args) as unknown;
++      };
++    },
++  });
++  return git.checkout({ ...repo, ...options, fs: { promises }, gitdir });
++}
+--- /dev/null
++++ b/test/git-checkout-isolation.test.ts
+@@ -0,0 +1,53 @@
++import { setTimeout as delay } from "node:timers/promises";
++import { expect, it } from "vitest";
++import { gitCommand } from "../src/shell/commands/git.js";
++import { Shell } from "../src/shell/shell.js";
++import type { VirtualFileSystem } from "../src/vfs/types.js";
++import { createTestFileSystem } from "./helpers/node-sql.js";
++
++it("a stalled checkout does not hold another filesystem's same-path index lock", async () => {
++  const first = createTestFileSystem();
++  const second = createTestFileSystem();
++  for (const vfs of [first, second]) {
++    const shell = new Shell({ fileSystem: vfs, commands: [gitCommand] });
++    await shell.executeText({ script: "git init /checkout-isolation" });
++    const run = (script: string) => shell.executeText({ script, cwd: "/checkout-isolation" });
++    await run("git config user.name Test; git config user.email test@example.invalid");
++    await vfs.writeFile("/checkout-isolation/a", "committed");
++    expect((await run("git add a; git commit -m initial")).exitCode).toBe(0);
++    await vfs.writeFile("/checkout-isolation/a", "dirty");
++  }
++  const entered = Promise.withResolvers<void>();
++  const resume = Promise.withResolvers<void>();
++  const held = new Proxy(first, {
++    get(target, property) {
++      if (property === "forCredentials") return undefined;
++      if (property === "writeFile")
++        return async (...args: Parameters<VirtualFileSystem["writeFile"]>) => {
++          if (args[0] === "/checkout-isolation/a") {
++            entered.resolve();
++            await resume.promise;
++          }
++          return target.writeFile(...args);
++        };
++      const value: unknown = Reflect.get(target, property, target);
++      return typeof value === "function" ? value.bind(target) : value;
++    },
++  });
++  const pending = new Shell({ fileSystem: held, commands: [gitCommand] }).executeText({
++    script: "git checkout --force main",
++    cwd: "/checkout-isolation",
++  });
++  await entered.promise;
++  const independent = new Shell({ fileSystem: second, commands: [gitCommand] }).executeText({
++    script: "git checkout --force main",
++    cwd: "/checkout-isolation",
++  });
++  try {
++    const completed = await Promise.race([independent, delay(1000).then(() => undefined)]);
++    expect(completed?.exitCode, "independent checkout blocked on another filesystem").toBe(0);
++  } finally {
++    resume.resolve();
++    await Promise.all([pending, independent]);
++  }
++});

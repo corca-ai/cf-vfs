@@ -617,10 +617,13 @@ runs inside the check on every mutation, so it must be cheap and synchronous.
 Returning anything but a positive safe integer fails that mutation with
 `EINVAL` rather than leaving the workspace unbounded.
 
-The other options are fixed for the object's life. `chunkBytes` and
-`maxInlineFileBytes` describe how stored bodies are laid out rather than how
-much may be stored, and changing either against data already written is what
-`EIO: inline file chunks do not match its size` reports.
+The other options are fixed for the object's life. A new instance can use a
+different `chunkBytes` with existing data: reads recover the stored width,
+append preserves it, and full overwrites replace all old chunks using the new
+width. Existing streams retain their previous body and inode identity is
+preserved, including hard links. Invalid stored chunk layouts still report
+`EIO`. `maxInlineFileBytes` limits incoming bodies rather than migrating
+existing data; lowering it can reject subsequent writes with `EFBIG`.
 
 Monitor logical inline bytes, entries, `storage.sql.databaseSize`, quota
 failures, stream-limit failures, deadline/idle cancellations, and per-command

@@ -1,0 +1,493 @@
+{
+  "node": "v24.18.0",
+  "cpu": "Apple M5 Max",
+  "warmups": 5,
+  "samples": 15,
+  "head": "78d7da1e6ee7d913319ec12736733a66648c623b",
+  "sourceDiff": "diff --git a/src/vfs/buffering.ts b/src/vfs/buffering.ts\nindex 8f9752e..42763ec 100644\n--- a/src/vfs/buffering.ts\n+++ b/src/vfs/buffering.ts\n@@ -2,7 +2,7 @@ import { VfsError } from \"../core/errors.js\";\n import { encodeUtf8 } from \"../core/unicode.js\";\n import { validatePositiveInteger } from \"./config.js\";\n import { emitVfsEvent, type VfsEventSink } from \"./events.js\";\n-import { collectRechunkedBytes, rechunk } from \"./streams.js\";\n+import { collectRechunkedBytes } from \"./streams.js\";\n import type { ByteBody } from \"./types.js\";\n \n export interface BufferedChunksLease {\n@@ -113,6 +113,7 @@ export function collectInlineBytesSync(\n   budget: InFlightByteBudget,\n   heldByCaller = 0,\n ): BufferedChunksLease {\n+  validatePositiveInteger(chunkBytes, \"chunkBytes\");\n   const input = encodeUtf8(body);\n   const sizeBytes = input.byteLength;\n   budget.acquire(sizeBytes, heldByCaller);\n@@ -120,7 +121,11 @@ export function collectInlineBytesSync(\n     budget.release(sizeBytes);\n     throw new VfsError(\"EFBIG\", `stream exceeds the ${maximumBytes}-byte limit`);\n   }\n-  const chunks =\n-    sizeBytes === 0 ? [] : sizeBytes <= chunkBytes ? [input] : rechunk([input], chunkBytes);\n+  // The encoder owns this buffer; unlike a caller's byte view it cannot be\n+  // changed while collecting. Chunk views need no second body-sized copy.\n+  const chunks: Uint8Array[] = [];\n+  for (let offset = 0; offset < sizeBytes; offset += chunkBytes) {\n+    chunks.push(input.subarray(offset, offset + chunkBytes));\n+  }\n   return leasedChunks(chunks, sizeBytes, budget, sizeBytes);\n }\ndiff --git a/src/vfs/digest.ts b/src/vfs/digest.ts\nindex e045cf9..33a96c7 100644\n--- a/src/vfs/digest.ts\n+++ b/src/vfs/digest.ts\n@@ -1,14 +1,31 @@\n+/** Reuses contiguous owned chunk views without joining another body-sized buffer. */\n+function contiguousBody(chunks: readonly Uint8Array[], sizeBytes: number): Uint8Array | undefined {\n+  const first = chunks[0];\n+  if (first === undefined) return undefined;\n+  let end = first.byteOffset;\n+  for (const chunk of chunks) {\n+    if (chunk.buffer !== first.buffer || chunk.byteOffset !== end) return undefined;\n+    end += chunk.byteLength;\n+  }\n+  return end - first.byteOffset === sizeBytes\n+    ? new Uint8Array(first.buffer, first.byteOffset, sizeBytes)\n+    : undefined;\n+}\n+\n /** Lowercase hexadecimal SHA-256 over one buffered body. */\n export async function sha256Hex(chunks: readonly Uint8Array[], sizeBytes: number): Promise<string> {\n   let source: Uint8Array;\n   if (chunks.length === 1 && chunks[0] !== undefined) {\n     source = chunks[0];\n   } else {\n-    source = new Uint8Array(sizeBytes);\n-    let offset = 0;\n-    for (const chunk of chunks) {\n-      source.set(chunk, offset);\n-      offset += chunk.byteLength;\n+    const contiguous = contiguousBody(chunks, sizeBytes);\n+    source = contiguous ?? new Uint8Array(sizeBytes);\n+    if (contiguous === undefined) {\n+      let offset = 0;\n+      for (const chunk of chunks) {\n+        source.set(chunk, offset);\n+        offset += chunk.byteLength;\n+      }\n     }\n   }\n   const digestInput: Uint8Array<ArrayBuffer> =\ndiff --git a/src/vfs/sql-content-base.ts b/src/vfs/sql-content-base.ts\nindex c8336ab..6e9c833 100644\n--- a/src/vfs/sql-content-base.ts\n+++ b/src/vfs/sql-content-base.ts\n@@ -1,6 +1,10 @@\n import { isVfsError, VfsError } from \"../core/errors.js\";\n import { basename, dirname } from \"../core/path.js\";\n-import { collectInlineBytes, collectInlineBytesSync } from \"./buffering.js\";\n+import {\n+  type BufferedChunksLease,\n+  collectInlineBytes,\n+  collectInlineBytesSync,\n+} from \"./buffering.js\";\n import { DIRECTORY_MODE } from \"./config.js\";\n import { sha256Hex } from \"./digest.js\";\n import { emitVfsEvent } from \"./events.js\";\n@@ -248,13 +252,14 @@ export abstract class SqlContent extends SqlMutation {\n     }\n   }\n \n-  protected collectInlineSync(body: string) {\n+  protected collectInlineSync(body: string, heldByCaller = 0) {\n     try {\n       return collectInlineBytesSync(\n         body,\n         this.maxInlineFileBytes,\n         this.chunkBytes,\n         this.inFlightBytes,\n+        heldByCaller,\n       );\n     } catch (error) {\n       this.throwInlineCollectionError(error);\n@@ -315,10 +320,17 @@ export abstract class SqlContent extends SqlMutation {\n    */\n   protected async incomingDigest(\n     options: { skipIfUnchanged?: boolean },\n-    buffered: { chunks: readonly Uint8Array[]; sizeBytes: number },\n+    buffered: BufferedChunksLease,\n   ): Promise<string | undefined> {\n-    if (options.skipIfUnchanged !== true) return undefined;\n-    return sha256Hex(buffered.chunks, buffered.sizeBytes);\n+    try {\n+      if (options.skipIfUnchanged !== true) return undefined;\n+      return await sha256Hex(buffered.chunks, buffered.sizeBytes);\n+    } catch (error) {\n+      // Hashing precedes publication, so its caller has not yet installed the\n+      // commit's release guard. Failed hashing must return this lease too.\n+      buffered.release();\n+      throw error;\n+    }\n   }\n \n   /**\ndiff --git a/src/vfs/sql-write-base.ts b/src/vfs/sql-write-base.ts\nindex a16f218..c6acec1 100644\n--- a/src/vfs/sql-write-base.ts\n+++ b/src/vfs/sql-write-base.ts\n@@ -67,7 +67,8 @@ export abstract class SqlWrite extends SqlWritePlan {\n         ? this.lastInlineRead\n         : undefined;\n     const plan = this.planInlineWrite(path, options, options, posix, snapshot);\n-    const buffered = materialized ? this.collectInlineSync(body) : await this.collectInline(body);\n+    const buffered =\n+      typeof body === \"string\" ? this.collectInlineSync(body) : await this.collectInline(body);\n     const digest = materialized ? undefined : await this.incomingDigest(options, buffered);\n     let queued = false;\n     const result = this.useBuffered(buffered, (chunks, sizeBytes) =>\n@@ -96,9 +97,10 @@ export abstract class SqlWrite extends SqlWritePlan {\n    * The three phases are the whole design, and the order is what makes it\n    * possible at all. Every entry is planned against SQLite synchronously, so\n    * a batch that cannot succeed is refused before it holds a byte. Then every\n-   * body is collected; this awaits only if the set contains a stream or asks\n-   * for a digest. Then one transaction publishes the set, holding no cursor\n-   * across anything.\n+   * body is collected; strings need no async boundary, while other bodies and\n+   * digests may yield. Entry accessors can still run caller code, so the set is\n+   * revalidated inside the transaction that publishes it. No cursor crosses\n+   * an await.\n    *\n    * An open transaction handed back to the host would be the other way to\n    * offer this, and it is the reason this shape exists instead: it would hold\n@@ -139,13 +141,20 @@ export abstract class SqlWrite extends SqlWritePlan {\n         // What the batch is already holding, so the budget can tell a set too\n         // large for it -- retrying which is work with no outcome -- from one\n         // that merely collided with a concurrent read or batch.\n-        const lease = await this.collectInline(entry.body, held);\n+        const body = entry.body;\n+        const lease =\n+          typeof body === \"string\"\n+            ? this.collectInlineSync(body, held)\n+            : await this.collectInline(body, held);\n         held += lease.sizeBytes;\n-        collected.push({\n-          plan,\n-          lease,\n-          digest: await this.incomingDigest(options, lease),\n-        });\n+        const item: CollectedWrite = { plan, lease, digest: undefined };\n+        collected.push(item);\n+        if (options.skipIfUnchanged === true) {\n+          collected[collected.length - 1] = {\n+            ...item,\n+            digest: await this.incomingDigest(options, lease),\n+          };\n+        }\n       }\n     } catch (error) {\n       for (const item of collected) item.lease.release();\n",
+  "compiledHashes": {
+    "baseline": {
+      "buffering.js": "aad0da217d9b5261ae0d80800047d20c75ec1b930d48beda60e96896d250ffe2",
+      "digest.js": "6d4f5cf5a56363bbe9fba4eef499d927b5c980bbc9889c3cc003646ca9c55917",
+      "sql-content-base.js": "5a06b747415bad79e2ea0b8b501669669004dfde7139c0ce4fdaa51cb844abc7",
+      "sql-write-base.js": "ee427d2bcf90ceda88430e7f8a7ff65c8baaea37aedd00ad9e9fd4e4340f862b"
+    },
+    "candidate": {
+      "buffering.js": "65d7e770e0a69051098e954f1062ddb83a4181a86f431503834507f74f30fd08",
+      "digest.js": "f3f085173af2befefbd4989ce5bf1abbbaeae9f0735119439fa664649382d24e",
+      "sql-content-base.js": "ff4aa3b3384c66dbf7fb4241df5a5e43ba7981e0ade13c45bcbc09f317884922",
+      "sql-write-base.js": "69d5d3189708574c2488e542a0c02126fc785ac7d2584430b5459745abc92d46"
+    }
+  },
+  "results": [
+    {
+      "name": "single-8KiB",
+      "count": 1,
+      "size": 8192,
+      "repeats": 500,
+      "single": true,
+      "baselineMs": {
+        "median": 8.759291999999988,
+        "p10": 8.303683200000005,
+        "p90": 9.936483200000016
+      },
+      "candidateMs": {
+        "median": 8.650875000000013,
+        "p10": 8.201316800000006,
+        "p90": 9.504858200000001
+      },
+      "ratio": {
+        "median": 0.9602902955892987,
+        "p10": 0.8957964933271682,
+        "p90": 1.091536891341203,
+        "ci95": [
+          0.9231047695966241,
+          1.0497024204543162
+        ]
+      },
+      "costs": {
+        "statements": 2500,
+        "returnedRows": 1500,
+        "bytes": 4096000
+      },
+      "rawMs": {
+        "baseline": [
+          9.762209000000013,
+          9.622749999999996,
+          8.99754200000001,
+          8.279166000000004,
+          10.052666000000016,
+          8.759291999999988,
+          8.34045900000001,
+          8.421291999999994,
+          8.400540999999976,
+          8.951959000000045,
+          14.125667000000021,
+          9.503417000000013,
+          8.382457999999986,
+          8.139999999999986,
+          8.549915999999996
+        ],
+        "candidate": [
+          8.650875000000013,
+          8.796582999999998,
+          9.741125000000011,
+          10.445625000000007,
+          9.150457999999986,
+          8.124250000000018,
+          8.754999999999995,
+          8.31691699999999,
+          8.066958,
+          8.432124999999985,
+          8.371749999999963,
+          8.774833000000001,
+          8.582125000000019,
+          8.933375000000012,
+          8.419582999999989
+        ]
+      }
+    },
+    {
+      "name": "single-8MiB",
+      "count": 1,
+      "size": 8388608,
+      "repeats": 20,
+      "single": true,
+      "baselineMs": {
+        "median": 264.48762499999975,
+        "p10": 261.38387479999966,
+        "p90": 266.7601831999997
+      },
+      "candidateMs": {
+        "median": 259.7044590000005,
+        "p10": 255.34091679999966,
+        "p90": 263.50715820000005
+      },
+      "ratio": {
+        "median": 0.9800891259067134,
+        "p10": 0.9601891767112628,
+        "p90": 0.9973685634265117,
+        "ci95": [
+          0.9781385461796165,
+          0.9953748671463779
+        ]
+      },
+      "costs": {
+        "statements": 100,
+        "returnedRows": 40,
+        "bytes": 167772160
+      },
+      "rawMs": {
+        "baseline": [
+          272.1304580000001,
+          262.0928749999998,
+          263.8331250000001,
+          266.5654170000007,
+          266.7637500000001,
+          260.5560830000004,
+          266.2530000000006,
+          264.48762499999975,
+          263.604875,
+          263.042375,
+          263.11833299999853,
+          264.80412500000057,
+          264.89295800000036,
+          266.75483299999905,
+          260.91120799999953
+        ],
+        "candidate": [
+          255.916792,
+          262.1343750000001,
+          262.442583,
+          258.23333300000013,
+          254.95699999999943,
+          251.92170799999985,
+          265.3871250000002,
+          258.70554099999936,
+          261.2146250000005,
+          260.12466700000004,
+          257.8794170000001,
+          264.2168750000001,
+          259.1427910000002,
+          261.1979589999992,
+          259.7044590000005
+        ]
+      }
+    },
+    {
+      "name": "unchanged-8KiB",
+      "count": 1,
+      "size": 8192,
+      "repeats": 500,
+      "single": true,
+      "skip": true,
+      "baselineMs": {
+        "median": 12.86016699999891,
+        "p10": 12.667025199999262,
+        "p90": 14.044116400000712
+      },
+      "candidateMs": {
+        "median": 13.136458000000857,
+        "p10": 12.7239497999999,
+        "p90": 13.713108600000123
+      },
+      "ratio": {
+        "median": 1.01126575191756,
+        "p10": 0.9580756008524783,
+        "p90": 1.055987249542673,
+        "ci95": [
+          0.9922045622447324,
+          1.034472489922398
+        ]
+      },
+      "costs": {
+        "statements": 2500,
+        "returnedRows": 1500,
+        "bytes": 4096000
+      },
+      "rawMs": {
+        "baseline": [
+          14.308500000001004,
+          14.727000000000771,
+          12.691375000000335,
+          12.650791999998546,
+          12.728209000000788,
+          13.239666999999827,
+          12.637667000000874,
+          12.757584000000861,
+          12.86016699999891,
+          12.841167000000496,
+          12.957791999999245,
+          13.647541000000274,
+          13.29883399999926,
+          13.06104200000118,
+          12.72662500000115
+        ],
+        "candidate": [
+          14.318124999999782,
+          13.387625000001208,
+          13.541708999999173,
+          12.818624999999884,
+          12.650292000000263,
+          13.136458000000857,
+          12.888291999999637,
+          13.261084000001574,
+          12.660832999999911,
+          13.283833999999842,
+          13.827375000000757,
+          12.94604099999924,
+          12.930334000000585,
+          13.36724999999933,
+          12.869999999998981
+        ]
+      }
+    },
+    {
+      "name": "unchanged-8MiB",
+      "count": 1,
+      "size": 8388608,
+      "repeats": 20,
+      "single": true,
+      "skip": true,
+      "baselineMs": {
+        "median": 138.13708299999962,
+        "p10": 135.80720000000147,
+        "p90": 140.66866639999972
+      },
+      "candidateMs": {
+        "median": 129.11291600000004,
+        "p10": 128.39382500000028,
+        "p90": 131.6268250000001
+      },
+      "ratio": {
+        "median": 0.9387250109211165,
+        "p10": 0.9249693989600571,
+        "p90": 0.9489309208609635,
+        "ci95": [
+          0.9288886194444267,
+          0.9418071863389292
+        ]
+      },
+      "costs": {
+        "statements": 100,
+        "returnedRows": 60,
+        "bytes": 167772160
+      },
+      "rawMs": {
+        "baseline": [
+          138.56125000000065,
+          138.13708299999962,
+          137.41825000000063,
+          140.70199999999932,
+          139.12708400000156,
+          140.6186660000003,
+          139.43091699999968,
+          137.91954199999964,
+          138.40537500000028,
+          137.81533399999898,
+          135.90087500000118,
+          136.68433300000106,
+          135.74475000000166,
+          135.63175000000047,
+          141.19654099999752
+        ],
+        "candidate": [
+          128.24062500000036,
+          128.860541,
+          129.11291600000004,
+          130.09379199999967,
+          128.97729100000106,
+          130.00908300000083,
+          129.51579200000015,
+          128.7520829999994,
+          130.09933300000012,
+          130.7777499999993,
+          132.19287500000064,
+          128.62362500000017,
+          128.81162500000028,
+          127.32091600000058,
+          132.97991699999693
+        ]
+      }
+    },
+    {
+      "name": "batch-100-8KiB",
+      "count": 100,
+      "size": 8192,
+      "repeats": 10,
+      "baselineMs": {
+        "median": 21.543541999999434,
+        "p10": 21.309757800000078,
+        "p90": 21.999216999999042
+      },
+      "candidateMs": {
+        "median": 21.618916999999783,
+        "p10": 21.031966400000236,
+        "p90": 21.941482999999426
+      },
+      "ratio": {
+        "median": 0.9958464207920793,
+        "p10": 0.9767372620159107,
+        "p90": 1.0206281861867479,
+        "ci95": [
+          0.9787389123079443,
+          1.0130763960242701
+        ]
+      },
+      "costs": {
+        "statements": 4030,
+        "returnedRows": 4010,
+        "bytes": 8192000
+      },
+      "rawMs": {
+        "baseline": [
+          21.37141700000211,
+          21.923917000000074,
+          21.412333000000217,
+          21.712875000001077,
+          21.543541999999434,
+          22.25079100000221,
+          21.430208000001585,
+          21.616582999999082,
+          21.269790999998804,
+          22.049416999998357,
+          21.225166999996873,
+          21.790916000001744,
+          21.494666999999026,
+          21.369708000001992,
+          21.91137499999968
+        ],
+        "candidate": [
+          21.989333000001352,
+          21.393167000001995,
+          21.618916999999783,
+          21.419832999999926,
+          21.827000000001135,
+          21.764749999998457,
+          21.1906659999986,
+          21.899249999998574,
+          21.437333000001672,
+          21.95783300000039,
+          20.955540999999357,
+          21.848417000001064,
+          21.03766700000051,
+          21.916957999997976,
+          21.028166000000056
+        ]
+      }
+    },
+    {
+      "name": "batch-3-1MiB",
+      "count": 3,
+      "size": 1048576,
+      "repeats": 30,
+      "baselineMs": {
+        "median": 81.46679199999926,
+        "p10": 80.92865820000006,
+        "p90": 83.67967480000225
+      },
+      "candidateMs": {
+        "median": 76.96720899999855,
+        "p10": 76.35782520000066,
+        "p90": 79.34594180000059
+      },
+      "ratio": {
+        "median": 0.9426756212670729,
+        "p10": 0.9180846071289807,
+        "p90": 0.9766556789785377,
+        "ci95": [
+          0.9381437322891836,
+          0.949085189426128
+        ]
+      },
+      "costs": {
+        "statements": 450,
+        "returnedRows": 300,
+        "bytes": 94371840
+      },
+      "rawMs": {
+        "baseline": [
+          85.50408299999981,
+          81.9251669999976,
+          80.08358299999963,
+          81.51591600000029,
+          84.2512080000015,
+          81.44929200000115,
+          81.03183299999728,
+          81.9763329999987,
+          80.85987500000192,
+          82.82237500000338,
+          81.18095800000083,
+          81.56629099999918,
+          81.46679199999926,
+          81.21900000000096,
+          81.07370900000024
+        ],
+        "candidate": [
+          76.51429199999984,
+          77.05158300000039,
+          75.50054200000159,
+          77.30208299999867,
+          76.71954200000255,
+          77.48775000000023,
+          80.20187500000247,
+          76.90558299999975,
+          78.06204199999775,
+          76.96720899999855,
+          76.3517920000013,
+          80.27429199999824,
+          76.36687499999971,
+          77.0837500000016,
+          76.42620900000111
+        ]
+      }
+    },
+    {
+      "name": "batch-100-bytes",
+      "count": 100,
+      "size": 8192,
+      "repeats": 10,
+      "bytes": true,
+      "baselineMs": {
+        "median": 17.820666999999958,
+        "p10": 17.529266800000915,
+        "p90": 18.50044219999909
+      },
+      "candidateMs": {
+        "median": 17.743040999997902,
+        "p10": 17.52827520000137,
+        "p90": 18.74941679999829
+      },
+      "ratio": {
+        "median": 1.000635192288787,
+        "p10": 0.9807936429674756,
+        "p90": 1.0177794485899503,
+        "ci95": [
+          0.9904070721280889,
+          1.0095498782228083
+        ]
+      },
+      "costs": {
+        "statements": 4030,
+        "returnedRows": 4010,
+        "bytes": 8192000
+      },
+      "rawMs": {
+        "baseline": [
+          18.89191700000083,
+          18.327707999997074,
+          18.38904200000252,
+          17.842625000001135,
+          17.48975000000064,
+          17.749374999999418,
+          17.414416999999958,
+          17.588542000001326,
+          17.92237500000192,
+          17.591083999999682,
+          17.820666999999958,
+          17.59833399999843,
+          18.37995900000169,
+          17.68104200000016,
+          18.5747089999968
+        ],
+        "candidate": [
+          18.903916999999637,
+          18.848249999999098,
+          18.601166999997076,
+          17.68708300000071,
+          17.824249999997846,
+          17.831292000002577,
+          17.688874999999825,
+          17.624916000000667,
+          17.743040999997902,
+          17.422333999998955,
+          17.726792000001296,
+          17.7654999999977,
+          17.623875000001135,
+          17.46454200000153,
+          18.131750000000466
+        ]
+      }
+    }
+  ]
+}

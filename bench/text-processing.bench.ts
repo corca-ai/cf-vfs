@@ -26,8 +26,9 @@ it.each(workloads)("text processing: $name", async (workload) => {
       const result = await shell.executeText({ script: workload.script });
       expect(result.exitCode, result.stderr).toBe(0);
       expect(result.stdout).toBe(expected);
-      expect(meter.statements).toBe(2);
-      expect(meter.rowsRead).toBe(2);
+      expect(meter.statements).toBe(1);
+      // One entry plus body lookup and the indexed extra-tail guard.
+      expect(meter.rowsRead).toBe(3);
       expect(meter.rowsWritten).toBe(0);
     };
     for (let index = 0; index < 3; index += 1) await execute();

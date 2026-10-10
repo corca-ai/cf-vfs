@@ -5,13 +5,14 @@ import type { VfsStat, VirtualFileSystem } from "../vfs/types.js";
 
 /**
  * Optional metadata reuse for one filesystem/credential view. Wire onEvent to
- * that filesystem before reading. Every committed mutation clears the cache,
- * including ancestor permission changes and symlink repoints. No TTL is used.
+ * that filesystem before reading. Content overwrites invalidate their paths;
+ * namespace and metadata changes clear all permission checks. No TTL is used.
  */
 export class FsMetadataCache {
   private readonly entries = new Map<string, VfsStat>();
   private owner: VirtualFileSystem | undefined;
   private epoch = 0;
+  private evictedSinceClear = false;
 
   constructor(private readonly maxEntries = 4096) {
     if (!Number.isSafeInteger(maxEntries) || maxEntries < 1) {
@@ -20,11 +21,18 @@ export class FsMetadataCache {
   }
 
   readonly onEvent = (event: VfsEvent): void => {
-    if (event.type === "vfs.mutation") this.clear();
+    if (event.type !== "vfs.mutation") return;
+    if (event.op === "write" && event.subtree === undefined && !this.evictedSinceClear) {
+      // Byte overwrites preserve ancestor search checks and path resolution.
+      // Hard-link writes announce every affected alias separately.
+      this.entries.delete(event.path);
+      this.epoch += 1;
+    } else this.clear();
   };
 
   clear(): void {
     this.entries.clear();
+    this.evictedSinceClear = false;
     this.epoch += 1;
   }
 
@@ -40,6 +48,9 @@ export class FsMetadataCache {
     this.entries.delete(stat.path);
     this.entries.set(stat.path, { ...stat });
     if (this.entries.size > this.maxEntries) {
+      // Once a working set exceeds capacity, retaining its tail across writes
+      // makes the next sequential scan evict entries it has yet to visit.
+      this.evictedSinceClear = true;
       const oldest = this.entries.keys().next().value;
       if (oldest !== undefined) this.entries.delete(oldest);
     }

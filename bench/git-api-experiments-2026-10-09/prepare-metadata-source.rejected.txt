@@ -1,0 +1,156 @@
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+
+const modified = [
+  "src/vfs/types.ts",
+  "src/vfs/sql-query-base.ts",
+  "src/vfs/sql.ts",
+  "src/shell/types.ts",
+  "src/shell/policy.ts",
+  "src/shell/devices.ts",
+  "src/shell/commands/git-fs.ts",
+  "src/shell/commands/git-worktree.ts",
+];
+const backup = "/tmp/cf-vfs-api-before-metadata";
+await mkdir(backup, { recursive: true });
+async function replace(file, needle, withText) {
+  const s = await readFile(file, "utf8");
+  if (!s.includes(needle)) throw Error("no match " + file);
+  await writeFile(file, s.replace(needle, withText));
+}
+for (const file of modified) {
+  await mkdir(backup + "/" + file.slice(0, file.lastIndexOf("/")), { recursive: true });
+  await cp(file, backup + "/" + file);
+}
+await replace(
+  "src/vfs/types.ts",
+  "  stat(path: string): VfsStat;",
+  `  stat(path: string): VfsStat;
+  /** Optional bounded metadata snapshot, preserving input order and duplicates. */
+  statMany?(paths: readonly string[], options?: { follow?: boolean }): VfsStat[];`,
+);
+await replace(
+  "src/vfs/sql-query-base.ts",
+  "  stat(path: string, access?: PosixAccessContext): VfsStat {",
+  `  statMany(paths: readonly string[], options: { follow?: boolean } = {}, access?: PosixAccessContext): VfsStat[] {
+    if (paths.length > 1024) throw new VfsError("E2BIG", "metadata batch exceeds 1024 paths");
+    if (paths.length === 0) return [];
+    const follow = options.follow !== false;
+    if (this.links() !== 0 || access !== undefined || paths.some(path => hasDotSegments(path) || pathRequiresDirectory(path)))
+      return paths.map(path => this.statEntry(path, follow, access));
+    const normalized = paths.map((path) => normalizePath(path));
+    const rows = this.sql.exec<SqlRow>(
+      \\QUERY\\,
+      JSON.stringify(normalized),
+    ).toArray();
+    const entries = new Map(rows.map(row => { const entry = parseEntry(row, this.mutationEpoch); return [entry.path, entry] as const; }));
+    return normalized.map((path, i) => {
+      const entry = entries.get(path);
+      return entry === undefined || entry.contentClass === "opaque"
+        ? this.statEntry(paths[i] ?? path, follow, access)
+        : rowToStat(entry);
+    });
+  }
+
+  stat(path: string, access?: PosixAccessContext): VfsStat {`.replace(
+    "\\QUERY\\",
+    "`SELECT ${ENTRY_COLUMNS} FROM vfs_entries e WHERE e.path IN (SELECT value FROM json_each(?))`",
+  ),
+);
+await replace(
+  "src/vfs/sql.ts",
+  "  stat(path: string): VfsStat {",
+  `  statMany(paths: readonly string[], options?: { follow?: boolean }): VfsStat[] {
+    return this.inner.statMany(paths, options, this.access);
+  }
+
+  stat(path: string): VfsStat {`,
+);
+await replace("src/shell/types.ts", '  | "stat"', '  | "stat"\n  | "statMany"');
+await replace(
+  "src/shell/policy.ts",
+  "  lstat(path: string) {",
+  `  statMany(paths: readonly string[], options: { follow?: boolean } = {}) {
+    for (const path of paths) { if (options.follow === false) this.readLink(path); else this.read(path); }
+    return this.#inner.statMany?.(paths, options) ?? paths.map(path => options.follow === false ? this.#inner.lstat(path) : this.#inner.stat(path));
+  }
+
+  lstat(path: string) {`,
+);
+await replace(
+  "src/shell/devices.ts",
+  "  lstat(path: string): VfsStat {",
+  `  statMany(paths: readonly string[], options: { follow?: boolean } = {}): VfsStat[] {
+    if (paths.some(path => this.#statAt(path, options.follow !== false) !== undefined))
+      return paths.map(path => options.follow === false ? this.lstat(path) : this.stat(path));
+    return this.#inner.statMany?.(paths, options) ?? paths.map(path => options.follow === false ? this.#inner.lstat(path) : this.#inner.stat(path));
+  }
+
+  lstat(path: string): VfsStat {`,
+);
+await replace(
+  "src/shell/commands/git-fs.ts",
+  "import { GitObjectWrites }",
+  'import { GitMetadataReads } from "./git-metadata-reads.js";\nimport { GitObjectWrites }',
+);
+await replace(
+  "src/shell/commands/git-fs.ts",
+  "  private failure: unknown;",
+  "  private failure: unknown;\n  private metadataReads: GitMetadataReads | undefined;",
+);
+await replace(
+  "src/shell/commands/git-fs.ts",
+  "  beginObjectWrites(",
+  `  coalesceMetadataReads(): void { this.metadataReads = new GitMetadataReads(this.context); }
+
+  beginObjectWrites(`,
+);
+await replace(
+  "src/shell/commands/git-fs.ts",
+  "return new FsStats(this.context.fileSystem.lstat(resolved));",
+  "return this.metadataReads?.lstat(resolved) ?? new FsStats(this.context.fileSystem.lstat(resolved));",
+);
+await replace(
+  "src/shell/commands/git-worktree.ts",
+  "  repo.fs.coalesceConfigReads(repo.gitdir);",
+  "  repo.fs.coalesceConfigReads(repo.gitdir);\n  repo.fs.coalesceMetadataReads();",
+);
+await writeFile(
+  "src/shell/commands/git-metadata-reads.ts",
+  `import { VfsError } from "../../core/errors.js";
+import { FsStats } from "../../fs/stats.js";
+import type { ShellCommandContext } from "../types.js";
+interface MetadataRequest { path: string; resolve: (stat: FsStats) => void; reject: (error: unknown) => void; }
+/** Coalesce only overlapping requests; never retain a completed snapshot. */
+export class GitMetadataReads {
+  private readonly pending: MetadataRequest[] = [];
+  constructor(private readonly context: ShellCommandContext) {}
+  lstat(path: string): Promise<FsStats> {
+    return new Promise((resolve, reject) => {
+      this.pending.push({path, resolve, reject});
+      if (this.pending.length === 1) queueMicrotask(() => this.flush());
+    });
+  }
+  private flush(): void {
+    const pending = this.pending.splice(0);
+    for (let offset = 0; offset < pending.length; offset += 128) this.resolveBatch(pending.slice(offset, offset + 128));
+  }
+  private resolveBatch(batch: MetadataRequest[]): void {
+    try {
+      if (this.context.signal.aborted) throw new VfsError("ECANCELED", "Git execution was cancelled");
+      this.context.budget.checkDeadline();
+    } catch(error) { for (const request of batch) request.reject(error); return; }
+    const fs = this.context.fileSystem;
+    try {
+      if (fs.statMany === undefined) throw new VfsError("ENOTSUP", "metadata batching unavailable");
+      const stats = fs.statMany(batch.map(request => request.path), {follow:false});
+      for (const [i,request] of batch.entries()) { const stat = stats[i]; if(stat === undefined) throw new VfsError("EIO", "incomplete metadata batch"); request.resolve(new FsStats(stat)); }
+    } catch {
+      for (const request of batch) {
+        try { request.resolve(new FsStats(fs.lstat(request.path))); } catch (error) { request.reject(error); }
+      }
+    }
+  }
+}
+`,
+);
+console.log("Prepared metadata experiment; backup " + backup);

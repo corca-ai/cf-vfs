@@ -2,6 +2,7 @@ import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { isVfsError, type VfsError } from "../src/core/errors.js";
+import { createFsAdapter } from "../src/fs/index.js";
 import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
 import { readAllBytes } from "../src/vfs/streams.js";
 import { runVfsConformance, streamThatFailsAfter } from "./helpers/vfs-conformance.js";
@@ -61,10 +62,15 @@ it("ranges bodies written with a different chunk size", async () => {
       largeReader.readFile("/large", { range: { suffix: 5 } }).stream,
       20,
     );
-    return { small: [...small], large: [...large] };
+    const whole = await readAllBytes(smallReader.readFile("/small").stream, 10);
+    return { small: [...small], large: [...large], whole: [...whole] };
   });
 
-  expect(result).toEqual({ small: [3, 4, 5, 6, 7], large: [15, 16, 17, 18, 19] });
+  expect(result).toEqual({
+    small: [3, 4, 5, 6, 7],
+    large: [15, 16, 17, 18, 19],
+    whole: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  });
 });
 
 it("returns RPC byte streams that support BYOB readers", async () => {
@@ -420,4 +426,64 @@ it("does not create tombstones for absent token reads", async () => {
   });
   expect(result.after).toBe(result.before);
   expect(result.first).toBe(result.second);
+});
+
+it("does not hide unexpected tail chunks behind the small whole-read optimization", async () => {
+  await runInDurableObject(workspace("small-read-extra-tail"), async (_instance, state) => {
+    const fs = new DurableObjectFileSystem(state.storage);
+    await fs.writeFile("/body", Uint8Array.of(1, 2, 3));
+    const id = fs.stat("/body").ino;
+    state.storage.sql.exec(
+      "INSERT INTO vfs_inline_chunks(entry_id,chunk_index,body) VALUES(?,1,?)",
+      id,
+      Uint8Array.of(9).buffer,
+    );
+    await expect(createFsAdapter(fs).promises.readFile("/body")).rejects.toMatchObject({
+      code: "EIO",
+    });
+  });
+});
+
+it.each([64, 4])(
+  "rewrites existing chunks after reconfiguring their width to %i",
+  async (chunkBytes) => {
+    await runInDurableObject(workspace(`rewrite-width-${chunkBytes}`), async (_instance, state) => {
+      const writer = new DurableObjectFileSystem(state.storage, { chunkBytes: 2 });
+      await writer.writeFile(
+        "/body",
+        Uint8Array.from({ length: 10 }, (_, i) => i),
+      );
+      const before = writer.readFile("/body");
+      const rewritten = new DurableObjectFileSystem(state.storage, { chunkBytes });
+      const body = new Uint8Array(11).fill(42);
+      await rewritten.writeFile("/body", body);
+      expect(await createFsAdapter(rewritten).promises.readFile("/body")).toEqual(body);
+      expect([...(await readAllBytes(before.stream, 20))]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      expect(rewritten.stat("/body").ino).toBe(before.stat.ino);
+    });
+  },
+);
+
+it.each([
+  [2, 64],
+  [4, 2],
+])("appends existing chunks after reconfiguring width %i to %i", async (oldWidth, chunkBytes) => {
+  await runInDurableObject(
+    workspace(`append-width-${oldWidth}-${chunkBytes}`),
+    async (_instance, state) => {
+      const writer = new DurableObjectFileSystem(state.storage, { chunkBytes: oldWidth });
+      await writer.writeFile(
+        "/body",
+        Uint8Array.from({ length: 10 }, (_, i) => i),
+      );
+      const before = writer.readFile("/body");
+      const rewritten = new DurableObjectFileSystem(state.storage, { chunkBytes });
+      await rewritten.appendFile("/body", Uint8Array.of(10, 11, 12));
+      expect([...(await createFsAdapter(rewritten).promises.readFile("/body"))]).toEqual([
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+      ]);
+      expect([...(await readAllBytes(before.stream, 20))]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      expect(rewritten.stat("/body").ino).toBe(before.stat.ino);
+    },
+  );
 });

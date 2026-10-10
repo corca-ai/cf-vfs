@@ -1,0 +1,34 @@
+
+> @corca-ai/cf-vfs@0.4.2 deploy:public
+> node bench/deploy-public.mjs
+
+Implementation: d188dd95fff1982c73ce7e6792d17da7acdb64dbd6b5653532c98a89bd7e7de1
+
+ ⛅️ wrangler 4.114.0 (update available 4.149.0)
+───────────────────────────────────────────────
+🌀 Building list of assets...
+✨ Read 9 files from the assets directory /Users/ak/prjs/cc/cf-vfs/demo/public
+🌀 Starting asset upload...
+🌀 Found 2 new or modified static assets to upload. Proceeding with upload...
++ /benchmarks/index.html
++ /benchmarks/benchmarks.js
+Uploaded 1 of 2 assets
+Uploaded 2 of 2 assets
+✨ Success! Uploaded 2 files (6 already uploaded) (0.95 sec)
+
+Total Upload: 1533.90 KiB / gzip: 332.01 KiB
+Worker Startup Time: 19 ms
+Your Worker has access to the following bindings:
+Binding                                                       Resource                     
+env.PUBLIC_BENCHMARKS (PublicBenchmarks)                      Durable Object               
+env.BENCHMARK (VfsBenchmark)                                  Durable Object               
+env.DEMO_WORKSPACES (DemoWorkspace)                           Durable Object               
+env.BENCHMARK_BUCKET (cf-vfs-benchmark)                       R2 Bucket                    
+env.BENCHMARK_RUNNER (cf-vfs-benchmark#BenchmarkRunner)       Worker                       
+env.ASSETS                                                    Assets                       
+env.VERSION_METADATA                                          Worker Version Metadata      
+
+Uploaded cf-vfs-benchmark (6.97 sec)
+Deployed cf-vfs-benchmark triggers (2.52 sec)
+  vfs.borca.ai (custom domain)
+Current Version ID: 50612400-4df3-49bb-bc22-50e4ca9e3407

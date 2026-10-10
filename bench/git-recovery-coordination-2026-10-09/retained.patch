@@ -1,0 +1,935 @@
+--- a/src/shell/commands/git-worktree.ts
++++ b/src/shell/commands/git-worktree.ts
+@@ -192,7 +192,8 @@
+ }
+ 
+ export async function gitCheckout(repo: GitRepository, argv: readonly string[]) {
+-  const args = gitArguments(argv, [], ["-b"]);
++  const args = gitArguments(argv, ["--force", "-f"], ["-b"]);
++  const force = args.flags.has("--force") || args.flags.has("-f");
+   const branch = args.values.get("-b");
+   gitOperands(args, branch === undefined ? 1 : 0, 1);
+   const ref = branch ?? args.operands[0];
+@@ -201,7 +202,7 @@
+     await git.branch({ ...repo, ref: branch, object: args.operands[0] ?? "HEAD" });
+   const oid = await checkoutOid(repo, ref);
+   const head = await git.resolveRef({ ...repo, ref: "HEAD" });
+-  if (oid === head && branch !== undefined) {
++  if (!force && oid === head && branch !== undefined) {
+     await git.writeRef({
+       ...repo,
+       ref: "HEAD",
+@@ -211,8 +212,8 @@
+     });
+     return;
+   }
+-  await requireCleanGitTree(repo);
+-  await git.checkout({ ...repo, ref });
++  if (!force) await requireCleanGitTree(repo);
++  await git.checkout({ ...repo, ref, force });
+ }
+ 
+ export async function gitDiff(
+@@ -224,6 +225,7 @@
+   gitOperands(args, 0);
+   const cached = args.flags.size > 0;
+   const trees = cached ? [git.TREE({ ref: "HEAD" }), git.STAGE()] : [git.STAGE(), git.WORKDIR()];
++  const compare = boundedDiffBodies();
+   await git.walk({
+     ...repo,
+     trees,
+@@ -233,21 +235,56 @@
+       const [before, after] = entries;
+       if (path === "." || (await before?.type()) === "tree" || (await after?.type()) === "tree")
+         return;
+-      if (!cached && before === null) return;
+-      const left = await walkerContent(repo, before, true),
+-        right = await walkerContent(repo, after, cached);
+-      await renderGitDiff(
+-        repo,
+-        fds,
+-        path,
+-        before === null,
+-        after === null,
+-        left || new Uint8Array(),
+-        right || new Uint8Array(),
+-      );
++      if (!cached && before == null) return;
++      // Equal object IDs establish byte equality without inflating either blob.
++      const oldOid = await before?.oid();
++      if (cached && oldOid !== undefined && oldOid === (await after?.oid())) return;
++      await compare(() => renderWalkerDiff(repo, fds, path, before, after, cached, oldOid));
+       return undefined;
+     },
+   });
++}
++
++function boundedDiffBodies() {
++  let active = 0;
++  const waiting: Array<() => void> = [];
++  return async (run: () => Promise<void>) => {
++    if (active < 32) active++;
++    else await new Promise<void>((resolve) => waiting.push(resolve));
++    try {
++      await run();
++    } finally {
++      const next = waiting.shift();
++      if (next === undefined) active--;
++      else next();
++    }
++  };
++}
++
++async function renderWalkerDiff(
++  repo: GitRepository,
++  fds: ShellFileDescriptors,
++  path: string,
++  before: git.WalkerEntry | null | undefined,
++  after: git.WalkerEntry | null | undefined,
++  cached: boolean,
++  oldOid: string | undefined,
++) {
++  repo.fs.check();
++  const right = await walkerContent(repo, after, cached);
++  // Hash real bytes rather than trusting the engine's whole-second stat cache.
++  if (!cached && right !== undefined && oldOid === (await git.hashBlob({ object: right })).oid)
++    return;
++  const left = await walkerContent(repo, before, true);
++  await renderGitDiff(
++    repo,
++    fds,
++    path,
++    before == null,
++    after == null,
++    left ?? new Uint8Array(),
++    right ?? new Uint8Array(),
++  );
+ }
+ 
+ async function renderGitDiff(
+--- a/demo/workspace.ts
++++ b/demo/workspace.ts
+@@ -22,6 +22,7 @@
+ } from "./identity.js";
+ import { demoNetwork } from "./network.js";
+ import { MAX_MESSAGE_BYTES, parseClientMessage, type ServerMessage } from "./protocol.js";
++import { WorkspaceOperations } from "./workspace-operations.js";
+ 
+ interface TerminalSession {
+   readonly shell: InteractiveShell;
+@@ -30,6 +31,7 @@
+   readonly watching: Set<string>;
+   pendingSourceBytes: number;
+   execution: ShellExecution | undefined;
++  pending: AbortController | undefined;
+ }
+ 
+ const DEMO_HOME = `/home/${DEMO_USER}`;
+@@ -193,6 +195,7 @@
+ 
+ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
+   private readonly sessions = new Map<WebSocket, TerminalSession>();
++  private readonly operations = new WorkspaceOperations();
+   /** The room this object is, so a session can say which one it joined. */
+   private readonly workspaceName: string;
+   private readonly documents: DemoDocuments;
+@@ -227,7 +230,11 @@
+     this.workspaceName = ctx.id.name ?? "country-XX";
+     this.documents = documents;
+     this.editable = new CollaborativeFileSystem(this.fileSystem, documents.registry);
+-    documents.attach(this.editable, (notice) => this.announce(notice));
++    documents.attach(
++      this.editable,
++      (notice) => this.announce(notice),
++      (operation) => this.operations.run(operation),
++    );
+     ctx.blockConcurrencyWhile(async () => {
+       // The Linux profile's directories, created once per workspace. `/bin` and
+       // `/usr/bin` are deliberately not among them: they resolve applets
+@@ -298,6 +305,7 @@
+       watching: new Set<string>(),
+       pendingSourceBytes: 0,
+       execution: undefined,
++      pending: undefined,
+     };
+     this.sessions.set(server, session);
+ 
+@@ -341,13 +349,23 @@
+ 
+   private removeSession(socket: WebSocket): void {
+     const session = this.sessions.get(socket);
++    session?.pending?.abort();
+     session?.execution?.cancel();
+     this.sessions.delete(socket);
+     // A document nobody is looking at any more is dropped, but only after the
+     // socket is out of the map so it does not count as its own watcher.
+-    for (const path of session?.watching ?? []) {
+-      if (!this.watchedElsewhere(socket, path)) this.documents.close(path);
+-    }
++    void this.operations
++      .run(async () => {
++        await this.documents.flush();
++        for (const path of session?.watching ?? []) {
++          if (
++            !this.watchedElsewhere(socket, path) &&
++            this.documents.registry.get(path)?.dirty !== true
++          )
++            this.documents.close(path);
++        }
++      })
++      .catch((error: unknown) => console.error("document close failed", error));
+   }
+ 
+   private watchedElsewhere(except: WebSocket, path: string): boolean {
+@@ -357,12 +375,12 @@
+     return false;
+   }
+ 
+-  /** Sends the current document to everyone watching it but the one that changed it. */
+-  private broadcastDocument(path: string, except?: WebSocket): void {
++  /** Acknowledges the writer and updates every other subscriber. */
++  private broadcastDocument(path: string): void {
+     const document = this.documents.get(path);
+     if (document === undefined) return;
+     for (const [socket, session] of this.sessions) {
+-      if (socket === except || !session.watching.has(path)) continue;
++      if (!session.watching.has(path)) continue;
+       send(socket, { type: "doc", path, version: document.version(), text: document.text() });
+     }
+   }
+@@ -405,8 +423,13 @@
+       return;
+     }
+     if (message.type === "signal") {
+-      if (session.execution !== undefined) {
+-        session.execution.cancel();
++      if (session.pending !== undefined) {
++        session.pending.abort();
++        if (session.execution !== undefined) session.execution.cancel();
++        else {
++          session.pending = undefined;
++          prompt(socket, session);
++        }
+       } else {
+         session.input.clear();
+         session.pendingSourceBytes = 0;
+@@ -414,41 +437,63 @@
+       }
+       return;
+     }
+-    if (message.type === "doc-open") {
+-      const document = await this.documents.open(message.path);
+-      send(socket, {
+-        type: "doc",
+-        path: message.path,
+-        version: document.version(),
+-        text: document.text(),
+-      });
+-      return;
+-    }
+-    if (message.type === "doc-close") {
+-      // Closed only when this was the last socket looking at it: the room is
+-      // shared, and one visitor closing a tab must not take the document out
+-      // from under another who is still editing it.
+-      if (!this.watchedElsewhere(socket, message.path)) this.documents.close(message.path);
+-      session.watching.delete(message.path);
+-      return;
+-    }
+-    if (message.type === "doc-edit") {
+-      session.watching.add(message.path);
+-      const applied = this.documents.applyClientText(message.path, message.base, message.text);
+-      const document = this.documents.get(message.path);
+-      if (document === undefined) return;
+-      if (applied === "stale") {
+-        // Say what is true now rather than taking text typed against something
+-        // that has since been replaced.
+-        send(socket, {
+-          type: "doc",
+-          path: message.path,
+-          version: document.version(),
+-          text: document.text(),
+-        });
+-        return;
+-      }
+-      this.broadcastDocument(message.path, socket);
++    if (
++      message.type === "doc-open" ||
++      message.type === "doc-close" ||
++      message.type === "doc-edit"
++    ) {
++      await this.operations.run(async () => {
++        if (this.sessions.get(socket) !== session) return;
++        if (message.type === "doc-open") {
++          const document = await this.documents.open(message.path);
++          if (this.sessions.get(socket) !== session) {
++            if (!this.watchedElsewhere(socket, message.path)) this.documents.close(message.path);
++            return;
++          }
++          session.watching.add(message.path);
++          send(socket, {
++            type: "doc",
++            path: message.path,
++            version: document.version(),
++            text: document.text(),
++          });
++          return;
++        }
++        if (message.type === "doc-close") {
++          await this.documents.flush();
++          if (this.documents.registry.get(message.path)?.dirty === true)
++            throw new VfsError(
++              "EAGAIN",
++              "Document is still unsaved; free space and retry closing",
++              message.path,
++            );
++          // Closed only when this was the last socket looking at it: the room is
++          // shared, and one visitor closing a tab must not take the document out
++          // from under another who is still editing it.
++          if (!this.watchedElsewhere(socket, message.path)) this.documents.close(message.path);
++          session.watching.delete(message.path);
++          return;
++        }
++        if (message.type === "doc-edit") {
++          session.watching.add(message.path);
++          const applied = this.documents.applyClientText(message.path, message.base, message.text);
++          const document = this.documents.get(message.path);
++          if (document === undefined) return;
++          if (applied === "stale") {
++            // Say what is true now rather than taking text typed against something
++            // that has since been replaced.
++            send(socket, {
++              type: "doc",
++              path: message.path,
++              version: document.version(),
++              text: document.text(),
++            });
++            return;
++          }
++          this.broadcastDocument(message.path);
++          return;
++        }
++      });
+       return;
+     }
+     if (message.type === "resize") {
+@@ -483,8 +528,8 @@
+       });
+       return;
+     }
+-    if (session.execution !== undefined) {
+-      send(socket, { type: "error", message: "A command is already running" });
++    if (session.execution !== undefined || session.pending !== undefined) {
++      send(socket, { type: "error", message: "A command is already running or queued" });
+       return;
+     }
+ 
+@@ -501,27 +546,38 @@
+       return;
+     }
+     session.pendingSourceBytes = 0;
+-    await this.execute(socket, session, submitted.source);
++    const pending = new AbortController();
++    session.pending = pending;
++    send(socket, { type: "running" });
++    try {
++      await this.operations.run(async () => {
++        if (pending.signal.aborted || this.sessions.get(socket) !== session) return;
++        await this.documents.flush();
++        if (!pending.signal.aborted)
++          await this.execute(socket, session, submitted.source, pending.signal);
++      });
++    } finally {
++      if (session.pending === pending) session.pending = undefined;
++    }
+   }
+ 
+   private async execute(
+     socket: WebSocket,
+     session: TerminalSession,
+     source: string,
++    signal: AbortSignal,
+   ): Promise<void> {
+-    send(socket, { type: "running" });
+-    const execution = session.shell.runStream({ script: source });
++    const execution = session.shell.runStream({ script: source, signal });
+     session.execution = execution;
+     try {
+       const [result] = await Promise.all([
+         execution.completed,
+         pumpOutput(socket, execution.stdout, "stdout"),
+         pumpOutput(socket, execution.stderr, "stderr"),
+-      ]);
+-      // A write-through leaves a document ahead of storage and nothing else
+-      // would publish it, so this is where the terminal's effect on an open
+-      // file reaches both the editors watching it and the namespace.
+-      this.documents.noticeShellWrites();
++      ]).finally(async () => {
++        this.documents.noticeShellWrites();
++        await this.documents.flush();
++      });
+       send(socket, {
+         type: "complete",
+         cwd: session.shell.cwd,
+--- a/demo/document.ts
++++ b/demo/document.ts
+@@ -75,11 +75,17 @@
+   readonly #timers = new Map<string, ReturnType<typeof setTimeout>>();
+   #fileSystem: CollaborativeFileSystem | undefined;
+   #notify: ((notice: DocumentNotice) => void) | undefined;
++  #run: <T>(operation: () => Promise<T>) => Promise<T> = (operation) => operation();
+ 
+   /** Wired after `super()`, when the object has a filesystem and sockets. */
+-  attach(fileSystem: CollaborativeFileSystem, notify: (notice: DocumentNotice) => void): void {
++  attach(
++    fileSystem: CollaborativeFileSystem,
++    notify: (notice: DocumentNotice) => void,
++    run?: <T>(operation: () => Promise<T>) => Promise<T>,
++  ): void {
+     this.#fileSystem = fileSystem;
+     this.#notify = notify;
++    if (run !== undefined) this.#run = run;
+   }
+ 
+   get(path: string): DemoDocument | undefined {
+@@ -172,7 +178,7 @@
+       path,
+       setTimeout(() => {
+         this.#timers.delete(path);
+-        void this.#publish(path).catch((error: unknown) => {
++        void this.#run(() => this.#publish(path)).catch((error: unknown) => {
+           this.#notify?.({
+             path,
+             kind: "error",
+@@ -183,7 +189,27 @@
+     );
+   }
+ 
++  async flush(): Promise<boolean> {
++    let saved = true;
++    for (const path of this.registry.paths()) {
++      if (this.registry.get(path)?.dirty !== true) continue;
++      this.#cancelPublish(path);
++      try {
++        await this.#publish(path);
++      } catch (error) {
++        saved = false;
++        this.#notify?.({
++          path,
++          kind: "error",
++          message: error instanceof Error ? error.message : String(error),
++        });
++      }
++    }
++    return saved;
++  }
++
+   async #publish(path: string): Promise<void> {
++    if (this.registry.get(path)?.dirty !== true) return;
+     const fileSystem = this.#require();
+     try {
+       await fileSystem.publish(path);
+--- /dev/null
++++ b/demo/workspace-operations.ts
+@@ -0,0 +1,24 @@
++import { VfsError } from "../src/core/errors.js";
++
++/** One room-wide queue also covers clone's source and destination and path aliases. */
++export class WorkspaceOperations {
++  private tail: Promise<unknown> = Promise.resolve();
++  private pending = 0;
++  constructor(private readonly capacity = 64) {}
++
++  run<T>(operation: () => T | Promise<T>): Promise<T> {
++    if (this.pending >= this.capacity)
++      return Promise.reject(new VfsError("EAGAIN", "Workspace is busy; retry shortly"));
++    this.pending++;
++    const result = this.tail.then(operation);
++    this.tail = result.then(
++      () => {
++        this.pending--;
++      },
++      () => {
++        this.pending--;
++      },
++    );
++    return result;
++  }
++}
+--- a/demo/benchmark-git-checkout-recovery.ts
++++ b/demo/benchmark-git-checkout-recovery.ts
+@@ -5,7 +5,7 @@
+ import { Shell } from "../src/shell/shell.js";
+ import type { VirtualFileSystem } from "../src/vfs/types.js";
+ 
+-/** Checkout is not a transaction: preserve history, detect partial bytes, repair then retry. */
++/** Preserve history after a partial checkout, then repair through explicit forced checkout. */
+ export async function runCheckoutRecovery(vfs: VirtualFileSystem) {
+   const root = "/scratch/checkout-recovery";
+   const fs = createFsAdapter(vfs);
+@@ -57,10 +57,7 @@
+   if (changed === 0 || changed === 32) throw new Error("Expected a partial worktree");
+   if ((await run("git checkout base")).exitCode === 0)
+     throw new Error("Dirty partial checkout was not guarded");
+-  // Explicit host repair from known committed bytes. The public applet currently
+-  // has no reset --hard / checkout --force; do not silently discard user edits.
+-  for (let n = 0; n < 32; n++) await vfs.writeFile(`${root}/f${n}`, `next ${n}\n`);
+-  await succeed("git checkout base");
++  await succeed("git checkout --force base");
+   for (let n = 0; n < 32; n++)
+     if ((await fs.promises.readFile(`${root}/f${n}`, "utf8")) !== `base ${n}\n`)
+       throw new Error("Checkout repair failed");
+--- a/demo/benchmark-git-recovery.ts
++++ b/demo/benchmark-git-recovery.ts
+@@ -5,6 +5,7 @@
+ import { Shell } from "../src/shell/shell.js";
+ import type { VirtualFileSystem } from "../src/vfs/types.js";
+ import { runCheckoutRecovery } from "./benchmark-git-checkout-recovery.js";
++import { WorkspaceOperations } from "./workspace-operations.js";
+ 
+ export const RECOVERY_OPERATIONS = [
+   "batch-capacity",
+@@ -58,12 +59,9 @@
+     const other = new Shell({ fileSystem: vfs, commands: [gitCommand] });
+     // Host serialization is the documented contract, including edits. Two callers
+     // submit concurrently, but the per-repository host queue owns execution.
+-    let tail: Promise<unknown> = Promise.resolve();
+-    const enqueue = (target: Shell, script: string) => {
+-      const result = tail.then(() => target.executeText({ script, cwd: ROOT }));
+-      tail = result;
+-      return result;
+-    };
++    const operations = new WorkspaceOperations();
++    const enqueue = (target: Shell, script: string) =>
++      operations.run(() => target.executeText({ script, cwd: ROOT }));
+     const outcomes = await Promise.all([
+       enqueue(shell, "git add seed"),
+       enqueue(other, "git add -A"),
+--- a/demo/public/index.html
++++ b/demo/public/index.html
+@@ -100,7 +100,9 @@
+         Everyone visiting from the same country shares one workspace here, so
+         what you write is what the next person finds — and can change. It holds
+         fifty kilobytes; when it is full, deleting something makes room. A
+-        public whiteboard, not your own.
++        public whiteboard, not your own. Commands run one at a time across this
++        workspace, and edits wait for the current command to finish. Ctrl-C
++        cancels your running or waiting command.
+       </p>
+ 
+       <section class="features" aria-label="What this is">
+--- a/demo/public/benchmarks/index.html
++++ b/demo/public/benchmarks/index.html
+@@ -31,7 +31,7 @@
+     <details class="measurement-details"><summary>How these numbers are measured</summary>
+       <p>Each cell is the median of three runs after one full warmup. Cache order alternates. Times are measured by the Worker around one Durable Object RPC call and include dispatch, storage, and operation assertions. Full-body verification and teardown run outside that timer.</p>
+       <p>“Metadata cache” uses the existing optional 4,096-entry cache. Both columns use the same persistent SQLite VFS and inline file bodies. File bodies are approximately 0.8 KiB. This is not an APFS or native Git CLI comparison.</p>
+-      <p>Git uses isomorphic-git 1.43.1. Add stages every file in batches of 32 to bound concurrent compression and stay within the isolate memory limit. The shell tables include local clone, push and pull. Coding sessions connect local clone, edits, additions, deletions, partial staging, commits and branch checkout. Mixed sessions include four poorly compressible 256 KiB files. Recovery checks inject capacity/write failures and cancellation, then retry and verify committed bytes; the two-shell check uses the required host serialization. R2 transfers and browser latency are not included. A different file size or repository can behave differently. Very short calls can round to zero on the platform clock.</p>
++      <p>Git uses isomorphic-git 1.43.1. Add stages every file in batches of 32 to bound concurrent compression and stay within the isolate memory limit. The shell tables include local clone, push and pull. Coding sessions connect local clone, edits, additions, deletions, partial staging, commits and branch checkout. Mixed sessions include four poorly compressible 256 KiB files. Recovery checks inject capacity/write failures and cancellation, then retry and verify committed bytes; the serialized two-shell check uses the same room queue as the demo. The checkout probe repairs partial files with explicit git checkout --force. R2 transfers and browser latency are not included. A different file size or repository can behave differently. Very short calls can round to zero on the platform clock.</p>
+       <p>“Stat after one overwrite” overwrites one warmed file then stats every file. “Status after edit” includes one differently sized edit. “Diff” reads the original blob and working file and computes a line diff. “Copy subtree” uses the existing recursive VFS copy operation. Every final file body is checked before publishing the result.</p>
+     </details>
+   </section>
+--- a/demo/public/benchmarks/benchmarks.js
++++ b/demo/public/benchmarks/benchmarks.js
+@@ -6,7 +6,7 @@
+ const workload = document.querySelector("#file-count");
+ const labels = {
+   "concurrent-two-adds": "Concurrent adds from two shells",
+-  prepare: "Prepare and commit source", clone: "Clone source and configure identity", edit: "Modify, add and delete one file", "status-dirty": "Status after three changes", "add-partial": "Stage modification and addition", "diff-staged": "Diff staged changes", "commit-partial": "Commit selected changes", "add-rest": "Stage remaining deletion", "commit-rest": "Commit remaining deletion", "checkout-base": "Checkout base", "status-final": "Final clean status", "batch-capacity": "Object batch capacity failure and retry", "batch-missing-parent": "Object batch missing parent and retry", "index-capacity": "Index capacity failure and retry", "cancel-mid-add": "Cancel add and retry", "serialized-two-shells": "Two shells with host serialization", "partial-add-retry": "Second batch failure and retry", "checkout-failure": "Partial checkout and explicit host repair",
++  prepare: "Prepare and commit source", clone: "Clone source and configure identity", edit: "Modify, add and delete one file", "status-dirty": "Status after three changes", "add-partial": "Stage modification and addition", "diff-staged": "Diff staged changes", "commit-partial": "Commit selected changes", "add-rest": "Stage remaining deletion", "commit-rest": "Commit remaining deletion", "checkout-base": "Checkout base", "status-final": "Final clean status", "batch-capacity": "Object batch capacity failure and retry", "batch-missing-parent": "Object batch missing parent and retry", "index-capacity": "Index capacity failure and retry", "cancel-mid-add": "Cancel add and retry", "serialized-two-shells": "Two shells with host serialization", "partial-add-retry": "Second batch failure and retry", "checkout-failure": "Partial checkout and forced recovery",
+   write: "Write files", stat: "Stat files", "stat-after-overwrite": "Stat after one overwrite", read: "Read files", readdir: "List directory (10×)", append: "Append to files", rename: "Rename files", "copy-tree": "Copy subtree", "remove-tree": "Remove subtree",
+   init: "Init repository", populate: "Populate worktree", "add-all": "Add all", commit: "Initial commit", "status-clean": "Clean status", "status-change": "Status after edit", diff: "Diff one file", "add-one": "Add one file", "commit-one": "Commit one change", log: "Log (2 commits)", branch: "Create branch", "checkout-old": "Checkout initial branch", "checkout-main": "Checkout main",
+   "add-unchanged": "Add unchanged worktree", "change-one": "Edit one file", "change-all": "Edit all tracked files", "add-changed": "Stage all tracked changes", "remove-files": "Delete worktree files", "add-removals": "Stage all deletions", "add-removals-repeat": "Stage deletions (20 rounds, incl. index resets)",
+--- a/demo/README.md
++++ b/demo/README.md
+@@ -165,6 +165,17 @@
+ It checks local clone, edits/additions/deletions, partial staging, commit selection
+ and complete checkout bytes. Isolated recovery rows inject object/index failures,
+ cancel add, fail a later add batch, test host-serialized shells, and demonstrate
+-explicit host repair after a partial checkout. Recovery timings include fixture
++explicit forced checkout recovery after a partial checkout. Recovery timings include fixture
+ creation, failure, retry, validation and teardown; they are not command latency.
+ See the [coding evaluation](../bench/git-coding-evaluation-2026-10-09/report.md).
++
++Shell source units and document mutations/publications share a bounded room-wide
++queue. This protects repository work from another session's commands and editor
++changes, including local clone sources and destinations. Queued/active work can
++be cancelled; disconnection skips queued work. Document subscriptions include
++readers, and accepted edits are acknowledged to the author. Publication failures
++retain pending text, report an error and allow commands that free storage quota.
++`git checkout --force REF` explicitly restores tracked files after partial
++checkout; ordinary checkout continues to protect dirty changes. The
++[recovery and diff report](../bench/git-recovery-coordination-2026-10-09/report.md)
++contains reproduction commands and deployed evidence.
+--- a/docs/git.md
++++ b/docs/git.md
+@@ -76,7 +76,7 @@
+ | `commit` | `-m MESSAGE / --message MESSAGE [--allow-empty]` |
+ | `log` | `[--oneline] [-n COUNT / --max-count COUNT] [REF]`; default count 10 |
+ | `branch` | `[NAME [START_REF]]`; lists or creates branches |
+-| `checkout` | `REF` or `-b NAME [START_REF]`; switching commits requires a clean tree/index |
++| `checkout` | `[-f / --force] REF` or `[-f / --force] -b NAME [START_REF]`; ordinary switching requires a clean tree/index |
+ | `config` | `[--local] [--get] KEY [VALUE]`; repository-local values only |
+ | `remote` | `[-v]` or `add NAME LOCAL_PATH` |
+ | `fetch` | `[REMOTE]`; defaults to `origin`; no pruning |
+@@ -155,7 +155,27 @@
+ write failures, mid-add cancellation and host-serialized callers to the public
+ benchmark. A failed add can retain completed staging batches; retry completes it.
+ A failed checkout can leave a partial worktree while preserving committed history.
+-The dirty-tree guard then rejects a plain retry. Recovery currently requires the
+-host to restore known committed bytes before retrying; the applet does not expose
+-`reset --hard` or `checkout --force`. These probes do not simulate isolate crashes
++The dirty-tree guard then rejects a plain retry. Explicit `git checkout --force REF`
++(or `-f`) restores the selected committed tree and index, discarding conflicting
++tracked edits and replacing untracked paths that obstruct checkout. Unrelated
++untracked files are retained. It can also fail partway if storage or execution
++limits are still exhausted; restore capacity before retrying. Ordinary checkout
++continues to protect a dirty tree. `reset --hard` is not exposed. These probes do not simulate isolate crashes
+ or establish safety for uncoordinated concurrent repository writers.
++
++The demo serializes whole shell source units, document open/edit/close and
++scheduled document publications through one bounded queue per shared workspace.
++This conservatively covers path aliases and both ends of clone/transfer without
++trying to infer which repositories an arbitrary shell program can modify.
++Signals and disconnections cancel queued or active work; ping and completion
++remain responsive. Pending editor saves are attempted before and after commands.
++A failed save keeps dirty text and reports an error; commands can still free
++space so a subsequent save succeeds. Opening a document subscribes the reader,
++and accepted edits acknowledge the author as well as other readers.
++
++Diff skips identical stored object IDs before decoding blobs. Unstaged diff
++hashes actual worktree bytes with at most 32 body comparisons active and reads
++stored blobs only for changed paths, preserving same-size rapid edits. No stat
++or content cache survives the command. The [recovery, coordination and diff
++evaluation](../bench/git-recovery-coordination-2026-10-09/report.md) records tests,
++local comparisons and production verification.
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -17,6 +17,10 @@
+ ## [Unreleased]
+ 
+ ### Added
++
++- Git `checkout --force REF` / `-f` explicitly restores tracked files and the
++  index after a partial checkout while ordinary checkout retains dirty-tree
++  protection.
+ 
+ - Optional `availableWriteBufferBytes` reports inline buffer headroom so callers
+   can plan bounded `writeFiles` batches without changing atomicity or quotas.
+@@ -27,6 +31,12 @@
+   shell/VFS bundles. The public demo explicitly enables the command.
+ 
+ ### Changed
++
++- Git diff avoids decoding unchanged stored blobs and bounds worktree body
++  comparisons. The demo serializes shell commands, editor changes and deferred
++  publication in one room queue, acknowledges edits and subscribes open readers.
++  The [evaluation](bench/git-recovery-coordination-2026-10-09/report.md) records
++  recovery and concurrency tests and measured diff performance.
+ 
+ - Git add persists bounded sets of loose objects using existing `writeFiles`
+   before publishing the index. Small sets and backends without sufficient
+--- a/test/demo-document.test.ts
++++ b/test/demo-document.test.ts
+@@ -1,6 +1,7 @@
+ import { afterEach, expect, it, vi } from "vitest";
+ import { DemoDocuments } from "../demo/document.js";
+ import { parseClientMessage } from "../demo/protocol.js";
++import { WorkspaceOperations } from "../demo/workspace-operations.js";
+ import { CollaborativeFileSystem } from "../src/collab/index.js";
+ import { defaultShellCommands } from "../src/shell/commands/default.js";
+ import { Shell } from "../src/shell/shell.js";
+@@ -295,3 +296,60 @@
+   expect(await documents.open("/./doc")).toBe(await documents.open("/doc"));
+   expect(documents.openPaths()).toEqual(["/doc"]);
+ });
++
++it("keeps deferred publication behind the host command queue", async () => {
++  vi.useFakeTimers();
++  const { documents, storage, editable, notices } = room();
++  const operations = new WorkspaceOperations();
++  documents.attach(
++    editable,
++    (notice) => notices.push(notice),
++    (operation) => operations.run(operation),
++  );
++  await storage.writeFile("/queued", "before");
++  const document = await documents.open("/queued");
++  documents.applyClientText("/queued", document.version(), "edited");
++  let release: () => void = () => {};
++  const gate = new Promise<void>((resolve) => {
++    release = resolve;
++  });
++  const command = operations.run(() => gate);
++  await vi.advanceTimersByTimeAsync(500);
++  expect(await new Response(storage.readFile("/queued").stream).text()).toBe("before");
++  release();
++  await command;
++  await operations.run(() => undefined);
++  expect(await new Response(storage.readFile("/queued").stream).text()).toBe("edited");
++});
++
++it("flushes editor bytes before a command reads and commits them", async () => {
++  const { documents, storage } = room();
++  await storage.writeFile("/flush", "before");
++  const document = await documents.open("/flush");
++  documents.applyClientText("/flush", document.version(), "edited");
++  await documents.flush();
++  expect(await new Response(storage.readFile("/flush").stream).text()).toBe("edited");
++  expect(documents.registry.get("/flush")?.dirty).toBe(false);
++});
++
++it("reports failed publication while retaining edits so a command can free quota and retry", async () => {
++  let maximum = 1024;
++  const storage = createTestFileSystem({ maxInlineLogicalBytes: () => maximum });
++  const documents = new DemoDocuments();
++  rooms.push(documents);
++  const notices: { kind: string }[] = [];
++  const editable = new CollaborativeFileSystem(storage, documents.registry);
++  documents.attach(editable, (notice) => notices.push(notice));
++  await storage.writeFile("/edit", "before");
++  await storage.writeFile("/filler", "filler");
++  const document = await documents.open("/edit");
++  documents.applyClientText("/edit", document.version(), "edited and larger");
++  maximum = 20;
++  expect(await documents.flush()).toBe(false);
++  expect(documents.registry.get("/edit")?.dirty).toBe(true);
++  expect(notices).toContainEqual(expect.objectContaining({ kind: "error" }));
++  const shell = new Shell({ fileSystem: editable, commands: defaultShellCommands });
++  expect((await shell.executeText({ script: "rm /filler" })).exitCode).toBe(0);
++  expect(await documents.flush()).toBe(true);
++  expect(await new Response(storage.readFile("/edit").stream).text()).toBe("edited and larger");
++});
+--- /dev/null
++++ b/test/demo-workspace-operations.test.ts
+@@ -0,0 +1,30 @@
++import { expect, it } from "vitest";
++import { WorkspaceOperations } from "../demo/workspace-operations.js";
++
++it("serializes two callers, survives a failed command and bounds admission", async () => {
++  const operations = new WorkspaceOperations(2);
++  const events: string[] = [];
++  let release: () => void = () => {};
++  const gate = new Promise<void>((resolve) => {
++    release = resolve;
++  });
++  const first = operations.run(async () => {
++    events.push("first");
++    await gate;
++    throw new Error("failed");
++  });
++  const failed = expect(first).rejects.toThrow("failed");
++  const second = operations.run(() => {
++    events.push("second");
++    return 2;
++  });
++  await expect(operations.run(() => events.push("overflow"))).rejects.toMatchObject({
++    code: "EAGAIN",
++  });
++  expect(events).toEqual(["first"]);
++  release();
++  await failed;
++  expect(await second).toBe(2);
++  expect(await operations.run(() => 3)).toBe(3);
++  expect(events).toEqual(["first", "second"]);
++});
+--- /dev/null
++++ b/test/git-diff-budgets.test.ts
+@@ -0,0 +1,76 @@
++import { expect, it } from "vitest";
++import { gitCommand } from "../src/shell/commands/git.js";
++import { Shell } from "../src/shell/shell.js";
++import { createTestFileSystem } from "./helpers/node-sql.js";
++
++async function fixture() {
++  const vfs = createTestFileSystem();
++  const shell = new Shell({ fileSystem: vfs, commands: [gitCommand] });
++  const run = (script: string) => shell.executeText({ script, cwd: "/repo" });
++  await shell.executeText({ script: "git init /repo" });
++  await run("git config user.name Test; git config user.email test@example.invalid");
++  for (let n = 0; n < 1000; n++) {
++    let seed = n + 1;
++    const body = Uint8Array.from({ length: 768 }, () => {
++      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
++      return 32 + ((seed >>> 24) % 95);
++    });
++    await vfs.writeFile(`/repo/f${n}`, body);
++  }
++  const setup = await run("git add -A && git commit -m initial");
++  expect(setup.exitCode, setup.stderr).toBe(0);
++  return { vfs, run };
++}
++it("diff --cached skips unchanged blobs within a small I/O budget", async () => {
++  const { vfs } = await fixture();
++  const shell = new Shell({
++    fileSystem: vfs,
++    commands: [gitCommand],
++    limits: { maxTotalIoBytes: 256 * 1024 },
++  });
++  const result = await shell.executeText({ script: "git diff --cached", cwd: "/repo" });
++  expect(result.exitCode, result.stderr).toBe(0);
++  expect(result.stdout).toBe("");
++});
++it("diff reads worktree bytes once and only decodes the changed stored blob", async () => {
++  const { vfs } = await fixture();
++  await vfs.writeFile("/repo/f0", "edited\n");
++  const shell = new Shell({
++    fileSystem: vfs,
++    commands: [gitCommand],
++    limits: { maxTotalIoBytes: 1024 * 1024 },
++  });
++  const result = await shell.executeText({ script: "git diff", cwd: "/repo" });
++  expect(result.exitCode, result.stderr).toBe(0);
++  expect(result.stdout.match(/diff --git/g)).toHaveLength(1);
++  expect(result.stdout).toContain("+edited");
++});
++it("diff observes same-size edits, staged bytes, binary changes and symlink targets", async () => {
++  const vfs = createTestFileSystem();
++  const shell = new Shell({ fileSystem: vfs, commands: [gitCommand] });
++  const run = (script: string) => shell.executeText({ script, cwd: "/repo" });
++  await shell.executeText({ script: "git init /repo" });
++  await run("git config user.name Test; git config user.email test@example.invalid");
++  await vfs.writeFile("/repo/a", "before\n");
++  await vfs.writeFile("/repo/binary", new Uint8Array([0, 1]));
++  vfs.symlink("/repo/link", "a");
++  expect((await run("git add -A && git commit -m initial")).exitCode).toBe(0);
++  await vfs.writeFile("/repo/a", "after!\n");
++  await vfs.writeFile("/repo/binary", new Uint8Array([0, 2]));
++  await vfs.remove("/repo/link");
++  vfs.symlink("/repo/link", "z");
++  const diff = await run("git diff");
++  expect(diff.exitCode, diff.stderr).toBe(0);
++  expect(diff.stdout).toContain("+after!");
++  expect(diff.stdout).toContain("Binary files differ");
++  expect(diff.stdout).toContain("+z");
++  await run("git add -A");
++  const staged = await run("git diff --cached");
++  const patches = (text: string) =>
++    text
++      .split(/(?=diff --git )/u)
++      .filter(Boolean)
++      .sort();
++  expect(patches(staged.stdout)).toEqual(patches(diff.stdout));
++  expect((await run("git diff")).stdout).toBe("");
++});
+--- /dev/null
++++ b/test/git-force-checkout.test.ts
+@@ -0,0 +1,68 @@
++import * as git from "isomorphic-git";
++import { expect, it } from "vitest";
++import { runCheckoutRecovery } from "../demo/benchmark-git-checkout-recovery.js";
++import { createFsAdapter } from "../src/fs/index.js";
++import { gitCommand } from "../src/shell/commands/git.js";
++import { Shell } from "../src/shell/shell.js";
++import { createTestFileSystem } from "./helpers/node-sql.js";
++
++it("recovers a partial checkout entirely through the Git applet", async () => {
++  expect((await runCheckoutRecovery(createTestFileSystem())).verified).toBe(100);
++});
++it.each(["--force", "-f"])(
++  "explicit checkout %s discards tracked changes and preserves unrelated untracked files",
++  async (flag) => {
++    const vfs = createTestFileSystem();
++    const shell = new Shell({ fileSystem: vfs, commands: [gitCommand] });
++    const run = (script: string) => shell.executeText({ script, cwd: "/repo" });
++    await shell.executeText({ script: "git init /repo" });
++    await run("git config user.name Test; git config user.email test@example.invalid");
++    await vfs.writeFile("/repo/a", "committed\n");
++    await run("git add a && git commit -m initial");
++    await vfs.writeFile("/repo/a", "dirty\n");
++    await vfs.writeFile("/repo/untracked", "keep\n");
++    expect((await run("git checkout main")).exitCode).toBe(1);
++    const result = await run(`git checkout ${flag} main`);
++    expect(result.exitCode, result.stderr).toBe(0);
++    const fs = createFsAdapter(vfs);
++    expect(await fs.promises.readFile("/repo/a", "utf8")).toBe("committed\n");
++    expect(await fs.promises.readFile("/repo/untracked", "utf8")).toBe("keep\n");
++    expect(await git.listFiles({ fs, dir: "/repo" })).toEqual(["a"]);
++  },
++);
++
++it("force checkout replaces a changed symlink without following its target", async () => {
++  const vfs = createTestFileSystem();
++  const shell = new Shell({ fileSystem: vfs, commands: [gitCommand] });
++  const run = (script: string) => shell.executeText({ script, cwd: "/repo" });
++  await shell.executeText({ script: "git init /repo" });
++  await run("git config user.name Test; git config user.email test@example.invalid");
++  await vfs.writeFile("/repo/a", "committed\n");
++  await run("git add a && git commit -m initial");
++  await vfs.writeFile("/outside", "keep outside\n");
++  await vfs.remove("/repo/a");
++  vfs.symlink("/repo/a", "/outside");
++  const result = await run("git checkout --force main");
++  expect(result.exitCode, result.stderr).toBe(0);
++  const fs = createFsAdapter(vfs);
++  expect(vfs.lstat("/repo/a").kind).toBe("file");
++  expect(await fs.promises.readFile("/repo/a", "utf8")).toBe("committed\n");
++  expect(await fs.promises.readFile("/outside", "utf8")).toBe("keep outside\n");
++});
++
++it("force checkout replaces an untracked path obstructing the selected tree", async () => {
++  const vfs = createTestFileSystem();
++  const shell = new Shell({ fileSystem: vfs, commands: [gitCommand] });
++  const run = (script: string) => shell.executeText({ script, cwd: "/repo" });
++  await shell.executeText({ script: "git init /repo" });
++  await run("git config user.name Test; git config user.email test@example.invalid");
++  await vfs.writeFile("/repo/a", "base\n");
++  await run("git add a && git commit -m base && git branch base");
++  await vfs.writeFile("/repo/added", "tracked\n");
++  await run("git add added && git commit -m added && git checkout base");
++  await vfs.writeFile("/repo/added", "untracked obstruction\n");
++  const result = await run("git checkout --force main");
++  expect(result.exitCode, result.stderr).toBe(0);
++  expect(await createFsAdapter(vfs).promises.readFile("/repo/added", "utf8")).toBe("tracked\n");
++  expect((await run("git status --porcelain")).stdout).toBe("");
++});
+--- /dev/null
++++ b/test/byte-vfs-durable-git-diff.test.ts
+@@ -0,0 +1,48 @@
++import { runInDurableObject } from "cloudflare:test";
++import { env } from "cloudflare:workers";
++import { expect, it } from "vitest";
++import { gitCommand } from "../src/shell/commands/git.js";
++import { Shell } from "../src/shell/shell.js";
++import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
++
++it("diff skips unchanged stored bodies and retains quick edits under I/O limits on workerd", async () => {
++  const outcomes = await runInDurableObject(
++    env.VFS_TEST.getByName("git-diff-bounded"),
++    async (_instance, state) => {
++      const vfs = new DurableObjectFileSystem(state.storage);
++      const shell = new Shell({ fileSystem: vfs, commands: [gitCommand] });
++      const run = (script: string) => shell.executeText({ script, cwd: "/repo" });
++      await shell.executeText({ script: "git init /repo" });
++      await run("git config user.name Test; git config user.email test@example.invalid");
++      for (let n = 0; n < 1000; n++) {
++        let seed = n + 1;
++        const body = Uint8Array.from({ length: 768 }, () => {
++          seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
++          return 32 + ((seed >>> 24) % 95);
++        });
++        await vfs.writeFile(`/repo/f${n}`, body);
++      }
++      const initial = await run("git add -A && git commit -m initial");
++      if (initial.exitCode !== 0) throw new Error(initial.stderr);
++      const cached = new Shell({
++        fileSystem: vfs,
++        commands: [gitCommand],
++        limits: { maxTotalIoBytes: 256 * 1024 },
++      });
++      const clean = await cached.executeText({ script: "git diff --cached", cwd: "/repo" });
++      await vfs.writeFile("/repo/f0", "edited\n");
++      const work = new Shell({
++        fileSystem: vfs,
++        commands: [gitCommand],
++        limits: { maxTotalIoBytes: 1024 * 1024 },
++      });
++      const changed = await work.executeText({ script: "git diff", cwd: "/repo" });
++      return { clean, changed };
++    },
++  );
++  expect(outcomes.clean.exitCode, outcomes.clean.stderr).toBe(0);
++  expect(outcomes.clean.stdout).toBe("");
++  expect(outcomes.changed.exitCode, outcomes.changed.stderr).toBe(0);
++  expect(outcomes.changed.stdout).toContain("+edited");
++  expect(outcomes.changed.stdout.match(/diff --git/g)).toHaveLength(1);
++});

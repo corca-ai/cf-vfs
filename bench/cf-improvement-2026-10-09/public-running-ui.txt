@@ -1,0 +1,364 @@
+- main
+  - navigation "Main navigation" [ref=e1]
+    - link "← Shell demo" [ref=e5]
+    - link "Source ↗" [ref=e6]
+  - region "Files. Commits. Checkout. See what the VFS costs." [ref=e2]
+    - paragraph
+      - StaticText "MEASURED ON CLOUDFLARE"
+    - heading "Files. Commits. Checkout. See what the VFS costs." [level=1, ref=e7]
+      - StaticText "Files. Commits. Checkout."
+      - LineBreak "\n"
+      - emphasis
+        - StaticText "See what the VFS costs."
+    - paragraph
+      - StaticText "Real file and Git operations on a SQLite-backed Durable Object. Results are saved in the VFS and shared with everyone."
+  - region "Benchmark controls" [ref=e3]
+    - generic
+      - button "Request benchmark" [disabled, ref=e9]
+      - link "Stored JSON ↗" [ref=e10]
+    - status
+      - StaticText "Benchmark running (89% complete). Everyone shares this run; the previous saved result stays visible."
+    - paragraph
+      - StaticText "Opening this page never runs a benchmark. A request runs the suite only when the saved result is at least 10 minutes old. Concurrent requests share one run. It continues in the background when you close this page."
+  - region "Saved results" [ref=e4]
+    - heading "Saved results" [level=2, ref=e8]
+    - LabelText
+      - StaticText "Workload "
+      - combobox "Workload" [expanded=false, ref=e11]: 1,000 files
+        - MenuListPopup
+          - option "100 files" [ref=e12]
+          - option "1,000 files" [selected, ref=e13]
+    - paragraph
+      - StaticText "Saved 10/9/2026, 8:31:34 AM · Deployment dce71ac5 · Request location LAX · 3 samples + warmup · 27,056 checks passed"
+    - generic
+      - table "File operations"
+        - caption
+          - StaticText "File operations"
+        - rowgroup
+          - row
+            - columnheader "Operation" [ref=e134]
+            - columnheader "VFS" [ref=e135]
+            - columnheader "Metadata cache" [ref=e136]
+            - columnheader "Cache / VFS" [ref=e137]
+        - row
+          - cell "Write files 1,000 operations / call" [ref=e14]
+            - StaticText "Write files"
+            - StaticText "1,000 operations / call"
+          - cell "93 ms 93 ms – 148 ms" [ref=e15]
+            - StaticText "93 ms"
+            - StaticText "93 ms – 148 ms"
+          - cell "146 ms 100 ms – 208 ms" [ref=e16]
+            - StaticText "146 ms"
+            - StaticText "100 ms – 208 ms"
+          - cell "1.57×" [ref=e17]
+        - row
+          - cell "Stat files 1,000 operations / call" [ref=e18]
+            - StaticText "Stat files"
+            - StaticText "1,000 operations / call"
+          - cell "12 ms 6 ms – 13 ms" [ref=e19]
+            - StaticText "12 ms"
+            - StaticText "6 ms – 13 ms"
+          - cell "4 ms 4 ms – 20 ms" [ref=e20]
+            - StaticText "4 ms"
+            - StaticText "4 ms – 20 ms"
+          - cell "0.33×" [ref=e21]
+        - row
+          - cell "Stat after one overwrite 1,000 operations / call" [ref=e22]
+            - StaticText "Stat after one overwrite"
+            - StaticText "1,000 operations / call"
+          - cell "54 ms 54 ms – 251 ms" [ref=e23]
+            - StaticText "54 ms"
+            - StaticText "54 ms – 251 ms"
+          - cell "97 ms 67 ms – 103 ms" [ref=e24]
+            - StaticText "97 ms"
+            - StaticText "67 ms – 103 ms"
+          - cell "1.80×" [ref=e25]
+        - row
+          - cell "Read files 1,000 operations / call" [ref=e26]
+            - StaticText "Read files"
+            - StaticText "1,000 operations / call"
+          - cell "54 ms 4 ms – 149 ms" [ref=e27]
+            - StaticText "54 ms"
+            - StaticText "4 ms – 149 ms"
+          - cell "934 ms 10 ms – 1,000 ms" [ref=e28]
+            - StaticText "934 ms"
+            - StaticText "10 ms – 1,000 ms"
+          - cell "17.30×" [ref=e29]
+        - row
+          - cell "List directory (10×) 10 operations / call" [ref=e30]
+            - StaticText "List directory (10×)"
+            - StaticText "10 operations / call"
+          - cell "30 ms 14 ms – 39 ms" [ref=e31]
+            - StaticText "30 ms"
+            - StaticText "14 ms – 39 ms"
+          - cell "30 ms 27 ms – 42 ms" [ref=e32]
+            - StaticText "30 ms"
+            - StaticText "27 ms – 42 ms"
+          - cell "1.00×" [ref=e33]
+        - row
+          - cell "Append to files 1,000 operations / call" [ref=e34]
+            - StaticText "Append to files"
+            - StaticText "1,000 operations / call"
+          - cell "617 ms 223 ms – 768 ms" [ref=e35]
+            - StaticText "617 ms"
+            - StaticText "223 ms – 768 ms"
+          - cell "1,135 ms 112 ms – 1,248 ms" [ref=e36]
+            - StaticText "1,135 ms"
+            - StaticText "112 ms – 1,248 ms"
+          - cell "1.84×" [ref=e37]
+        - row
+          - cell "Rename files 1,000 operations / call" [ref=e38]
+            - StaticText "Rename files"
+            - StaticText "1,000 operations / call"
+          - cell "1,157 ms 905 ms – 1,646 ms" [ref=e39]
+            - StaticText "1,157 ms"
+            - StaticText "905 ms – 1,646 ms"
+          - cell "89 ms 72 ms – 121 ms" [ref=e40]
+            - StaticText "89 ms"
+            - StaticText "72 ms – 121 ms"
+          - cell "0.08×" [ref=e41]
+        - row
+          - cell "Copy subtree" [ref=e42]
+          - cell "79 ms 77 ms – 84 ms" [ref=e43]
+            - StaticText "79 ms"
+            - StaticText "77 ms – 84 ms"
+          - cell "92 ms 85 ms – 163 ms" [ref=e44]
+            - StaticText "92 ms"
+            - StaticText "85 ms – 163 ms"
+          - cell "1.16×" [ref=e45]
+        - row
+          - cell "Remove subtree" [ref=e46]
+          - cell "52 ms 45 ms – 53 ms" [ref=e47]
+            - StaticText "52 ms"
+            - StaticText "45 ms – 53 ms"
+          - cell "62 ms 62 ms – 75 ms" [ref=e48]
+            - StaticText "62 ms"
+            - StaticText "62 ms – 75 ms"
+          - cell "1.19×" [ref=e49]
+      - table "Git engine operations"
+        - caption
+          - StaticText "Git engine operations"
+        - rowgroup
+          - row
+            - columnheader "Operation" [ref=e138]
+            - columnheader "VFS" [ref=e139]
+            - columnheader "Metadata cache" [ref=e140]
+            - columnheader "Cache / VFS" [ref=e141]
+        - row
+          - cell "Init repository" [ref=e50]
+          - cell "54 ms 51 ms – 120 ms" [ref=e51]
+            - StaticText "54 ms"
+            - StaticText "51 ms – 120 ms"
+          - cell "71 ms 62 ms – 73 ms" [ref=e52]
+            - StaticText "71 ms"
+            - StaticText "62 ms – 73 ms"
+          - cell "1.31×" [ref=e53]
+        - row
+          - cell "Populate worktree 1,000 operations / call" [ref=e54]
+            - StaticText "Populate worktree"
+            - StaticText "1,000 operations / call"
+          - cell "116 ms 102 ms – 135 ms" [ref=e55]
+            - StaticText "116 ms"
+            - StaticText "102 ms – 135 ms"
+          - cell "147 ms 110 ms – 150 ms" [ref=e56]
+            - StaticText "147 ms"
+            - StaticText "110 ms – 150 ms"
+          - cell "1.27×" [ref=e57]
+        - row
+          - cell "Add all (32 files / batch)" [ref=e58]
+          - cell "2,645 ms 2,495 ms – 2,697 ms" [ref=e59]
+            - StaticText "2,645 ms"
+            - StaticText "2,495 ms – 2,697 ms"
+          - cell "2,875 ms 2,772 ms – 2,923 ms" [ref=e60]
+            - StaticText "2,875 ms"
+            - StaticText "2,772 ms – 2,923 ms"
+          - cell "1.09×" [ref=e61]
+        - row
+          - cell "Initial commit" [ref=e62]
+          - cell "711 ms 709 ms – 719 ms" [ref=e63]
+            - StaticText "711 ms"
+            - StaticText "709 ms – 719 ms"
+          - cell "849 ms 743 ms – 1,001 ms" [ref=e64]
+            - StaticText "849 ms"
+            - StaticText "743 ms – 1,001 ms"
+          - cell "1.19×" [ref=e65]
+        - row
+          - cell "Clean status" [ref=e66]
+          - cell "49 ms 46 ms – 113 ms" [ref=e67]
+            - StaticText "49 ms"
+            - StaticText "46 ms – 113 ms"
+          - cell "41 ms 35 ms – 61 ms" [ref=e68]
+            - StaticText "41 ms"
+            - StaticText "35 ms – 61 ms"
+          - cell "0.84×" [ref=e69]
+        - row
+          - cell "Status after edit" [ref=e70]
+          - cell "134 ms 115 ms – 237 ms" [ref=e71]
+            - StaticText "134 ms"
+            - StaticText "115 ms – 237 ms"
+          - cell "96 ms 85 ms – 105 ms" [ref=e72]
+            - StaticText "96 ms"
+            - StaticText "85 ms – 105 ms"
+          - cell "0.72×" [ref=e73]
+        - row
+          - cell "Diff one file" [ref=e74]
+          - cell "6 ms 4 ms – 9 ms" [ref=e75]
+            - StaticText "6 ms"
+            - StaticText "4 ms – 9 ms"
+          - cell "4 ms 4 ms – 67 ms" [ref=e76]
+            - StaticText "4 ms"
+            - StaticText "4 ms – 67 ms"
+          - cell "0.67×" [ref=e77]
+        - row
+          - cell "Add one file" [ref=e78]
+          - cell "73 ms 71 ms – 85 ms" [ref=e79]
+            - StaticText "73 ms"
+            - StaticText "71 ms – 85 ms"
+          - cell "63 ms 58 ms – 63 ms" [ref=e80]
+            - StaticText "63 ms"
+            - StaticText "58 ms – 63 ms"
+          - cell "0.86×" [ref=e81]
+        - row
+          - cell "Commit one change" [ref=e82]
+          - cell "182 ms 181 ms – 200 ms" [ref=e83]
+            - StaticText "182 ms"
+            - StaticText "181 ms – 200 ms"
+          - cell "176 ms 167 ms – 181 ms" [ref=e84]
+            - StaticText "176 ms"
+            - StaticText "167 ms – 181 ms"
+          - cell "0.97×" [ref=e85]
+        - row
+          - cell "Log (2 commits)" [ref=e86]
+          - cell "6 ms 3 ms – 10 ms" [ref=e87]
+            - StaticText "6 ms"
+            - StaticText "3 ms – 10 ms"
+          - cell "3 ms 3 ms – 5 ms" [ref=e88]
+            - StaticText "3 ms"
+            - StaticText "3 ms – 5 ms"
+          - cell "0.50×" [ref=e89]
+        - row
+          - cell "Create branch" [ref=e90]
+          - cell "59 ms 57 ms – 61 ms" [ref=e91]
+            - StaticText "59 ms"
+            - StaticText "57 ms – 61 ms"
+          - cell "57 ms 56 ms – 62 ms" [ref=e92]
+            - StaticText "57 ms"
+            - StaticText "56 ms – 62 ms"
+          - cell "0.97×" [ref=e93]
+        - row
+          - cell "Checkout initial branch" [ref=e94]
+          - cell "131 ms 125 ms – 143 ms" [ref=e95]
+            - StaticText "131 ms"
+            - StaticText "125 ms – 143 ms"
+          - cell "123 ms 112 ms – 129 ms" [ref=e96]
+            - StaticText "123 ms"
+            - StaticText "112 ms – 129 ms"
+          - cell "0.94×" [ref=e97]
+        - row
+          - cell "Checkout main" [ref=e98]
+          - cell "145 ms 139 ms – 940 ms" [ref=e99]
+            - StaticText "145 ms"
+            - StaticText "139 ms – 940 ms"
+          - cell "109 ms 103 ms – 120 ms" [ref=e100]
+            - StaticText "109 ms"
+            - StaticText "103 ms – 120 ms"
+          - cell "0.75×" [ref=e101]
+      - table "Shell Git commands"
+        - caption
+          - StaticText "Shell Git commands"
+        - rowgroup
+          - row
+            - columnheader "Operation" [ref=e142]
+            - columnheader "Time" [ref=e143]
+        - row
+          - cell "Init repository" [ref=e102]
+          - cell "72 ms 46 ms – 76 ms" [ref=e103]
+            - StaticText "72 ms"
+            - StaticText "46 ms – 76 ms"
+        - row
+          - cell "Populate worktree 1,000 operations / call" [ref=e104]
+            - StaticText "Populate worktree"
+            - StaticText "1,000 operations / call"
+          - cell "141 ms 94 ms – 151 ms" [ref=e105]
+            - StaticText "141 ms"
+            - StaticText "94 ms – 151 ms"
+        - row
+          - cell "Add all (32 files / batch)" [ref=e106]
+          - cell "3,244 ms 2,827 ms – 3,294 ms" [ref=e107]
+            - StaticText "3,244 ms"
+            - StaticText "2,827 ms – 3,294 ms"
+        - row
+          - cell "Initial commit" [ref=e108]
+          - cell "733 ms 675 ms – 754 ms" [ref=e109]
+            - StaticText "733 ms"
+            - StaticText "675 ms – 754 ms"
+        - row
+          - cell "Clone local bare remote" [ref=e110]
+          - cell "162 ms 158 ms – 1,708 ms" [ref=e111]
+            - StaticText "162 ms"
+            - StaticText "158 ms – 1,708 ms"
+        - row
+          - cell "Clone local worktree" [ref=e112]
+          - cell "2,811 ms 1,705 ms – 3,232 ms" [ref=e113]
+            - StaticText "2,811 ms"
+            - StaticText "1,705 ms – 3,232 ms"
+        - row
+          - cell "Fetch unchanged remote" [ref=e114]
+          - cell "61 ms 49 ms – 69 ms" [ref=e115]
+            - StaticText "61 ms"
+            - StaticText "49 ms – 69 ms"
+        - row
+          - cell "Pull unchanged remote" [ref=e116]
+          - cell "262 ms 181 ms – 307 ms" [ref=e117]
+            - StaticText "262 ms"
+            - StaticText "181 ms – 307 ms"
+        - row
+          - cell "Add unchanged worktree" [ref=e118]
+          - cell "1,468 ms 186 ms – 1,903 ms" [ref=e119]
+            - StaticText "1,468 ms"
+            - StaticText "186 ms – 1,903 ms"
+        - row
+          - cell "Edit one file" [ref=e120]
+          - cell "44 ms 41 ms – 92 ms" [ref=e121]
+            - StaticText "44 ms"
+            - StaticText "41 ms – 92 ms"
+        - row
+          - cell "Add one file" [ref=e122]
+          - cell "52 ms 44 ms – 74 ms" [ref=e123]
+            - StaticText "52 ms"
+            - StaticText "44 ms – 74 ms"
+        - row
+          - cell "Commit one change" [ref=e124]
+          - cell "127 ms 114 ms – 230 ms" [ref=e125]
+            - StaticText "127 ms"
+            - StaticText "114 ms – 230 ms"
+        - row
+          - cell "Push one commit" [ref=e126]
+          - cell "55 ms 50 ms – 90 ms" [ref=e127]
+            - StaticText "55 ms"
+            - StaticText "50 ms – 90 ms"
+        - row
+          - cell "Pull one commit" [ref=e128]
+          - cell "1,295 ms 632 ms – 2,742 ms" [ref=e129]
+            - StaticText "1,295 ms"
+            - StaticText "632 ms – 2,742 ms"
+        - row
+          - cell "Delete worktree files 1,000 operations / call" [ref=e130]
+            - StaticText "Delete worktree files"
+            - StaticText "1,000 operations / call"
+          - cell "107 ms 81 ms – 156 ms" [ref=e131]
+            - StaticText "107 ms"
+            - StaticText "81 ms – 156 ms"
+        - row
+          - cell "Stage all deletions" [ref=e132]
+          - cell "107 ms 58 ms – 127 ms" [ref=e133]
+            - StaticText "107 ms"
+            - StaticText "58 ms – 127 ms"
+    - group
+      - DisclosureTriangle "How these numbers are measured" [expanded=false]
+        - StaticText "How these numbers are measured"
+  - paragraph
+    - StaticText "The result lives at "
+    - code
+      - StaticText "/benchmarks/latest.json"
+    - StaticText " in an isolated benchmark VFS. Its actual file modification time controls the next run."

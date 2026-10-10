@@ -210,7 +210,7 @@ it("refuses a guarded write when the link was repointed underneath it", async ()
   expect(await readAll(fs, "/b.txt")).toBe("CALLER\n");
 });
 
-it("costs a namespace without links exactly what it cost before", async () => {
+it("keeps fixed point lookup costs with and without symbolic links", async () => {
   const queries: string[] = [];
   const fs = createTestFileSystem({ onStatement: (query) => queries.push(query) });
   await fs.writeFile("/a/b/c.txt", "x\n", { createParents: true });
@@ -226,16 +226,13 @@ it("costs a namespace without links exactly what it cost before", async () => {
     read: count(() => fs.readFile("/a/b/c.txt").stream.cancel()),
     token: count(() => fs.getMutationToken("/a/b/c.txt")),
   };
-  // Pinned absolutely, not merely capped: a bound with no floor is satisfied
-  // by a meter that stopped counting. These are the counts the filesystem
-  // had before links existed, measured on the previous release.
-  expect(baseline).toEqual({ stat: 1, read: 2, token: 3 });
+  // Small whole reads combine the entry and body when no links exist.
+  expect(baseline).toEqual({ stat: 1, read: 1, token: 3 });
 
-  // One link somewhere else must not change what reading an unrelated path
-  // costs, because both operations keep the row resolution landed on.
+  // Link resolution keeps its row; the separate body read remains bounded.
   fs.symlink("/unrelated", "/a");
   expect(count(() => fs.stat("/a/b/c.txt"))).toBe(baseline.stat);
-  expect(count(() => fs.readFile("/a/b/c.txt").stream.cancel())).toBe(baseline.read);
+  expect(count(() => fs.readFile("/a/b/c.txt").stream.cancel())).toBe(2);
   // A token costs one more: it needs the canonical path, and unlike the two
   // above it has no use for the row that resolving it produced.
   expect(count(() => fs.getMutationToken("/a/b/c.txt"))).toBe(baseline.token + 1);

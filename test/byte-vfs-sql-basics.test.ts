@@ -72,6 +72,24 @@ it("does not attach a completed digest to a newer file revision", async () => {
   expect(await fileSystem.digestFile("/raced")).toBe(newDigest);
 });
 
+it("keeps byte digests and unchanged-write guards correct across binary overwrites", async () => {
+  const fs = createTestFileSystem({ chunkBytes: 2 });
+  const body = Uint8Array.of(0, 255, 128, 1, 2);
+  await fs.writeFile("/bytes", body);
+  body.fill(9);
+  expect(await bytes(fs.readFile("/bytes").stream)).toEqual([0, 255, 128, 1, 2]);
+  const first = await fs.digestFile("/bytes");
+  const token = fs.getMutationToken("/bytes");
+  await fs.writeFile("/bytes", Uint8Array.of(0, 255, 128, 1, 2), { skipIfUnchanged: true });
+  expect(fs.getMutationToken("/bytes")).toBe(token);
+  await fs.writeFile("/bytes", Uint8Array.of(0, 255, 128, 1, 3));
+  expect(await fs.digestFile("/bytes")).not.toBe(first);
+  const digest = await crypto.subtle.digest("SHA-256", Uint8Array.of(0, 255, 128, 1, 3));
+  expect(await fs.digestFile("/bytes")).toBe(
+    Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join(""),
+  );
+});
+
 describe("shared VFS conformance", () => {
   runVfsConformance(() => createTestFileSystem());
 });

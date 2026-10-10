@@ -1241,6 +1241,14 @@ twelve `writeFile` calls leaves a tree that matches nobody's intent. A failed
 batch leaves every path exactly as it was, including the paths earlier in the
 array.
 
+The optional `availableWriteBufferBytes` property reports current instance-wide
+inline buffer headroom in bytes. SQL filesystems and their credential and
+collaborative views expose it; an absent value means the backend has not
+reported its capacity. It helps callers plan bounded write batches, but does
+not reserve memory or guarantee success after an asynchronous boundary. Consume
+or cancel read streams to release their leases; concurrent work can still
+cause `EAGAIN`. This property does not change `writeFiles` atomicity or quotas.
+
 Each entry carries its own `path`, `body`, optional `mode`, and optional
 `ifMutationToken`; `createParents`, `disposition`, and `skipIfUnchanged` apply
 to the call. A set too large for the in-flight budget fails with `ENOSPC` and
@@ -1310,3 +1318,9 @@ link is one zero-byte entry and is not followed.
 Glob patterns are capped at 16,384 UTF-16 code units. Non-final stars commit to
 their earliest following fixed fragment, preventing exponential backtracking
 across successive stars while preserving Unicode bracket matching.
+
+## Optional Git command
+
+The separately imported [`git` applet](git.md) operates local VFS repositories,
+including local clone, fetch, push and fast-forward pull. It is excluded from
+the default registry and requires an explicitly installed optional Git engine.

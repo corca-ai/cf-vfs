@@ -190,19 +190,8 @@ class FsPromises {
   ): Promise<void> {
     const resolved = this.path(path);
     const recursive = typeof options === "object" && options.recursive === true;
-    if (!recursive) {
-      try {
-        this.vfs.lstat(resolved);
-      } catch (error) {
-        if (error instanceof VfsError && error.code === "ENOENT") {
-          this.vfs.mkdir(resolved, false, typeof options === "number" ? options : options?.mode);
-          return;
-        }
-        throw error;
-      }
-      throw new VfsError("EEXIST", "file or directory already exists", resolved);
-    }
-    this.vfs.mkdir(resolved, true, typeof options === "object" ? options.mode : options);
+
+    this.vfs.mkdir(resolved, recursive, typeof options === "object" ? options.mode : options);
   }
 
   async unlink(path: string): Promise<void> {

@@ -2,6 +2,7 @@ import { CollaborativeFileSystem } from "../src/collab/index.js";
 import { VfsError } from "../src/core/errors.js";
 import { curlCommand } from "../src/shell/commands/curl.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
+import { gitCommand } from "../src/shell/commands/git.js";
 import { InteractiveInputBuffer, InteractiveShell } from "../src/shell/interactive.js";
 import {
   LINUX_SHELL_OPTIONS,
@@ -21,6 +22,7 @@ import {
 } from "./identity.js";
 import { demoNetwork } from "./network.js";
 import { MAX_MESSAGE_BYTES, parseClientMessage, type ServerMessage } from "./protocol.js";
+import { WorkspaceOperations } from "./workspace-operations.js";
 
 interface TerminalSession {
   readonly shell: InteractiveShell;
@@ -29,6 +31,7 @@ interface TerminalSession {
   readonly watching: Set<string>;
   pendingSourceBytes: number;
   execution: ShellExecution | undefined;
+  pending: AbortController | undefined;
 }
 
 const DEMO_HOME = `/home/${DEMO_USER}`;
@@ -192,6 +195,7 @@ export function handleTerminalRequest(
 
 export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
   private readonly sessions = new Map<WebSocket, TerminalSession>();
+  private readonly operations = new WorkspaceOperations();
   /** The room this object is, so a session can say which one it joined. */
   private readonly workspaceName: string;
   private readonly documents: DemoDocuments;
@@ -226,7 +230,11 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
     this.workspaceName = ctx.id.name ?? "country-XX";
     this.documents = documents;
     this.editable = new CollaborativeFileSystem(this.fileSystem, documents.registry);
-    documents.attach(this.editable, (notice) => this.announce(notice));
+    documents.attach(
+      this.editable,
+      (notice) => this.announce(notice),
+      (operation) => this.operations.run(operation),
+    );
     ctx.blockConcurrencyWhile(async () => {
       // The Linux profile's directories, created once per workspace. `/bin` and
       // `/usr/bin` are deliberately not among them: they resolve applets
@@ -270,7 +278,7 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
     const session: TerminalSession = {
       shell: new InteractiveShell({
         fileSystem: this.editable,
-        commands: [...defaultShellCommands, curlCommand],
+        commands: [...defaultShellCommands, curlCommand, gitCommand],
         // PATH lookup and the profile's environment are one decision, not two:
         // without `commandResolution` a `PATH` is an ordinary variable and
         // every applet answers to its bare name regardless of it.
@@ -297,6 +305,7 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       watching: new Set<string>(),
       pendingSourceBytes: 0,
       execution: undefined,
+      pending: undefined,
     };
     this.sessions.set(server, session);
 
@@ -340,13 +349,23 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
 
   private removeSession(socket: WebSocket): void {
     const session = this.sessions.get(socket);
+    session?.pending?.abort();
     session?.execution?.cancel();
     this.sessions.delete(socket);
     // A document nobody is looking at any more is dropped, but only after the
     // socket is out of the map so it does not count as its own watcher.
-    for (const path of session?.watching ?? []) {
-      if (!this.watchedElsewhere(socket, path)) this.documents.close(path);
-    }
+    void this.operations
+      .run(async () => {
+        await this.documents.flush();
+        for (const path of session?.watching ?? []) {
+          if (
+            !this.watchedElsewhere(socket, path) &&
+            this.documents.registry.get(path)?.dirty !== true
+          )
+            this.documents.close(path);
+        }
+      })
+      .catch((error: unknown) => console.error("document close failed", error));
   }
 
   private watchedElsewhere(except: WebSocket, path: string): boolean {
@@ -356,12 +375,12 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
     return false;
   }
 
-  /** Sends the current document to everyone watching it but the one that changed it. */
-  private broadcastDocument(path: string, except?: WebSocket): void {
+  /** Acknowledges the writer and updates every other subscriber. */
+  private broadcastDocument(path: string): void {
     const document = this.documents.get(path);
     if (document === undefined) return;
     for (const [socket, session] of this.sessions) {
-      if (socket === except || !session.watching.has(path)) continue;
+      if (!session.watching.has(path)) continue;
       send(socket, { type: "doc", path, version: document.version(), text: document.text() });
     }
   }
@@ -404,8 +423,13 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       return;
     }
     if (message.type === "signal") {
-      if (session.execution !== undefined) {
-        session.execution.cancel();
+      if (session.pending !== undefined) {
+        session.pending.abort();
+        if (session.execution !== undefined) session.execution.cancel();
+        else {
+          session.pending = undefined;
+          prompt(socket, session);
+        }
       } else {
         session.input.clear();
         session.pendingSourceBytes = 0;
@@ -413,41 +437,63 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       }
       return;
     }
-    if (message.type === "doc-open") {
-      const document = await this.documents.open(message.path);
-      send(socket, {
-        type: "doc",
-        path: message.path,
-        version: document.version(),
-        text: document.text(),
+    if (
+      message.type === "doc-open" ||
+      message.type === "doc-close" ||
+      message.type === "doc-edit"
+    ) {
+      await this.operations.run(async () => {
+        if (this.sessions.get(socket) !== session) return;
+        if (message.type === "doc-open") {
+          const document = await this.documents.open(message.path);
+          if (this.sessions.get(socket) !== session) {
+            if (!this.watchedElsewhere(socket, message.path)) this.documents.close(message.path);
+            return;
+          }
+          session.watching.add(message.path);
+          send(socket, {
+            type: "doc",
+            path: message.path,
+            version: document.version(),
+            text: document.text(),
+          });
+          return;
+        }
+        if (message.type === "doc-close") {
+          await this.documents.flush();
+          if (this.documents.registry.get(message.path)?.dirty === true)
+            throw new VfsError(
+              "EAGAIN",
+              "Document is still unsaved; free space and retry closing",
+              message.path,
+            );
+          // Closed only when this was the last socket looking at it: the room is
+          // shared, and one visitor closing a tab must not take the document out
+          // from under another who is still editing it.
+          if (!this.watchedElsewhere(socket, message.path)) this.documents.close(message.path);
+          session.watching.delete(message.path);
+          return;
+        }
+        if (message.type === "doc-edit") {
+          session.watching.add(message.path);
+          const applied = this.documents.applyClientText(message.path, message.base, message.text);
+          const document = this.documents.get(message.path);
+          if (document === undefined) return;
+          if (applied === "stale") {
+            // Say what is true now rather than taking text typed against something
+            // that has since been replaced.
+            send(socket, {
+              type: "doc",
+              path: message.path,
+              version: document.version(),
+              text: document.text(),
+            });
+            return;
+          }
+          this.broadcastDocument(message.path);
+          return;
+        }
       });
-      return;
-    }
-    if (message.type === "doc-close") {
-      // Closed only when this was the last socket looking at it: the room is
-      // shared, and one visitor closing a tab must not take the document out
-      // from under another who is still editing it.
-      if (!this.watchedElsewhere(socket, message.path)) this.documents.close(message.path);
-      session.watching.delete(message.path);
-      return;
-    }
-    if (message.type === "doc-edit") {
-      session.watching.add(message.path);
-      const applied = this.documents.applyClientText(message.path, message.base, message.text);
-      const document = this.documents.get(message.path);
-      if (document === undefined) return;
-      if (applied === "stale") {
-        // Say what is true now rather than taking text typed against something
-        // that has since been replaced.
-        send(socket, {
-          type: "doc",
-          path: message.path,
-          version: document.version(),
-          text: document.text(),
-        });
-        return;
-      }
-      this.broadcastDocument(message.path, socket);
       return;
     }
     if (message.type === "resize") {
@@ -482,8 +528,8 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       });
       return;
     }
-    if (session.execution !== undefined) {
-      send(socket, { type: "error", message: "A command is already running" });
+    if (session.execution !== undefined || session.pending !== undefined) {
+      send(socket, { type: "error", message: "A command is already running or queued" });
       return;
     }
 
@@ -500,27 +546,38 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       return;
     }
     session.pendingSourceBytes = 0;
-    await this.execute(socket, session, submitted.source);
+    const pending = new AbortController();
+    session.pending = pending;
+    send(socket, { type: "running" });
+    try {
+      await this.operations.run(async () => {
+        if (pending.signal.aborted || this.sessions.get(socket) !== session) return;
+        await this.documents.flush();
+        if (!pending.signal.aborted)
+          await this.execute(socket, session, submitted.source, pending.signal);
+      });
+    } finally {
+      if (session.pending === pending) session.pending = undefined;
+    }
   }
 
   private async execute(
     socket: WebSocket,
     session: TerminalSession,
     source: string,
+    signal: AbortSignal,
   ): Promise<void> {
-    send(socket, { type: "running" });
-    const execution = session.shell.runStream({ script: source });
+    const execution = session.shell.runStream({ script: source, signal });
     session.execution = execution;
     try {
       const [result] = await Promise.all([
         execution.completed,
         pumpOutput(socket, execution.stdout, "stdout"),
         pumpOutput(socket, execution.stderr, "stderr"),
-      ]);
-      // A write-through leaves a document ahead of storage and nothing else
-      // would publish it, so this is where the terminal's effect on an open
-      // file reaches both the editors watching it and the namespace.
-      this.documents.noticeShellWrites();
+      ]).finally(async () => {
+        this.documents.noticeShellWrites();
+        await this.documents.flush();
+      });
       send(socket, {
         type: "complete",
         cwd: session.shell.cwd,

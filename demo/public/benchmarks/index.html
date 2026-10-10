@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="File and Git benchmarks running on a real Cloudflare Durable Object, with results saved in cf-vfs.">
+  <meta name="theme-color" content="#07120f">
+  <title>cf-vfs · Cloudflare benchmarks</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/benchmarks/benchmarks.css">
+  <script type="module" src="/benchmarks/benchmarks.js"></script>
+</head>
+<body>
+<main class="shell-page benchmark-page">
+  <nav class="site-nav" aria-label="Main navigation"><a href="/">← Shell demo</a><a href="https://github.com/corca-ai/cf-vfs" rel="noreferrer" target="_blank">Source ↗</a></nav>
+  <section class="intro" aria-labelledby="page-title">
+    <p class="eyebrow">Measured on Cloudflare</p>
+    <h1 id="page-title">Files. Commits. Checkout.<br><em>See what the VFS costs.</em></h1>
+    <p class="benchmark-lede">Real file and Git operations on a SQLite-backed Durable Object. Results are saved in the VFS and shared with everyone.</p>
+  </section>
+  <section class="benchmark-controls" aria-label="Benchmark controls">
+    <div><button type="button" id="run-benchmark">Request benchmark</button><a class="download-link" href="/api/benchmarks" target="_blank" rel="noreferrer">Stored JSON ↗</a></div>
+    <p id="benchmark-status" role="status" aria-live="polite">Loading the saved result…</p>
+    <p class="benchmark-help">Opening this page never runs a benchmark. A request runs the suite only when the saved result is at least 10 minutes old. Concurrent requests share one run. It continues in the background when you close this page.</p>
+  </section>
+  <section id="results" hidden aria-labelledby="results-title">
+    <div class="result-heading"><h2 id="results-title">Saved results</h2><label for="file-count">Workload <select id="file-count"><option value="100">100 files</option><option value="1000" selected>1,000 files</option></select></label></div>
+    <p id="result-meta" class="benchmark-help"></p>
+    <div id="benchmark-tables"></div>
+    <details class="measurement-details"><summary>How these numbers are measured</summary>
+      <p>Each cell is the median of three runs after one full warmup. Cache order alternates. Times are measured by the Worker around one Durable Object RPC call and include dispatch, storage, and operation assertions. Full-body verification and teardown run outside that timer.</p>
+      <p>“Metadata cache” uses the existing optional 4,096-entry cache. Both columns use the same persistent SQLite VFS and inline file bodies. File bodies are approximately 0.8 KiB. This is not an APFS or native Git CLI comparison.</p>
+      <p>Git uses isomorphic-git 1.43.1. Add stages every file in batches of 32 to bound concurrent compression and stay within the isolate memory limit. The shell tables include local clone, push and pull. Coding sessions connect local clone, edits, additions, deletions, partial staging, commits and branch checkout. Mixed sessions include four poorly compressible 256 KiB files. Recovery checks inject capacity/write failures and cancellation, then retry and verify committed bytes; the serialized two-shell check uses the same room queue as the demo. The checkout probe repairs partial files with explicit git checkout --force. R2 transfers and browser latency are not included. A different file size or repository can behave differently. Very short calls can round to zero on the platform clock.</p>
+      <p>“Stat after one overwrite” overwrites one warmed file then stats every file. “Status after edit” includes one differently sized edit. “Diff” reads the original blob and working file and computes a line diff. “Copy subtree” uses the existing recursive VFS copy operation. Every final file body is checked before publishing the result.</p>
+    </details>
+  </section>
+  <p class="benchmark-footer">The result lives at <code>/benchmarks/latest.json</code> in an isolated benchmark VFS. Its actual file modification time controls the next run.</p>
+</main>
+</body>
+</html>

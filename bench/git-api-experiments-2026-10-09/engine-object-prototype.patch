@@ -1,0 +1,71 @@
+--- a/engine.mjs
++++ b/engine.mjs
+@@ -5892,7 +5892,10 @@
+   // Don't overwrite existing git objects - this helps avoid EPERM errors.
+   // Although I don't know how we'd fix corrupted objects then. Perhaps delete them
+   // on read?
+-  if (!(await fs.exists(filepath))) await fs.write(filepath, object);
++  if (!(await fs.exists(filepath))) {
++    if(fs.deferredObjects) fs.deferredObjects.set(filepath,object);
++    else await fs.write(filepath, object);
++  }
+ }
+ 
+ /* eslint-env node, browser */
+@@ -6001,6 +6004,7 @@
+         const autocrlf = await config.get('core.autocrlf');
+         const batches = Array.isArray(filepath) ? filepath : [filepath];
+         for (let offset=0; offset<batches.length; offset+=128) {
++          fs.deferredObjects = new Map();
+           await addToIndex({
+           dir,
+           gitdir: updatedGitdir,
+@@ -6011,6 +6015,9 @@
+           parallel,
+           autocrlf,
+         });
++          const objects=[...fs.deferredObjects].map(([path,body])=>({path,body}));
++          fs.deferredObjects=undefined;
++          if(objects.length)await fs._original_unwrapped_fs.promises.writeFiles(objects);
+         }
+       }
+     );
+--- a/dist/shell/commands/git-fs.js
++++ b/dist/shell/commands/git-fs.js
+@@ -81,6 +81,10 @@
+                 lease.release();
+             }
+         }),
++        writeFiles: entries => this.operation(async()=>{
++          const resolved=entries.map(({path,body})=>{this.check();this.context.budget.io(body.byteLength);return {path:commandPath(this.context,path),body};});
++          await this.context.fileSystem.writeFiles(resolved,{createParents:true});
++        }),
+         writeFile: (path, body, options) => this.operation(async () => {
+             const bytes = typeof body === "string" ? encodeUtf8(body) : body;
+             this.context.budget.io(bytes.byteLength);
+--- a/dist/shell/policy.js
++++ b/dist/shell/policy.js
+@@ -124,6 +124,10 @@
+             }
+         }
+         return this.#inner.getMutationToken(path, options);
++    }
++    async writeFiles(entries,options) {
++      for(const entry of entries){this.write(entry.path);this.#budget.mutation();}
++      return this.#inner.writeFiles(entries,options);
+     }
+     lstat(path) {
+         this.readLink(path);
+--- a/dist/shell/devices.js
++++ b/dist/shell/devices.js
+@@ -253,6 +253,10 @@
+     }
+     stat(path) {
+         return this.#statAt(path) ?? this.#inner.stat(path);
++    }
++    writeFiles(entries,options) {
++      for(const entry of entries)this.#refuseMutation(entry.path);
++      return this.#inner.writeFiles(entries,options);
+     }
+     lstat(path) {
+         return this.#statAt(path, false) ?? this.#inner.lstat(path);

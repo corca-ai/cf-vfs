@@ -1,11 +1,11 @@
-/** Real Git probe. Build first; install isomorphic-git in an isolated prefix.
- * GIT_PROBE_DEPS=/tmp/cf-vfs-git-probe-deps node bench/git-workload.mjs
+/** Real Git probe. Build first; the pinned dev dependency supplies isomorphic-git.
+ * GIT_PROBE_VARIANT=fs node bench/git-workload.mjs
  * Local HTTP remote only. No library changes or production credentials.
  */
 
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
@@ -26,6 +26,7 @@ const require = createRequire(
   ),
 );
 const variant = process.env.GIT_PROBE_VARIANT || "baseline";
+const timingOnly = process.env.GIT_PROBE_TIMING_ONLY === "1";
 const { FsMetadataCache } =
   variant === "metadata" || variant === "combined"
     ? await import(new URL("fs/metadata.js", library))
@@ -42,6 +43,7 @@ const { MemoryOpaqueStore } = await import(new URL("testing/opaque-store.js", li
 const git = require("isomorphic-git");
 const http = require("isomorphic-git/http/node");
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "cf-vfs-git-"));
+const nativeVolume = execFileSync("df", ["-P", root], { encoding: "utf8" }).trim();
 const results = [];
 const author = {
   name: "VFS probe",
@@ -138,6 +140,7 @@ function instrument(base) {
     };
   }
   reset();
+  if (timingOnly) return { fs: base, reset, get: () => structuredClone(meter) };
   const promises = Object.fromEntries(
     Object.entries(base.promises).map(([name, fn]) => [
       name,
@@ -240,11 +243,13 @@ const r = await remote();
 async function run(kind, count, trial) {
   let vfs;
   let meter;
-  const metadata = FsMetadataCache ? new FsMetadataCache() : undefined;
+  const metadata = FsMetadataCache
+    ? new FsMetadataCache(Number(process.env.GIT_PROBE_METADATA_ENTRIES || 4096))
+    : undefined;
   const store = TieredFileContent ? new MemoryOpaqueStore() : undefined;
   if (kind === "vfs")
     vfs = new NodeSqlFileSystem({
-      onStatement: (q, n) => meter?.observe(q, n),
+      ...(timingOnly ? {} : { onStatement: (q, n) => meter?.observe(q, n) }),
       ...(metadata ? { onEvent: metadata.onEvent } : {}),
       ...(store ? { opaqueStore: store } : {}),
     });
@@ -294,6 +299,7 @@ async function run(kind, count, trial) {
     } catch (e) {
       error = { code: e.code || e.name, message: e.message };
     }
+    const elapsedMs = performance.now() - start;
     const m = meter.get();
     const topQueries = Object.entries(m.queries)
       .sort((a, b) => b[1] - a[1])
@@ -304,7 +310,7 @@ async function run(kind, count, trial) {
       count,
       trial,
       name,
-      ms: performance.now() - start,
+      ms: elapsedMs,
       ...m,
       topQueries,
       error,
@@ -352,7 +358,10 @@ async function run(kind, count, trial) {
         if (h === w) continue;
         const old = await git.readBlob({ ...opts, oid: first, filepath });
         const next = await client.promises.readFile(`${dir}/${filepath}`);
-        assert(createLineDiff(Buffer.from(old.blob).toString(), next.toString()).changes > 0);
+        assert(
+          createLineDiff(Buffer.from(old.blob).toString(), Buffer.from(next).toString()).changes >
+            0,
+        );
         changed++;
       }
       assert.equal(changed, 1);
@@ -411,19 +420,48 @@ async function run(kind, count, trial) {
       });
       assert.equal(await git.resolveRef({ fs: client, dir: cloneDir, ref: "HEAD" }), second);
     });
+    // Outside timing: every cloned body must match, not just HEAD. Commit tree
+    // identity also makes the two backends' fixture outcomes comparable.
+    for (let i = 0; i < count; i++) {
+      const filepath = `d${Math.floor(i / 100)}/f${i}.txt`;
+      assert.deepEqual(
+        Buffer.from(await client.promises.readFile(`${cloneDir}/${filepath}`)),
+        Buffer.from(await client.promises.readFile(`${dir}/${filepath}`)),
+      );
+    }
+    results.push({
+      kind,
+      count,
+      trial,
+      name: "verified-outcome",
+      initialOid: first,
+      changedOid: second,
+      verifiedFiles: count,
+    });
   } finally {
     vfs?.close();
   }
 }
 try {
   for (const count of (process.env.GIT_PROBE_COUNTS || "100,1000").split(",").map(Number))
-    for (let trial = 0; trial < Number(process.env.GIT_PROBE_TRIALS || 3); trial++)
-      for (const kind of ["native", "vfs"]) await run(kind, count, trial);
+    for (
+      let trial = -Number(process.env.GIT_PROBE_WARMUPS || 0);
+      trial < Number(process.env.GIT_PROBE_TRIALS || 3);
+      trial++
+    ) {
+      const start = results.length;
+      for (const kind of trial % 2 === 0 ? ["native", "vfs"] : ["vfs", "native"])
+        await run(kind, count, trial);
+      const outcomes = results.slice(start).filter((row) => row.name === "verified-outcome");
+      assert.equal(outcomes[0].initialOid, outcomes[1].initialOid);
+      assert.equal(outcomes[0].changedOid, outcomes[1].changedOid);
+      if (trial < 0) results.splice(start);
+    }
   // Compressed pack above 8 MiB even though every working-tree file is below it.
   let client;
   const largeStore = TieredFileContent ? new MemoryOpaqueStore() : undefined;
   const vfs = new NodeSqlFileSystem({
-    onStatement: (q, n) => client?.observe(q, n),
+    ...(timingOnly ? {} : { onStatement: (q, n) => client?.observe(q, n) }),
     ...(largeStore ? { opaqueStore: largeStore } : {}),
   });
   client = instrument(
@@ -565,6 +603,7 @@ try {
       {
         node: process.version,
         variant: process.env.GIT_PROBE_VARIANT || "baseline",
+        timingOnly,
         gitEngine: JSON.parse(
           fs.readFileSync(
             path.join(path.dirname(require.resolve("isomorphic-git")), "package.json"),
@@ -572,6 +611,22 @@ try {
           ),
         ).version,
         nativeGit: execFileSync("git", ["--version"], { encoding: "utf8" }).trim(),
+        cpu: os.cpus()[0]?.model,
+        platform: os.platform(),
+        arch: os.arch(),
+        osVersion: os.version(),
+        nativeVolume,
+        protocolSha256: createHash("sha256")
+          .update(fs.readFileSync(new URL(import.meta.url)))
+          .digest("hex"),
+        sourceCommit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+        sourceDiff: execFileSync("git", ["diff", "HEAD", "--", "src"], { encoding: "utf8" }),
+        counts: (process.env.GIT_PROBE_COUNTS || "100,1000").split(",").map(Number),
+        trials: Number(process.env.GIT_PROBE_TRIALS || 3),
+        warmups: Number(process.env.GIT_PROBE_WARMUPS || 0),
+        metadataCacheEntries: FsMetadataCache
+          ? Number(process.env.GIT_PROBE_METADATA_ENTRIES || 4096)
+          : 0,
         results,
       },
       null,
