@@ -6,7 +6,7 @@ const root = `/home/demo/perf-3h-${Date.now()}`;
 const client = connect(new URL("https://vfs.borca.ai"));
 const checks = [];
 try {
-  await client.wait((message) => message.type === "ready");
+  await client.wait((message) => message.type === "hello");
   await client.run(
     `git init ${root}/repo; git -C ${root}/repo config user.name Perf; git -C ${root}/repo config user.email perf@example.invalid; printf original > ${root}/repo/a; git -C ${root}/repo add -A; git -C ${root}/repo commit -m first`,
   );

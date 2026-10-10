@@ -19,8 +19,8 @@ No filesystem API or persisted schema is added.
 | Reuse parent rows during batch publication | Target clone improvements, but full CF parent-only 10 pairs overall 1.0112[0.9726,1.0204] | Rejected |
 | Fuse credential-bound reads with stat's permission envelope | Local improvement; combined full CF ROOT 10 pairs overall 0.9981[0.9900,1.0060], confirmed flags | Rejected |
 | Remember one validated canonical path string | Local isolated/incremental improvement; narrowed full CF UID1000 ten pairs overall 0.9966[0.9860,1.0171], confirmed flags | Rejected |
-| Return the private single input chunk without a second copy | Actual CF 64 KiB input: 128→64 KiB peak buffer reservation;96 KiB budget failure→success | Rejected as part of the final combination; standalone full CF latency approval not established |
-| Cache parent metadata between read operations | Shared-binding revision/depth guards; local UID1000 full 10 pairs overall 0.8294[0.8252,0.8366] | Rejected: repeated material CF shell population regression |
+| Return the private single input chunk without a second copy | Actual CF 64 KiB input: 128→64 KiB peak buffer reservation;96 KiB budget failure→success | Initially rejected with the combination; subsequently adopted with explicit user acceptance (see addendum) |
+| Cache parent metadata between read operations | Shared-binding revision/depth guards; local UID1000 full 10 pairs overall 0.8294[0.8252,0.8366] | Adopted after explicit user acceptance of the repeated CF shell population regression (see addendum) |
 
 Ratios are candidate/baseline; lower is faster. Isolated positive rows and
 reduced SQL statement counts do not approve a latency claim. In particular,
@@ -30,7 +30,7 @@ All full observations, targeted followups and rejected patches are retained.
 `inventory.md` indexes them; interrupted final-v3/v4 checkpoints are not
 approval evidence. Older and newer protocols are kept separate.
 
-## Rejected final candidate design
+## Final measured candidate design (subsequently adopted)
 
 The parent cache stores at most 256 directory metadata projections, with no
 file bodies or authorization verdicts. Every access still evaluates the
@@ -168,7 +168,7 @@ The matched cached-init pairs also give 1.0822 [1.0139, 1.1166], although its
 second block alone is inconclusive. `confirmation-analysis.json` preserves
 both block summaries and all matched pairs; it is not a full-suite result.
 
-**Decision: reject the complete cache/collector candidate.** Library source and
+**Initial decision: reject the complete cache/collector candidate.** Library source and
 performance guards were restored to baseline. The isolated collector has a
 real CF reservation benefit, but no separately approved full CF latency
 comparison; it was not shipped by borrowing approval from a rejected combination.
@@ -186,9 +186,9 @@ The fresh public baseline run is `bfc8caa4-0716-4840-a87b-00081096a8f8`, with
 190 workloads and 60,648 body validations.
 
 The private Worker imports candidate source from the main checkout. To
-reproduce a rejected experiment, apply its archived patch there before
-compiling/deploying; compiling a separate candidate graph alone does not
-change the Worker imports. Never deploy these rejected candidates to production.
+reproduce an archived experiment, start from baseline library source and apply
+its patch in the checkout used by the Worker before compiling/deploying; compiling a separate candidate graph alone does not
+change the Worker imports. Other rejected experiments are not authorized for production by this adoption.
 
 
 
@@ -221,10 +221,74 @@ not evidence for an 11% improvement in its own aggregate.
 Restored tests protect repeated warm reads, per-principal permission checks,
 shared-binding rollback, buffer ownership and late-EOF timeout cleanup. Warm
 500-stat reads at depths 1/16/64 now use 500 rows each; the previous budgets were
-3,500/26,000/98,000. Public deployment and final verification are pending below.
+3,500/26,000/98,000. Public deployment and final verification are recorded below.
 
 Adoption checks passed: 1,967 Node tests, 156 Workers tests, 46/46 native POSIX
 comparisons, 31 workerd performance guards, all 12 bundle budgets, typecheck,
 lint, knip, quality, docs and comparison-protocol checks. Existing lint warnings
 remain. `adoption-checks.log.gz` preserves the complete check output. The source
 patch under `src/` is byte-for-byte identical to the measured v2 patch.
+
+### Public deployment verification
+
+Deployed source commit: `08b8e0b77759ca30539a1e369921b594a48c0aae`.
+Build: `8b69f3aaaa96cff14269623ff1ec7cdb48ca1b0c99e18774017d2d5310fc3fa2`.
+Worker version: `36d44b2b-452c-4eb2-b58a-fc5faddb50e1`.
+Public run: `6f38b081-8434-4eda-825b-504f55386d0e`, 190 workloads and 60,648
+validations. Both the returned commit and build match the deployed source.
+
+Against the saved public baseline, descriptive geometric-mean ratios are
+0.866 overall, 0.676 files, 0.897 Git/coding and 0.930 metadata-cache variants.
+There are 35 >5% flags and no unresolved clock-zero workloads. These public
+runs have only three samples, are separated in time and use an unbound VFS;
+they are deployment screening, not statistical evidence for a new acceleration
+claim. `adopted-public-assessment.json` retains all descriptive flags. A full
+unbound, colocated ten-pair private CF comparison investigated all of them;
+it uses the fixed Git identity fixture and is not pooled with the public runs.
+
+The actual public demo-shell smoke check passed local clone body equality,
+clean clone status, permission denial after chmod on a previously read parent,
+restored access and local pull body equality. Its unique test directory was
+removed. The smoke harness now correctly waits for the protocol's `hello`
+message; its initial `ready` wait was a harness mistake, not a service failure.
+
+The `fs-tiered` bundle grows from 255,124 to 257,593 bytes (+2,469), within its
+259,712-byte budget. The added bounded cache and shared invalidation guards
+account for this deliberate cost; the credential-bound CF aggregate and SQL
+reductions justify it. Other rejected query/cache experiments remain absent.
+
+### Completed unbound CF control
+
+The complete 190-workload colocated comparison used ten alternating pairs plus
+one warmup, matching unbound credentials and fixed Git identity fixtures. Every
+publicly flagged workload has ten matched pairs in this control; the private
+and public timing protocols are kept separate.
+
+| Family | Paired candidate / baseline [95% CI] |
+|---|---:|
+| Uncached overall (146) | 0.9924 [0.9764, 1.0071] |
+| Uncached file operations (18) | 0.9678 [0.9309, 1.0124] |
+| Uncached Git/coding/recovery (128) | 0.9968 [0.9778, 1.0115] |
+| Adapter metadata-cache variants (44) | 1.0127 [0.9846, 1.0230] |
+
+No family's interval establishes a change in this unbound condition. All 190
+workloads' SQL costs match exactly: 370,226 statements, 5,042,149 actual rows
+read and 216,461 actual rows written for each version.
+
+None of the 35 public descriptive flags meets the confirmed-regression rule
+in the paired control. The control itself has 16 >5% flags, including three
+with intervals above one; these additional signals remain disclosed:
+
+| Workload | Median ms baseline → candidate | Paired ratio [95% CI] |
+|---|---:|---:|
+| Git diff, 100 files, adapter cache | 41 → 44.5 | 1.0830 [1.0209, 1.2210] |
+| Git clean status, 1000 files, adapter cache | 167.5 → 178.5 | 1.0512 [1.0186, 1.1248] |
+| Coding-small add-rest, 100 files, uncached | 102 → 112 | 1.0815 [1.0080, 1.1204] |
+
+These are latency tradeoffs rather than evidence of a regression-free release.
+The adoption decision remains based on the primary demo-shell credential-bound
+aggregate improvement, with the user's instruction to favor the full geometric
+mean over individual slowdowns. The unbound aggregate remains statistically
+neutral and SQL costs do not increase. `adopted-control-assessment.json` records
+every public flag's paired followup and the three newly observed signals.
+The temporary evaluation Worker and its test data were removed after validation.

@@ -124,3 +124,16 @@ behavior-only permissions/rollback tests and optional fixed Git identity clock
 in private measurement fixtures. No production deployment; final checks pending.
 
 Private evaluation Worker deleted successfully. Restored Node1964/Workers156, POSIX46 and workerd31 pass; no library diff.
+
+Subsequent user-approved adoption: restored exactly the measured v2 source
+patch (bounded POSIX traversal metadata + one-chunk collector). Adopted source
+commit08b8e0b77759ca30539a1e369921b594a48c0aae, public build8b69f3aaaa96cff14269623ff1ec7cdb48ca1b0c99e18774017d2d5310fc3fa2,
+Worker version36d44b2b-452c-4eb2-b58a-fc5faddb50e1. Public full190/60648 checks
+and shell clone/pull/chmod smoke pass. User prioritizes the proven UID1000
+full geometric mean improvement over accepted individual latency tradeoffs.
+Additional full unbound CF10 pairs overall0.9924 CI[0.9764,1.0071], neutral;
+all190 SQL costs match exactly370226/5042149/216461. Public35 descriptive flags
+not confirmed in paired control; new control3 latency signals5–8% remain
+disclosed in report. Candidate Node1967/Workers156/POSIX46/workerd31/bundles12
+pass. Recreated temporary evaluation Worker deleted and both test rooms cleared
+with explicit HTTP200 verification. No other rejected optimization adopted.

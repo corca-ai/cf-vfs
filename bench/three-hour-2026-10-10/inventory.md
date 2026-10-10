@@ -4,6 +4,7 @@ Ratios are candidate/baseline. Lower is faster. A confidence interval containing
 
 | Evidence | Credentials | Full plan | Pairs | Overall ratio [95% CI] | >5% flags | Confirmed flags | Cost increases |
 |---|---|---|---|---|---|---|---|
+| [cf-adopted-unbound-control.json.gz](cf-adopted-unbound-control.json.gz) | none | true | 10 | 0.9924 [0.9764, 1.0071] | 16 | 3 | 0 |
 | [cf-batch-parents.json.gz](cf-batch-parents.json.gz) | none | true | 10 | 1.0112 [0.9726, 1.0204] | 36 | 5 | 4 |
 | [cf-copy-path-demo.json.gz](cf-copy-path-demo.json.gz) | demo | true | 10 | 0.9966 [0.9860, 1.0171] | 30 | 2 | 0 |
 | [cf-final-fixed.json.gz](cf-final-fixed.json.gz) | none | true | 10 | 0.9951 [0.9883, 1.0075] | 27 | 8 | 0 |
