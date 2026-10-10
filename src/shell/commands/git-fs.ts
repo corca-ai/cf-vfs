@@ -248,14 +248,14 @@ export class GitFileSystem {
         const resolved = commandPath(this.context, path);
         if (this.context.fileSystem.lstat(resolved).kind === "directory")
           throw new VfsError("EISDIR", "cannot unlink a directory", resolved);
-        this.context.fileSystem.remove(resolved);
+        return this.context.fileSystem.remove(resolved).then(() => undefined);
       }),
     rmdir: (path: string) =>
       this.operation(() => {
         const resolved = commandPath(this.context, path);
         if (this.context.fileSystem.lstat(resolved).kind !== "directory")
           throw new VfsError("ENOTDIR", "not a directory", resolved);
-        this.context.fileSystem.remove(resolved);
+        return this.context.fileSystem.remove(resolved).then(() => undefined);
       }),
     readlink: (path: string) =>
       this.operation(() => this.context.fileSystem.readlink(commandPath(this.context, path))),

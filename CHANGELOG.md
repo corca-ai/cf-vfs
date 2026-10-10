@@ -16,6 +16,9 @@ included.
 
 ## [Unreleased]
 
+- Propagate asynchronous Git unlink/rmdir failures, preserving permission and
+  nonempty-directory errors instead of reporting successful removal.
+
 - Reuse bounded POSIX traversal parent metadata with per-access permission
   checks and invalidation across transactions and filesystem instances sharing
   a SQL binding; avoid a second copy of single-chunk command input buffers.
