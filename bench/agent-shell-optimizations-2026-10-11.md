@@ -137,3 +137,31 @@ library-specific cached-read penalty established by these controls. The
 original full FS/Git +1.4% slowdown and pooled raw read flag remain visible;
 this is not a claim of universal acceleration or proven zero regressions.
 Public deployment verification is recorded below after deployment.
+
+## Public deployment verification
+
+Source `98cab91659a98684a74931480de9f4d2e815d4df` was pushed and deployed to
+https://vfs.borca.ai/. Worker version
+`8950c793-d890-4278-86e2-741870a84b83`, implementation
+`8d852b43af9a271932d8ff46417ab510755a4f4be5d0e6fd3b42ffb7758e84ca`.
+The authenticated full public run `56096780-2741-4bc1-ac25-7178008d80a2`
+completed at 2026-10-11T11:04:48.827Z: **190 rows, 60,648 checks passed**.
+
+Against the saved preceding public result, descriptive candidate/baseline
+ratios were overall 0.9326, files 1.0087, Git/coding 0.9224 and metadata cache
+0.9849. There were 36 >5% latency point flags and zero SQL-cost flags; all are
+retained in `public-verification.json`. These ordinary three-sample public
+runs are not matched-pair causal evidence, and do not replace the controlled
+full-suite +1.4% result or its investigation above.
+
+A real production WebSocket shell smoke test passed: a non-interactive Bash
+file combined jq, command substitutions, file redirection, forced replacement,
+sed and grep, with exact expected stdout and exit status. It created and
+removed only its unique demo workspace. The first invocation completed the
+workflow but supplied a duplicated output path to the evidence writer; the
+corrected invocation retained the successful result in `public-smoke.json`.
+
+Final gates passed: 2,001 Node tests, 158 Workers tests, 46 POSIX cases,
+14 isolated execution-limit cases, 12 tree-shaking budgets, package checks,
+full benchmark cost gates, types, lint, documentation and changelog checks.
+No npm publication or filesystem API expansion was performed.

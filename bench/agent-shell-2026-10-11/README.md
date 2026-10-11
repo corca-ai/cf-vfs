@@ -77,3 +77,9 @@ Final regression evidence includes two independent complete-group repeats,
 and the reversed-import comparison (`cf-cache-swapped.json`). In the latter,
 raw candidate/baseline means old/new. `crossover.mjs` documents its conditional
 slot-effect assumption; its diagnostic does not replace the full-suite score.
+
+`public-verification.json` preserves all descriptive public regression flags
+and deployment identity; `public-candidate.json.gz` retains the complete state.
+The production Bash workflow evidence is `public-smoke.json`; rerun it with
+`node bench/agent-shell-2026-10-11/public-smoke.mjs public-smoke.json`
+(the output argument is relative to the script directory).
