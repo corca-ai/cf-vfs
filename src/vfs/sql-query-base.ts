@@ -30,7 +30,8 @@ import {
   READ_PERMISSION,
   WRITE_PERMISSION,
 } from "./sql-posix.js";
-import { ENTRY_COLUMNS } from "./sql-schema.js";
+import { ENTRY_COLUMNS, ENTRY_JSON } from "./sql-schema.js";
+import { canonicalStatPaths, statResult, validateStatPaths } from "./stat-many.js";
 import { canonicalAncestors } from "./traversal.js";
 import type {
   ChangePage,
@@ -39,6 +40,8 @@ import type {
   FindOptions,
   MutationTokenOptions,
   PageOptions,
+  StatManyOptions,
+  StatManyResult,
   SubtreeSummary,
   VfsStat,
 } from "./types.js";
@@ -62,6 +65,54 @@ export abstract class SqlQuery extends SqlContent {
 
   stat(path: string, access?: PosixAccessContext): VfsStat {
     return this.statEntry(path, true, access);
+  }
+
+  statMany(
+    paths: readonly string[],
+    options: StatManyOptions = {},
+    access?: PosixAccessContext,
+  ): StatManyResult[] {
+    validateStatPaths(paths);
+    if (paths.length < 2)
+      return paths.map((path) =>
+        statResult(() => this.statEntry(path, options.follow !== false, access)),
+      );
+    const follow = options.follow !== false;
+    const canonical = canonicalStatPaths(paths);
+    if (canonical === undefined || this.links() !== 0)
+      return paths.map((path) => statResult(() => this.statEntry(path, follow, access)));
+    const entries = new Map<string, EntryRow>();
+    // VALUES is a bounded request relation, not a metered JSON virtual table
+    // or IN temporary index. CROSS JOIN drives indexed point reads from it.
+    for (let at = 0; at < canonical.length; at += 64) {
+      const batch = canonical.slice(at, at + 64);
+      const rows = this.sql
+        .exec<SqlRow>(
+          `WITH requested(path) AS (VALUES ${batch.map(() => "(?)").join(",")})
+         SELECT ${ENTRY_JSON} AS entry
+         FROM requested CROSS JOIN vfs_entries e INDEXED BY vfs_entries_path
+         ON e.path = requested.path`,
+          ...batch,
+        )
+        .toArray();
+      for (const result of rows) {
+        const row = parseEntry(
+          JSON.parse(stringColumn(result, "entry")) as SqlRow,
+          this.mutationEpoch,
+        );
+        entries.set(row.path, row);
+      }
+    }
+    return canonical.map((path) =>
+      statResult(() => {
+        const row = entries.get(path);
+        if (row?.contentClass === "opaque") return this.statEntry(path, follow, access);
+        this.assertTraverse(path, [], access);
+        if (row === undefined) throw new VfsError("ENOENT", "no such file or directory", path);
+        if (access !== undefined && row.kind === "directory") this.rememberTraversalParent(row);
+        return rowToStat(row);
+      }),
+    );
   }
 
   /** Reports a link as itself rather than as what it points at. */

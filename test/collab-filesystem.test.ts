@@ -413,3 +413,23 @@ it("forwards write buffer headroom through collaborative credential views", asyn
   expect(fs.availableWriteBufferBytes).toBe(2048);
   expect(user.availableWriteBufferBytes).toBe(2048);
 });
+
+it("batches current overlay metadata without bypassing credential checks", async () => {
+  const { inner, registry, document, fileSystem } = open("base");
+  await inner.writeFile("/doc.txt", "base");
+  registry.open("/doc.txt", document, inner.stat("/doc.txt").mutationToken);
+  document.type(4, " pending");
+  registry.markDirty("/doc.txt");
+  expect(fileSystem.statMany(["/doc.txt", "/missing"])).toEqual([
+    { stat: fileSystem.stat("/doc.txt") },
+    { error: { code: "ENOENT", message: "no such file or directory", path: "/missing" } },
+  ]);
+  expect(fileSystem.statMany(["/doc.txt"])[0]).toMatchObject({ stat: { sizeBytes: 12 } });
+  inner.mkdir("/secret", false, 0o700);
+  await inner.writeFile("/secret/file", "secret");
+  const user = fileSystem.forCredentials({ uid: 1000, gid: 1000 });
+  expect(user.statMany?.(["/doc.txt", "/secret/file"])).toEqual([
+    { stat: user.stat("/doc.txt") },
+    { error: { code: "EACCES", message: "permission denied", path: "/secret/file" } },
+  ]);
+});

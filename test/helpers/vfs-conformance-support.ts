@@ -4,7 +4,7 @@ import type { VirtualFileSystem } from "../../src/vfs/types.js";
 
 // Durable Object RPC turns synchronous server results into promises at the caller boundary.
 export type RpcCompatibleVirtualFileSystem = {
-  [Method in keyof VirtualFileSystem]: VirtualFileSystem[Method] extends (
+  [Method in keyof VirtualFileSystem]: NonNullable<VirtualFileSystem[Method]> extends (
     ...args: infer Args
   ) => infer Result
     ? (...args: Args) => Result | Promise<Awaited<Result>>

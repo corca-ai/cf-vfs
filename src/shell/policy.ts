@@ -1,5 +1,6 @@
 import { VfsError } from "../core/errors.js";
 import { dirname, isDescendant, normalizePath } from "../core/path.js";
+import { statResult, validateStatPaths } from "../vfs/stat-many.js";
 import type {
   AppendFileOptions,
   BulkOperation,
@@ -18,6 +19,7 @@ import type {
   ReadFileOptions,
   RemoveOptions,
   RemoveResult,
+  StatManyOptions,
   SubtreeSummary,
   SymlinkOptions,
   TouchOptions,
@@ -241,6 +243,23 @@ export class ScopedFileSystem implements ShellFileSystem {
   stat(path: string) {
     this.read(path);
     return this.#inner.stat(path);
+  }
+
+  statMany(paths: readonly string[], options: StatManyOptions = {}) {
+    validateStatPaths(paths);
+    // Policy refusals keep their shell-specific identity and abort the request.
+    for (const path of paths) {
+      if (options.follow === false) this.readLink(path);
+      else this.read(path);
+    }
+    return (
+      this.#inner.statMany?.(paths, options) ??
+      paths.map((path) =>
+        statResult(() =>
+          options.follow === false ? this.#inner.lstat(path) : this.#inner.stat(path),
+        ),
+      )
+    );
   }
 
   list(path: string) {

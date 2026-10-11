@@ -1,8 +1,10 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { meterSqlStorage } from "../bench/metered-sql.js";
 import { isVfsError, type VfsError } from "../src/core/errors.js";
 import { createFsAdapter } from "../src/fs/index.js";
+import { FsMetadataIndex } from "../src/fs/metadata.js";
 import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
 import { readAllBytes } from "../src/vfs/streams.js";
 import { runVfsConformance, streamThatFailsAfter } from "./helpers/vfs-conformance.js";
@@ -11,6 +13,57 @@ import type { TestWorkspaceVfs } from "./worker.js";
 function workspace(name: string): DurableObjectStub<TestWorkspaceVfs> {
   return env.VFS_TEST.getByName(`byte-${name}`);
 }
+
+it("batches metadata over RPC without losing order, duplicates or individual errors", async () => {
+  const stub = workspace("stat-many");
+  await stub.writeFile("/file", "body");
+  await stub.symlink("/link", "/file");
+  expect(await stub.statMany(["/link", "/missing", "/link"], { follow: false })).toEqual([
+    { stat: await stub.lstat("/link") },
+    { error: { code: "ENOENT", message: "no such file or directory", path: "/missing" } },
+    { stat: await stub.lstat("/link") },
+  ]);
+  expect(await stub.statMany(["/link"])).toEqual([{ stat: await stub.stat("/file") }]);
+  try {
+    await stub.statMany(Array(1001).fill("/file"));
+    throw new Error("oversized metadata batch was accepted");
+  } catch (error) {
+    expect(error).toMatchObject({ code: "E2BIG" });
+  }
+});
+
+it("bounds batch statements without increasing native reads and refreshes only changed metadata", async () => {
+  const result = await runInDurableObject(workspace("metadata-cost"), async (_instance, state) => {
+    const meter = meterSqlStorage(state.storage);
+    const fs = new DurableObjectFileSystem(meter.storage, { recordChanges: true });
+    const paths = Array.from({ length: 1000 }, (_, index) => `/f${index}`);
+    await fs.writeFiles(paths.map((path) => ({ path, body: "body" })));
+    meter.reset();
+    const entries = fs.statMany(paths);
+    const batch = {
+      statements: meter.statements,
+      reads: meter.rowsRead,
+      writes: meter.rowsWritten,
+    };
+    const index = new FsMetadataIndex(fs);
+    index.refresh();
+    await fs.writeFile("/f0", "changed");
+    meter.reset();
+    const delta = index.refresh();
+    return {
+      batch,
+      entries: entries.length,
+      updated: delta.updated.map((stat) => stat.path),
+      reads: meter.rowsRead,
+      writes: meter.rowsWritten,
+    };
+  });
+  expect(result.entries).toBe(1000);
+  expect(result.batch).toEqual({ statements: 16, reads: 1000, writes: 0 });
+  expect(result.updated).toContain("/f0");
+  expect(result.reads).toBeLessThan(10);
+  expect(result.writes).toBe(0);
+});
 
 describe("shared VFS conformance", () => {
   let conformanceId = 0;

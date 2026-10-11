@@ -11,6 +11,7 @@ export type ShellFileSystem = Pick<
   | "availableWriteBufferBytes"
   | "getMutationToken"
   | "stat"
+  | "statMany"
   | "list"
   | "listPage"
   | "find"

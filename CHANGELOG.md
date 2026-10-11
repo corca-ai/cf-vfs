@@ -16,6 +16,10 @@ included.
 
 ## [Unreleased]
 
+- Add optional bounded `statMany` metadata reads and coalesce overlapping Git
+  metadata requests. Add an opt-in host metadata index over the existing change
+  feed, preserving credential restrictions and avoiding repeated full scans.
+
 - Reduce SQLite entry materialization and use indexed inode, descriptor and
   single-file copy queries. Retain bounded directory access metadata across
   credential-bound append commits, preserving per-principal checks, nested

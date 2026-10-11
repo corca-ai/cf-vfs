@@ -5,6 +5,7 @@ import { NO_ENTRY_IDENTITY, type VfsStat } from "../../vfs/types.js";
 import type { ShellCommandContext } from "../types.js";
 import { GitCheckoutWrites } from "./git-checkout-writes.js";
 import { GitObjectWrites } from "./git-object-writes.js";
+import { gitStatReads } from "./git-stat-reads.js";
 import { collectStream, commandPath, readFileBytes } from "./helpers.js";
 
 interface ConfigRead {
@@ -23,10 +24,15 @@ export class GitFileSystem {
   private readonly objectDirectories = new Set<string>();
   private configPath: string | undefined;
   private pendingConfig: Promise<ConfigRead> | undefined;
+  private statReads: ReturnType<typeof gitStatReads> | undefined;
   constructor(readonly context: ShellCommandContext) {}
 
   beginWorkReads(limit: number): void {
     this.workReads = { limit, snapshots: new Map(), stats: new Map() };
+    const fileSystem = this.context.fileSystem;
+    const read = fileSystem.statMany;
+    if (read !== undefined)
+      this.statReads = gitStatReads((paths) => read.call(fileSystem, paths, { follow: false }));
   }
   workReadSnapshot(path: string): VfsStat | undefined {
     return this.workReads?.snapshots.get(path);
@@ -189,6 +195,15 @@ export class GitFileSystem {
         work.stats.set(resolved, entry);
       return new FsStats(entry);
     };
+    if (!follow && this.statReads !== undefined && this.objectWrites === undefined)
+      return this.statReads(resolved).then((result) => {
+        if ("error" in result)
+          throw new VfsError(result.error.code, result.error.message, result.error.path);
+        const work = this.workReads;
+        if (work !== undefined && (work.stats.size < work.limit || work.stats.has(resolved)))
+          work.stats.set(resolved, result.stat);
+        return new FsStats(result.stat);
+      });
     return this.objectWrites === undefined
       ? read()
       : this.objectWrites.beforeRead(resolved).then(read);

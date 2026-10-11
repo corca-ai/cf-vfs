@@ -4,6 +4,7 @@ import { encodeUtf8, utf8ByteLength } from "../core/unicode.js";
 import { supportsPosixCredentials } from "../vfs/capabilities.js";
 import { sha256Hex } from "../vfs/digest.js";
 import { byteRangeBounds } from "../vfs/range.js";
+import { statResult, validateStatPaths } from "../vfs/stat-many.js";
 import { readAllBytes } from "../vfs/streams.js";
 import type {
   AppendFileOptions,
@@ -34,6 +35,7 @@ import type {
   ReadFileOptions,
   RemoveOptions,
   RemoveResult,
+  StatManyOptions,
   SubtreeSummary,
   SymlinkOptions,
   TouchOptions,
@@ -200,6 +202,18 @@ export class CollaborativeFileSystem implements PosixVirtualFileSystem {
     // Reported from the same text the read would serve, so a size and its
     // bytes cannot disagree.
     return this.#withPendingSize(this.#inner.stat(path));
+  }
+
+  statMany(paths: readonly string[], options: StatManyOptions = {}) {
+    validateStatPaths(paths);
+    const results = this.#inner.statMany?.(paths, options);
+    if (results === undefined)
+      return paths.map((path) =>
+        statResult(() => (options.follow === false ? this.lstat(path) : this.stat(path))),
+      );
+    return results.map((result) =>
+      "stat" in result ? { stat: this.#withPendingSize(result.stat) } : result,
+    );
   }
 
   statById(ino: number): VfsStat {

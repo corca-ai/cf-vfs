@@ -1,3 +1,5 @@
+import type { VfsErrorCode } from "../core/errors.js";
+
 export const MAX_INLINE_FILE_BYTES = 8 * 1024 * 1024;
 
 export type ContentClass = "inline" | "opaque";
@@ -172,6 +174,15 @@ export interface ChangePage {
 export interface ChangesSinceOptions {
   limit?: number;
 }
+
+export interface StatManyOptions {
+  /** Follow the final symbolic link, like stat. Defaults to true. */
+  follow?: boolean;
+}
+
+export type StatManyResult =
+  | { stat: VfsStat }
+  | { error: { code: VfsErrorCode; message: string; path?: string } };
 
 export type ByteBody =
   | ReadableStream<Uint8Array>
@@ -450,6 +461,12 @@ export interface VirtualFileSystem {
   getMutationToken(path: string, options?: MutationTokenOptions): string;
   /** Resolves symbolic links in every component, as `stat(2)` does. */
   stat(path: string): VfsStat;
+  /**
+   * Optional bounded metadata lookup. Results preserve input order and duplicates;
+   * each path has the same permission checks and errors as stat/lstat. At most
+   * 1000 paths per call. Path errors are results; unexpected failures still throw.
+   */
+  statMany?(paths: readonly string[], options?: StatManyOptions): StatManyResult[];
   /**
    * Reports the entry holding an identity, so a caller that keyed durable
    * state to one can find where it is now.

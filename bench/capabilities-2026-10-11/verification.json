@@ -1,0 +1,54 @@
+{
+  "at": "2026-10-11T07:15:43.196Z",
+  "sourceBuild": "capabilities-28720507900c8a69",
+  "checks": [
+    {
+      "name": "typecheck",
+      "tail": "> @corca-ai/cf-vfs@0.4.2 typecheck\n> tsc --noEmit && tsc -p bench/tsconfig.remote.json && tsc -p bench/coding-durability-2026-10-10/tsconfig.json"
+    },
+    {
+      "name": "Node tests (maxWorkers=4)",
+      "tail": "RUN  v4.1.10 /Users/ak/prjs/cc/cf-vfs\n\n\n Test Files  105 passed (105)\n      Tests  1988 passed (1988)\n   Start at  15:58:55\n   Duration  5.56s (transform 1.35s, setup 0ms, import 5.12s, tests 11.37s, environment 4ms)"
+    },
+    {
+      "name": "Workers tests",
+      "tail": "    at parseTextOptions (/Users/ak/prjs/cc/cf-vfs/src/shell/rpc-validation.ts:54:50)\n    at parseRemoteTextOptions (/Users/ak/prjs/cc/cf-vfs/src/shell/rpc-validation.ts:64:10)\n    at TestWorkspaceVfs.executeText (/Users/ak/prjs/cc/cf-vfs/src/shell/durable-object.ts:79:35)\n    at Users/ak/prjs/cc/cf-vfs/node_modules/@cloudflare/vitest-pool-workers/dist/worker/lib/cloudflare/test-internal.mjs:372:47\n\n Test Files  15 passed (15)\n      Tests  158 passed (158)\n   Start at  15:59:02\n   Duration  4.16s (transform 5.79s, setup 0ms, import 27.52s, tests 4.30s, environment 1ms)"
+    },
+    {
+      "name": "POSIX",
+      "tail": "> @corca-ai/cf-vfs@0.4.2 test:posix\n> node bench/posix-semantics.mjs --check\n\n{\"matches\":46,\"total\":46,\"differences\":[]}"
+    },
+    {
+      "name": "tree shaking",
+      "tail": "  vfs 216991/225152 bytes (the SQLite filesystem with no shell and no R2)\n  shell 238570/248704 bytes (the non-interactive shell with one applet)\n  interactive 248365/258944 bytes (the interactive session adapter)\n  default-registry 505599/529152 bytes (the convenience preset with every applet)\n  linux-profile 713222/744960 bytes (the opt-in Linux profile over the SQLite filesystem)\n  r2-opaque 218689/226944 bytes (the SQLite filesystem with the R2 opaque adapter)\n  fs-adapter 252089/262016 bytes (the opt-in promise filesystem adapter)\n  fs-tiered 262054/272384 bytes (the opt-in adapter with metadata reuse and R2 content)\ntree-shaking and bundle budgets verified across 12 presets"
+    },
+    {
+      "name": "limits",
+      "tail": "> @corca-ai/cf-vfs@0.4.2 test:limits\n> node test/check-execution-limits.mjs\n\nexecution limits verified in 14 isolated processes"
+    },
+    {
+      "name": "docs",
+      "tail": "> @corca-ai/cf-vfs@0.4.2 test:docs\n> node test/check-docs.mjs\n\ndocumentation links, 78 documented applets, and the CLAUDE.md symlink verified"
+    },
+    {
+      "name": "package",
+      "tail": "> @corca-ai/cf-vfs@0.4.2 test:package\n> node test/check-package.mjs\n\npackage tarball, runtime/type consumers, and explicit exports verified"
+    },
+    {
+      "name": "comparison protocol",
+      "tail": "> @corca-ai/cf-vfs@0.4.2 test:bench-protocol\n> node test/check-performance-comparison.mjs\n\nPerformance comparison protocol checks passed"
+    },
+    {
+      "name": "knip",
+      "tail": "> @corca-ai/cf-vfs@0.4.2 knip\n> knip"
+    },
+    {
+      "name": "quality",
+      "tail": "    6 \u2502 const DOT_COMPONENT = /(?:^|\\/)\\.\\.?(?:\\/|$)/u;\n  > 7 \u2502 // biome-ignore lint/suspicious/noControlCharactersInRegex: NUL and non-ASCII paths require full byte validation.\n      \u2502 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    8 \u2502 const NON_CANONICAL_ASCII = /\\/\\/|\\/\\.\\.?(?:\\/|$)|[^\\x01-\\x7f]/;\n    9 \u2502 \n  \n\nChecked 338 files in 21ms. No fixes applied.\nFound 1 warning."
+    },
+    {
+      "name": "Knip without generated comparison graphs",
+      "exitCode": 0
+    }
+  ]
+}

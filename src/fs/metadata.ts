@@ -3,6 +3,8 @@ import { hasDotSegments, normalizePath, pathRequiresDirectory } from "../core/pa
 import type { VfsEvent } from "../vfs/events.js";
 import type { VfsStat, VirtualFileSystem } from "../vfs/types.js";
 
+export { FsMetadataIndex } from "./metadata-index.js";
+
 /**
  * Optional metadata reuse for one filesystem/credential view. Wire onEvent to
  * that filesystem before reading. Content overwrites invalidate their paths;

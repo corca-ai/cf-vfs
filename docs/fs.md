@@ -175,3 +175,54 @@ than blindly forwarding it. Callers must still enforce permissions, modes,
 budgets and quotas, and hosts must serialize changes to overlays and repositories
 with the operation. These hints are an optional VFS extension, not a new method
 on `fs.promises`.
+
+### Incremental host metadata index
+
+`FsMetadataIndex`, imported from `/fs/metadata`, combines the existing
+`changesSince` and paginated namespace reads. The first `refresh()` returns the
+namespace; later calls return `{ updated, removed }` for paths changed since the
+last successful refresh. `snapshot()` copies the current indexed metadata.
+
+```ts
+import { FsMetadataIndex } from "@corca-ai/cf-vfs/fs/metadata";
+
+// The host creates this VFS with recordChanges: true.
+const index = new FsMetadataIndex(trustedFileSystem, 100_000);
+const { updated, removed } = index.refresh();
+// Update a search/build/synchronization index from these deltas.
+```
+
+This is an opt-in, in-memory host index, not an authorization cache. It requires
+the trusted filesystem capability: credential-bound views continue to reject the
+workspace feed, including for UID 0. Never pass these snapshots to a less trusted
+caller without applying that caller's policy, or use them to authorize an actual
+file read. Bodies are not retained and final symlinks are not followed. A restart
+rebuilds the index. Flush pending document overlays before refreshing: the feed
+tracks committed storage changes. Refresh is synchronous and intended for a local VFS, not an
+asynchronous RPC stub. Use the existing one-owner-per-database model: multiple
+independent mutating engines over one database do not share the existing change
+sequence and inode allocation caches, so their feed is not a safe index source.
+
+Capacity defaults to 100,000 namespace entries. A refresh also bounds the number
+of distinct changed paths to the larger of capacity and 1,000. Overflow or an
+unexpected read failure leaves the previous index and cursor intact. The change
+feed must remain enabled for the lifetime of the index; its extra mutation cost
+is paid only by workspaces that explicitly enable `recordChanges`. The index
+does not enable it automatically. Initial indexing costs a full namespace/feed
+read; enabling the feed also adds writes. Fewer refresh reads do not by themselves
+imply a smaller bill, especially for write-heavy workspaces.
+
+### Optional batch metadata lookup
+
+`fileSystem.statMany?.(paths, { follow: false })` performs bounded `lstat`-style
+reads; omitting `follow: false` selects `stat` semantics. It accepts at most 1,000
+paths, preserves input order and duplicates, and returns one `{ stat }` or
+`{ error: { code, message, path? } }` per path. Missing paths and permission errors
+are individual results; malformed batches and unexpected engine failures throw.
+Existing filesystem implementations can omit the capability. No file body or
+read authorization is implied by metadata access.
+
+The SQL backend checks each path with the same credentials as ordinary reads.
+Complex paths and symlink resolution retain the ordinary implementation. The
+optional Git applet coalesces overlapping metadata reads; shell roots, reserved
+paths, execution budgets, and fatal permission refusals still apply.

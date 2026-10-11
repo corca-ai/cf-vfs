@@ -26,6 +26,7 @@ import {
   rpcWriteFilesOptions,
   rpcWriteOptions,
 } from "./rpc-validation.js";
+import { validateStatPaths } from "./stat-many.js";
 import type {
   AppendFileOptions,
   BeginOpaqueUploadOptions,
@@ -51,6 +52,8 @@ import type {
   ReadFileOptions,
   RemoveOptions,
   RemoveResult,
+  StatManyOptions,
+  StatManyResult,
   SubtreeSummary,
   SymlinkOptions,
   TouchOptions,
@@ -76,6 +79,11 @@ export abstract class VfsDurableObject<Environment> extends DurableObject<Enviro
 
   stat(path: string): VfsStat {
     return this.fileSystem.stat(rpcString(path, "path"));
+  }
+
+  statMany(paths: readonly string[], options?: StatManyOptions): StatManyResult[] {
+    validateStatPaths(paths);
+    return this.fileSystem.statMany(paths, rpcFollowOptions(options));
   }
 
   statById(ino: number): VfsStat {
