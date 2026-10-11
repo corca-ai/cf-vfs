@@ -1,0 +1,111 @@
+{
+  "builds": {
+    "baseline": "agent2-mono-baseline-v1",
+    "candidate": "agent2-mono-candidate-v1"
+  },
+  "baseUrls": {
+    "baseline": "https://cf-vfs-agent2-mono-b.donghun.workers.dev",
+    "candidate": "https://cf-vfs-agent2-mono-a.donghun.workers.dev"
+  },
+  "room": "full-5168e2da-f6ac-43ec-a8c5-bc68087af284-escaped",
+  "protocol": "monomorphic-two-services-target-v1",
+  "warmups": 3,
+  "pairs": 20,
+  "repeatsPerRequest": 50,
+  "timing": "caller RPC wall time divided by 50; alternating separate single-graph service actors",
+  "geometricRatio": 0.6116693308974652,
+  "rows": [
+    {
+      "verification": {
+        "baseline": {
+          "verifiedFiles": 10,
+          "build": "agent2-mono-baseline-v1",
+          "colo": "LAX"
+        },
+        "candidate": {
+          "verifiedFiles": 10,
+          "build": "agent2-mono-candidate-v1",
+          "colo": "LAX"
+        }
+      },
+      "name": "escaped-json",
+      "costs": {
+        "candidate": {
+          "statements": 551,
+          "rowsRead": 953,
+          "rowsWritten": 100
+        },
+        "baseline": {
+          "statements": 551,
+          "rowsRead": 953,
+          "rowsWritten": 100
+        }
+      },
+      "baseline": {
+        "median": 6.68,
+        "p10": 5.672,
+        "p90": 8.428
+      },
+      "candidate": {
+        "median": 4.09,
+        "p10": 3.612,
+        "p90": 5.024000000000002
+      },
+      "ratio": {
+        "median": 0.6116693308974652,
+        "p10": 0.5380804843304843,
+        "p90": 0.7380893794359027,
+        "ci95": [
+          0.5786433563740686,
+          0.6724677332286402
+        ]
+      },
+      "rawMs": {
+        "baseline": [
+          6.96,
+          8.42,
+          6.68,
+          6.68,
+          7.7,
+          7.9,
+          7.8,
+          8.64,
+          6.22,
+          6.54,
+          5.4,
+          6.04,
+          5.6,
+          6.6,
+          6.38,
+          5.68,
+          7.34,
+          5.74,
+          7.02,
+          8.5
+        ],
+        "candidate": [
+          4.82,
+          6.56,
+          4.9,
+          3.8,
+          4.32,
+          4.44,
+          4.22,
+          4.42,
+          3.66,
+          3.86,
+          3.36,
+          3.64,
+          3.3,
+          4.82,
+          3.96,
+          3.78,
+          6.14,
+          3.9,
+          4.42,
+          3.66
+        ]
+      }
+    }
+  ]
+}

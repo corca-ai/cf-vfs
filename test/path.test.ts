@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { globToRegExp, matchesGlob } from "../src/core/glob.js";
-import { normalizePath, normalizePathPreservingTrailingSlash } from "../src/core/path.js";
+import {
+  compareUtf8,
+  normalizePath,
+  normalizePathPreservingTrailingSlash,
+} from "../src/core/path.js";
 
 describe("path normalization", () => {
   it("resolves relative segments without escaping the virtual root", () => {
@@ -72,3 +76,55 @@ it("normalizes canonical ASCII boundaries without relaxing pathname validation",
   );
   expect(() => normalizePath("/a/\0b")).toThrowError(expect.objectContaining({ code: "EINVAL" }));
 });
+
+describe("UTF-8 ordering", () => {
+  it("matches encoded byte order for prefixes, Unicode and malformed surrogates", () => {
+    const values = [
+      "",
+      "a",
+      "aa",
+      "a\0",
+      "a\n",
+      "z",
+      "é",
+      "한글",
+      "\u07ff",
+      "\u0800",
+      "\ud7ff",
+      "\ue000",
+      "\ufffd",
+      "\uffff",
+      "𐀀",
+      "😀",
+      "\u{10ffff}",
+      "\ud800",
+      "\udfff",
+      "\ud800a",
+      "a\ud800",
+      "\ud800\ud800",
+      "\udc00\ud800",
+      "prefix😀",
+      "prefix\ue000",
+      "prefix\ud800suffix",
+      "prefix\ufffdsuffix",
+    ];
+    const encoder = new TextEncoder();
+    const cases = values.flatMap((value) => [value, `${"p".repeat(128)}${value}`]);
+    for (const left of cases) {
+      for (const right of cases) {
+        const expected = encodedOrder(encoder.encode(left), encoder.encode(right));
+        expect(Math.sign(compareUtf8(left, right)), JSON.stringify([left, right])).toBe(
+          Math.sign(expected),
+        );
+      }
+    }
+  });
+});
+
+function encodedOrder(left: Uint8Array, right: Uint8Array): number {
+  for (let i = 0; i < Math.min(left.length, right.length); i++) {
+    const order = (left[i] ?? 0) - (right[i] ?? 0);
+    if (order !== 0) return order;
+  }
+  return left.length - right.length;
+}

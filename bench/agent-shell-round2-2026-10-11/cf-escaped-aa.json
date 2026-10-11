@@ -1,0 +1,95 @@
+{
+  "build": "agent2-aa-v1",
+  "warmups": 3,
+  "pairs": 20,
+  "repeatsPerRequest": 50,
+  "timing": "caller RPC wall time divided by 50; same DO alternating versions",
+  "geometricRatio": 1.0564735370673866,
+  "rows": [
+    {
+      "verification": {
+        "verifiedFiles": 10,
+        "build": "agent2-aa-v1",
+        "colo": "LAX"
+      },
+      "name": "escaped-json",
+      "costs": {
+        "candidate": {
+          "statements": 551,
+          "rowsRead": 953,
+          "rowsWritten": 100
+        },
+        "baseline": {
+          "statements": 551,
+          "rowsRead": 953,
+          "rowsWritten": 100
+        }
+      },
+      "baseline": {
+        "median": 4.109999999999999,
+        "p10": 3.608,
+        "p90": 4.988
+      },
+      "candidate": {
+        "median": 4.23,
+        "p10": 3.792,
+        "p90": 4.75
+      },
+      "ratio": {
+        "median": 1.0564735370673866,
+        "p10": 0.8288335652801403,
+        "p90": 1.1841914905735604,
+        "ci95": [
+          1.016431924882629,
+          1.1282346310994225
+        ]
+      },
+      "rawMs": {
+        "baseline": [
+          4.02,
+          3.62,
+          4.2,
+          4.12,
+          3.9,
+          5.06,
+          3.88,
+          4.26,
+          4.1,
+          3.5,
+          4.98,
+          4.28,
+          4.26,
+          3.92,
+          4.3,
+          3.78,
+          5.22,
+          3.98,
+          4.46,
+          3.46
+        ],
+        "candidate": [
+          4.18,
+          4.28,
+          4.74,
+          4.12,
+          3.58,
+          5.36,
+          4.66,
+          4.4,
+          4.32,
+          3.96,
+          3.8,
+          4.84,
+          4.2,
+          4.26,
+          4.48,
+          4.18,
+          4.08,
+          4.48,
+          3.72,
+          4.16
+        ]
+      }
+    }
+  ]
+}

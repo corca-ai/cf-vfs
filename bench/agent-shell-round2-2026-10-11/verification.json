@@ -1,0 +1,108 @@
+{
+  "node": "v24.18.0",
+  "platform": "darwin-arm64",
+  "candidateGraphSha256": "3df5efa8cd95f56e031b2ffe5c65b483f79c30b1da69591484d87b2231ecb2ac",
+  "checks": [
+    {
+      "name": "Node",
+      "command": "npx vitest run --config vitest.node.config.ts --maxWorkers=4",
+      "count": 2002,
+      "exitCode": 0
+    },
+    {
+      "name": "Workers",
+      "command": "npx vitest run",
+      "count": 158,
+      "exitCode": 0
+    },
+    {
+      "name": "POSIX",
+      "command": "npm run test:posix",
+      "count": 46,
+      "exitCode": 0
+    },
+    {
+      "name": "Execution limits",
+      "command": "npm run test:limits",
+      "count": 14,
+      "exitCode": 0
+    },
+    {
+      "name": "Bundles",
+      "command": "npm run test:tree-shaking",
+      "count": 12,
+      "exitCode": 0
+    },
+    {
+      "name": "Full benchmark gates",
+      "command": "npm run bench:check",
+      "count": 45,
+      "exitCode": 0
+    },
+    {
+      "name": "Package",
+      "command": "npm run test:package",
+      "count": null,
+      "exitCode": 0
+    },
+    {
+      "name": "Root types",
+      "command": "npm run typecheck",
+      "count": null,
+      "exitCode": 0
+    },
+    {
+      "name": "Private Worker types",
+      "command": "npx tsc -p bench/agent-shell-round2-2026-10-11/tsconfig.json",
+      "count": null,
+      "exitCode": 0
+    },
+    {
+      "name": "Lint",
+      "command": "npm run lint",
+      "count": null,
+      "exitCode": 0
+    },
+    {
+      "name": "Quality",
+      "command": "npm run test:quality",
+      "count": null,
+      "exitCode": 0
+    },
+    {
+      "name": "Knip",
+      "command": "npm run knip",
+      "count": null,
+      "exitCode": 0
+    },
+    {
+      "name": "Docs",
+      "command": "npm run test:docs",
+      "count": 78,
+      "exitCode": 0
+    },
+    {
+      "name": "Comparison protocol",
+      "command": "npm run test:bench-protocol",
+      "count": null,
+      "exitCode": 0
+    }
+  ],
+  "notes": [
+    "Quality retains three existing unused-suppression warnings; thresholds unchanged.",
+    "Full benchmark gate includes Node SQL cost guards and 45 workerd performance cases.",
+    "No npm publication. Public deployment and complete CF assessment recorded separately."
+  ],
+  "privateWorkerReview": {
+    "reference": "https://developers.cloudflare.com/workers/best-practices/workers-best-practices/",
+    "retrievedAt": "2026-10-11T12:52:35.231Z",
+    "latestTypes": "5.20261011.1",
+    "generatedBindingsCommand": "npx wrangler types --config bench/agent-shell-round2-2026-10-11/wrangler.jsonc --include-runtime=false --env-interface=AgentEvaluationEnv bench/agent-shell-round2-2026-10-11/env.d.ts",
+    "notes": [
+      "Authentication uses constant-time token comparison; ignored secrets are not archived.",
+      "Request data stays in per-actor instance state; RPC work is awaited and fixtures are bounded.",
+      "Compatibility date deliberately matches baseline during performance comparison.",
+      "Separate-service configs change service identity only; bindings and migration shapes match."
+    ]
+  }
+}

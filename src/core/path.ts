@@ -8,6 +8,13 @@ const DOT_COMPONENT = /(?:^|\/)\.\.?(?:\/|$)/u;
 const NON_CANONICAL_ASCII = /\/\/|\/\.\.?(?:\/|$)|[^\x01-\x7f]/;
 
 export function compareUtf8(left: string, right: string): number {
+  if (left === right) return 0;
+  // UTF-16 and UTF-8 order agree for BMP text without surrogate code units.
+  // Supplementary characters and malformed surrogates retain encoded ordering.
+  if (!/[\ud800-\udfff]/.test(left) && !/[\ud800-\udfff]/.test(right)) return left < right ? -1 : 1;
+  // Short supplementary text can be compared as scalar values without buffers.
+  // Longer text keeps native encoding to avoid a long JavaScript prefix scan.
+  if (left.length <= 128 && right.length <= 128) return compareShortUtf8(left, right);
   const leftBytes = encodeUtf8(left);
   const rightBytes = encodeUtf8(right);
   const length = Math.min(leftBytes.byteLength, rightBytes.byteLength);
@@ -18,6 +25,25 @@ export function compareUtf8(left: string, right: string): number {
     if (leftByte !== rightByte) return leftByte - rightByte;
   }
   return leftBytes.byteLength - rightBytes.byteLength;
+}
+
+function utf8OrderPoint(point: number): number {
+  // TextEncoder replaces each unpaired surrogate with U+FFFD.
+  return point >= 0xd800 && point <= 0xdfff ? 0xfffd : point;
+}
+
+function compareShortUtf8(left: string, right: string): number {
+  let leftOffset = 0;
+  let rightOffset = 0;
+  while (leftOffset < left.length && rightOffset < right.length) {
+    const leftPoint = left.codePointAt(leftOffset) ?? 0;
+    const rightPoint = right.codePointAt(rightOffset) ?? 0;
+    leftOffset += leftPoint > 0xffff ? 2 : 1;
+    rightOffset += rightPoint > 0xffff ? 2 : 1;
+    const order = utf8OrderPoint(leftPoint) - utf8OrderPoint(rightPoint);
+    if (order !== 0) return order;
+  }
+  return (leftOffset < left.length ? 1 : 0) - (rightOffset < right.length ? 1 : 0);
 }
 
 function validatePath(path: string): void {

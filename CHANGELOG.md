@@ -16,6 +16,9 @@ included.
 
 ## [Unreleased]
 
+- Avoid repeated UTF-8 encoding in byte-order comparisons used by non-interactive
+  sorting and JSON filters, retaining supplementary and malformed-surrogate order.
+
 - Process JSON string spans in bulk for non-interactive `jq` workflows,
   preserving escape handling, original numeric spellings, key order, resource
   limits and UTF-8 error offsets without adding filesystem APIs.

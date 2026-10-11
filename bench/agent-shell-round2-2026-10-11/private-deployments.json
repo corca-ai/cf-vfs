@@ -1,0 +1,87 @@
+{
+  "baselineCommit": "49c2c46",
+  "baselineGraphSha256": "e7f6dd03bc673697add0f30659da83320bdc53a9c75b2bf53559cad37168f3ad",
+  "candidateGraphSha256": "3df5efa8cd95f56e031b2ffe5c65b483f79c30b1da69591484d87b2231ecb2ac",
+  "worker": "cf-vfs-agent-evaluation",
+  "phases": [
+    {
+      "build": "agent2-bmp-v1",
+      "version": "cc030075-f7fa-4b89-9ced-3c3879c44731",
+      "status": "rejected; partial CF target only"
+    },
+    {
+      "build": "agent2-hybrid-v1",
+      "version": "9516042b-cf0b-4f53-aaf7-8274e9cd96c8",
+      "status": "intermediate; twelve-workload target complete, full CF interrupted for quality refactor"
+    },
+    {
+      "build": "agent2-hybrid-v2",
+      "version": "7e9003ad-c0be-4669-ac94-8d8d6f49757e",
+      "status": "final candidate; separate helper for surrogate normalization"
+    },
+    {
+      "status": "byte-identical A/A",
+      "version": "dc402420-f407-43c7-8ae5-5600dd043e3f"
+    },
+    {
+      "status": "reversed-import escaped JSON",
+      "version": "af6cbe33-618c-434b-991e-1d4f3acbb2da"
+    },
+    {
+      "status": "restored candidate",
+      "version": "b2323d4a-c18d-48b8-a533-f4ba89b8075d"
+    },
+    {
+      "status": "reversed-import full groups",
+      "version": "c11fef3a-45cb-46b2-baed-db4960d9b9b9"
+    },
+    {
+      "status": "restored candidate after group controls",
+      "version": "504b5a07-b64b-4f8b-813e-917f5a702774"
+    }
+  ],
+  "monomorphicServices": [
+    {
+      "service": "cf-vfs-agent2-mono-a",
+      "phase": "forward",
+      "graph": "baseline",
+      "build": "agent2-mono-baseline-v1",
+      "version": "9befbaf1-6734-41af-ac51-7eb4b7585039"
+    },
+    {
+      "service": "cf-vfs-agent2-mono-b",
+      "phase": "forward",
+      "graph": "candidate",
+      "build": "agent2-mono-candidate-v1",
+      "version": "181bb426-fe56-4265-a2a0-9ca22f549617"
+    },
+    {
+      "service": "cf-vfs-agent2-mono-a",
+      "phase": "reversed",
+      "graph": "candidate",
+      "build": "agent2-mono-candidate-v1",
+      "version": "20033009-112f-4c78-940b-105f6e9acf7c"
+    },
+    {
+      "service": "cf-vfs-agent2-mono-b",
+      "phase": "reversed",
+      "graph": "baseline",
+      "build": "agent2-mono-baseline-v1",
+      "version": "3d3309a1-e88e-4d2e-9b18-0facb00d6eab"
+    },
+    {
+      "service": "cf-vfs-agent2-mono-a",
+      "phase": "escaped-forward",
+      "graph": "baseline",
+      "build": "agent2-mono-baseline-v1",
+      "version": "c62566cc-bdd2-453c-a164-fd452ecc16ea"
+    },
+    {
+      "service": "cf-vfs-agent2-mono-b",
+      "phase": "escaped-forward",
+      "graph": "candidate",
+      "build": "agent2-mono-candidate-v1",
+      "version": "bf6c8496-1982-4198-8324-506bc0355cdf"
+    }
+  ]
+}

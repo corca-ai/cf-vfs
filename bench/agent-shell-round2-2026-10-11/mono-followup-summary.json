@@ -1,0 +1,167 @@
+[
+  {
+    "input": "cf-mono-forward.json.gz",
+    "room": "full-5168e2da-f6ac-43ec-a8c5-bc68087af284",
+    "baseUrls": {
+      "baseline": "https://cf-vfs-agent2-mono-a.donghun.workers.dev",
+      "candidate": "https://cf-vfs-agent2-mono-b.donghun.workers.dev"
+    },
+    "metrics": [
+      {
+        "id": "overall",
+        "workloads": 54,
+        "ratio": {
+          "median": 0.8014881586961855,
+          "p10": 0.7890982683574538,
+          "p90": 0.8343085545086194,
+          "ci95": [
+            0.7939878479209456,
+            0.8293737987146591
+          ]
+        }
+      },
+      {
+        "id": "git",
+        "workloads": 54,
+        "ratio": {
+          "median": 0.8014881586961855,
+          "p10": 0.7890982683574538,
+          "p90": 0.8343085545086194,
+          "ci95": [
+            0.7939878479209456,
+            0.8293737987146591
+          ]
+        }
+      }
+    ],
+    "regressions": 13,
+    "confirmed": 10,
+    "profileCostFlags": 0,
+    "nativeDifferences": []
+  },
+  {
+    "input": "cf-mono-reversed.json.gz",
+    "room": "full-5168e2da-f6ac-43ec-a8c5-bc68087af284",
+    "baseUrls": {
+      "baseline": "https://cf-vfs-agent2-mono-b.donghun.workers.dev",
+      "candidate": "https://cf-vfs-agent2-mono-a.donghun.workers.dev"
+    },
+    "metrics": [
+      {
+        "id": "overall",
+        "workloads": 54,
+        "ratio": {
+          "median": 1.1548818644781749,
+          "p10": 1.1019186143933963,
+          "p90": 1.1767001860785429,
+          "ci95": [
+            1.1159075564989482,
+            1.1693517171789467
+          ]
+        }
+      },
+      {
+        "id": "git",
+        "workloads": 54,
+        "ratio": {
+          "median": 1.1548818644781749,
+          "p10": 1.1019186143933963,
+          "p90": 1.1767001860785429,
+          "ci95": [
+            1.1159075564989482,
+            1.1693517171789467
+          ]
+        }
+      }
+    ],
+    "regressions": 33,
+    "confirmed": 32,
+    "profileCostFlags": 0,
+    "nativeDifferences": [
+      {
+        "pair": 3,
+        "profile": false,
+        "stage": {
+          "group": "git-recovery",
+          "operation": "checkout-failure",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "baseline": {
+          "statements": 3449,
+          "rowsRead": 25788,
+          "rowsWritten": 1606
+        },
+        "candidate": {
+          "statements": 3480,
+          "rowsRead": 25881,
+          "rowsWritten": 1606
+        }
+      },
+      {
+        "pair": 5,
+        "profile": false,
+        "stage": {
+          "group": "git-recovery",
+          "operation": "checkout-failure",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "baseline": {
+          "statements": 3480,
+          "rowsRead": 25881,
+          "rowsWritten": 1606
+        },
+        "candidate": {
+          "statements": 3449,
+          "rowsRead": 25788,
+          "rowsWritten": 1606
+        }
+      },
+      {
+        "pair": 7,
+        "profile": false,
+        "stage": {
+          "group": "git-recovery",
+          "operation": "checkout-failure",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "baseline": {
+          "statements": 3480,
+          "rowsRead": 25881,
+          "rowsWritten": 1606
+        },
+        "candidate": {
+          "statements": 3449,
+          "rowsRead": 25788,
+          "rowsWritten": 1606
+        }
+      },
+      {
+        "pair": 8,
+        "profile": false,
+        "stage": {
+          "group": "git-recovery",
+          "operation": "checkout-failure",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "baseline": {
+          "statements": 3449,
+          "rowsRead": 25788,
+          "rowsWritten": 1606
+        },
+        "candidate": {
+          "statements": 3480,
+          "rowsRead": 25881,
+          "rowsWritten": 1606
+        }
+      }
+    ]
+  }
+]

@@ -608,3 +608,8 @@ workloads separate from the existing public FS/Git score so its history remains
 comparable. JSON parsing and rendering retain ordinary string spans together,
 while escape semantics, object member order, number spellings and budget
 accounting remain unchanged.
+
+The [agent sorting follow-up](../bench/agent-shell-round2-optimizations-2026-10-11.md)
+profiles repeated UTF-8 encoding in shared comparisons. It retains the original
+ten-workload shell cohort and separately checks supplementary text and long
+common prefixes, alongside complete FS/Git regression and SQL-cost controls.

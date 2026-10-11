@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-11T11:33:58.763Z",
+  "rows": [
+    {
+      "script": "set -e; mkdir -p '/home/demo/.agent-perf-64834565-5021-434d-ba8a-46a64d8fa473'; cd '/home/demo/.agent-perf-64834565-5021-434d-ba8a-46a64d8fa473'; printf '%s' '{\"name\":\"agent-demo\",\"version\":\"1.0.0\"}' > package.json; printf '%s' 'old 한글\nold 😀\n' > source.ts; printf '%s' 'set -e\nname=$(jq -r .name package.json)\njq -c '\\''. + {version: \"2.0.0\"}'\\'' package.json > next.json\nmv -f next.json package.json\nsed '\\''s/old/new/g'\\'' source.ts > next.ts\nprintf '\\''%s:%s\\n'\\'' \"$name\" \"$(grep -c new next.ts)\"\njq -r .version package.json\nprintf '\\''%s\\n'\\'' z é 𐀀  é | sort | uniq\n' > task.sh; bash task.sh; cat next.ts",
+      "stdout": "agent-demo:2\n2.0.0\nz\né\n\n𐀀\nnew 한글\nnew 😀\n",
+      "stderr": "",
+      "exitCode": 0,
+      "matches": true
+    }
+  ]
+}
