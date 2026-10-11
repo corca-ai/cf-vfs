@@ -16,6 +16,10 @@ included.
 
 ## [Unreleased]
 
+- Process JSON string spans in bulk for non-interactive `jq` workflows,
+  preserving escape handling, original numeric spellings, key order, resource
+  limits and UTF-8 error offsets without adding filesystem APIs.
+
 - Avoid character-by-character brace scans for ordinary shell words and match
   Bash when brace ranges mix endpoint kinds, use overflowing strides, or cross
   the backslash character between uppercase and lowercase letters.

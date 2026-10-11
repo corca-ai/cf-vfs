@@ -1,0 +1,658 @@
+{
+  "metrics": [
+    {
+      "id": "overall",
+      "workloads": 146,
+      "ratio": {
+        "median": 1.014268048424991,
+        "p10": 0.9973626759762713,
+        "p90": 1.0357426580789504,
+        "ci95": [
+          1.0038400414218187,
+          1.0286690574396768
+        ]
+      }
+    },
+    {
+      "id": "files",
+      "workloads": 18,
+      "ratio": {
+        "median": 1.0244276031316217,
+        "p10": 0.9564423194688885,
+        "p90": 1.0649402793252893,
+        "ci95": [
+          0.9885282675252582,
+          1.048997923785111
+        ]
+      }
+    },
+    {
+      "id": "git",
+      "workloads": 128,
+      "ratio": {
+        "median": 1.0076257607385948,
+        "p10": 0.9999609144617576,
+        "p90": 1.040430817845474,
+        "ci95": [
+          1.0035011544838475,
+          1.0348496737458084
+        ]
+      }
+    },
+    {
+      "id": "cache",
+      "workloads": 44,
+      "ratio": {
+        "median": 1.002465512242761,
+        "p10": 0.9844985096721327,
+        "p90": 1.073366266899679,
+        "ci95": [
+          0.9940987162764756,
+          1.0473975999962204
+        ]
+      }
+    }
+  ],
+  "regressionFlags": 36,
+  "confirmed": [
+    {
+      "stage": {
+        "group": "git-shell",
+        "operation": "init",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 100,
+        "p10": 98.9,
+        "p90": 110.89999999999999
+      },
+      "candidate": {
+        "median": 107.5,
+        "p10": 102,
+        "p90": 150.1
+      },
+      "ratio": {
+        "median": 1.0503030303030303,
+        "p10": 1,
+        "p90": 1.4896989698969896,
+        "ci95": [
+          1.0168067226890756,
+          1.365477874318044
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "git-shell",
+            "operation": "init",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 86,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 179,
+            "rowsRead": 550,
+            "rowsWritten": 78
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "git-shell",
+            "operation": "init",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 82,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 179,
+            "rowsRead": 550,
+            "rowsWritten": 78
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "git-shell",
+        "operation": "push-one",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 161.5,
+        "p10": 143.9,
+        "p90": 177.6
+      },
+      "candidate": {
+        "median": 171,
+        "p10": 145,
+        "p90": 192.6
+      },
+      "ratio": {
+        "median": 1.052367941712204,
+        "p10": 0.9685759402813666,
+        "p90": 1.144375,
+        "ci95": [
+          1.0129124746107339,
+          1.090430900621118
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "git-shell",
+            "operation": "push-one",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 132,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 944,
+            "rowsRead": 1562,
+            "rowsWritten": 40
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "git-shell",
+            "operation": "push-one",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 125,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 944,
+            "rowsRead": 1562,
+            "rowsWritten": 40
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "git-shell",
+        "operation": "add-removals-repeat",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 424.5,
+        "p10": 407.2,
+        "p90": 497.7
+      },
+      "candidate": {
+        "median": 499.5,
+        "p10": 436.7,
+        "p90": 523.1
+      },
+      "ratio": {
+        "median": 1.1597967654214971,
+        "p10": 0.9762669929931304,
+        "p90": 1.2393434947718878,
+        "ci95": [
+          1.0041322314049588,
+          1.227699530516432
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "git-shell",
+            "operation": "add-removals-repeat",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 339,
+          "iterations": 20,
+          "verified": 21,
+          "sql": {
+            "statements": 1369,
+            "rowsRead": 4035,
+            "rowsWritten": 122
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "git-shell",
+            "operation": "add-removals-repeat",
+            "files": 100,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 427,
+          "iterations": 20,
+          "verified": 21,
+          "sql": {
+            "statements": 1369,
+            "rowsRead": 4035,
+            "rowsWritten": 122
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 147.5,
+        "p10": 139.3,
+        "p90": 166.7
+      },
+      "candidate": {
+        "median": 159,
+        "p10": 146.2,
+        "p90": 181.9
+      },
+      "ratio": {
+        "median": 1.0517824432858953,
+        "p10": 0.9640567524960588,
+        "p90": 1.2717661230541142,
+        "ci95": [
+          1.004716034517359,
+          1.1657177105184298
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "rename",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 95,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 1100,
+            "rowsRead": 3000,
+            "rowsWritten": 600
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "rename",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 118,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 1100,
+            "rowsRead": 3000,
+            "rowsWritten": 600
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 119,
+        "p10": 111.9,
+        "p90": 126.39999999999999
+      },
+      "candidate": {
+        "median": 128.5,
+        "p10": 117.5,
+        "p90": 140
+      },
+      "ratio": {
+        "median": 1.0962131837307152,
+        "p10": 0.9589809144420001,
+        "p90": 1.1827238335435055,
+        "ci95": [
+          1.032648350830169,
+          1.1491228070175439
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "git",
+            "operation": "checkout-main",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 101,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 269,
+            "rowsRead": 796,
+            "rowsWritten": 8
+          },
+          "verifiedBodies": 100
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "git",
+            "operation": "checkout-main",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 91,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 269,
+            "rowsRead": 796,
+            "rowsWritten": 8
+          },
+          "verifiedBodies": 100
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": true,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 749,
+        "p10": 677.3,
+        "p90": 786
+      },
+      "candidate": {
+        "median": 799,
+        "p10": 692.5,
+        "p90": 1016.6
+      },
+      "ratio": {
+        "median": 1.1423139413483576,
+        "p10": 0.9325798685551612,
+        "p90": 1.3137287464068046,
+        "ci95": [
+          1.010115606936416,
+          1.2643626239148469
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "rename",
+            "files": 1000,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 570,
+          "iterations": 1000,
+          "verified": 1,
+          "sql": {
+            "statements": 11000,
+            "rowsRead": 30000,
+            "rowsWritten": 6000
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "rename",
+            "files": 1000,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 540,
+          "iterations": 1000,
+          "verified": 1,
+          "sql": {
+            "statements": 11000,
+            "rowsRead": 30000,
+            "rowsWritten": 6000
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 4639,
+        "p10": 4368.2,
+        "p90": 5068
+      },
+      "candidate": {
+        "median": 4892.5,
+        "p10": 4539.9,
+        "p90": 6044.5
+      },
+      "ratio": {
+        "median": 1.0539860170401858,
+        "p10": 0.9481994280112299,
+        "p90": 1.2406017740467776,
+        "ci95": [
+          1.0024328542810945,
+          1.1516605370762298
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "prepare",
+            "files": 1000,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 5800,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 27732,
+            "rowsRead": 157858,
+            "rowsWritten": 27820
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "prepare",
+            "files": 1000,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 4597,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 27732,
+            "rowsRead": 157858,
+            "rowsWritten": 27820
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 4070,
+        "p10": 3762.3,
+        "p90": 4394.799999999999
+      },
+      "candidate": {
+        "median": 4545,
+        "p10": 3935.6,
+        "p90": 5237.8
+      },
+      "ratio": {
+        "median": 1.1120064304146564,
+        "p10": 0.9347864790390636,
+        "p90": 1.3099125774206744,
+        "ci95": [
+          1.0254183756878272,
+          1.2112412931338257
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "clone",
+            "files": 1000,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 3758,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 32604,
+            "rowsRead": 113009,
+            "rowsWritten": 13994
+          },
+          "verifiedBodies": 1001
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "coding-mixed",
+            "operation": "clone",
+            "files": 1000,
+            "cache": false,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 3849,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 32604,
+            "rowsRead": 113009,
+            "rowsWritten": 13994
+          },
+          "verifiedBodies": 1001
+        }
+      ]
+    }
+  ],
+  "costRegressions": [],
+  "nativeSql": {
+    "baseline-cache-False": {
+      "statements": 438595,
+      "rowsRead": 1706463,
+      "rowsWritten": 182971
+    },
+    "candidate-cache-False": {
+      "statements": 438595,
+      "rowsRead": 1706463,
+      "rowsWritten": 182971
+    },
+    "baseline-cache-True": {
+      "statements": 72665,
+      "rowsRead": 247932,
+      "rowsWritten": 44844
+    },
+    "candidate-cache-True": {
+      "statements": 72665,
+      "rowsRead": 247932,
+      "rowsWritten": 44844
+    }
+  }
+}

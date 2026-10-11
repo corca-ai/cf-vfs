@@ -67,3 +67,36 @@ describe("jq JSON values", () => {
     expect(() => parseJsonText('"é"x', "jq")).toThrowError("jq: invalid JSON at byte 4");
   });
 });
+
+// String runs must retain JSON's exact escape and byte-offset semantics.
+describe("JSON string boundaries", () => {
+  it.each([
+    "",
+    "ordinary project path ".repeat(500),
+    '한글😀\\path"quoted"\n\t\r\b\f',
+    "\u0000\u001f\u007f",
+  ])("round-trips text and adjacent object members", (text) => {
+    const input = `{"value":${JSON.stringify(text)},"next":"end"}`;
+    const value = parseJsonText(input, "jq");
+    expect(value).toEqual(
+      new Map([
+        ["value", text],
+        ["next", "end"],
+      ]),
+    );
+    expect(JSON.parse(renderJson(value))).toEqual({ value: text, next: "end" });
+  });
+  it("decodes escaped slash, surrogate pairs and controls across adjacent strings", () => {
+    const value = parseJsonText(String.raw`["a\/b","\uD83D\uDE00","\u0000","\"end"]`, "jq");
+    expect(value).toEqual(["a/b", "😀", "\0", '"end']);
+    expect(JSON.parse(renderJson(value))).toEqual(value);
+  });
+  it.each([
+    ['"한글\u0001"', "unescaped control character at byte 7"],
+    ['"é\\x"', "invalid escape at byte 3"],
+    ['"é', "unterminated string at byte 3"],
+    ['"é\\u00xz"', "invalid unicode escape at byte 3"],
+  ])("reports the original invalid character in %s", (input, message) => {
+    expect(() => parseJsonText(input, "jq")).toThrowError(`jq: ${message}`);
+  });
+});

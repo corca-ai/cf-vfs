@@ -188,6 +188,8 @@ const ESCAPES: Record<string, string> = {
 class JsonReader {
   private offset = 0;
   private depth = 0;
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: JSON forbids raw U+0000–U+001F in strings.
+  private readonly stringBoundary = /["\\\u0000-\u001f]/gu;
 
   constructor(
     private readonly text: string,
@@ -282,18 +284,23 @@ class JsonReader {
     this.expect('"');
     let value = "";
     for (;;) {
-      const character = this.text[this.offset];
-      if (character === undefined) this.fail("unterminated string");
+      // Retain ordinary spans in one slice instead of allocating one piece
+      // per UTF-16 code unit. The reader owns the cursor; nested reads and
+      // separate invocations cannot share mutable regexp state.
+      this.stringBoundary.lastIndex = this.offset;
+      const boundary = this.stringBoundary.exec(this.text);
+      if (boundary === null) {
+        this.offset = this.text.length;
+        this.fail("unterminated string");
+      }
+      value += this.text.slice(this.offset, boundary.index);
+      this.offset = boundary.index;
+      const character = boundary[0];
       if (character === '"') {
         this.offset += 1;
         return value;
       }
-      if (character !== "\\") {
-        if (character.charCodeAt(0) < 0x20) this.fail("unescaped control character");
-        value += character;
-        this.offset += 1;
-        continue;
-      }
+      if (character !== "\\") this.fail("unescaped control character");
       value += this.escape();
     }
   }
@@ -356,16 +363,6 @@ export interface RenderOptions {
   readonly budget?: JsonBudget | undefined;
 }
 
-/** Whether a string holds anything the JSON writer has to escape. */
-function needsEscaping(value: string): boolean {
-  for (const character of value) {
-    if (character === '"' || character === "\\") return true;
-    const code = character.codePointAt(0) ?? 0;
-    if (code < 0x20 || code === 0x7f) return true;
-  }
-  return false;
-}
-
 function escapedJsonCharacter(character: string): string {
   if (character === '"') return '\\"';
   if (character === "\\") return "\\\\";
@@ -379,10 +376,8 @@ function escapedJsonCharacter(character: string): string {
 }
 
 function renderJsonString(value: string): string {
-  if (!needsEscaping(value)) return `"${value}"`;
-  let out = '"';
-  for (const character of value) out += escapedJsonCharacter(character);
-  return `${out}"`;
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: JSON output must escape controls, including DEL in this profile.
+  return `"${value.replace(/["\\\u0000-\u001f\u007f]/gu, escapedJsonCharacter)}"`;
 }
 
 /** How `jq` writes a computed number. */

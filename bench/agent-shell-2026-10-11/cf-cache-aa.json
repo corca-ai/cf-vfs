@@ -1,0 +1,9062 @@
+{
+  "engine": "cloudflare-sqlite-rpc",
+  "protocol": "full-suite-colocated-alternating-fixed-git-v1",
+  "identityTime": 1700000000000,
+  "fixtureRootMode": 16895,
+  "trials": 20,
+  "warmups": 3,
+  "fullPlan": false,
+  "groups": [
+    "files:100:true"
+  ],
+  "credentials": "demo",
+  "colocated": true,
+  "baseUrl": "https://cf-vfs-agent-evaluation.donghun.workers.dev",
+  "room": "full-42780a66-b2e1-47da-8190-c09a819f51a6",
+  "startedAt": "2026-10-11T10:48:58.876Z",
+  "candidate": "agent-aa-e1d5e34-files",
+  "completedAt": "2026-10-11T10:49:41.095Z",
+  "metrics": [
+    {
+      "id": "cache",
+      "workloads": 9,
+      "ratio": {
+        "median": 1.0069730233564067,
+        "p10": 0.9263229146232287,
+        "p90": 1.1137836240196741,
+        "ci95": [
+          0.9766406186289533,
+          1.058922316137017
+        ]
+      }
+    }
+  ],
+  "regressions": [
+    {
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 97.5,
+        "p10": 88.9,
+        "p90": 107
+      },
+      "candidate": {
+        "median": 101,
+        "p10": 88.8,
+        "p90": 123.2
+      },
+      "ratio": {
+        "median": 1.0895968143354904,
+        "p10": 0.9380028443722064,
+        "p90": 1.2001794258373206,
+        "ci95": [
+          0.9852407570854174,
+          1.1223607852821336
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "write",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 108,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 1113,
+            "rowsRead": 2322,
+            "rowsWritten": 612
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "write",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 102,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 1113,
+            "rowsRead": 2322,
+            "rowsWritten": 612
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 36,
+        "p10": 33.9,
+        "p90": 39
+      },
+      "candidate": {
+        "median": 36.5,
+        "p10": 33.8,
+        "p90": 41.60000000000001
+      },
+      "ratio": {
+        "median": 1.054054054054054,
+        "p10": 0.9140336134453781,
+        "p90": 1.23025283347864,
+        "ci95": [
+          0.9451951951951951,
+          1.0719696969696968
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "read",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 26,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 200,
+            "rowsRead": 299,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "read",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 29,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 200,
+            "rowsRead": 299,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    }
+  ],
+  "confirmed": [],
+  "costRegressions": [],
+  "workloads": [
+    {
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 97.5,
+        "p10": 88.9,
+        "p90": 107
+      },
+      "candidate": {
+        "median": 101,
+        "p10": 88.8,
+        "p90": 123.2
+      },
+      "ratio": {
+        "median": 1.0895968143354904,
+        "p10": 0.9380028443722064,
+        "p90": 1.2001794258373206,
+        "ci95": [
+          0.9852407570854174,
+          1.1223607852821336
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "write",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 108,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 1113,
+            "rowsRead": 2322,
+            "rowsWritten": 612
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "write",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 102,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 1113,
+            "rowsRead": 2322,
+            "rowsWritten": 612
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 16,
+        "p10": 15,
+        "p90": 18
+      },
+      "candidate": {
+        "median": 16,
+        "p10": 14.9,
+        "p90": 17.1
+      },
+      "ratio": {
+        "median": 1,
+        "p10": 0.8823529411764706,
+        "p90": 1.0733333333333335,
+        "ci95": [
+          0.9393382352941176,
+          1
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "stat",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 14,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 3,
+            "rowsRead": 107,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "stat",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 17,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 3,
+            "rowsRead": 107,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 27,
+        "p10": 25,
+        "p90": 28.1
+      },
+      "candidate": {
+        "median": 27.5,
+        "p10": 26,
+        "p90": 30.1
+      },
+      "ratio": {
+        "median": 1.037037037037037,
+        "p10": 0.9629629629629629,
+        "p90": 1.086814814814815,
+        "ci95": [
+          1,
+          1.0557142857142856
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "stat-after-overwrite",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 42,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 5,
+            "rowsRead": 17,
+            "rowsWritten": 2
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "stat-after-overwrite",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 43,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 5,
+            "rowsRead": 17,
+            "rowsWritten": 2
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 36,
+        "p10": 33.9,
+        "p90": 39
+      },
+      "candidate": {
+        "median": 36.5,
+        "p10": 33.8,
+        "p90": 41.60000000000001
+      },
+      "ratio": {
+        "median": 1.054054054054054,
+        "p10": 0.9140336134453781,
+        "p90": 1.23025283347864,
+        "ci95": [
+          0.9451951951951951,
+          1.0719696969696968
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "read",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 26,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 200,
+            "rowsRead": 299,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "read",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 29,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 200,
+            "rowsRead": 299,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 26,
+        "p10": 24.9,
+        "p90": 34.1
+      },
+      "candidate": {
+        "median": 27,
+        "p10": 24.9,
+        "p90": 34.2
+      },
+      "ratio": {
+        "median": 1.0392307692307692,
+        "p10": 0.8476470588235294,
+        "p90": 1.2008333333333332,
+        "ci95": [
+          0.9666666666666667,
+          1.1060794044665012
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "readdir",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 25,
+          "iterations": 10,
+          "verified": 10,
+          "sql": {
+            "statements": 20,
+            "rowsRead": 1010,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "readdir",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 25,
+          "iterations": 10,
+          "verified": 10,
+          "sql": {
+            "statements": 20,
+            "rowsRead": 1010,
+            "rowsWritten": 0
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 60,
+        "p10": 54.7,
+        "p90": 70.2
+      },
+      "candidate": {
+        "median": 65,
+        "p10": 53.8,
+        "p90": 70.1
+      },
+      "ratio": {
+        "median": 1.026267748478702,
+        "p10": 0.9165072859744992,
+        "p90": 1.1908735332464147,
+        "ci95": [
+          0.9759837177747626,
+          1.0599078341013826
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "append",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 70,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 600,
+            "rowsRead": 700,
+            "rowsWritten": 300
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "append",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 81,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 600,
+            "rowsRead": 700,
+            "rowsWritten": 300
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 89.5,
+        "p10": 78.9,
+        "p90": 103.10000000000002
+      },
+      "candidate": {
+        "median": 94,
+        "p10": 81.7,
+        "p90": 109.70000000000002
+      },
+      "ratio": {
+        "median": 1.0050505050505052,
+        "p10": 0.8710075520353656,
+        "p90": 1.2190454124189063,
+        "ci95": [
+          0.9480159294552695,
+          1.082286887225308
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "rename",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 72,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 1100,
+            "rowsRead": 2800,
+            "rowsWritten": 500
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "rename",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 86,
+          "iterations": 100,
+          "verified": 1,
+          "sql": {
+            "statements": 1100,
+            "rowsRead": 2800,
+            "rowsWritten": 500
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 35,
+        "p10": 33,
+        "p90": 43.2
+      },
+      "candidate": {
+        "median": 35.5,
+        "p10": 33,
+        "p90": 40.2
+      },
+      "ratio": {
+        "median": 0.9864864864864865,
+        "p10": 0.831266149870801,
+        "p90": 1.1598930481283425,
+        "ci95": [
+          0.9579150579150579,
+          1.0555984555984557
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "copy-tree",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 60,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 17,
+            "rowsRead": 1849,
+            "rowsWritten": 406
+          },
+          "verifiedBodies": 0
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "copy-tree",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 61,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 17,
+            "rowsRead": 1849,
+            "rowsWritten": 406
+          },
+          "verifiedBodies": 0
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "baseline": {
+        "median": 30,
+        "p10": 29,
+        "p90": 32
+      },
+      "candidate": {
+        "median": 30,
+        "p10": 28.9,
+        "p90": 31.300000000000004
+      },
+      "ratio": {
+        "median": 0.967741935483871,
+        "p10": 0.9354838709677419,
+        "p90": 1.0407119021134594,
+        "ci95": [
+          0.9660919540229885,
+          1.0166666666666666
+        ]
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "remove-tree",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "baseline",
+          "ms": 49,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 15,
+            "rowsRead": 1738,
+            "rowsWritten": 304
+          },
+          "verifiedBodies": 100
+        },
+        {
+          "pair": 0,
+          "profile": true,
+          "stage": {
+            "group": "files",
+            "operation": "remove-tree",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "version": "candidate",
+          "ms": 50,
+          "iterations": 1,
+          "verified": 1,
+          "sql": {
+            "statements": 15,
+            "rowsRead": 1738,
+            "rowsWritten": 304
+          },
+          "verifiedBodies": 100
+        }
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 98,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 15,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 28,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 34,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 31,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 61,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 94,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 106,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 17,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 29,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 37,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 34,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 69,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 101,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 40,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 37,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 134,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 18,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 29,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 39,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 69,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 103,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 39,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 90,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 21,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 27,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 37,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 25,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 70,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 93,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 37,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 31,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 106,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 16,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 29,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 36,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 26,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 85,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 83,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 34,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 31,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 125,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 20,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 36,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 41,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 29,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 88,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 102,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 42,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 34,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 107,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 14,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 26,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 35,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 69,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 109,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 36,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 28,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 94,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 15,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 27,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 33,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 26,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 62,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 101,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 37,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 29,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 107,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 18,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 29,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 37,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 62,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 181,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 43,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 34,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 93,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 16,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 28,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 39,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 65,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 116,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 36,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 105,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 15,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 28,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 38,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 26,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 64,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 97,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 36,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 31,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 88,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 15,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 28,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 31,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 24,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 52,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 86,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 89,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 17,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 28,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 36,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 26,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 72,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 91,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 36,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 101,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 15,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 39,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 29,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 65,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 82,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 50,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 31,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 109,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 17,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 28,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 31,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 23,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 51,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 95,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 33,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 31,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 107,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 18,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 27,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 34,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 34,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 58,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 90,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 36,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 32,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 100,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 17,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 27,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 26,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 56,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 101,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 45,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 31,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 110,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 15,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 26,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 37,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 60,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 93,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 35,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 29,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 123,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 16,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 36,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 29,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 67,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 95,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 39,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 31,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 111,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 17,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 28,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 34,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 24,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 64,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 78,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 37,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 95,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 15,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 25,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 36,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 58,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 122,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 37,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 120,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 15,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 34,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 28,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 59,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 88,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 35,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 90,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 15,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 37,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 25,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 52,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 86,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 33,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 29,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 82,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 16,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 25,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 48,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 25,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 55,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 88,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 31,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 92,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 14,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 25,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 39,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 59,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 89,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 28,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 87,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 14,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 26,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 36,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 40,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 55,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 82,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 34,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 81,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 15,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 25,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 34,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 36,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 54,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 146,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 34,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 29,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 102,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 15,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 26,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 34,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 55,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 73,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 97,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 15,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 27,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 25,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 70,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 89,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 33,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 32,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 93,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 16,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 28,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 32,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 26,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 71,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 89,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 35,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 101,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 17,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 35,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 65,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 91,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 34,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 91,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 16,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 27,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 37,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 27,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 67,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 92,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 31,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 92,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 16,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 26,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 26,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 56,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 82,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 77,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 89,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 17,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 35,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 24,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 58,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 89,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 33,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 29,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 100,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 15,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 27,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 36,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 26,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 56,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 77,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 37,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 100,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 15,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 27,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 39,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 61,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 79,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 35,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 29,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 103,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 17,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 27,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 37,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 26,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 51,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 89,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 33,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 101,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 17,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 31,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 72,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 32,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 67,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 79,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 33,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 29,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 98,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 16,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 28,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 47,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 26,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 70,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 100,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 38,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 99,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 16,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 27,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 37,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 42,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 59,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 99,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 33,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 30,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 108,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 14,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 42,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 26,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 25,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 70,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 72,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 60,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "baseline",
+      "ms": 49,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 102,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1113,
+        "rowsRead": 2322,
+        "rowsWritten": 612
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 17,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 3,
+        "rowsRead": 107,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 43,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 5,
+        "rowsRead": 17,
+        "rowsWritten": 2
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 29,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 200,
+        "rowsRead": 299,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 25,
+      "iterations": 10,
+      "verified": 10,
+      "sql": {
+        "statements": 20,
+        "rowsRead": 1010,
+        "rowsWritten": 0
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 81,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 600,
+        "rowsRead": 700,
+        "rowsWritten": 300
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 86,
+      "iterations": 100,
+      "verified": 1,
+      "sql": {
+        "statements": 1100,
+        "rowsRead": 2800,
+        "rowsWritten": 500
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 61,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 17,
+        "rowsRead": 1849,
+        "rowsWritten": 406
+      },
+      "verifiedBodies": 0
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "version": "candidate",
+      "ms": 50,
+      "iterations": 1,
+      "verified": 1,
+      "sql": {
+        "statements": 15,
+        "rowsRead": 1738,
+        "rowsWritten": 304
+      },
+      "verifiedBodies": 100
+    }
+  ],
+  "placements": [
+    {
+      "pair": -3,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": -3,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": -2,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": -2,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": -1,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": -1,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 0,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 1,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 2,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 3,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 4,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 5,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 6,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 7,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 8,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 9,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 10,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 11,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 12,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 13,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 14,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 15,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 16,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 17,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 18,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 19,
+      "profile": false,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "start": 41,
+      "colo": "LAX"
+    },
+    {
+      "pair": 0,
+      "profile": true,
+      "start": 41,
+      "colo": "LAX"
+    }
+  ]
+}

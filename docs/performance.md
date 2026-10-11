@@ -600,3 +600,11 @@ The [Bash word-expansion report](../bench/bash-optimizations-2026-10-11.md)
 records the ordinary-word allocation optimization, Bash differential fixes,
 separate shell measurements and full FS/Git regression controls. Its shell
 aggregate does not change the existing public overall-score workload cohort.
+
+The [agent shell evaluation](../bench/agent-shell-optimizations-2026-10-11.md)
+measures non-interactive scripts that inspect and update JSON, edit source
+with sed, compose pipelines and execute a Bash script file. It keeps these
+workloads separate from the existing public FS/Git score so its history remains
+comparable. JSON parsing and rendering retain ordinary string spans together,
+while escape semantics, object member order, number spellings and budget
+accounting remain unchanged.

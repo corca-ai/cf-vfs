@@ -1,0 +1,101 @@
+{
+  "node": "v24.18.0",
+  "platform": "darwin-arm64",
+  "checks": [
+    {
+      "name": "Node",
+      "command": "npx vitest run --config vitest.node.config.ts --maxWorkers=4",
+      "count": 2001,
+      "exitCode": 0
+    },
+    {
+      "name": "Workers",
+      "command": "npx vitest run",
+      "count": 158,
+      "exitCode": 0
+    },
+    {
+      "name": "POSIX",
+      "command": "npm run test:posix",
+      "count": 46,
+      "exitCode": 0
+    },
+    {
+      "name": "Execution limits",
+      "command": "npm run test:limits",
+      "count": 14,
+      "exitCode": 0
+    },
+    {
+      "name": "Bundles",
+      "command": "npm run test:tree-shaking",
+      "count": 12,
+      "exitCode": 0
+    },
+    {
+      "name": "Typecheck",
+      "command": "npm run typecheck",
+      "count": null,
+      "exitCode": 0
+    },
+    {
+      "name": "Private Worker types",
+      "command": "npx tsc -p bench/agent-shell-2026-10-11/tsconfig.json",
+      "count": null,
+      "exitCode": 0
+    },
+    {
+      "name": "Lint",
+      "command": "npm run lint",
+      "count": null,
+      "exitCode": 0
+    },
+    {
+      "name": "Knip",
+      "command": "npm run knip",
+      "count": null,
+      "exitCode": 0
+    },
+    {
+      "name": "Quality",
+      "command": "npm run test:quality",
+      "count": null,
+      "exitCode": 0
+    },
+    {
+      "name": "Docs",
+      "command": "npm run test:docs",
+      "count": null,
+      "exitCode": 0
+    },
+    {
+      "name": "Package",
+      "command": "npm run test:package",
+      "count": null,
+      "exitCode": 0
+    },
+    {
+      "name": "Benchmark protocol",
+      "command": "npm run test:bench-protocol",
+      "count": null,
+      "exitCode": 0
+    },
+    {
+      "name": "Performance gates",
+      "command": "npm run bench:check",
+      "count": null,
+      "exitCode": 0
+    },
+    {
+      "name": "Host oracle",
+      "command": "node bench/agent-shell-2026-10-11/oracle.mjs",
+      "count": 10,
+      "exitCode": 0
+    }
+  ],
+  "notes": [
+    "Existing sql-path suppression/quality warnings remain; lint has no errors.",
+    "Npm package not published.",
+    "Public adoption/deployment checks are recorded separately after full CF evaluation."
+  ]
+}

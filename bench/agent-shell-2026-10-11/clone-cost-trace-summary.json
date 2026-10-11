@@ -1,0 +1,174 @@
+[
+  {
+    "credentials": "demo",
+    "pair": 5,
+    "deltaStatements": -5,
+    "deltaReturned": -2,
+    "queries": [
+      {
+        "sql": "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version,\n          (SELECT json_group_array(json_array(path,kind,mode,uid,gid))\n             FROM vfs_entries INDEXED BY vfs_entries_path\n             WHERE path IN (SELECT value FROM json_each(?))) AS parents\n       FROM (SELECT 1) seed\n       LEFT JOIN vfs_entries e INDEXED BY vfs_entries_path ON e.path = ?",
+        "baseline": {
+          "sql": "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version,\n          (SELECT json_group_array(json_array(path,kind,mode,uid,gid))\n             FROM vfs_entries INDEXED BY vfs_entries_path\n             WHERE path IN (SELECT value FROM json_each(?))) AS parents\n       FROM (SELECT 1) seed\n       LEFT JOIN vfs_entries e INDEXED BY vfs_entries_path ON e.path = ?",
+          "calls": 218,
+          "rows": 218
+        },
+        "candidate": {
+          "sql": "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version,\n          (SELECT json_group_array(json_array(path,kind,mode,uid,gid))\n             FROM vfs_entries INDEXED BY vfs_entries_path\n             WHERE path IN (SELECT value FROM json_each(?))) AS parents\n       FROM (SELECT 1) seed\n       LEFT JOIN vfs_entries e INDEXED BY vfs_entries_path ON e.path = ?",
+          "calls": 217,
+          "rows": 217
+        }
+      },
+      {
+        "sql": "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+        "baseline": {
+          "sql": "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+          "calls": 1970,
+          "rows": 1747
+        },
+        "candidate": {
+          "sql": "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+          "calls": 1971,
+          "rows": 1748
+        }
+      },
+      {
+        "sql": "BEGIN",
+        "baseline": {
+          "sql": "BEGIN",
+          "calls": 223,
+          "rows": 0
+        },
+        "candidate": {
+          "sql": "BEGIN",
+          "calls": 222,
+          "rows": 0
+        }
+      },
+      {
+        "sql": "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+        "baseline": {
+          "sql": "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+          "calls": 219,
+          "rows": 219
+        },
+        "candidate": {
+          "sql": "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+          "calls": 218,
+          "rows": 218
+        }
+      },
+      {
+        "sql": "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+        "baseline": {
+          "sql": "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+          "calls": 218,
+          "rows": 0
+        },
+        "candidate": {
+          "sql": "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+          "calls": 217,
+          "rows": 0
+        }
+      },
+      {
+        "sql": "COMMIT",
+        "baseline": {
+          "sql": "COMMIT",
+          "calls": 219,
+          "rows": 0
+        },
+        "candidate": {
+          "sql": "COMMIT",
+          "calls": 218,
+          "rows": 0
+        }
+      },
+      {
+        "sql": "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (?) AND kind = 'directory'\n      RETURNING path, mutation_version",
+        "baseline": {
+          "sql": "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (?) AND kind = 'directory'\n      RETURNING path, mutation_version",
+          "calls": 113,
+          "rows": 113
+        },
+        "candidate": {
+          "sql": "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (?) AND kind = 'directory'\n      RETURNING path, mutation_version",
+          "calls": 112,
+          "rows": 112
+        }
+      }
+    ]
+  },
+  {
+    "credentials": "none",
+    "pair": 7,
+    "deltaStatements": -5,
+    "deltaReturned": -2,
+    "queries": [
+      {
+        "sql": "BEGIN",
+        "baseline": {
+          "sql": "BEGIN",
+          "calls": 36,
+          "rows": 0
+        },
+        "candidate": {
+          "sql": "BEGIN",
+          "calls": 35,
+          "rows": 0
+        }
+      },
+      {
+        "sql": "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+        "baseline": {
+          "sql": "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+          "calls": 31,
+          "rows": 31
+        },
+        "candidate": {
+          "sql": "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+          "calls": 30,
+          "rows": 30
+        }
+      },
+      {
+        "sql": "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+        "baseline": {
+          "sql": "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+          "calls": 31,
+          "rows": 0
+        },
+        "candidate": {
+          "sql": "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+          "calls": 30,
+          "rows": 0
+        }
+      },
+      {
+        "sql": "COMMIT",
+        "baseline": {
+          "sql": "COMMIT",
+          "calls": 31,
+          "rows": 0
+        },
+        "candidate": {
+          "sql": "COMMIT",
+          "calls": 30,
+          "rows": 0
+        }
+      },
+      {
+        "sql": "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (?) AND kind = 'directory'\n      RETURNING path, mutation_version",
+        "baseline": {
+          "sql": "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (?) AND kind = 'directory'\n      RETURNING path, mutation_version",
+          "calls": 10,
+          "rows": 10
+        },
+        "candidate": {
+          "sql": "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (?) AND kind = 'directory'\n      RETURNING path, mutation_version",
+          "calls": 9,
+          "rows": 9
+        }
+      }
+    ]
+  }
+]
