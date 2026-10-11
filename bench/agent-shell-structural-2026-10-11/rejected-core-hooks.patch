@@ -1,0 +1,128 @@
+diff --git a/src/shell/commands/git-fs.ts b/src/shell/commands/git-fs.ts
+index ffbe20a..4cadf1f 100644
+--- a/src/shell/commands/git-fs.ts
++++ b/src/shell/commands/git-fs.ts
+@@ -3,6 +3,7 @@ import { encodeUtf8 } from "../../core/unicode.js";
+ import { FsStats } from "../../fs/stats.js";
+ import { NO_ENTRY_IDENTITY, type VfsStat } from "../../vfs/types.js";
+ import type { ShellCommandContext } from "../types.js";
++import type { GitAddTracking } from "./git-add-tracking.js";
+ import { GitCheckoutWrites } from "./git-checkout-writes.js";
+ import { GitObjectWrites } from "./git-object-writes.js";
+ import { gitStatReads } from "./git-stat-reads.js";
+@@ -25,7 +26,10 @@ export class GitFileSystem {
+   private configPath: string | undefined;
+   private pendingConfig: Promise<ConfigRead> | undefined;
+   private statReads: ReturnType<typeof gitStatReads> | undefined;
+-  constructor(readonly context: ShellCommandContext) {}
++  constructor(
++    readonly context: ShellCommandContext,
++    readonly addTracking?: GitAddTracking,
++  ) {}
+ 
+   beginWorkReads(limit: number): void {
+     this.workReads = { limit, snapshots: new Map(), stats: new Map() };
+diff --git a/src/shell/commands/git-worktree.ts b/src/shell/commands/git-worktree.ts
+index 193c05c..7045d87 100644
+--- a/src/shell/commands/git-worktree.ts
++++ b/src/shell/commands/git-worktree.ts
+@@ -33,11 +33,13 @@ export async function gitAdd(repo: GitRepository, argv: readonly string[]) {
+   gitOperands(args, args.flags.size === 0 ? 1 : 0, Number.MAX_SAFE_INTEGER);
+   const paths =
+     args.operands.length === 0 ? ["."] : args.operands.map((path) => relativePath(repo, path));
++  const tracking = trackWholeAdd(repo, paths);
+   // Share the index snapshot between inspection and mutation in this command.
+   repo.fs.coalesceConfigReads(repo.gitdir);
+   const options = { ...repo, cache: {} };
+   const sizes = new Map<string, number>();
+-  const matrix = await gitMatrix(options, paths, sizes);
++  const inspected = tracking?.paths ?? paths;
++  const matrix = await inspectAdd(options, inspected, sizes);
+   const selected = matrix.filter(
+     ([path, , work, stage]) =>
+       work !== stage &&
+@@ -75,6 +77,19 @@ export async function gitAdd(repo: GitRepository, argv: readonly string[]) {
+     if (path !== "." && !matrix.some(([name]) => name === path || name.startsWith(`${path}/`)))
+       await git.add({ ...options, filepath: path });
+   }
++  tracking?.complete();
++}
++
++function trackWholeAdd(repo: GitRepository, paths: readonly string[]) {
++  return paths.length === 1 && paths[0] === "." ? repo.fs.addTracking?.begin(repo) : undefined;
++}
++
++async function inspectAdd(
++  repo: GitRepository,
++  paths: readonly string[],
++  sizes: Map<string, number>,
++) {
++  return paths.length === 0 ? [] : await gitMatrix(repo, paths, sizes);
+ }
+ 
+ function* stagingBatches(
+@@ -149,6 +164,7 @@ export async function gitCommit(
+     committer,
+     disallowEmpty: !args.flags.has("--allow-empty"),
+   });
++  repo.fs.addTracking?.committed(repo);
+   await writeText(fds[1], `${oid}\n`);
+ }
+ 
+diff --git a/src/shell/commands/git.ts b/src/shell/commands/git.ts
+index d5ae685..045d76a 100644
+--- a/src/shell/commands/git.ts
++++ b/src/shell/commands/git.ts
+@@ -2,6 +2,7 @@ import * as git from "isomorphic-git";
+ import { VfsError } from "../../core/errors.js";
+ import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
+ import { defineApplet } from "./applet.js";
++import type { GitAddTracking } from "./git-add-tracking.js";
+ import { GitFileSystem } from "./git-fs.js";
+ import { localClone, localFetch, localPull, localPush } from "./git-local.js";
+ import { gitArguments, gitOperands, localGitPath } from "./git-options.js";
+@@ -23,20 +24,26 @@ const SPEC = {
+   summary: "operates Git repositories and local remotes in the VFS",
+ } as const;
+ 
+-export const gitCommand = /* @__PURE__ */ defineApplet(SPEC, async (context, argv, fds) => {
+-  try {
+-    return await executeGit(context, argv, fds);
+-  } catch (error) {
+-    if (error instanceof VfsError) throw error;
+-    await writeText(fds[2], `git: ${error instanceof Error ? error.message : String(error)}\n`);
+-    return 1;
+-  }
+-});
++export const gitCommand = /* @__PURE__ */ gitCommandWithTracking();
++
++/** Internal constructor used by the separately imported tracking capability. */
++export function gitCommandWithTracking(tracking?: GitAddTracking) {
++  return defineApplet(SPEC, async (context, argv, fds) => {
++    try {
++      return await executeGit(context, argv, fds, tracking);
++    } catch (error) {
++      if (error instanceof VfsError) throw error;
++      await writeText(fds[2], `git: ${error instanceof Error ? error.message : String(error)}\n`);
++      return 1;
++    }
++  });
++}
+ 
+ async function executeGit(
+   context: ShellCommandContext,
+   argv: readonly string[],
+   fds: ShellFileDescriptors,
++  tracking?: GitAddTracking,
+ ) {
+   let index = 0,
+     cwd = context.session.cwd;
+@@ -49,7 +56,7 @@ async function executeGit(
+     index += 2;
+   }
+   const scoped = { ...context, session: { ...context.session, cwd } };
+-  const fs = new GitFileSystem(scoped);
++  const fs = new GitFileSystem(scoped, tracking);
+   const command = argv[index],
+     args = argv.slice(index + 1);
+   if (command === undefined || command === "--help") {

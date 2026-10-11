@@ -613,3 +613,9 @@ The [agent sorting follow-up](../bench/agent-shell-round2-optimizations-2026-10-
 profiles repeated UTF-8 encoding in shared comparisons. It retains the original
 ten-workload shell cohort and separately checks supplementary text and long
 common prefixes, alongside complete FS/Git regression and SQL-cost controls.
+
+The [structural agent-workload evaluation](../bench/agent-shell-structural-optimizations-2026-10-11.md)
+compares jq iteration, direct pipeline writes and incremental Git staging.
+Only the separately imported staging command is retained for long-lived,
+change-recorded workspaces; its cold overhead and complete default-command
+controls are reported separately from the warm-path gain.

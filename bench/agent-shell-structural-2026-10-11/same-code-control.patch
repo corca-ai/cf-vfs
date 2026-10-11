@@ -1,0 +1,29 @@
+--- a/bench/agent-shell-structural-2026-10-11/worker.ts
++++ b/bench/agent-shell-structural-2026-10-11/worker.ts
+@@ -17,7 +17,7 @@
+ import { Shell } from "../three-hour-2026-10-10/compiled/structural-wrapper-final/src/shell/shell.js";
+ import { DurableObjectFileSystem } from "../three-hour-2026-10-10/compiled/structural-wrapper-final/src/vfs/do-sql.js";
+ 
+-const BUILD = "structural-git-wrapper-v4";
++const BUILD = "structural-default-aa-v1";
+ const plan = benchmarkPlan().filter((stage) => stage.trial === 0);
+ export class AgentEvaluation extends DurableObject<AgentEvaluationEnv> {
+   private suite: PublicBenchmarkSuite | BeforeSuite | undefined;
+@@ -109,7 +109,7 @@
+   async setup(version: string, credentials: string) {
+     await this.clear();
+     let suite: PublicBenchmarkSuite | BeforeSuite;
+-    const raw = new (version === "baseline" ? BeforeFs : DurableObjectFileSystem)(
++    const raw = new BeforeFs(
+       this.meter.storage,
+       {
+         maxEntries: 20000,
+@@ -120,7 +120,7 @@
+     await raw.initialize();
+     if (credentials === "demo") raw.setMetadata("/", { mode: 0o40777 });
+     const fs = credentials === "demo" ? raw.forCredentials({ uid: 1000, gid: 1000 }) : raw;
+-    suite = new (version === "baseline" ? BeforeSuite : PublicBenchmarkSuite)(fs, 1700000000000);
++    suite = new BeforeSuite(fs, 1700000000000);
+     this.suite = suite;
+   }
+   async stage(index: number) {

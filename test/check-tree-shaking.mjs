@@ -21,6 +21,7 @@ const record = process.argv.includes("--record");
 const M = {
   applet: "shell/commands/applet",
   git: "shell/commands/git",
+  trackedGit: "shell/commands/git-tracked",
   awk: "shell/commands/awk",
   options: "shell/commands/options",
   helpers: "shell/commands/helpers",
@@ -106,7 +107,7 @@ const PRESETS = [
     config: "wrangler.git-tree-shake.jsonc",
     describe: "the opt-in Git applet and engine, with no shell or SQL owner",
     include: [M.git, M.applet],
-    exclude: [M.shell, M.registry, M.sql, M.doSql, M.r2, M.interactive],
+    exclude: [M.shell, M.registry, M.sql, M.doSql, M.r2, M.interactive, M.trackedGit],
   },
   {
     name: "ls",

@@ -1,0 +1,179 @@
+diff --git a/src/core/jq.ts b/src/core/jq.ts
+index 0adc1fb..8cd1f67 100644
+--- a/src/core/jq.ts
++++ b/src/core/jq.ts
+@@ -81,6 +81,19 @@ export class JqFilter {
+     }
+   }
+ 
++  /** Yields results without retaining a separate array; each iterator owns its budget. */
++  *stream(input: JsonValue, host?: JqBudget): Generator<JsonValue> {
++    const execution = new JqFilter(this.node, this.variables);
++    execution.budget = new JqEvaluationBudget(host);
++    try {
++      execution.budget.retain(input);
++      for (const value of this.variables.values()) execution.budget.retain(value);
++      yield* execution.evaluate(this.node, input);
++    } finally {
++      execution.budget.release();
++    }
++  }
++
+   private *evaluate(node: Node, input: JsonValue): Generator<JsonValue> {
+     this.budget.enter();
+     try {
+diff --git a/src/core/json-value.ts b/src/core/json-value.ts
+index d68fc9e..9081a86 100644
+--- a/src/core/json-value.ts
++++ b/src/core/json-value.ts
+@@ -150,20 +150,24 @@ export function equalJson(
+   return compareJson(left, right, budget) === 0;
+ }
+ 
+-/** Reads every value in a stream of concatenated JSON texts. */
+-export function parseJsonStream(text: string, command: string, budget?: JsonBudget): JsonValue[] {
++/** Reads values lazily from a complete JSON source. */
++export function* jsonValues(text: string, command: string, budget?: JsonBudget): Generator<JsonValue> {
+   budget?.step(Math.ceil(text.length / 64));
+   budget?.reserve(text.length * 2);
+   const reader = new JsonReader(text, command, budget);
+-  const values: JsonValue[] = [];
+   for (;;) {
+     reader.skipSpace();
+-    if (reader.done()) return values;
++    if (reader.done()) return;
+     budget?.reserve(8, 1);
+-    values.push(reader.value());
++    yield reader.value();
+   }
+ }
+ 
++/** Reads every value in a stream of concatenated JSON texts. */
++export function parseJsonStream(text: string, command: string, budget?: JsonBudget): JsonValue[] {
++  return [...jsonValues(text, command, budget)];
++}
++
+ export function parseJsonText(text: string, command: string, budget?: JsonBudget): JsonValue {
+   const values = parseJsonStream(text, command, budget);
+   const only = values[0];
+diff --git a/src/shell/commands/jq.ts b/src/shell/commands/jq.ts
+index a95db45..dc1ad82 100644
+--- a/src/shell/commands/jq.ts
++++ b/src/shell/commands/jq.ts
+@@ -1,7 +1,7 @@
+ import { isVfsError } from "../../core/errors.js";
+ import { compileJq, JqRuntimeError, JqSyntaxError, parseJqArgument } from "../../core/jq.js";
+ import { JqEvaluationBudget } from "../../core/jq-budget.js";
+-import { type JsonValue, parseJsonStream, renderJson } from "../../core/json-value.js";
++import { type JsonValue, jsonValues, renderJson } from "../../core/json-value.js";
+ import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
+ import {
+   type AppletSpecWithOptions,
+@@ -9,7 +9,7 @@ import {
+   defineApplet,
+   parseAppletOptions,
+ } from "./applet.js";
+-import { BufferedTextWriter, inputTexts, writeText } from "./helpers.js";
++import { BufferedTextWriter, collectText, readFileText, writeText } from "./helpers.js";
+ 
+ const JQ = {
+   name: "jq",
+@@ -108,21 +108,19 @@ function jqInvocation(argv: readonly string[], budget: JqEvaluationBudget): JqIn
+   }
+ }
+ 
+-async function jqInputs(
++async function* jqInputs(
+   context: ShellCommandContext,
+   paths: readonly string[],
+   fds: ShellFileDescriptors,
+   budget: JqEvaluationBudget,
+-): Promise<JsonValue[]> {
+-  const inputs: JsonValue[] = [];
+-  const collected = await inputTexts(context, paths, fds[0]);
+-  try {
+-    for (const input of collected.value) {
+-      for (const value of parseJsonStream(input.text, "jq", budget)) inputs.push(value);
++): AsyncGenerator<JsonValue> {
++  for (const path of paths.length === 0 ? ["-"] : paths) {
++    const collected = path === "-" ? await collectText(context, fds[0]) : await readFileText(context, path);
++    try {
++      yield* jsonValues(collected.value, "jq", budget);
++    } finally {
++      collected.release();
+     }
+-    return inputs;
+-  } finally {
+-    collected.release();
+   }
+ }
+ 
+@@ -146,7 +144,7 @@ async function runJqFilter(
+   context: ShellCommandContext,
+   fds: ShellFileDescriptors,
+   filter: ReturnType<typeof compileJq>,
+-  subjects: readonly JsonValue[],
++  subjects: Iterable<JsonValue> | AsyncIterable<JsonValue>,
+   has: (name: string) => boolean,
+   budget: JqEvaluationBudget,
+ ): Promise<{ readonly status: number; readonly last: JsonValue | undefined }> {
+@@ -154,21 +152,19 @@ async function runJqFilter(
+   const render = jqRenderer(has, budget);
+   let last: JsonValue | undefined;
+   try {
+-    for (const subject of subjects) {
+-      let results: JsonValue[];
++    for await (const subject of subjects) {
+       try {
+-        results = filter.run(subject, context.budget);
++        for (const value of filter.stream(subject, context.budget)) {
++          last = value;
++          context.budget.io(1);
++          await output.write(has("join-output") ? render(value) : `${render(value)}\n`);
++        }
+       } catch (error) {
+         if (!(error instanceof JqRuntimeError)) throw error;
+         await output.flush();
+         await writeText(fds[2], `${error.message}\n`);
+         return { status: RUNTIME_FAILED, last };
+       }
+-      for (const value of results) {
+-        last = value;
+-        context.budget.io(1);
+-        await output.write(has("join-output") ? render(value) : `${render(value)}\n`);
+-      }
+     }
+     await output.flush();
+     return { status: 0, last };
+@@ -202,16 +198,26 @@ export const jqCommand = /* @__PURE__ */ defineApplet(JQ, async (context, argv,
+       return FILTER_REJECTED;
+     }
+ 
+-    let inputs: JsonValue[];
++    let subjects: Iterable<JsonValue> | AsyncIterable<JsonValue> = has("null-input") ? [null] : jqInputs(context, paths, fds, budget);
+     try {
+-      inputs = has("null-input") ? [] : await jqInputs(context, paths, fds, budget);
++      if (has("slurp") && !has("null-input")) {
++        const all: JsonValue[] = [];
++        for await (const subject of subjects) all.push(subject);
++        subjects = [all];
++      }
+     } catch (error) {
+       await writeText(fds[2], `${isVfsError(error) ? error.message : String(error)}\n`);
+       return RUNTIME_FAILED;
+     }
+-
+-    const subjects = has("null-input") ? [null] : has("slurp") ? [inputs] : inputs;
+-    const { status, last } = await runJqFilter(context, fds, filter, subjects, has, budget);
++    let result: Awaited<ReturnType<typeof runJqFilter>>;
++    try {
++      result = await runJqFilter(context, fds, filter, subjects, has, budget);
++    } catch (error) {
++      if (!isVfsError(error) || error.code !== "EINVAL") throw error;
++      await writeText(fds[2], `${error.message}\n`);
++      return RUNTIME_FAILED;
++    }
++    const { status, last } = result;
+     if (status !== 0) return status;
+ 
+     if (!has("exit-status")) return 0;

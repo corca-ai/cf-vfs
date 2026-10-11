@@ -231,3 +231,42 @@ The [API-free optimization evaluation](../bench/git-no-api-2026-10-10/report.md)
 compares this cache, pack storage and a rejected copy-on-write prototype locally
 and on Cloudflare. Pack preparation remains an explicit external maintenance
 choice through the existing Git SDK; automatic packing is not enabled.
+
+## Incremental staging for change-recorded workspaces
+
+A host already using `recordChanges: true` can opt into incremental whole-tree
+staging through the separately imported command:
+
+```ts
+import { createTrackedGitCommand } from "@corca-ai/cf-vfs/shell/commands/git-tracked";
+
+const shell = new Shell({
+  fileSystem: workspace,
+  commands: [createTrackedGitCommand(workspace)],
+});
+```
+
+Supply the same trusted filesystem object to both constructors. Shell still
+applies its normal roots, credentials and limits; the workspace feed stays
+inside the host-owned tracker. Keep the command and shell alive between
+executions to reuse checkpoints. Normal `git add .` and `git add -A` at the
+repository root establish a checkpoint after successful staging. Subsequent
+calls in symlink-free repositories inspect at most 128 changed regular-file
+paths. A commit made through this command preserves the checkpoint when the
+index and worktree are unchanged.
+
+The first call, restart, failed add, changed index/HEAD/config/ignore rules,
+permission or policy change, deletion, directory operation, any repository symlink,
+unsupported wrapper, or large change set uses the full walk. Changes outside
+the repository also invalidate reuse: they can back a symlinked config or ignore
+file. Credential-bound VFS objects cannot provide the feed; pass the trusted
+owner and specify execution credentials through Shell. Open collaborative
+document overlays select the full walk through the existing bulk-source hint.
+As with ordinary Git, hosts must serialize repository commands with edits and
+use one mutating filesystem owner per database.
+
+This adds no filesystem methods. The default `gitCommand` remains independent
+of the tracker. Enabling `recordChanges` for the first time adds storage writes
+to mutations, so compare the whole editing workload when considering that
+separate configuration choice. Existing public benchmark scores retain their
+original default-command workload; incremental staging is evaluated separately.

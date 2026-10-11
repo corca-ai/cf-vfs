@@ -1,0 +1,35 @@
+
+ RUN  v4.1.10 /Users/ak/prjs/cc/cf-vfs
+
+ ❯ test/git-tracked.test.ts (19 tests | 1 failed) 1319ms
+   × rechecks ignore rules reached through a symlink inside the repository 61ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/git-tracked.test.ts > rechecks ignore rules reached through a symlink inside the repository
+AssertionError: expected '?? "hidden"\nM  "rules"\n' to contain 'A  "hidden"'
+
+- Expected
++ Received
+
+- A  "hidden"
++ ?? "hidden"
++ M  "rules"
++
+
+ ❯ test/git-tracked.test.ts:213:42
+    211|   await fs.writeFile("/repo/rules", "");
+    212|   await ok("git add .");
+    213|   expect(await ok("git status --short")).toContain('A  "hidden"');
+       |                                          ^
+    214| });
+    215|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 18 passed (19)
+   Start at  00:15:44
+   Duration  1.62s (transform 198ms, setup 0ms, import 253ms, tests 1.32s, environment 0ms)
+

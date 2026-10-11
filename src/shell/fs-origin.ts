@@ -14,3 +14,8 @@ export function registerFileSystemOrigin(view: ShellFileSystem, root: object): v
 export function fileSystemOrigin(view: ShellFileSystem): object {
   return views.get(view) ?? view;
 }
+
+/** Compare ownership without exposing the host filesystem to an applet. */
+export function hasFileSystemOrigin(view: ShellFileSystem, root: object): boolean {
+  return views.get(view) === roots.get(root) && roots.has(root);
+}

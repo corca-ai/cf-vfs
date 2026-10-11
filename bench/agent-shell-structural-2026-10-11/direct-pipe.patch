@@ -1,0 +1,88 @@
+diff --git a/src/shell/pipe.ts b/src/shell/pipe.ts
+index ddc0813..d665d83 100644
+--- a/src/shell/pipe.ts
++++ b/src/shell/pipe.ts
+@@ -36,7 +36,7 @@ export interface BytePipe {
+ }
+ 
+ interface SharedSinkState {
+-  writer: WritableStreamDefaultWriter<Uint8Array>;
++  writer: { write(chunk: Uint8Array): Promise<void>; close(): Promise<void>; abort(reason?: unknown): Promise<void> };
+   references: number;
+   terminal: boolean;
+ }
+@@ -92,12 +92,13 @@ class BytePipeState {
+   #pullWaiters: Array<() => void> = [];
+   readonly options: BytePipeOptions;
+   readonly readable: ReadableStream<Uint8Array>;
+-  readonly writable: WritableStream<Uint8Array>;
++  readonly writer: SharedSinkState["writer"];
++  #pending: Promise<void> = Promise.resolve();
+ 
+   constructor(options: BytePipeOptions) {
+     this.options = options;
+     this.readable = this.#createReadable();
+-    this.writable = this.#createWritable();
++    this.writer = this.#createWriter();
+   }
+ 
+   #cancellationError(): unknown {
+@@ -203,34 +204,40 @@ class BytePipeState {
+     this.#wakeWriters();
+   }
+ 
+-  #createWritable(): WritableStream<Uint8Array> {
+-    return new WritableStream<Uint8Array>({
+-      write: async (chunk) => {
+-        try {
+-          this.#accept(chunk);
+-          await this.#waitForCapacity();
+-        } catch (error) {
+-          this.#fail(error);
+-          throw error;
+-        }
++  #createWriter(): SharedSinkState["writer"] {
++    return {
++      write: (chunk) => {
++        this.#pending = this.#pending.then(async () => {
++          try {
++            this.#accept(chunk);
++            await this.#waitForCapacity();
++          } catch (error) {
++            this.#fail(error);
++            throw error;
++          }
++        });
++        return this.#pending;
+       },
+       close: () => {
+-        this.#removeAbortListener();
+-        if (this.#cancelled === undefined) this.#controller?.close();
+-        this.#wakeWriters();
++        this.#pending = this.#pending.then(() => {
++          this.#removeAbortListener();
++          if (this.#cancelled === undefined) this.#controller?.close();
++          this.#wakeWriters();
++        });
++        return this.#pending;
+       },
+-      abort: (reason) => {
++      abort: async (reason) => {
+         this.#removeAbortListener();
+-        if (this.#cancelled === undefined) this.#controller?.error(reason);
+-        this.#wakeWriters();
++        this.#fail(reason ?? new VfsError("EPIPE", "pipe aborted"));
+       },
+-    });
++    };
+   }
++
+ }
+ 
+ export function createBytePipe(options: BytePipeOptions): BytePipe {
+   const state = new BytePipeState(options);
+   if (options.signal.aborted) state.abortFromSignal();
+   else options.signal.addEventListener("abort", state.abortFromSignal, { once: true });
+-  return { readable: state.readable, sink: sinkFromWritable(state.writable) };
++  return { readable: state.readable, sink: new SharedSink({ writer: state.writer, references: 1, terminal: false }) };
+ }

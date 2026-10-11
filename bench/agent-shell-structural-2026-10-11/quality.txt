@@ -1,0 +1,41 @@
+
+> @corca-ai/cf-vfs@0.4.2 test:quality
+> biome lint --config-path biome.quality.jsonc --max-diagnostics=none src test
+
+src/core/json-value.ts:191:3 suppressions/unused ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Suppression comment has no effect. Remove the suppression or make sure you are suppressing the correct rule.
+  
+    189 │   private offset = 0;
+    190 │   private depth = 0;
+  > 191 │   // biome-ignore lint/suspicious/noControlCharactersInRegex: JSON forbids raw U+0000–U+001F in strings.
+        │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    192 │   private readonly stringBoundary = /["\\\u0000-\u001f]/gu;
+    193 │ 
+  
+
+src/core/json-value.ts:379:3 suppressions/unused ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Suppression comment has no effect. Remove the suppression or make sure you are suppressing the correct rule.
+  
+    378 │ function renderJsonString(value: string): string {
+  > 379 │   // biome-ignore lint/suspicious/noControlCharactersInRegex: JSON output must escape controls, including DEL in this profile.
+        │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    380 │   return `"${value.replace(/["\\\u0000-\u001f\u007f]/gu, escapedJsonCharacter)}"`;
+    381 │ }
+  
+
+src/core/path.ts:7:1 suppressions/unused ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Suppression comment has no effect. Remove the suppression or make sure you are suppressing the correct rule.
+  
+    5 │ const MAX_NAME_BYTES = 255;
+    6 │ const DOT_COMPONENT = /(?:^|\/)\.\.?(?:\/|$)/u;
+  > 7 │ // biome-ignore lint/suspicious/noControlCharactersInRegex: NUL and non-ASCII paths require full byte validation.
+      │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    8 │ const NON_CANONICAL_ASCII = /\/\/|\/\.\.?(?:\/|$)|[^\x01-\x7f]/;
+    9 │ 
+  
+
+Checked 340 files in 23ms. No fixes applied.
+Found 3 warnings.

@@ -16,6 +16,10 @@ included.
 
 ## [Unreleased]
 
+- Add a separately imported Git command that reuses the existing workspace change
+  feed for incremental whole-tree staging, with full-walk fallbacks and normal
+  POSIX checks. Checkpoints survive commits of an unchanged index.
+
 - Avoid repeated UTF-8 encoding in byte-order comparisons used by non-interactive
   sorting and JSON filters, retaining supplementary and malformed-surrogate order.
 

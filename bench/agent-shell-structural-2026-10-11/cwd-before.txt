@@ -1,0 +1,39 @@
+
+ RUN  v4.1.10 /Users/ak/prjs/cc/cf-vfs
+
+ ❯ test/git-tracked.test.ts (20 tests | 1 failed) 1353ms
+   × validates each -C operand before accepting an unchanged checkpoint 30ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/git-tracked.test.ts > validates each -C operand before accepting an unchanged checkpoint
+AssertionError: expected { Object (exitCode, stdout, ...) } to deeply equal { exitCode: 1, stdout: '', …(1) }
+
+- Expected
++ Received
+
+  {
+-   "exitCode": 1,
+-   "stderr": "/repo/d0/f: git: not a directory
+- ",
++   "exitCode": 0,
++   "stderr": "",
+    "stdout": "",
+  }
+
+ ❯ test/git-tracked.test.ts:221:29
+    219|   const expected = await plain.executeText({ script, cwd: "/repo" });
+    220|   expect(expected.exitCode).not.toBe(0);
+    221|   expect(await run(script)).toEqual(expected);
+       |                             ^
+    222|   await fs.writeFile("/repo/d0/f", "next\n");
+    223|   await ok("git -C /repo/d0 -C .. add -A .");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 19 passed (20)
+   Start at  00:57:06
+   Duration  1.65s (transform 191ms, setup 0ms, import 245ms, tests 1.35s, environment 0ms)
+
