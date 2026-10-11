@@ -200,3 +200,50 @@ resource limits were relaxed. Node (2,002), Workers (158), POSIX (46), execution
 limits (14), all twelve bundle budgets, package exports, docs, types, lint,
 quality, comparison protocol and full benchmark gates passed. Existing lint
 advisories and quality suppressions remain unchanged. See `verification.json`.
+
+## Public deployment and historical-drift control
+
+Committed/pushed runtime source **`a0cc061`**, fingerprint
+`a81d4ac4d4655aa3683b53c69b7a9564ef79bdb1ea06b235624537ee527e3c50`.
+The first public deployment was `0b7550bd-ce80-4ea7-8392-9c5f8c0e9f78`.
+Its complete 190-row run passed all 60,648 checks but screened 1.1459 overall
+against the saved historical public baseline. A fresh repeat screened 1.1626;
+these flags were investigated rather than ignored after a favorable target.
+
+Temporarily restoring the **previous production version** and running the same
+complete public plan now also screened approximately **1.163** against its own
+historical result. That identical-code historical drift accounts for the
+apparent overall slowdown; the exact platform/storage-state cause is not
+established. These time-adjacent three-sample controls diagnose drift and do
+not replace the ten-pair private CF comparison or prove causal equivalence.
+All historical and fresh flags are retained in `public-followup.json.gz`.
+
+After restoring the candidate, the outer Worker advertised the new build while
+the DO still advertised the old build for several minutes. The expected-build
+guard collected no mixed-build samples. That guarded wait was stopped and the
+identical committed runtime and unchanged build/source stamp were redeployed;
+no library change, migration or binding change was made. See
+`public-propagation.json`. This preserves the measured source identity while
+forcing a fresh deployment; the final outer Worker and DO builds matched.
+Cloudflare documents eventual code propagation between Workers and DOs in its
+[known issues](https://developers.cloudflare.com/durable-objects/platform/known-issues/#code-updates).
+
+Final deployed version **`21577e2c-d3a8-4378-b73a-ef8a5d277af8`**, run
+**`f1f7be22-2242-4188-a9cd-1d611e45e390`**, completed
+2026-10-11 13:17:04 UTC: **190 rows, 60,648 checks**, expected source/build
+verified. Compared with the freshly remeasured previous version, descriptive
+geometric ratios are overall **0.9861**, files **0.9778**, Git/coding **0.9872**,
+and metadata cache **1.0214**. Fifty-seven per-workload point estimates exceed
++5%, with zero unresolved zeros; all are retained. These three-sample ratios
+are not a new general FS/Git speedup claim, nor a claim that every row improves.
+The matching full ten-pair comparison and attribution controls above remain
+the adoption evidence. Public records have **no native SQL coverage**; native
+cost gates come from the separate paired CF measurements.
+
+The final live public WebSocket smoke passed its exact stdout, stderr and
+status checks for a named Bash script, jq rewrite, sed editing, and Unicode
+`sort | uniq`; its UUID-owned workspace was removed. Repeated public runs
+reuse the same commit identity, leaving the existing history deduplication and
+190-row sparkline cohort intact. All three owned private evaluation services
+and their temporary compiled graphs were removed after verification. No npm
+package was published.

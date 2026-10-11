@@ -30,7 +30,8 @@ against native Bash/jq/sed in the C locale. The two large sorts are stress
 fixtures. Native uniq/wc field padding alone is normalized for this oracle;
 VFS benchmark stdout is exact.
 
-The private Worker has no public product API and is removed after evaluation.
+The three private evaluation Workers have no public product API and were
+removed after evaluation.
 Authentication comes from an ignored local secrets file; no token is archived.
 
 Reproduce the final graph and exploratory comparators in a new directory:
@@ -81,3 +82,21 @@ labels. `crossover-mono-escaped.mjs` retains their conditional product estimate
 and uncertainty, separate from both the ten-workflow headline and full FS/Git
 score. These controls diagnose placement/import effects; they cannot establish
 universal noninferiority.
+
+
+Public verification keeps the historical baseline, two initial candidate runs,
+a fresh previous-production-version control, and the restored candidate's
+final run. `summarize-public.mjs` validates all 190-row/60,648-check results and
+retains descriptive flags without replacing the full paired approval evidence.
+Its readers accept both replay JSON and archived `.json.gz`. See
+`public-verification.json` for the final source/build/deployment/run identity,
+`public-propagation.json` for the guarded restore/redeploy, and
+`public-smoke.json` for the final live shell output.
+
+To replay private Worker measurements, restore the graphs, then recreate the
+ignored `agent2-baseline` and `agent2-candidate` symlinks under
+`bench/three-hour-2026-10-10/compiled/` to the restored graph roots. A/A also
+requires a separate byte-identical baseline copy linked as `agent2-baseline-copy`.
+Use the archived source templates for each phase and configure the private
+secret locally; remove those services and symlinks after replay. Library graphs
+and private service configurations remain separate from the production API.

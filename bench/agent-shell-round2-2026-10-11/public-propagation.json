@@ -1,0 +1,10 @@
+{
+  "baselineVersion": "8950c793-d890-4278-86e2-741870a84b83",
+  "initialCandidateVersion": "0b7550bd-ce80-4ea7-8392-9c5f8c0e9f78",
+  "restoredCandidateVersion": "21577e2c-d3a8-4378-b73a-ef8a5d277af8",
+  "candidateSourceCommit": "a0cc061bda4228bdea0c78e98f64dfd90a836135",
+  "candidateBuild": "a81d4ac4d4655aa3683b53c69b7a9564ef79bdb1ea06b235624537ee527e3c50",
+  "observation": "After restoring the original candidate version by rollback, the outer Worker advertised the candidate build while the DO snapshot still advertised the baseline build for several minutes. The expected-build guard collected no mixed-build samples. That guarded wait was stopped; identical committed runtime code and the unchanged generated build/source identity were redeployed, producing the restored version above. The final full run then started with matching Worker and DO builds.",
+  "note": "Fresh redeploy used Wrangler directly to preserve the already committed runtime source identity; pending changes were benchmark evidence and the generated build stamp only. Measured source fingerprint and emitted comparator were checked against the frozen graph. No migration, binding, schema, library source, API or dependency changed.",
+  "reference": "https://developers.cloudflare.com/durable-objects/platform/known-issues/#code-updates"
+}
