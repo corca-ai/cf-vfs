@@ -63,6 +63,10 @@ uncached rows and reports the 44 cache rows separately.
 - `full-local-wrapper`, `full-cf-wrapper`: complete default-command controls.
   The optional wrapper is not imported by these benchmark suites.
 - `default-git-bundle-equivalence`: baseline and default candidate bundle hashes.
+- `public-verification`, `public-assessment`, `public-candidate`, `public-smoke`:
+  post-deployment identity, complete public snapshot and shell checks.
+- `private-*-cleanup*`, `local-cleanup`: removal of the two temporary Workers
+  and owned local graphs/links; the public Worker remains deployed.
 - `cost-recheck-*`: 10 repeats of a tiny failed-checkout counter difference.
 - `check-accepted-release`, `bench-check-accepted-release`: final complete verification logs.
   Earlier checks remain as exploratory evidence.

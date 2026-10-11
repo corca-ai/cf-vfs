@@ -181,4 +181,22 @@ Three pre-existing unused lint-suppression warnings remain.
 Both temporary private Workers were deleted, their test rooms cleared, and the
 owned local build graphs/credential symlink removed after hash-verified archival.
 Shared credential files were retained. Knip also passes without restored graphs.
-Public deployment verification is recorded in the follow-up delivery entry.
+Public deployment uses source commit
+`665c38dec817da15db006ba3de8c75069df0fa43`, Worker version
+`af4b76e3-4520-4e53-b87f-e0a039c5f1d0`, and build
+`2372eeb50aa33ba94d0964cdd8b38cc7e9af41d06ae29d0868a9153e181e3f2b`.
+Fresh public run `f85809c3-9151-4173-bad2-873bf21cf00d` verified all **190 rows**
+and **60,648 checks**, with the expected commit/build/deployment IDs. The public
+WebSocket shell also matched the Bash/jq/sed/pipeline/supplementary-Unicode
+workflow and removed its temporary workspace.
+
+The three-sample public snapshot versus the captured baseline has time ratios
+**0.96931 overall**, **0.95379 files**, **0.97151 Git**, **0.95109 cache**.
+It still has **37 >5% flags**, zero unresolved zero timings, and the assessment
+correctly returns `requiresReview: true`. This is descriptive verification,
+not evidence of a default-command speedup or a regression-free timing pass.
+The complete ten-pair controls, known-identical control, and byte-identical
+default Git bundle above provide the relevant interpretation. The new tracker
+is not enabled in this public default workload, so its target gains are not
+claimed for the public aggregate or demo shell. See `public-verification`,
+`public-assessment`, `public-candidate` and `public-smoke` in the evidence folder.

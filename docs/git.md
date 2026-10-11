@@ -257,7 +257,7 @@ index and worktree are unchanged.
 
 The first call, restart, failed add, changed index/HEAD/config/ignore rules,
 permission or policy change, deletion, directory operation, any repository symlink,
-unsupported wrapper, or large change set uses the full walk. Changes outside
+a repository at `/`, unsupported wrapper, or large change set uses the full walk. Changes outside
 the repository also invalidate reuse: they can back a symlinked config or ignore
 file. Credential-bound VFS objects cannot provide the feed; pass the trusted
 owner and specify execution credentials through Shell. Open collaborative
