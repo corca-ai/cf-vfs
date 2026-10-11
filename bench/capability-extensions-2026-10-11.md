@@ -13,7 +13,10 @@ at most 1,000 paths and returns ordered, per-path stat/error results. Duplicates
 are retained. Ordinary canonical paths are read through bounded, 64-parameter
 `VALUES` relations driving indexed point queries with `CROSS JOIN`. Paths with
 POSIX operators or a namespace containing symlinks use existing resolution;
-opaque metadata hydration retains the ordinary implementation. Each path still
+opaque metadata hydration retains the ordinary implementation after the initial
+batch lookup and may therefore add reads for opaque paths. The ordinary inline
+probes and full-suite profiles are not a universal read-cost guarantee for every
+path class. Each path still
 checks its credential view's ancestors. Nothing caches a completed permission
 verdict or file body. RPC, policy roots, reserved shell paths, and the
 collaborative document overlay preserve their existing checks and metadata.
@@ -215,5 +218,24 @@ every operation improves or that the cache aggregate improves significantly.
 
 Only `statMany` expands the VFS interface. The index composes existing host
 capabilities; it does not enable the feed in the demo or make Git incremental.
-The rejected query forms were not adopted. Public rollout and its separate
-functional/descriptive benchmark evidence will be recorded after deployment.
+The rejected query forms were not adopted. Public rollout completed on https://vfs.borca.ai/ (source `ea1b5dc`). Build
+`0033f8fc1080e600aad424f09c29d9bec3574578aa97079da37f696de761407a`, deployment
+`962d6ad9-b9a2-4701-a3d4-8de4563041c5`. The actual public shell passes Git
+init/add/commit/status, document editing and subsequent Git status, local clone
+and content checks, and DAC denial/restoration. Its unique temporary directory
+was removed. This is functional verification of the collaborative demo wrapper;
+it is not a separate full latency claim for that wrapper.
+
+The public page run verifies 60,648 outputs and matches the new build and source
+commit. Its three-sample descriptive latency ratios versus the deployment-before
+baseline are overall 0.932086, files 0.947812, Git 0.929896 and cache 0.919246.
+Thirty-nine workload medians cross +5%, with no unresolved comparisons. These
+single-run observations are not the controlled adoption evidence and do not
+erase individual flags. Raw public results, the compact comparison and shell
+smoke are retained in the evidence directory. The benchmark page now has the
+new source commit's result available for its existing history/sparklines.
+
+Both private evaluation Workers were deleted. Completed drivers clear their
+rooms in finally blocks; earlier cancelled rooms were explicitly cleared with
+successful responses. Owned generated graphs and the debug tail were removed;
+lossless archives and pinned reproduction instructions remain.

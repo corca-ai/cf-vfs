@@ -223,6 +223,9 @@ Existing filesystem implementations can omit the capability. No file body or
 read authorization is implied by metadata access.
 
 The SQL backend checks each path with the same credentials as ordinary reads.
-Complex paths and symlink resolution retain the ordinary implementation. The
+Complex paths and symlink resolution retain the ordinary implementation. Opaque
+object metadata still uses ordinary hydration after the batch lookup and can
+require additional reads; this is not a fewer-reads guarantee for every path
+class. The
 optional Git applet coalesces overlapping metadata reads; shell roots, reserved
 paths, execution budgets, and fatal permission refusals still apply.
