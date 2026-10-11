@@ -38,6 +38,27 @@ describe("Bash v4 brace expansion and backtick substitution", () => {
       stderrIncludes: ["shell expansion work limit exceeded"],
     },
     {
+      name: "leaves mixed and non-ASCII brace range endpoints literal like Bash",
+      script: "printf '%s|' {1..a} {a..1} {é..ê}",
+      stdout: "{1..a}|{a..1}|{é..ê}|",
+    },
+    {
+      name: "leaves overflowing brace strides literal instead of losing alternatives",
+      script:
+        "printf '%s|' {1..3..999999999999999999999999999} {a..c..999999999999999999999999999}",
+      stdout: "{1..3..999999999999999999999999999}|{a..c..999999999999999999999999999}|",
+    },
+    {
+      name: "preserves empty fields when letter ranges cross a backslash",
+      script: "printf '<%s>|' {Z..b}; printf '\\n'; printf '<%s>|' {b..Z}",
+      stdout: "<Z>|<[>|<>|<]>|<^>|<_>|<`>|<a>|<b>|\n<b>|<a>|<`>|<_>|<^>|<]>|<>|<[>|<Z>|",
+    },
+    {
+      name: "preserves padding, signed strides, zero strides, and quoted alternatives",
+      script: "printf '%s|' {03..-1..-2} {a..e..2} {e..a..-2} {1..3..0} pre{a,\"two words\"}post",
+      stdout: "03|01|-1|a|c|e|e|c|a|1|2|3|preapost|pretwo wordspost|",
+    },
+    {
       name: "runs a backtick substitution and keeps its status",
       script: "printf '%s|' `printf x` \"`printf y`\"; `false`; printf '%s' $?",
       stdout: "x|y|1",

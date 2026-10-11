@@ -35,8 +35,8 @@ interface BraceGroup {
 
 /** `{1..9}`, `{-2..2}`, `{01..3}`, `{1..9..2}`. */
 const INTEGER_RANGE = /^(-?[0-9]+)\.\.(-?[0-9]+)(?:\.\.(-?[0-9]+))?$/u;
-/** `{a..z}`, `{a..z..2}`. Endpoints are single code points, not letters only. */
-const CHARACTER_RANGE = /^(.)\.\.(.)(?:\.\.(-?[0-9]+))?$/su;
+/** Bash character ranges require ASCII alphabetic endpoints. */
+const CHARACTER_RANGE = /^([a-zA-Z])\.\.([a-zA-Z])(?:\.\.(-?[0-9]+))?$/u;
 /** Bash pads when either endpoint is written with a leading zero. */
 const ZERO_PADDED = /^-?0[0-9]/u;
 
@@ -102,7 +102,12 @@ function characterRange(
   const values: Atom[][] = [];
   for (let index = 0; index < count; index += 1) {
     const code = start + direction * stride * index;
-    values.push([{ kind: "char", value: String.fromCodePoint(code) }]);
+    // Bash removes the generated backslash but retains its empty field.
+    values.push([
+      code === 92
+        ? { kind: "opaque", part: { kind: "literal", value: "", quoted: true } }
+        : { kind: "char", value: String.fromCodePoint(code) },
+    ]);
   }
   return values;
 }
@@ -137,17 +142,28 @@ function integerRange(
   return values;
 }
 
+/** Overflowing Bash signed-long strides leave the entire range literal. */
+function rangeStep(text: string | undefined): number | undefined {
+  if (text === undefined) return 1;
+  const value = BigInt(text);
+  return BigInt.asIntN(64, value) === value ? Number(value) : undefined;
+}
+
 /** Parses a range body, which — unlike a list — must be entirely literal. */
 function rangeAlternatives(content: readonly Atom[], budget: ShellBudget): Atom[][] | undefined {
   if (content.some((atom) => atom.kind !== "char")) return undefined;
   const text = content.map((atom) => (atom.kind === "char" ? atom.value : "")).join("");
   const integers = INTEGER_RANGE.exec(text);
   if (integers?.[1] !== undefined && integers[2] !== undefined) {
-    return integerRange(integers[1], integers[2], Number(integers[3] ?? "1"), budget);
+    const step = rangeStep(integers[3]);
+    return step === undefined ? undefined : integerRange(integers[1], integers[2], step, budget);
   }
   const characters = CHARACTER_RANGE.exec(text);
   if (characters?.[1] !== undefined && characters[2] !== undefined) {
-    return characterRange(characters[1], characters[2], Number(characters[3] ?? "1"), budget);
+    const step = rangeStep(characters[3]);
+    return step === undefined
+      ? undefined
+      : characterRange(characters[1], characters[2], step, budget);
   }
   return undefined;
 }
@@ -231,8 +247,11 @@ function expandAtoms(atoms: readonly Atom[], budget: ShellBudget): Atom[][] {
  * the first pass over the parts, which is the common case.
  */
 export function expandBraces(word: ShellWord, budget: ShellBudget): ShellWord[] {
+  if (
+    !word.parts.some((part) => part.kind === "literal" && !part.quoted && part.value.includes("{"))
+  )
+    return [word];
   const atoms = flatten(word);
-  if (!atoms.some((atom) => atom.kind === "char" && atom.value === "{")) return [word];
   // An alternative that contributes nothing to the word contributes no word:
   // `{a,}` is one field and `{,}` is none, while `f{,.bak}` still counts two
   // because the prefix survives into both.

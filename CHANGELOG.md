@@ -16,6 +16,10 @@ included.
 
 ## [Unreleased]
 
+- Avoid character-by-character brace scans for ordinary shell words and match
+  Bash when brace ranges mix endpoint kinds, use overflowing strides, or cross
+  the backslash character between uppercase and lowercase letters.
+
 - Add optional bounded `statMany` metadata reads and coalesce overlapping Git
   metadata requests. Add an opt-in host metadata index over the existing change
   feed, preserving credential restrictions and avoiding repeated full scans.

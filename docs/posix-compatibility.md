@@ -49,11 +49,15 @@ approximated. The language version is exported as
 
 Brace expansion runs first among the expansions and reads only the word, so a
 brace that arrives through a parameter is text rather than syntax:
-`v={a,b}; echo $v` prints the braces. Lists, ranges over integers and code
-points, an increment, zero-padded ranges, nesting, and adjacency all follow
-Bash — `pre{a,b}post`, `{1..10..3}`, `{01..3}`, `{a..e}`, `{a,{b,c}}`, and
-`{a,b}{1,2}`. Braces that spell no group stay literal, which covers `{a}`,
-`{}`, and an unmatched `{`, and quoting suppresses expansion whether written
+`v={a,b}; echo $v` prints the braces. Lists, integer ranges and ranges with
+ASCII letter endpoints, an increment, zero-padded ranges, nesting, and
+adjacency all follow Bash — `pre{a,b}post`, `{1..10..3}`, `{01..3}`, `{a..e}`, `{a,{b,c}}`, and
+`{a,b}{1,2}`. Integer endpoints retain the profile's JavaScript safe-integer
+limit. Mixed digit/letter and non-ASCII endpoints, and strides outside
+the signed 64-bit range, stay literal like Bash. A letter range crossing the
+backslash character retains an empty field at that position, as Bash does.
+Braces that spell no group stay literal, which covers `{a}`, `{}`, and an
+unmatched `{`, and quoting suppresses expansion whether written
 as `"{a,b}"` or `\{a,b\}`. An alternative that contributes nothing
 contributes no word, so `{a,}` is one word and `{,}` is none. Assignments and
 `case` patterns are single-word positions and are not expanded, matching Bash.

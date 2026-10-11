@@ -595,3 +595,8 @@ runs a benchmark; same-commit replacement and the ten-minute cache remain.
 
 The [five-hour optimization report](../bench/posix-optimizations-five-hours-2026-10-10.md)
 records matched full-suite CF results, tradeoffs and deployment checkpoints.
+
+The [Bash word-expansion report](../bench/bash-optimizations-2026-10-11.md)
+records the ordinary-word allocation optimization, Bash differential fixes,
+separate shell measurements and full FS/Git regression controls. Its shell
+aggregate does not change the existing public overall-score workload cohort.

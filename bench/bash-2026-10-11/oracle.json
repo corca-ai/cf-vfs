@@ -1,0 +1,33 @@
+{
+  "executable": "/opt/homebrew/bin/bash",
+  "version": "GNU bash, version 5.3.20(1)-release (aarch64-apple-darwin25.6.0)",
+  "locale": "C",
+  "timezone": "UTC",
+  "note": "Additional host Bash 5.3.20 evidence; pinned 5.3.3 fixtures were not regenerated (Docker unavailable)",
+  "rows": [
+    {
+      "script": "printf '%s|' {1..a} {a..1} {é..ê}",
+      "stdout": "{1..a}|{a..1}|{é..ê}|",
+      "exitCode": 0,
+      "stderr": ""
+    },
+    {
+      "script": "printf '%s|' {1..3..999999999999999999999999999} {a..c..999999999999999999999999999}",
+      "stdout": "{1..3..999999999999999999999999999}|{a..c..999999999999999999999999999}|",
+      "exitCode": 0,
+      "stderr": ""
+    },
+    {
+      "script": "printf '<%s>|' {Z..b}; printf '\\n'; printf '<%s>|' {b..Z}",
+      "stdout": "<Z>|<[>|<>|<]>|<^>|<_>|<`>|<a>|<b>|\n<b>|<a>|<`>|<_>|<^>|<]>|<>|<[>|<Z>|",
+      "exitCode": 0,
+      "stderr": ""
+    },
+    {
+      "script": "printf '%s|' {03..-1..-2} {a..e..2} {e..a..-2} {1..3..0} pre{a,\"two words\"}post",
+      "stdout": "03|01|-1|a|c|e|e|c|a|1|2|3|preapost|pretwo wordspost|",
+      "exitCode": 0,
+      "stderr": ""
+    }
+  ]
+}
