@@ -32,7 +32,8 @@ geometric mean of workload medians.
 
 The private Worker uses the existing authenticated evaluation protocol and
 separate UUID rooms. It is not a public endpoint and should be removed after
-measurement. Its compiled imports live in the existing ignored
+measurement. It was deleted after the final measurements, and temporary
+compiled directories were removed. Its compiled imports live in the existing ignored
 `bench/three-hour-2026-10-10/compiled/bash-{baseline,candidate}` directories;
 restore the archived graphs there before redeployment. Generate bindings with
 Wrangler and check `tsconfig.json` in this directory. Never commit `.dev.vars`.

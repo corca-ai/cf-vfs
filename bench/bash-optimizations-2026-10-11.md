@@ -154,5 +154,32 @@ change.
 - Lint/quality retain the existing unused NUL-regex suppression warning and
   existing benchmark informational suggestions; no new errors.
 
-Commit/push, public deployment, expected-build full public evaluation and
-post-deployment WebSocket verification: pending controlled CF adoption gate.
+Code committed and pushed as **3c7e04473a57414b3fd86cf3910e4d197cde5097**.
+Public `https://vfs.borca.ai/` deployment version:
+**cf2050f1-d1fe-45f1-88fe-29dba91bd7f5**. Expected build:
+**b729287aa1c4f3d3a701b9a7cbfc742464fbecce66a923d14c4dab183ead3bcd**.
+
+The authenticated full public run verified that build and commit, completed
+at **2026-10-11T09:19:11.642Z**, run
+**bcecdcbe-ebfa-413e-bbfb-5e9791b03939**, with **60,648 checks** and **190 rows**.
+Public WebSocket Bash verification matches all four groups, versus one of four
+before deployment. `public-smoke.json`, `public-candidate.json.gz`,
+`public-comparison.json` and `public-deployment.json` retain the evidence.
+
+The three-sample public comparison against the prior archived deployed run has
+ratios overall **0.9482**, files **0.9635**, Git **0.9461**, cache **1.0114**,
+with **47 >5% flags** and **zero unresolved measurements**. These are descriptive
+history values, not confidence-backed adoption evidence. In particular,
+`git-recovery/partial-add-retry` has a 2.00x public point estimate (624 to
+1249 ms). The controlled full CF comparison for that workload is 0.9711,
+CI [0.8958, 1.0160], with identical SQL costs; the local unbound control is
+0.9165, CI [0.8560, 1.0490]. Those controls do not confirm a persistent regression,
+and the credential-bound CF comparison does not independently establish its
+unbound performance. All public flags remain available instead of being
+suppressed or described as universal improvements.
+
+The temporary authenticated evaluation Worker was deleted, its rooms cleared,
+and owned compiled/profiling temporaries removed. Immutable graphs,
+declarations, profiles and paired measurements remain archived for review.
+No npm release was made; the package version remains 0.4.2 with an Unreleased
+changelog entry.

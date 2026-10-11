@@ -1,0 +1,33 @@
+{
+  "at": "2026-10-11T09:16:32.928Z",
+  "rows": [
+    {
+      "script": "printf '%s|' {1..a} {a..1} {é..ê}",
+      "stdout": "{1..a}|{a..1}|{é..ê}|",
+      "stderr": "",
+      "exitCode": 0,
+      "matches": true
+    },
+    {
+      "script": "printf '%s|' {1..3..999999999999999999999999999} {a..c..999999999999999999999999999}",
+      "stdout": "{1..3..999999999999999999999999999}|{a..c..999999999999999999999999999}|",
+      "stderr": "",
+      "exitCode": 0,
+      "matches": true
+    },
+    {
+      "script": "printf '<%s>|' {Z..b}; printf '\\n'; printf '<%s>|' {b..Z}",
+      "stdout": "<Z>|<[>|<>|<]>|<^>|<_>|<`>|<a>|<b>|\n<b>|<a>|<`>|<_>|<^>|<]>|<>|<[>|<Z>|",
+      "stderr": "",
+      "exitCode": 0,
+      "matches": true
+    },
+    {
+      "script": "printf '%s|' {03..-1..-2} {a..e..2} {e..a..-2} {1..3..0} pre{a,\"two words\"}post",
+      "stdout": "03|01|-1|a|c|e|e|c|a|1|2|3|preapost|pretwo wordspost|",
+      "stderr": "",
+      "exitCode": 0,
+      "matches": true
+    }
+  ]
+}
