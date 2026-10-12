@@ -46,6 +46,8 @@ export abstract class SqlPath extends SqlBase {
   }
 
   protected oneEntry(path: string): EntryRow | null {
+    const cached = this.readState.takeEntry(path);
+    if (cached !== undefined) return cached;
     const row = firstRow(
       this.sql.exec<SqlRow>(
         `SELECT ${ENTRY_JSON} AS entry

@@ -19,6 +19,8 @@ try {
       extends: join(root, "tsconfig.build.json"),
       compilerOptions: {
         rootDir: root,
+        module: "esnext",
+        moduleResolution: "bundler",
         outDir: join(temporary, "compiled"),
         declaration: false,
         noEmit: false,

@@ -25,25 +25,11 @@ import {
   SETGID_BIT,
   STICKY_BIT,
 } from "./sql-posix.js";
+import { sqlReadState } from "./sql-read-state.js";
 import { traversalAncestors } from "./traversal.js";
 import type { OpaqueStore } from "./types.js";
 
 type TraversalParent = Pick<DirectoryEntryRow, "path" | "kind" | "mode" | "uid" | "gid">;
-
-interface TraversalState {
-  generation: number;
-  depth: number;
-  stableTraversalDepth: number;
-}
-const TRAVERSAL_STATES = new WeakMap<VfsSqlStorage, TraversalState>();
-function traversalState(sql: VfsSqlStorage): TraversalState {
-  let state = TRAVERSAL_STATES.get(sql);
-  if (state === undefined) {
-    state = { generation: 0, depth: 0, stableTraversalDepth: 0 };
-    TRAVERSAL_STATES.set(sql, state);
-  }
-  return state;
-}
 
 const DEFAULT_MAX_DATABASE_BYTES = 10_000_000_000;
 const DEFAULT_DATABASE_HEADROOM_BYTES = 64 * 1024 * 1024;
@@ -70,7 +56,7 @@ export abstract class SqlBase {
   /** Non-zero while a transaction body is on the stack. */
   protected transactionDepth = 0;
   private traversalParents: Map<string, TraversalParent> | undefined;
-  private readonly traversalState: TraversalState;
+  protected readonly readState: ReturnType<typeof sqlReadState>;
   private traversalGeneration = -1;
   /**
    * `vfs_usage` as the running transaction has it.
@@ -217,7 +203,7 @@ export abstract class SqlBase {
     const limits = resolveFileSystemLimits(options);
     this.storage = storage;
     this.sql = storage.sql;
-    this.traversalState = traversalState(this.sql);
+    this.readState = sqlReadState(this.sql);
     this.chunkBytes = limits.chunkBytes;
     this.maxInlineFileBytes = limits.maxInlineFileBytes;
     this.maxInlineLogicalBytes = limits.maxInlineLogicalBytes;
@@ -434,10 +420,10 @@ export abstract class SqlBase {
   }
 
   private refreshTraversalParents(): boolean {
-    if (this.traversalState.depth !== this.traversalState.stableTraversalDepth) return false;
-    if (this.traversalGeneration !== this.traversalState.generation) {
+    if (this.readState.depth !== this.readState.stableTraversalDepth) return false;
+    if (this.traversalGeneration !== this.readState.generation) {
       this.traversalParents?.clear();
-      this.traversalGeneration = this.traversalState.generation;
+      this.traversalGeneration = this.readState.generation;
     }
     return true;
   }
@@ -567,27 +553,29 @@ export abstract class SqlBase {
   }
 
   protected transaction<T>(callback: () => T, preservesTraversal = false): T {
+    this.readState.invalidateBatch();
     // Only opt in when directory paths, kinds, owners and modes cannot change.
     // Ordinary nested mutations still disable reuse, and rollback clears it.
     if (!preservesTraversal) {
       this.traversalParents?.clear();
-      this.traversalState.generation += 1;
+      this.readState.generation += 1;
     }
     try {
       const result = this.storage.transactionSync(() => {
         this.transactionDepth += 1;
-        this.traversalState.depth += 1;
-        if (preservesTraversal) this.traversalState.stableTraversalDepth += 1;
+        this.readState.depth += 1;
+        if (preservesTraversal) this.readState.stableTraversalDepth += 1;
         try {
           const result = callback();
           if (this.transactionDepth === 1) this.flushParentTimes();
           return result;
         } finally {
+          this.readState.invalidateBatch();
           this.transactionDepth -= 1;
-          this.traversalState.depth -= 1;
-          if (preservesTraversal) this.traversalState.stableTraversalDepth -= 1;
+          this.readState.depth -= 1;
+          if (preservesTraversal) this.readState.stableTraversalDepth -= 1;
           else {
-            this.traversalState.generation += 1;
+            this.readState.generation += 1;
             this.traversalParents?.clear();
           }
           // A rollback discards the in-memory total along with the row it
@@ -605,7 +593,7 @@ export abstract class SqlBase {
       return result;
     } catch (error) {
       if (preservesTraversal) {
-        this.traversalState.generation += 1;
+        this.readState.generation += 1;
         this.traversalParents?.clear();
       }
       this.pendingUsage = undefined;

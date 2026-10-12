@@ -679,3 +679,20 @@ authenticated evaluation. `demo/benchmark-task-reference` is independently
 frozen. `node bench/pin-reference.mjs --pin --task` explicitly starts a new task
 series; ordinary optimizations must not run it. Both reference hashes and
 fixture/dependency inputs are verified by the existing reference gate.
+
+### One-use metadata after batch lookup
+
+The SQLite backend can carry at most 1,000 inline-file metadata projections
+from `statMany` into subsequent point reads. Each projection is consumed once.
+This lets a file read reuse metadata that was just fetched as part of a batch,
+including an EOF read that authorizes a cached Git content hash. Whole-body
+reads still collect the current body and preserve their immutable stream
+snapshot. This is internal reuse; no filesystem capability or option is added.
+
+The state belongs to one SQL storage identity and is shared by VFS owners using
+that storage. Every VFS transaction discards the batch before entering and on
+exit, including nested transactions and rollback. No batch is retained or used
+inside a transaction. Directory and opaque entries are excluded. Permission
+checks still run for the current principal on every access; neither file bodies
+nor permission verdicts are cached by this mechanism. The optional FS adapter's
+metadata cache remains a separate feature.

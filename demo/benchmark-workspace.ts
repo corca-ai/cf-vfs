@@ -26,6 +26,8 @@ export class BenchmarkWorkspace extends DurableObject<VfsBenchmarkEnv> {
     return this.exclusive(async () => {
       if (expectedBuild !== BENCHMARK_BUILD_ID) throw new Error("Benchmark deployment changed");
       this.suite = undefined;
+      this.task = undefined;
+      this.meter = undefined;
       this.token = undefined;
       await this.ctx.storage.deleteAll();
       this.suite = await (arm === "reference" ? createReferenceFixture : createBenchmarkFixture)(
@@ -43,6 +45,7 @@ export class BenchmarkWorkspace extends DurableObject<VfsBenchmarkEnv> {
     return this.exclusive(async () => {
       if (expectedBuild !== BENCHMARK_BUILD_ID) throw new Error("Benchmark deployment changed");
       this.task = undefined;
+      this.suite = undefined;
       this.token = undefined;
       await this.ctx.storage.deleteAll();
       this.meter = profile ? meterSqlStorage(this.ctx.storage) : undefined;

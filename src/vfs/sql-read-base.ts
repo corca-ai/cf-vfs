@@ -192,6 +192,9 @@ export abstract class SqlRead extends SqlQuery {
   /** One snapshot statement for metadata and a small whole inline body. */
   private directRead(path: string) {
     const normalized = normalizePath(path);
+    const cached = this.readState.takeEntry(normalized);
+    if (cached !== undefined)
+      return { access: { path: normalized, row: cached, followed: [] }, body: undefined };
     const row = firstRow(
       this.sql.exec<SqlRow>(
         `SELECT ${ENTRY_COLUMNS},
