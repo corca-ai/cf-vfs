@@ -1,0 +1,730 @@
+{
+  "metrics": [
+    {
+      "id": "overall",
+      "workloads": 146,
+      "ratio": {
+        "median": 0.9731573195824619,
+        "p10": 0.937641543445198,
+        "p90": 1.0118719564974836,
+        "ci95": [
+          0.9544073209393776,
+          0.9934466278563834
+        ]
+      }
+    },
+    {
+      "id": "files",
+      "workloads": 18,
+      "ratio": {
+        "median": 1.0432907560994302,
+        "p10": 0.9812069279887029,
+        "p90": 1.1414449179635633,
+        "ci95": [
+          1.0030189400479443,
+          1.114345290975096
+        ]
+      }
+    },
+    {
+      "id": "git",
+      "workloads": 128,
+      "ratio": {
+        "median": 0.9651691329608344,
+        "p10": 0.9360453880694306,
+        "p90": 0.9980410153380359,
+        "ci95": [
+          0.9433897873038641,
+          0.9814000247362518
+        ]
+      }
+    },
+    {
+      "id": "cache",
+      "workloads": 44,
+      "ratio": {
+        "median": 1.0216737126549584,
+        "p10": 0.9465790989285432,
+        "p90": 1.0997089878236483,
+        "ci95": [
+          0.9833843148785983,
+          1.0757107595521276
+        ]
+      }
+    }
+  ],
+  "flags": 46,
+  "confirmed": [
+    {
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "ratio": {
+        "median": 1.1128364389233956,
+        "p10": 1.0333333333333334,
+        "p90": 1.2392857142857143,
+        "ci95": [
+          1.0434782608695652,
+          1.194047619047619
+        ]
+      }
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ratio": {
+        "median": 1.0860328002168609,
+        "p10": 1.0166466935396012,
+        "p90": 1.1611766747657064,
+        "ci95": [
+          1.0383628731343284,
+          1.1327433628318584
+        ]
+      }
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ratio": {
+        "median": 1.1435017140552532,
+        "p10": 1.030211089141998,
+        "p90": 1.3538899082568807,
+        "ci95": [
+          1.0682730923694779,
+          1.3521739130434782
+        ]
+      }
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ratio": {
+        "median": 1.192905670237784,
+        "p10": 1.0188239478363958,
+        "p90": 1.6028378378378378,
+        "ci95": [
+          1.0655299539170506,
+          1.4846153846153847
+        ]
+      }
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": true,
+        "trial": 0
+      },
+      "ratio": {
+        "median": 1.1188593717056716,
+        "p10": 0.9099409309730845,
+        "p90": 1.426675917666105,
+        "ci95": [
+          1.0104796763629358,
+          1.2663934426229508
+        ]
+      }
+    },
+    {
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 1000,
+        "cache": true,
+        "trial": 0
+      },
+      "ratio": {
+        "median": 1.1189520156618322,
+        "p10": 0.993558933479218,
+        "p90": 1.3715272190935908,
+        "ci95": [
+          1.058654598702315,
+          1.3588110403397027
+        ]
+      }
+    },
+    {
+      "stage": {
+        "group": "coding-small",
+        "operation": "status-clean",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ratio": {
+        "median": 1.0723213798373452,
+        "p10": 0.9953772282688287,
+        "p90": 1.3012283660897623,
+        "ci95": [
+          1.0216666666666667,
+          1.2430361982191251
+        ]
+      }
+    },
+    {
+      "stage": {
+        "group": "coding-small",
+        "operation": "add-rest",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ratio": {
+        "median": 1.0919026328862396,
+        "p10": 1.006090613130765,
+        "p90": 1.265619858989424,
+        "ci95": [
+          1.0478606912023931,
+          1.1771221532091096
+        ]
+      }
+    }
+  ],
+  "costFlags": [
+    {
+      "stage": {
+        "group": "git-shell",
+        "operation": "commit",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 109,
+            "rowsRead": 116,
+            "rowsWritten": 36
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 97,
+            "rowsRead": 124,
+            "rowsWritten": 34
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "git-shell",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 89,
+            "rowsRead": 110,
+            "rowsWritten": 26
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 83,
+            "rowsRead": 121,
+            "rowsWritten": 24
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "git-shell",
+        "operation": "commit",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 175,
+            "rowsRead": 186,
+            "rowsWritten": 78
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 166,
+            "rowsRead": 236,
+            "rowsWritten": 67
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "git-shell",
+        "operation": "commit-one",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 86,
+            "rowsRead": 109,
+            "rowsWritten": 20
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 86,
+            "rowsRead": 123,
+            "rowsWritten": 18
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-small",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 2812,
+            "rowsRead": 3793,
+            "rowsWritten": 1702
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 2807,
+            "rowsRead": 3798,
+            "rowsWritten": 1701
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-small",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 79,
+            "rowsRead": 100,
+            "rowsWritten": 20
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 74,
+            "rowsRead": 105,
+            "rowsWritten": 19
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-small",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 79,
+            "rowsRead": 100,
+            "rowsWritten": 20
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 74,
+            "rowsRead": 105,
+            "rowsWritten": 19
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 2845,
+            "rowsRead": 3858,
+            "rowsWritten": 1717
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 2834,
+            "rowsRead": 3860,
+            "rowsWritten": 1716
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 91,
+            "rowsRead": 110,
+            "rowsWritten": 26
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 80,
+            "rowsRead": 112,
+            "rowsWritten": 25
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 91,
+            "rowsRead": 110,
+            "rowsWritten": 26
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 80,
+            "rowsRead": 112,
+            "rowsWritten": 25
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-small",
+        "operation": "prepare",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 20513,
+            "rowsRead": 29473,
+            "rowsWritten": 12437
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 20514,
+            "rowsRead": 29481,
+            "rowsWritten": 12436
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-small",
+        "operation": "commit-partial",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 67,
+            "rowsRead": 90,
+            "rowsWritten": 14
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 68,
+            "rowsRead": 98,
+            "rowsWritten": 13
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-small",
+        "operation": "commit-rest",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 67,
+            "rowsRead": 90,
+            "rowsWritten": 14
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 68,
+            "rowsRead": 98,
+            "rowsWritten": 13
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 20513,
+            "rowsRead": 29473,
+            "rowsWritten": 12437
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 20514,
+            "rowsRead": 29481,
+            "rowsWritten": 12436
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 67,
+            "rowsRead": 90,
+            "rowsWritten": 14
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 68,
+            "rowsRead": 98,
+            "rowsWritten": 13
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 67,
+            "rowsRead": 90,
+            "rowsWritten": 14
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 68,
+            "rowsRead": 98,
+            "rowsWritten": 13
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "git-recovery",
+        "operation": "batch-capacity",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 1754,
+            "rowsRead": 3742,
+            "rowsWritten": 1004
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 1732,
+            "rowsRead": 3746,
+            "rowsWritten": 1002
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "git-recovery",
+        "operation": "partial-add-retry",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 8572,
+            "rowsRead": 21492,
+            "rowsWritten": 5923
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 8562,
+            "rowsRead": 21498,
+            "rowsWritten": 5921
+          }
+        }
+      ]
+    },
+    {
+      "stage": {
+        "group": "git-recovery",
+        "operation": "checkout-failure",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "version": "baseline",
+          "sql": {
+            "statements": 3449,
+            "rowsRead": 7591,
+            "rowsWritten": 1606
+          }
+        },
+        {
+          "version": "candidate",
+          "sql": {
+            "statements": 3433,
+            "rowsRead": 7598,
+            "rowsWritten": 1604
+          }
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "baseline": {
+      "statements": 332530,
+      "rowsRead": 743212,
+      "rowsWritten": 186846
+    },
+    "candidate": {
+      "statements": 332303,
+      "rowsRead": 743361,
+      "rowsWritten": 186801
+    }
+  }
+}

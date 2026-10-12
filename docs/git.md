@@ -116,6 +116,15 @@ publication, including errors the engine normally retries. Object directory
 creation is shared within the command; each actual write still checks traversal,
 permissions, quotas and the session umask. Index serialization and compression
 concurrency retain their existing bounds.
+Commit uses the same object writer for trees and the commit object, publishing
+them before updating the branch reference. It reserves space only after the
+index and parent reads, at most 128 KiB and within current shell/backend headroom.
+Reads, directory enumeration, capacity spills and reference writes flush pending
+objects; body reads and individual writes release the reservation first. Missing
+capacity or batch support falls back to individual writes. Object publication
+also rechecks the existing per-path bulk-eligibility hint; if any path requires
+individual I/O or the hint is absent, that set uses individual writes. A failed object batch
+cannot publish the reference, and command completion or failure releases buffers.
 Selected-path staging prunes unrelated walker branches before stat or content
 reads. New blobs with no HEAD/index entry skip comparison reads and hashes;
 the engine reads and hashes them during staging with its normal permission and

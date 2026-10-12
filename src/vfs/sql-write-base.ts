@@ -84,20 +84,23 @@ export abstract class SqlWrite extends SqlWritePlan {
     const digest = materialized ? undefined : await this.incomingDigest(options, buffered);
     let queued = false;
     const result = this.useBuffered(buffered, (chunks, sizeBytes) =>
-      this.transaction(() => {
-        const outcome = this.commitInlineWrite(
-          plan,
-          chunks,
-          sizeBytes,
-          digest,
-          this.now(),
-          posix,
-          false,
-          !materialized,
-        );
-        queued = outcome.queuedGarbage;
-        return outcome.result;
-      }),
+      this.transaction(
+        () => {
+          const outcome = this.commitInlineWrite(
+            plan,
+            chunks,
+            sizeBytes,
+            digest,
+            this.now(),
+            posix,
+            false,
+            !materialized,
+          );
+          queued = outcome.queuedGarbage;
+          return outcome.result;
+        },
+        posix !== undefined && (!plan.createParents || plan.capturedEntry !== null),
+      ),
     );
     if (queued) await this.scheduleGarbageAlarm();
     return result;

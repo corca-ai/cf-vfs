@@ -33,13 +33,13 @@ type TraversalParent = Pick<DirectoryEntryRow, "path" | "kind" | "mode" | "uid" 
 interface TraversalState {
   generation: number;
   depth: number;
-  contentDepth: number;
+  stableTraversalDepth: number;
 }
 const TRAVERSAL_STATES = new WeakMap<VfsSqlStorage, TraversalState>();
 function traversalState(sql: VfsSqlStorage): TraversalState {
   let state = TRAVERSAL_STATES.get(sql);
   if (state === undefined) {
-    state = { generation: 0, depth: 0, contentDepth: 0 };
+    state = { generation: 0, depth: 0, stableTraversalDepth: 0 };
     TRAVERSAL_STATES.set(sql, state);
   }
   return state;
@@ -434,7 +434,7 @@ export abstract class SqlBase {
   }
 
   private refreshTraversalParents(): boolean {
-    if (this.traversalState.depth !== this.traversalState.contentDepth) return false;
+    if (this.traversalState.depth !== this.traversalState.stableTraversalDepth) return false;
     if (this.traversalGeneration !== this.traversalState.generation) {
       this.traversalParents?.clear();
       this.traversalGeneration = this.traversalState.generation;
@@ -566,9 +566,10 @@ export abstract class SqlBase {
     return this.createId();
   }
 
-  protected transaction<T>(callback: () => T, contentOnly = false): T {
-    // Append changes file contents, never cached directory access metadata.
-    if (!contentOnly) {
+  protected transaction<T>(callback: () => T, preservesTraversal = false): T {
+    // Only opt in when directory paths, kinds, owners and modes cannot change.
+    // Ordinary nested mutations still disable reuse, and rollback clears it.
+    if (!preservesTraversal) {
       this.traversalParents?.clear();
       this.traversalState.generation += 1;
     }
@@ -576,7 +577,7 @@ export abstract class SqlBase {
       const result = this.storage.transactionSync(() => {
         this.transactionDepth += 1;
         this.traversalState.depth += 1;
-        if (contentOnly) this.traversalState.contentDepth += 1;
+        if (preservesTraversal) this.traversalState.stableTraversalDepth += 1;
         try {
           const result = callback();
           if (this.transactionDepth === 1) this.flushParentTimes();
@@ -584,7 +585,7 @@ export abstract class SqlBase {
         } finally {
           this.transactionDepth -= 1;
           this.traversalState.depth -= 1;
-          if (contentOnly) this.traversalState.contentDepth -= 1;
+          if (preservesTraversal) this.traversalState.stableTraversalDepth -= 1;
           else {
             this.traversalState.generation += 1;
             this.traversalParents?.clear();
@@ -603,7 +604,7 @@ export abstract class SqlBase {
       if (this.transactionDepth === 0) this.emitCommittedMutations();
       return result;
     } catch (error) {
-      if (contentOnly) {
+      if (preservesTraversal) {
         this.traversalState.generation += 1;
         this.traversalParents?.clear();
       }

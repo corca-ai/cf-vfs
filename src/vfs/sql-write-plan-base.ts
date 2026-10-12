@@ -495,37 +495,40 @@ export abstract class SqlWritePlan extends SqlRead {
   ): { results: WriteResult[]; queuedGarbage: boolean } {
     let queuedGarbage = false;
     const results = this.useBufferedSet(collected, () =>
-      this.transaction(() =>
-        this.withDeferredUsage(() => {
-          const before = this.usage();
-          // Headroom is a property of the database rather than of the set, so it
-          // is weighed before the batch writes anything as well as after. The
-          // quotas can only be weighed after, because what the set costs is not
-          // known until every entry has decided whether it is writing at all.
-          this.assertCapacityFrom(before, 0, 0);
-          const now = this.now();
-          const written: WriteResult[] = [];
-          for (const item of collected) {
-            const outcome = this.commitInlineWrite(
-              item.plan,
-              item.lease.chunks,
-              item.lease.sizeBytes,
-              item.digest,
-              now,
-              posix,
-              true,
+      this.transaction(
+        () =>
+          this.withDeferredUsage(() => {
+            const before = this.usage();
+            // Headroom is a property of the database rather than of the set, so it
+            // is weighed before the batch writes anything as well as after. The
+            // quotas can only be weighed after, because what the set costs is not
+            // known until every entry has decided whether it is writing at all.
+            this.assertCapacityFrom(before, 0, 0);
+            const now = this.now();
+            const written: WriteResult[] = [];
+            for (const item of collected) {
+              const outcome = this.commitInlineWrite(
+                item.plan,
+                item.lease.chunks,
+                item.lease.sizeBytes,
+                item.digest,
+                now,
+                posix,
+                true,
+              );
+              if (outcome.queuedGarbage) queuedGarbage = true;
+              written.push(outcome.result);
+            }
+            const after = this.usage();
+            this.assertCapacityFrom(
+              before,
+              after.inlineBytes - before.inlineBytes,
+              after.entries - before.entries,
             );
-            if (outcome.queuedGarbage) queuedGarbage = true;
-            written.push(outcome.result);
-          }
-          const after = this.usage();
-          this.assertCapacityFrom(
-            before,
-            after.inlineBytes - before.inlineBytes,
-            after.entries - before.entries,
-          );
-          return written;
-        }),
+            return written;
+          }),
+        posix !== undefined &&
+          collected.every(({ plan }) => !plan.createParents || plan.capturedEntry !== null),
       ),
     );
     return { results, queuedGarbage };

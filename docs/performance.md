@@ -619,3 +619,22 @@ compares jq iteration, direct pipeline writes and incremental Git staging.
 Only the separately imported staging command is retained for long-lived,
 change-recorded workspaces; its cold overhead and complete default-command
 controls are reported separately from the warm-path gain.
+
+The [workspace-flow evaluation](../bench/workspace-flow-optimizations-2026-10-12.md)
+measures inspection, editing, validation, staging and commit as one agent task.
+The existing bounded directory projection now survives mutation-token reads,
+credential-bound inline write publication when no directory can be created,
+and credential-bound regular-file removal. This extends the append-only
+transaction classification to operations that preserve directory paths, kinds,
+owners and modes. It retains no file contents, file stat snapshots, mutation
+tokens, directory timestamps, or authorization verdicts. Each access checks its
+current principal; ordinary nested transactions, directory or permission changes,
+and rollback still invalidate reuse. Batched writes that might create a parent
+retain ordinary invalidation. No change recording or additional filesystem API
+is required.
+
+The same evaluation also measures commit object publication across the complete
+task. The optional Git applet reuses the existing bounded batch writer for tree
+and commit objects before reference publication. Lazy reservation and flush
+boundaries preserve read headroom, fallback writes and failure ordering. This
+does not add Git work or imports to the filesystem or non-Git shell presets.

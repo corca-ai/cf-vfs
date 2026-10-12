@@ -1,0 +1,20 @@
+--- /tmp/cf-vfs-workflow-after/compiled/src/shell/commands/git-worktree.js	2026-10-12 08:45:13
++++ /tmp/cf-vfs-workflow-commit/compiled/src/shell/commands/git-worktree.js	2026-10-12 08:58:19
+@@ -121,13 +121,15 @@
+         name: env.get("GIT_COMMITTER_NAME") ?? author.name,
+         email: env.get("GIT_COMMITTER_EMAIL") ?? author.email,
+     };
+-    const oid = await git.commit({
++    repo.fs.beginObjectWrites(repo.gitdir, 65536, 32);
++    let oid;
++    try { oid = await git.commit({
+         ...repo,
+         message,
+         author,
+         committer,
+         disallowEmpty: !args.flags.has("--allow-empty"),
+-    });
++    }); } finally { repo.fs.endObjectWrites(); }
+     await writeText(fds[1], `${oid}\n`);
+ }
+ export async function gitLog(repo, argv, fds) {

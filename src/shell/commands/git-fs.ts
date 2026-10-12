@@ -4,7 +4,7 @@ import { FsStats } from "../../fs/stats.js";
 import { NO_ENTRY_IDENTITY, type VfsStat } from "../../vfs/types.js";
 import type { ShellCommandContext } from "../types.js";
 import { GitCheckoutWrites } from "./git-checkout-writes.js";
-import { GitObjectWrites } from "./git-object-writes.js";
+import { GitObjectWrites, isLooseGitObject } from "./git-object-writes.js";
 import { gitStatReads } from "./git-stat-reads.js";
 import { collectStream, commandPath, readFileBytes } from "./helpers.js";
 
@@ -20,6 +20,7 @@ export class GitFileSystem {
     | { limit: number; snapshots: Map<string, VfsStat>; stats: Map<string, VfsStat> }
     | undefined;
   private objectWrites: GitObjectWrites | undefined;
+  private commitObjectPrefix: string | undefined;
   private checkoutWrites: { dir: string; gitdir: string; writer: GitCheckoutWrites } | undefined;
   private readonly objectDirectories = new Set<string>();
   private configPath: string | undefined;
@@ -65,24 +66,69 @@ export class GitFileSystem {
       available < capacity + inputBytes
     )
       return;
-    const release = this.context.budget.buffered(capacity);
-    this.objectWrites = new GitObjectWrites(
-      this.context,
-      `${gitdir}/objects/`,
-      capacity,
-      release,
-      (path) => {
-        if (this.objectDirectories.has(path)) return;
-        try {
-          this.mkdir(path);
-        } catch (error) {
-          if (!(error instanceof VfsError)) throw error;
-          if (error.code === "ENOENT") this.mkdir(path, true);
-          else if (error.code !== "EEXIST") throw error;
-        }
-        this.objectDirectories.add(path);
-      },
+    this.startObjectWrites(`${gitdir}/objects/`, capacity);
+  }
+
+  /** Reserve lazily: reading the index and parent commit needs full headroom. */
+  beginCommitWrites(gitdir: string): void {
+    this.commitObjectPrefix = `${gitdir}/objects/`;
+  }
+
+  endCommitWrites(): void {
+    this.endObjectWrites();
+    this.commitObjectPrefix = undefined;
+  }
+
+  private retainCommitObjects(path: string): void {
+    const prefix = this.commitObjectPrefix;
+    if (prefix === undefined || this.objectWrites !== undefined || !isLooseGitObject(path, prefix))
+      return;
+    const capacity = Math.min(
+      128 * 1024,
+      this.context.fileSystem.availableWriteBufferBytes ?? 0,
+      this.context.budget.remainingBufferedBytes?.() ?? 0,
     );
+    if (capacity > 0 && this.context.fileSystem.writeFiles !== undefined)
+      this.startObjectWrites(prefix, capacity);
+  }
+
+  private async flushCommitObjects(): Promise<void> {
+    if (this.commitObjectPrefix === undefined || this.objectWrites === undefined) return;
+    await this.objectWrites.flush();
+    this.endObjectWrites();
+  }
+
+  private async retainObject(
+    writer: GitObjectWrites,
+    path: string,
+    bytes: Uint8Array,
+    mode: number,
+  ) {
+    if (writer.matches(path) && (await writer.retain(path, bytes, mode))) return true;
+    await writer.flush();
+    if (this.commitObjectPrefix !== undefined) this.endObjectWrites();
+    return false;
+  }
+
+  private beforeObjectRead(path: string): Promise<void> | undefined {
+    return this.commitObjectPrefix === undefined
+      ? this.objectWrites?.beforeRead(path)
+      : this.flushCommitObjects();
+  }
+
+  private startObjectWrites(prefix: string, capacity: number): void {
+    const release = this.context.budget.buffered(capacity);
+    this.objectWrites = new GitObjectWrites(this.context, prefix, capacity, release, (path) => {
+      if (this.objectDirectories.has(path)) return;
+      try {
+        this.mkdir(path);
+      } catch (error) {
+        if (!(error instanceof VfsError)) throw error;
+        if (error.code === "ENOENT") this.mkdir(path, true);
+        else if (error.code !== "EEXIST") throw error;
+      }
+      this.objectDirectories.add(path);
+    });
   }
 
   beginCheckoutWrites(dir: string, gitdir: string): void {
@@ -212,11 +258,13 @@ export class GitFileSystem {
   readonly promises = {
     readFile: (path: string, options?: string | { encoding?: string }) =>
       this.operation(async () => {
+        // A read may be larger than the spare capacity observed at the last write.
+        // Publish and release commit buffers before collecting any file body.
+        if (this.objectWrites !== undefined)
+          await this.beforeObjectRead(commandPath(this.context, path));
         const encoding = typeof options === "string" ? options : options?.encoding;
         if (path === this.configPath && (encoding === "utf8" || encoding === "utf-8"))
           return (await this.readConfig(path)).value;
-        if (this.objectWrites !== undefined)
-          await this.objectWrites.beforeRead(commandPath(this.context, path));
         const lease = await this.readBytes(path);
         try {
           if (encoding !== undefined && encoding !== "utf8" && encoding !== "utf-8")
@@ -232,14 +280,12 @@ export class GitFileSystem {
         this.context.budget.io(bytes.byteLength);
         const resolved = commandPath(this.context, path);
         const mode = (options?.mode ?? 0o100666) & ~this.context.session.umask;
-        if (this.objectWrites !== undefined) {
-          if (
-            this.objectWrites.matches(resolved) &&
-            (await this.objectWrites.retain(resolved, bytes, mode))
-          )
-            return;
-          await this.objectWrites.flush();
-        }
+        this.retainCommitObjects(resolved);
+        if (
+          this.objectWrites !== undefined &&
+          (await this.retainObject(this.objectWrites, resolved, bytes, mode))
+        )
+          return;
         const creationMode = this.creationMode(resolved, mode);
         const pending = this.checkoutWrite(resolved, bytes, creationMode);
         if (pending !== undefined) return pending;
@@ -250,12 +296,17 @@ export class GitFileSystem {
     lstat: (path: string) => this.operation(() => this.fileStats(path, false)),
     readdir: (path: string) =>
       this.operation(() => {
-        const entries = this.context.fileSystem.list(commandPath(this.context, path));
-        this.context.budget.glob(entries.length);
-        // Synthetic shell devices/applets have no stored Git file bytes.
-        return entries
-          .filter((entry) => entry.ino !== NO_ENTRY_IDENTITY)
-          .map((entry) => entry.name);
+        const list = () => {
+          const entries = this.context.fileSystem.list(commandPath(this.context, path));
+          this.context.budget.glob(entries.length);
+          // Synthetic shell devices/applets have no stored Git file bytes.
+          return entries
+            .filter((entry) => entry.ino !== NO_ENTRY_IDENTITY)
+            .map((entry) => entry.name);
+        };
+        return this.commitObjectPrefix === undefined
+          ? list()
+          : this.flushCommitObjects().then(list);
       }),
     mkdir: (path: string) => this.operation(() => this.mkdir(path)),
     unlink: (path: string) =>

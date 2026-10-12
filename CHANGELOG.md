@@ -16,6 +16,16 @@ included.
 
 ## [Unreleased]
 
+- Batch Git commit tree and commit-object publication through the existing
+  bounded writer before updating refs. Reservations are lazy and released before
+  reads or individual writes; publication failure leaves the branch unchanged.
+  Object publication respects per-path bulk eligibility and uses individual
+  writes for filesystem views that require them.
+- Reuse bounded directory traversal metadata across mutation-token reads,
+  credential-bound file writes that cannot create directories, and regular-file
+  removal. Consecutive shell editing and Git tasks avoid repeated ancestor reads
+  while retaining fresh permission checks and rollback invalidation.
+
 - Add a separately imported Git command that reuses the existing workspace change
   feed for incremental whole-tree staging, with full-walk fallbacks and normal
   POSIX checks. Checkpoints survive commits of an unchanged index.

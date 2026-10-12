@@ -23,9 +23,11 @@ export abstract class SqlMove extends SqlMetadata {
     const access = this.resolveAccess(path, false, false);
     const normalized = access.path;
     if (normalized === "/") throw new VfsError("EINVAL", "cannot remove root", normalized);
+    const root = access.row ?? this.requireEntry(normalized, false);
     const state = { queued: 0 };
-    const result = this.transaction(() =>
-      this.commitRemove(normalized, access.row, access.followed, options, posix, state),
+    const result = this.transaction(
+      () => this.commitRemove(normalized, root, access.followed, options, posix, state),
+      posix !== undefined && root.kind === "file",
     );
     if (state.queued > 0) await this.scheduleGarbageAlarm();
     return result;

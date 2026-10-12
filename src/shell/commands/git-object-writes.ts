@@ -2,7 +2,11 @@ import { dirname } from "../../core/path.js";
 import type { WriteFilesEntry } from "../../vfs/types.js";
 import type { ShellCommandContext } from "../types.js";
 
-/** One add batch: objects become durable before the engine publishes its index. */
+export function isLooseGitObject(path: string, prefix: string): boolean {
+  return path.startsWith(prefix) && /^[a-f0-9]{2}\/[a-f0-9]{38}$/u.test(path.slice(prefix.length));
+}
+
+/** Objects become durable before the engine publishes its index or reference. */
 export class GitObjectWrites {
   private readonly pending = new Map<string, WriteFilesEntry>();
   private held = 0;
@@ -16,10 +20,7 @@ export class GitObjectWrites {
     private readonly mkdir: (path: string) => void,
   ) {}
   matches(path: string): boolean {
-    return (
-      path.startsWith(this.prefix) &&
-      /^[a-f0-9]{2}\/[a-f0-9]{38}$/u.test(path.slice(this.prefix.length))
-    );
+    return isLooseGitObject(path, this.prefix);
   }
   async retain(path: string, body: Uint8Array, mode: number): Promise<boolean> {
     if (this.flushing !== undefined) await this.flushing;
@@ -60,7 +61,23 @@ export class GitObjectWrites {
     );
     const write = this.context.fileSystem.writeFiles;
     if (write === undefined) throw new Error("Git object batch lost its writer");
-    await write.call(this.context.fileSystem, writes);
+    // Overlays may expose atomic batches while requiring individual writes for
+    // particular paths. Recheck at publication, before replacing those calls.
+    if (
+      writes.every(
+        (entry) =>
+          this.context.fileSystem.canUseBulkOperation?.("write-target", entry.path) === true,
+      )
+    ) {
+      await write.call(this.context.fileSystem, writes);
+    } else {
+      for (const entry of writes)
+        await this.context.fileSystem.writeFile(
+          entry.path,
+          entry.body,
+          entry.mode === undefined ? undefined : { mode: entry.mode },
+        );
+    }
   }
   close(): void {
     this.pending.clear();

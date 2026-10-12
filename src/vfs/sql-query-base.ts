@@ -277,17 +277,19 @@ export abstract class SqlQuery extends SqlContent {
     // would guard. Reading it from the written path would return the link's
     // version and never match the target's.
     if (access === undefined) {
-      return this.transaction(() =>
-        options.follow === false
-          ? this.tokenFor(this.normalizeAccessPath(path, true, false))
-          : this.guardToken(path),
+      return this.transaction(
+        () =>
+          options.follow === false
+            ? this.tokenFor(this.normalizeAccessPath(path, true, false))
+            : this.guardToken(path),
+        true,
       );
     }
     return this.transaction(() => {
       const resolved = this.resolveAccess(path, true, options.follow !== false);
       this.assertTraverse(resolved.path, resolved.followed, access);
       return options.follow === false ? this.tokenFor(resolved.path) : this.guardToken(path);
-    });
+    }, true);
   }
 
   list(path: string, posix?: PosixAccessContext): VfsStat[] {

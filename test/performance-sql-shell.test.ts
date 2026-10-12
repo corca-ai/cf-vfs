@@ -195,7 +195,7 @@ it("walks a credential-bound creation parent only once per transaction", async (
     touch: 10,
     mkdir: 10,
     symlink: 10,
-    write: 13,
+    write: 12,
     recursiveTouch: 22,
   });
 });

@@ -142,13 +142,19 @@ export async function gitCommit(
     name: env.get("GIT_COMMITTER_NAME") ?? author.name,
     email: env.get("GIT_COMMITTER_EMAIL") ?? author.email,
   };
-  const oid = await git.commit({
-    ...repo,
-    message,
-    author,
-    committer,
-    disallowEmpty: !args.flags.has("--allow-empty"),
-  });
+  repo.fs.beginCommitWrites(repo.gitdir);
+  let oid: string;
+  try {
+    oid = await git.commit({
+      ...repo,
+      message,
+      author,
+      committer,
+      disallowEmpty: !args.flags.has("--allow-empty"),
+    });
+  } finally {
+    repo.fs.endCommitWrites();
+  }
   await writeText(fds[1], `${oid}\n`);
 }
 
