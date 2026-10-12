@@ -187,7 +187,8 @@ export class VfsBenchmark extends DurableObject<VfsBenchmarkEnv> {
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
-    if (url.pathname === "/api/benchmarks/developer") {
+    const task = url.pathname.startsWith("/api/benchmarks/task");
+    if (["/api/benchmarks/developer", "/api/benchmarks/task/developer"].includes(url.pathname)) {
       if (!(await authorized(request, env.PUBLIC_BENCHMARK_TOKEN)))
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (request.method !== "POST")
@@ -198,7 +199,9 @@ export default {
           { error: "Deployment is still propagating" },
           { status: 409, headers: { "Retry-After": "2" } },
         );
-      const benchmark = env.PUBLIC_BENCHMARKS.getByName("shared-results-v1");
+      const benchmark = env.PUBLIC_BENCHMARKS.getByName(
+        task ? "agent-task-results-v1" : "shared-results-v1",
+      );
       let claim: Awaited<ReturnType<typeof benchmark.claim>>;
       try {
         claim = await benchmark.claim(
@@ -206,6 +209,7 @@ export default {
           true,
           BENCHMARK_BUILD_ID,
           env.VERSION_METADATA.id,
+          task,
         );
       } catch (error) {
         if (error instanceof Error && error.message.includes("deployment is still propagating"))
@@ -229,7 +233,8 @@ export default {
         },
       );
     }
-    if (url.pathname === "/api/benchmarks") return handlePublicBenchmarks(request, env);
+    if (["/api/benchmarks", "/api/benchmarks/task"].includes(url.pathname))
+      return handlePublicBenchmarks(request, env, task);
     if (url.pathname === "/ws") return handleTerminalRequest(request, env);
     if (request.method === "GET" && url.pathname === "/health") {
       return json({

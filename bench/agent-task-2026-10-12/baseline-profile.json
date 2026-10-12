@@ -1,0 +1,714 @@
+{
+  "profile": true,
+  "pairs": 1,
+  "warmups": 2,
+  "directories": 20,
+  "files": 1000,
+  "changed": 20,
+  "rows": [
+    {
+      "pair": 0,
+      "version": "baseline",
+      "phase": "inspect",
+      "ms": 19.63979100000006,
+      "sql": {
+        "statements": 1146,
+        "returnedRows": 3143,
+        "traversals": 0
+      },
+      "queries": [
+        [
+          "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+          1075
+        ],
+        [
+          "SELECT body FROM vfs_inline_chunks\n           WHERE entry_id = ? ORDER BY chunk_index",
+          28
+        ],
+        [
+          "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version\n       FROM vfs_entries e INDEXED BY vfs_entries_parent_name\n       WHERE e.parent_path = ? AND e.path <> '/'\n       ORDER BY e.name",
+          22
+        ],
+        [
+          "WITH requested(path) AS (VALUES (?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?))\n         SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n         FROM requested CROSS JOIN vfs_entries e INDEXED BY vfs_entries_path\n         ON e.path = requested.path",
+          20
+        ],
+        [
+          "WITH requested(path) AS (VALUES (?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?))\n         SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n         FROM requested CROSS JOIN vfs_entries e INDEXED BY vfs_entries_path\n         ON e.path = requested.path",
+          1
+        ]
+      ]
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "phase": "edit",
+      "ms": 4.313582999999994,
+      "sql": {
+        "statements": 780,
+        "returnedRows": 440,
+        "traversals": 0
+      },
+      "queries": [
+        [
+          "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+          180
+        ],
+        [
+          "BEGIN",
+          80
+        ],
+        [
+          "COMMIT",
+          80
+        ],
+        [
+          "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version\n         FROM vfs_entries e INDEXED BY vfs_entries_path\n         WHERE e.path = ?\n         UNION ALL\n         SELECT NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,\n                NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, version\n         FROM vfs_path_tombstones\n         WHERE path = ?\n         LIMIT 1",
+          80
+        ],
+        [
+          "SELECT mutation_version AS version FROM vfs_entries INDEXED BY vfs_entries_path\n         WHERE path = ?\n         UNION ALL\n         SELECT version FROM vfs_path_tombstones WHERE path = ?\n         LIMIT 1",
+          60
+        ],
+        [
+          "SELECT body FROM vfs_inline_chunks\n           WHERE entry_id = ? ORDER BY chunk_index",
+          40
+        ],
+        [
+          "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+          40
+        ],
+        [
+          "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (?) AND kind = 'directory'\n      ",
+          40
+        ],
+        [
+          "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+          20
+        ],
+        [
+          "DELETE FROM vfs_path_tombstones WHERE path = ? RETURNING version",
+          20
+        ],
+        [
+          "INSERT INTO vfs_entries (\n           id, path, parent_path, name, kind, content_class, opaque_object_id,\n           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,\n           body_digest, body_digest_revision, mutation_version\n         ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, ?, ?, ?, ?, ?, ?, 1, ?, 1, ?)\n         ON CONFLICT(path) DO UPDATE SET\n           kind = 'file', content_class = 'inline', opaque_object_id = NULL,\n           size_bytes = excluded.size_bytes, mode = excluded.mode,\n           modified_at_ms = excluded.modified_at_ms, changed_at_ms = excluded.modified_at_ms,\n           revision = vfs_entries.revision + 1,\n           body_digest = excluded.body_digest,\n           body_digest_revision = vfs_entries.revision + 1,\n           mutation_version = excluded.mutation_version\n         RETURNING id, revision",
+          20
+        ],
+        [
+          "INSERT INTO vfs_inline_chunks(entry_id, chunk_index, body)\n         VALUES (?, ?, ?)\n         ON CONFLICT(entry_id, chunk_index) DO UPDATE SET body = excluded.body",
+          20
+        ],
+        [
+          "UPDATE vfs_entries SET\n             size_bytes = ?, mode = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,\n             body_digest = ?, body_digest_revision = revision + 1, mutation_version = ?\n           WHERE id = ? AND mutation_version = ?\n           RETURNING id, revision,\n             (SELECT MAX(chunk_index) FROM vfs_inline_chunks\n              WHERE entry_id = vfs_entries.id) AS last_chunk_index",
+          20
+        ],
+        [
+          "UPDATE vfs_inline_chunks SET body = ?\n           WHERE entry_id = ? AND chunk_index = ? RETURNING entry_id",
+          20
+        ],
+        [
+          "DELETE FROM vfs_inline_chunks WHERE entry_id = ?",
+          20
+        ],
+        [
+          "DELETE FROM vfs_entries WHERE id = ?",
+          20
+        ],
+        [
+          "INSERT INTO vfs_path_tombstones (path, version) VALUES (?, ?)\n       ON CONFLICT(path) DO UPDATE SET version = MAX(version, excluded.version)",
+          20
+        ]
+      ]
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "phase": "verify",
+      "ms": 0.7636250000000473,
+      "sql": {
+        "statements": 40,
+        "returnedRows": 40,
+        "traversals": 0
+      },
+      "queries": [
+        [
+          "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+          20
+        ],
+        [
+          "SELECT body FROM vfs_inline_chunks\n           WHERE entry_id = ? ORDER BY chunk_index",
+          20
+        ]
+      ]
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "phase": "stage",
+      "ms": 22.43954199999996,
+      "sql": {
+        "statements": 1501,
+        "returnedRows": 3379,
+        "traversals": 11
+      },
+      "queries": [
+        [
+          "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+          1170
+        ],
+        [
+          "SELECT body FROM vfs_inline_chunks\n           WHERE entry_id = ? ORDER BY chunk_index",
+          70
+        ],
+        [
+          "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version\n         FROM vfs_entries e INDEXED BY vfs_entries_path\n         WHERE e.path = ?\n         UNION ALL\n         SELECT NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,\n                NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, version\n         FROM vfs_path_tombstones\n         WHERE path = ?\n         LIMIT 1",
+          42
+        ],
+        [
+          "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version\n       FROM vfs_entries e INDEXED BY vfs_entries_parent_name\n       WHERE e.parent_path = ? AND e.path <> '/'\n       ORDER BY e.name",
+          22
+        ],
+        [
+          "BEGIN",
+          21
+        ],
+        [
+          "COMMIT",
+          21
+        ],
+        [
+          "WITH requested(path) AS (VALUES (?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?))\n         SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n         FROM requested CROSS JOIN vfs_entries e INDEXED BY vfs_entries_path\n         ON e.path = requested.path",
+          20
+        ],
+        [
+          "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+          20
+        ],
+        [
+          "DELETE FROM vfs_path_tombstones WHERE path = ? RETURNING version",
+          20
+        ],
+        [
+          "INSERT INTO vfs_entries (\n           id, path, parent_path, name, kind, content_class, opaque_object_id,\n           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,\n           body_digest, body_digest_revision, mutation_version\n         ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, ?, ?, ?, ?, ?, ?, 1, ?, 1, ?)\n         ON CONFLICT(path) DO UPDATE SET\n           kind = 'file', content_class = 'inline', opaque_object_id = NULL,\n           size_bytes = excluded.size_bytes, mode = excluded.mode,\n           modified_at_ms = excluded.modified_at_ms, changed_at_ms = excluded.modified_at_ms,\n           revision = vfs_entries.revision + 1,\n           body_digest = excluded.body_digest,\n           body_digest_revision = vfs_entries.revision + 1,\n           mutation_version = excluded.mutation_version\n         RETURNING id, revision",
+          20
+        ],
+        [
+          "INSERT INTO vfs_inline_chunks(entry_id, chunk_index, body)\n         VALUES (?, ?, ?)\n         ON CONFLICT(entry_id, chunk_index) DO UPDATE SET body = excluded.body",
+          20
+        ],
+        [
+          "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+          20
+        ],
+        [
+          "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (?) AND kind = 'directory'\n      ",
+          20
+        ],
+        [
+          "SELECT path, kind, mode, uid, gid\n         FROM vfs_entries INDEXED BY vfs_entries_path\n         WHERE path IN (SELECT value FROM json_each(?))",
+          11
+        ],
+        [
+          "WITH requested(path) AS (VALUES (?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?))\n         SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n         FROM requested CROSS JOIN vfs_entries e INDEXED BY vfs_entries_path\n         ON e.path = requested.path",
+          2
+        ],
+        [
+          "UPDATE vfs_entries SET\n             size_bytes = ?, mode = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,\n             body_digest = ?, body_digest_revision = revision + 1, mutation_version = ?\n           WHERE id = ? AND mutation_version = ?\n           RETURNING id, revision,\n             (SELECT MAX(chunk_index) FROM vfs_inline_chunks\n              WHERE entry_id = vfs_entries.id) AS last_chunk_index",
+          1
+        ],
+        [
+          "UPDATE vfs_inline_chunks SET body = ?\n           WHERE entry_id = ? AND chunk_index = ? RETURNING entry_id",
+          1
+        ]
+      ]
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "phase": "commit",
+      "ms": 5.559500000000071,
+      "sql": {
+        "statements": 308,
+        "returnedRows": 241,
+        "traversals": 14
+      },
+      "queries": [
+        [
+          "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+          157
+        ],
+        [
+          "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version\n         FROM vfs_entries e INDEXED BY vfs_entries_path\n         WHERE e.path = ?\n         UNION ALL\n         SELECT NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,\n                NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, version\n         FROM vfs_path_tombstones\n         WHERE path = ?\n         LIMIT 1",
+          48
+        ],
+        [
+          "DELETE FROM vfs_path_tombstones WHERE path = ? RETURNING version",
+          23
+        ],
+        [
+          "INSERT INTO vfs_entries (\n           id, path, parent_path, name, kind, content_class, opaque_object_id,\n           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,\n           body_digest, body_digest_revision, mutation_version\n         ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, ?, ?, ?, ?, ?, ?, 1, ?, 1, ?)\n         ON CONFLICT(path) DO UPDATE SET\n           kind = 'file', content_class = 'inline', opaque_object_id = NULL,\n           size_bytes = excluded.size_bytes, mode = excluded.mode,\n           modified_at_ms = excluded.modified_at_ms, changed_at_ms = excluded.modified_at_ms,\n           revision = vfs_entries.revision + 1,\n           body_digest = excluded.body_digest,\n           body_digest_revision = vfs_entries.revision + 1,\n           mutation_version = excluded.mutation_version\n         RETURNING id, revision",
+          23
+        ],
+        [
+          "INSERT INTO vfs_inline_chunks(entry_id, chunk_index, body)\n         VALUES (?, ?, ?)\n         ON CONFLICT(entry_id, chunk_index) DO UPDATE SET body = excluded.body",
+          23
+        ],
+        [
+          "SELECT path, kind, mode, uid, gid\n         FROM vfs_entries INDEXED BY vfs_entries_path\n         WHERE path IN (SELECT value FROM json_each(?))",
+          14
+        ],
+        [
+          "SELECT body FROM vfs_inline_chunks\n           WHERE entry_id = ? ORDER BY chunk_index",
+          11
+        ],
+        [
+          "BEGIN",
+          2
+        ],
+        [
+          "COMMIT",
+          2
+        ],
+        [
+          "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+          1
+        ],
+        [
+          "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+          1
+        ],
+        [
+          "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (SELECT value FROM json_each(?)) AND kind = 'directory'\n      ",
+          1
+        ],
+        [
+          "UPDATE vfs_entries SET\n             size_bytes = ?, mode = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,\n             body_digest = ?, body_digest_revision = revision + 1, mutation_version = ?\n           WHERE id = ? AND mutation_version = ?\n           RETURNING id, revision,\n             (SELECT MAX(chunk_index) FROM vfs_inline_chunks\n              WHERE entry_id = vfs_entries.id) AS last_chunk_index",
+          1
+        ],
+        [
+          "UPDATE vfs_inline_chunks SET body = ?\n           WHERE entry_id = ? AND chunk_index = ? RETURNING entry_id",
+          1
+        ]
+      ]
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "phase": "inspect",
+      "ms": 19.214624999999955,
+      "sql": {
+        "statements": 1146,
+        "returnedRows": 3143,
+        "traversals": 0
+      },
+      "queries": [
+        [
+          "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+          1075
+        ],
+        [
+          "SELECT body FROM vfs_inline_chunks\n           WHERE entry_id = ? ORDER BY chunk_index",
+          28
+        ],
+        [
+          "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version\n       FROM vfs_entries e INDEXED BY vfs_entries_parent_name\n       WHERE e.parent_path = ? AND e.path <> '/'\n       ORDER BY e.name",
+          22
+        ],
+        [
+          "WITH requested(path) AS (VALUES (?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?))\n         SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n         FROM requested CROSS JOIN vfs_entries e INDEXED BY vfs_entries_path\n         ON e.path = requested.path",
+          20
+        ],
+        [
+          "WITH requested(path) AS (VALUES (?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?))\n         SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n         FROM requested CROSS JOIN vfs_entries e INDEXED BY vfs_entries_path\n         ON e.path = requested.path",
+          1
+        ]
+      ]
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "phase": "edit",
+      "ms": 4.516540999999961,
+      "sql": {
+        "statements": 780,
+        "returnedRows": 440,
+        "traversals": 0
+      },
+      "queries": [
+        [
+          "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+          180
+        ],
+        [
+          "BEGIN",
+          80
+        ],
+        [
+          "COMMIT",
+          80
+        ],
+        [
+          "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version\n         FROM vfs_entries e INDEXED BY vfs_entries_path\n         WHERE e.path = ?\n         UNION ALL\n         SELECT NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,\n                NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, version\n         FROM vfs_path_tombstones\n         WHERE path = ?\n         LIMIT 1",
+          80
+        ],
+        [
+          "SELECT mutation_version AS version FROM vfs_entries INDEXED BY vfs_entries_path\n         WHERE path = ?\n         UNION ALL\n         SELECT version FROM vfs_path_tombstones WHERE path = ?\n         LIMIT 1",
+          60
+        ],
+        [
+          "SELECT body FROM vfs_inline_chunks\n           WHERE entry_id = ? ORDER BY chunk_index",
+          40
+        ],
+        [
+          "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+          40
+        ],
+        [
+          "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (?) AND kind = 'directory'\n      ",
+          40
+        ],
+        [
+          "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+          20
+        ],
+        [
+          "DELETE FROM vfs_path_tombstones WHERE path = ? RETURNING version",
+          20
+        ],
+        [
+          "INSERT INTO vfs_entries (\n           id, path, parent_path, name, kind, content_class, opaque_object_id,\n           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,\n           body_digest, body_digest_revision, mutation_version\n         ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, ?, ?, ?, ?, ?, ?, 1, ?, 1, ?)\n         ON CONFLICT(path) DO UPDATE SET\n           kind = 'file', content_class = 'inline', opaque_object_id = NULL,\n           size_bytes = excluded.size_bytes, mode = excluded.mode,\n           modified_at_ms = excluded.modified_at_ms, changed_at_ms = excluded.modified_at_ms,\n           revision = vfs_entries.revision + 1,\n           body_digest = excluded.body_digest,\n           body_digest_revision = vfs_entries.revision + 1,\n           mutation_version = excluded.mutation_version\n         RETURNING id, revision",
+          20
+        ],
+        [
+          "INSERT INTO vfs_inline_chunks(entry_id, chunk_index, body)\n         VALUES (?, ?, ?)\n         ON CONFLICT(entry_id, chunk_index) DO UPDATE SET body = excluded.body",
+          20
+        ],
+        [
+          "UPDATE vfs_entries SET\n             size_bytes = ?, mode = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,\n             body_digest = ?, body_digest_revision = revision + 1, mutation_version = ?\n           WHERE id = ? AND mutation_version = ?\n           RETURNING id, revision,\n             (SELECT MAX(chunk_index) FROM vfs_inline_chunks\n              WHERE entry_id = vfs_entries.id) AS last_chunk_index",
+          20
+        ],
+        [
+          "UPDATE vfs_inline_chunks SET body = ?\n           WHERE entry_id = ? AND chunk_index = ? RETURNING entry_id",
+          20
+        ],
+        [
+          "DELETE FROM vfs_inline_chunks WHERE entry_id = ?",
+          20
+        ],
+        [
+          "DELETE FROM vfs_entries WHERE id = ?",
+          20
+        ],
+        [
+          "INSERT INTO vfs_path_tombstones (path, version) VALUES (?, ?)\n       ON CONFLICT(path) DO UPDATE SET version = MAX(version, excluded.version)",
+          20
+        ]
+      ]
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "phase": "verify",
+      "ms": 0.7019169999999804,
+      "sql": {
+        "statements": 40,
+        "returnedRows": 40,
+        "traversals": 0
+      },
+      "queries": [
+        [
+          "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+          20
+        ],
+        [
+          "SELECT body FROM vfs_inline_chunks\n           WHERE entry_id = ? ORDER BY chunk_index",
+          20
+        ]
+      ]
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "phase": "stage",
+      "ms": 22.203125,
+      "sql": {
+        "statements": 1501,
+        "returnedRows": 3379,
+        "traversals": 11
+      },
+      "queries": [
+        [
+          "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+          1170
+        ],
+        [
+          "SELECT body FROM vfs_inline_chunks\n           WHERE entry_id = ? ORDER BY chunk_index",
+          70
+        ],
+        [
+          "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version\n         FROM vfs_entries e INDEXED BY vfs_entries_path\n         WHERE e.path = ?\n         UNION ALL\n         SELECT NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,\n                NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, version\n         FROM vfs_path_tombstones\n         WHERE path = ?\n         LIMIT 1",
+          42
+        ],
+        [
+          "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version\n       FROM vfs_entries e INDEXED BY vfs_entries_parent_name\n       WHERE e.parent_path = ? AND e.path <> '/'\n       ORDER BY e.name",
+          22
+        ],
+        [
+          "BEGIN",
+          21
+        ],
+        [
+          "COMMIT",
+          21
+        ],
+        [
+          "WITH requested(path) AS (VALUES (?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?))\n         SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n         FROM requested CROSS JOIN vfs_entries e INDEXED BY vfs_entries_path\n         ON e.path = requested.path",
+          20
+        ],
+        [
+          "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+          20
+        ],
+        [
+          "DELETE FROM vfs_path_tombstones WHERE path = ? RETURNING version",
+          20
+        ],
+        [
+          "INSERT INTO vfs_entries (\n           id, path, parent_path, name, kind, content_class, opaque_object_id,\n           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,\n           body_digest, body_digest_revision, mutation_version\n         ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, ?, ?, ?, ?, ?, ?, 1, ?, 1, ?)\n         ON CONFLICT(path) DO UPDATE SET\n           kind = 'file', content_class = 'inline', opaque_object_id = NULL,\n           size_bytes = excluded.size_bytes, mode = excluded.mode,\n           modified_at_ms = excluded.modified_at_ms, changed_at_ms = excluded.modified_at_ms,\n           revision = vfs_entries.revision + 1,\n           body_digest = excluded.body_digest,\n           body_digest_revision = vfs_entries.revision + 1,\n           mutation_version = excluded.mutation_version\n         RETURNING id, revision",
+          20
+        ],
+        [
+          "INSERT INTO vfs_inline_chunks(entry_id, chunk_index, body)\n         VALUES (?, ?, ?)\n         ON CONFLICT(entry_id, chunk_index) DO UPDATE SET body = excluded.body",
+          20
+        ],
+        [
+          "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+          20
+        ],
+        [
+          "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (?) AND kind = 'directory'\n      ",
+          20
+        ],
+        [
+          "SELECT path, kind, mode, uid, gid\n         FROM vfs_entries INDEXED BY vfs_entries_path\n         WHERE path IN (SELECT value FROM json_each(?))",
+          11
+        ],
+        [
+          "WITH requested(path) AS (VALUES (?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?),(?))\n         SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n         FROM requested CROSS JOIN vfs_entries e INDEXED BY vfs_entries_path\n         ON e.path = requested.path",
+          2
+        ],
+        [
+          "UPDATE vfs_entries SET\n             size_bytes = ?, mode = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,\n             body_digest = ?, body_digest_revision = revision + 1, mutation_version = ?\n           WHERE id = ? AND mutation_version = ?\n           RETURNING id, revision,\n             (SELECT MAX(chunk_index) FROM vfs_inline_chunks\n              WHERE entry_id = vfs_entries.id) AS last_chunk_index",
+          1
+        ],
+        [
+          "UPDATE vfs_inline_chunks SET body = ?\n           WHERE entry_id = ? AND chunk_index = ? RETURNING entry_id",
+          1
+        ]
+      ]
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "phase": "commit",
+      "ms": 5.547500000000014,
+      "sql": {
+        "statements": 308,
+        "returnedRows": 241,
+        "traversals": 14
+      },
+      "queries": [
+        [
+          "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+          157
+        ],
+        [
+          "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version\n         FROM vfs_entries e INDEXED BY vfs_entries_path\n         WHERE e.path = ?\n         UNION ALL\n         SELECT NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,\n                NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, version\n         FROM vfs_path_tombstones\n         WHERE path = ?\n         LIMIT 1",
+          48
+        ],
+        [
+          "DELETE FROM vfs_path_tombstones WHERE path = ? RETURNING version",
+          23
+        ],
+        [
+          "INSERT INTO vfs_entries (\n           id, path, parent_path, name, kind, content_class, opaque_object_id,\n           size_bytes, mode, uid, gid, created_at_ms, modified_at_ms, revision,\n           body_digest, body_digest_revision, mutation_version\n         ) VALUES (?, ?, ?, ?, 'file', 'inline', NULL, ?, ?, ?, ?, ?, ?, 1, ?, 1, ?)\n         ON CONFLICT(path) DO UPDATE SET\n           kind = 'file', content_class = 'inline', opaque_object_id = NULL,\n           size_bytes = excluded.size_bytes, mode = excluded.mode,\n           modified_at_ms = excluded.modified_at_ms, changed_at_ms = excluded.modified_at_ms,\n           revision = vfs_entries.revision + 1,\n           body_digest = excluded.body_digest,\n           body_digest_revision = vfs_entries.revision + 1,\n           mutation_version = excluded.mutation_version\n         RETURNING id, revision",
+          23
+        ],
+        [
+          "INSERT INTO vfs_inline_chunks(entry_id, chunk_index, body)\n         VALUES (?, ?, ?)\n         ON CONFLICT(entry_id, chunk_index) DO UPDATE SET body = excluded.body",
+          23
+        ],
+        [
+          "SELECT path, kind, mode, uid, gid\n         FROM vfs_entries INDEXED BY vfs_entries_path\n         WHERE path IN (SELECT value FROM json_each(?))",
+          14
+        ],
+        [
+          "SELECT body FROM vfs_inline_chunks\n           WHERE entry_id = ? ORDER BY chunk_index",
+          11
+        ],
+        [
+          "BEGIN",
+          2
+        ],
+        [
+          "COMMIT",
+          2
+        ],
+        [
+          "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+          1
+        ],
+        [
+          "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+          1
+        ],
+        [
+          "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (SELECT value FROM json_each(?)) AND kind = 'directory'\n      ",
+          1
+        ],
+        [
+          "UPDATE vfs_entries SET\n             size_bytes = ?, mode = ?, modified_at_ms = ?, changed_at_ms = ?, revision = revision + 1,\n             body_digest = ?, body_digest_revision = revision + 1, mutation_version = ?\n           WHERE id = ? AND mutation_version = ?\n           RETURNING id, revision,\n             (SELECT MAX(chunk_index) FROM vfs_inline_chunks\n              WHERE entry_id = vfs_entries.id) AS last_chunk_index",
+          1
+        ],
+        [
+          "UPDATE vfs_inline_chunks SET body = ?\n           WHERE entry_id = ? AND chunk_index = ? RETURNING entry_id",
+          1
+        ]
+      ]
+    }
+  ],
+  "summary": [
+    {
+      "phase": "inspect",
+      "before": {
+        "median": 19.63979100000006,
+        "p10": 19.63979100000006,
+        "p90": 19.63979100000006
+      },
+      "after": {
+        "median": 19.214624999999955,
+        "p10": 19.214624999999955,
+        "p90": 19.214624999999955
+      },
+      "ratio": {
+        "median": 0.9783518062895831,
+        "p10": 0.9783518062895831,
+        "p90": 0.9783518062895831,
+        "ci95": [
+          0.9783518062895831,
+          0.9783518062895831
+        ]
+      }
+    },
+    {
+      "phase": "edit",
+      "before": {
+        "median": 4.313582999999994,
+        "p10": 4.313582999999994,
+        "p90": 4.313582999999994
+      },
+      "after": {
+        "median": 4.516540999999961,
+        "p10": 4.516540999999961,
+        "p90": 4.516540999999961
+      },
+      "ratio": {
+        "median": 1.047050908722509,
+        "p10": 1.047050908722509,
+        "p90": 1.047050908722509,
+        "ci95": [
+          1.047050908722509,
+          1.047050908722509
+        ]
+      }
+    },
+    {
+      "phase": "verify",
+      "before": {
+        "median": 0.7636250000000473,
+        "p10": 0.7636250000000473,
+        "p90": 0.7636250000000473
+      },
+      "after": {
+        "median": 0.7019169999999804,
+        "p10": 0.7019169999999804,
+        "p90": 0.7019169999999804
+      },
+      "ratio": {
+        "median": 0.9191907022425102,
+        "p10": 0.9191907022425102,
+        "p90": 0.9191907022425102,
+        "ci95": [
+          0.9191907022425102,
+          0.9191907022425102
+        ]
+      }
+    },
+    {
+      "phase": "stage",
+      "before": {
+        "median": 22.43954199999996,
+        "p10": 22.43954199999996,
+        "p90": 22.43954199999996
+      },
+      "after": {
+        "median": 22.203125,
+        "p10": 22.203125,
+        "p90": 22.203125
+      },
+      "ratio": {
+        "median": 0.9894642680318537,
+        "p10": 0.9894642680318537,
+        "p90": 0.9894642680318537,
+        "ci95": [
+          0.9894642680318537,
+          0.9894642680318537
+        ]
+      }
+    },
+    {
+      "phase": "commit",
+      "before": {
+        "median": 5.559500000000071,
+        "p10": 5.559500000000071,
+        "p90": 5.559500000000071
+      },
+      "after": {
+        "median": 5.547500000000014,
+        "p10": 5.547500000000014,
+        "p90": 5.547500000000014
+      },
+      "ratio": {
+        "median": 0.9978415325119062,
+        "p10": 0.9978415325119062,
+        "p90": 0.9978415325119062,
+        "ci95": [
+          0.9978415325119062,
+          0.9978415325119062
+        ]
+      }
+    },
+    {
+      "phase": "total",
+      "before": {
+        "median": 52.71604100000013,
+        "p10": 52.71604100000013,
+        "p90": 52.71604100000013
+      },
+      "after": {
+        "median": 52.18370799999991,
+        "p10": 52.18370799999991,
+        "p90": 52.18370799999991
+      },
+      "ratio": {
+        "median": 0.9899018782537137,
+        "p10": 0.9899018782537137,
+        "p90": 0.9899018782537137,
+        "ci95": [
+          0.9899018782537137,
+          0.9899018782537137
+        ]
+      }
+    }
+  ]
+}

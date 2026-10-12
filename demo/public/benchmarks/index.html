@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/benchmarks/benchmarks.css">
   <script type="module" src="/benchmarks/benchmarks.js"></script>
+  <script type="module" src="/benchmarks/task.js"></script>
 </head>
 <body>
 <main class="shell-page benchmark-page">
@@ -23,6 +24,14 @@
     <div><button type="button" id="run-benchmark">Request benchmark</button><a class="download-link" href="/api/benchmarks" target="_blank" rel="noreferrer">Stored JSON ↗</a></div>
     <p id="benchmark-status" role="status" aria-live="polite">Loading the saved result…</p>
     <p class="benchmark-help">Opening this page never runs a benchmark. A paired run can take around 15–30 minutes. A request runs the suite only when the saved result is at least 10 minutes old. Concurrent requests share one run. It continues in the background when you close this page.</p>
+  </section>
+  <section aria-labelledby="task-title" class="task-section">
+    <h2 id="task-title">Agent coding task</h2>
+    <p class="benchmark-help">Inspect → edit 20 of 1,000 files → verify → stage → commit. Independent noninteractive shell executions share a workspace with UID/GID 1000 permission checks. This separate series does not change the 190-workload overview.</p>
+    <div><button type="button" id="run-task">Request task benchmark</button><a class="download-link" href="/api/benchmarks/task" target="_blank" rel="noreferrer">Task JSON ↗</a></div>
+    <p id="task-status" class="benchmark-help" role="status" aria-live="polite">Loading saved task results…</p>
+    <div id="task-summary"></div>
+    <p class="benchmark-help">One RPC times the complete task. Setup, two warmup cycles and final validation are excluded. SQL counts come from a separate replay; they add no instrumentation to the timed task. Six alternating pairs per run; at least three runs before a timing conclusion. Opening the page never runs work; requests reuse results less than 10 minutes old.</p>
   </section>
   <section id="results" hidden aria-labelledby="results-title">
     <div class="result-heading"><h2 id="results-title">Saved results</h2><label for="file-count">Workload <select id="file-count"><option value="100">100 files</option><option value="1000" selected>1,000 files</option></select></label></div>

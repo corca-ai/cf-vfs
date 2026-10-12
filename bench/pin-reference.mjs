@@ -5,9 +5,10 @@ import { build } from "esbuild";
 
 // Explicit maintenance command; normal deployments VERIFY, never refresh the reference.
 if (!process.argv.includes("--pin")) throw new Error("Use --pin to start a new reference series");
-const root = "demo/benchmark-reference";
+const task = process.argv.includes("--task");
+const root = task ? "demo/benchmark-task-reference" : "demo/benchmark-reference";
 const result = await build({
-  entryPoints: ["demo/benchmark-fixture.ts"],
+  entryPoints: [task ? "demo/benchmark-task-fixture.ts" : "demo/benchmark-fixture.ts"],
   bundle: true,
   format: "esm",
   platform: "node",

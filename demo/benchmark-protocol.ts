@@ -68,6 +68,14 @@ export function mergeRows(rows: BenchmarkRow[], incoming: BenchmarkRow[]): Bench
     const referenceMs = [...(old?.referenceMs ?? []), ...(row.referenceMs ?? [])];
     const merged = {
       ...row,
+      ...(row.costs === undefined
+        ? {}
+        : {
+            costs: {
+              reference: [...(old?.costs?.reference ?? []), ...row.costs.reference],
+              candidate: [...(old?.costs?.candidate ?? []), ...row.costs.candidate],
+            },
+          }),
       samplesMs,
       referenceMs,
       medianMs: median(samplesMs),

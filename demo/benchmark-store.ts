@@ -11,16 +11,30 @@ const RUN_LEASE_MS = 5 * 60 * 1000;
 export const MAX_RUNS_PER_COMMIT = 12;
 
 export interface BenchmarkRow {
-  group: "files" | "git" | "git-shell" | "coding-small" | "coding-mixed" | "git-recovery";
+  group:
+    | "files"
+    | "git"
+    | "git-shell"
+    | "coding-small"
+    | "coding-mixed"
+    | "git-recovery"
+    | "agent-task";
   operation: string;
   files: number;
   cache: boolean;
   iterations: number;
   samplesMs: number[];
   referenceMs?: number[];
+  costs?: { reference: BenchmarkCost[]; candidate: BenchmarkCost[] };
   medianMs: number;
   minMs: number;
   maxMs: number;
+}
+
+export interface BenchmarkCost {
+  statements: number;
+  rowsRead: number;
+  rowsWritten: number;
 }
 
 export interface PublicBenchmarkResult {
@@ -58,6 +72,7 @@ export interface BenchmarkDiagnostics {
 }
 
 export interface BenchmarkJob {
+  task?: boolean;
   orderOffset?: number;
   diagnostics?: BenchmarkDiagnostics[];
   commitHash?: string;

@@ -18,6 +18,13 @@ import {
 } from "./benchmark-store.js";
 import { summarizeStage } from "./benchmark-suite.js";
 
+import {
+  runTaskPair,
+  TASK_GROUPS,
+  TASK_MEASUREMENT,
+  TASK_PROTOCOL,
+} from "./benchmark-task-runner.js";
+
 const WORKSPACE = "shared-results-v1";
 
 /** Durable coordinator; all timed work belongs to a separate scratch DO. */
@@ -44,7 +51,10 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
   async snapshot(progressOnly = false) {
     const state = await this.store.get(!progressOnly);
     const job = state.status === "running" ? await this.store.job() : null;
-    const progress = job === null ? null : Math.floor((job.nextIndex / pairedPlan().length) * 100);
+    const progress =
+      job === null
+        ? null
+        : Math.floor((job.nextIndex / (job.task ? TASK_GROUPS : pairedPlan().length)) * 100);
     if (progressOnly)
       return { status: state.status, error: state.error, buildId: BENCHMARK_BUILD_ID, progress };
     return { ...state, buildId: BENCHMARK_BUILD_ID, progress };
@@ -54,7 +64,13 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
     this.work = result.catch(() => undefined);
     return result;
   }
-  claim(colo: string | null, force = false, expectedBuild?: string, deploymentId?: string) {
+  claim(
+    colo: string | null,
+    force = false,
+    expectedBuild?: string,
+    deploymentId?: string,
+    task = false,
+  ) {
     return this.exclusive(async () => {
       if (expectedBuild !== undefined && expectedBuild !== BENCHMARK_BUILD_ID)
         throw new Error("Benchmark deployment is still propagating; retry the request");
@@ -62,6 +78,7 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
       if (claim.runId !== null) {
         await this.store.checkpoint({
           runId: claim.runId,
+          task,
           deploymentId: deploymentId ?? this.env.VERSION_METADATA.id,
           buildId: BENCHMARK_BUILD_ID,
           commitHash: BENCHMARK_COMMIT_HASH,
@@ -93,6 +110,7 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
         job.runId,
         job.nextIndex,
         job.orderOffset ?? 0,
+        job.task ?? false,
       );
       await this.exclusive(async () => {
         await this.assertDeployment();
@@ -108,10 +126,12 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
           verified: job.verified + group.verified,
           diagnostics: [...(job.diagnostics ?? []), group.diagnostics],
         };
-        if (next.nextIndex === pairedPlan().length) {
-          const expected = pairedPlan()
-            .filter((group) => group.pair === 0)
-            .reduce((sum, group) => sum + group.stages.length, 0);
+        if (next.nextIndex === (job.task ? TASK_GROUPS : pairedPlan().length)) {
+          const expected = job.task
+            ? 1
+            : pairedPlan()
+                .filter((group) => group.pair === 0)
+                .reduce((sum, group) => sum + group.stages.length, 0);
           if (
             rows.length !== expected ||
             rows.some(
@@ -122,7 +142,7 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
             throw new Error("Incomplete paired benchmark samples");
           await this.store.complete({
             version: 2,
-            protocol: PROTOCOL,
+            protocol: job.task ? TASK_PROTOCOL : PROTOCOL,
             diagnostics: next.diagnostics ?? [],
             deploymentId: job.deploymentId ?? this.env.VERSION_METADATA.id,
             buildId: BENCHMARK_BUILD_ID,
@@ -131,7 +151,7 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
             completedAt: new Date().toISOString(),
             colo: job.colo,
             engine: "isomorphic-git 1.43.1",
-            measurement: MEASUREMENT,
+            measurement: job.task ? TASK_MEASUREMENT : MEASUREMENT,
             rows,
             verified: next.verified,
           });
@@ -168,7 +188,8 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
 
 /** Alternates complete groups on one DO; its external clock advances during RPC. */
 export class BenchmarkRunner extends WorkerEntrypoint<VfsBenchmarkEnv> {
-  async group(runId: string, startIndex: number, orderOffset: number) {
+  async group(runId: string, startIndex: number, orderOffset: number, task = false) {
+    if (task) return runTaskPair(this.env, runId, startIndex, orderOffset);
     const item = pairedPlan()[startIndex];
     if (!item) throw new Error("Invalid benchmark group");
     const stub = this.env.BENCHMARK_WORKSPACES.getByName("paired-scratch-v2", {
@@ -246,6 +267,7 @@ export class BenchmarkRunner extends WorkerEntrypoint<VfsBenchmarkEnv> {
 export async function handlePublicBenchmarks(
   request: Request,
   env: VfsBenchmarkEnv,
+  task = false,
 ): Promise<Response> {
   const headers = {
     "Cache-Control": "no-store",
@@ -253,7 +275,7 @@ export async function handlePublicBenchmarks(
     "X-Vfs-Build": BENCHMARK_BUILD_ID,
     "X-Vfs-Deployment": env.VERSION_METADATA.id,
   };
-  const stub = env.PUBLIC_BENCHMARKS.getByName(WORKSPACE);
+  const stub = env.PUBLIC_BENCHMARKS.getByName(task ? "agent-task-results-v1" : WORKSPACE);
   if (request.method === "GET")
     return Response.json(
       await stub.snapshot(new URL(request.url).searchParams.get("progress") === "1"),
@@ -272,6 +294,7 @@ export async function handlePublicBenchmarks(
     false,
     BENCHMARK_BUILD_ID,
     env.VERSION_METADATA.id,
+    task,
   );
   return Response.json(
     { ...claim.snapshot, reused: claim.runId === null },

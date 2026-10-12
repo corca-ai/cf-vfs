@@ -656,3 +656,26 @@ task. The optional Git applet reuses the existing bounded batch writer for tree
 and commit objects before reference publication. Lazy reservation and flush
 boundaries preserve read headroom, fallback writes and failure ordering. This
 does not add Git work or imports to the filesystem or non-Git shell presets.
+
+### Permission-bound agent task series
+
+The public page also offers a separate **Agent coding task** benchmark at
+`/api/benchmarks/task`. It does not change the original 190-workload cohort or
+its frozen reference. It uses ordinary Git and independent noninteractive shell
+executions with UID/GID 1000: inspect a 1,000-file repository, edit 20 files with
+sed/redirection/cleanup, verify with grep, stage all changes and commit.
+
+Each arm gets a fresh fixture and two untimed cycles with distinct content.
+One Worker-to-DO RPC measures the complete third cycle without SQL observation.
+A separate equally warmed replay records native SQL statements/rows read/rows
+written. Final file bodies, clean status, command outputs and matching commit
+identities are checked. This describes a warm coding task, excluding initial
+repository creation; prepare/clone in the original suite remain cold controls.
+
+Request runs explicitly; the same ten-minute VFS-mtime cache, active-run
+coalescing, six alternating pairs, three-run minimum and one-point-per-commit
+history rules apply. Run `npm run bench:public -- --task --out task.json` for
+authenticated evaluation. `demo/benchmark-task-reference` is independently
+frozen. `node bench/pin-reference.mjs --pin --task` explicitly starts a new task
+series; ordinary optimizations must not run it. Both reference hashes and
+fixture/dependency inputs are verified by the existing reference gate.

@@ -11,6 +11,7 @@ function option(name) {
   if (!value || value.startsWith("--")) throw new Error(`${name} needs a value`);
   return value;
 }
+const endpoint = args.includes("--task") ? "/api/benchmarks/task" : "/api/benchmarks";
 const base = new URL(option("--url") ?? "https://vfs.borca.ai");
 if (base.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(base.hostname))
   throw new Error("Use HTTPS for authenticated benchmarks");
@@ -39,7 +40,7 @@ async function json(path, init) {
     return response.json();
   }
 }
-const claim = await json("/api/benchmarks/developer", {
+const claim = await json(`${endpoint}/developer`, {
   method: "POST",
   headers: {
     Authorization: `Bearer ${token}`,
@@ -55,9 +56,9 @@ let state = claim;
 while (state.status === "running") {
   if (Date.now() - started > 45 * 60_000) throw new Error("Timed out waiting for benchmark");
   await delay(2000);
-  state = await json("/api/benchmarks?progress=1");
+  state = await json(`${endpoint}?progress=1`);
 }
-if (state.status === "ready") state = await json("/api/benchmarks");
+if (state.status === "ready") state = await json(endpoint);
 if (state.status !== "ready" || !state.result) throw new Error(state.error ?? "Benchmark failed");
 const result = state.result;
 if (
