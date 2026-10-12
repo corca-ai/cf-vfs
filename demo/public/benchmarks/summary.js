@@ -1,3 +1,4 @@
+import { pairedSummary } from "./paired.js";
 /** Stable workload identity; never average milliseconds from unlike operations. */
 export function workloadKey(row) {
   return JSON.stringify([row.group, row.operation, row.files, row.cache, row.iterations]);
@@ -25,6 +26,7 @@ function indexRows(rows) {
 }
 /** Same full workload cohort for every point, including unchanged iteration counts. */
 export function summarizeHistory(history, result) {
+  if (result.protocol) return pairedSummary(history, result, summaryMetrics);
   const expected = indexRows(result.rows);
   const points = history.filter((point) => {
     if ((point.engine && point.engine !== result.engine) ||

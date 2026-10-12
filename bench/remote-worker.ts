@@ -3,6 +3,7 @@ import { handlePublicBenchmarks } from "../demo/benchmark.js";
 import { BENCHMARK_BUILD_ID } from "../demo/benchmark-build.js";
 
 export { BenchmarkRunner, PublicBenchmarks } from "../demo/benchmark.js";
+export { BenchmarkWorkspace } from "../demo/benchmark-workspace.js";
 
 import { DemoWorkspace, handleTerminalRequest } from "../demo/workspace.js";
 import {

@@ -12,6 +12,7 @@ async function files(root) {
   }
   return paths;
 }
+execFileSync(process.execPath, ["bench/check-reference.mjs"], { stdio: "inherit" });
 const hash = createHash("sha256");
 const paths = [
   ...(await files("src")),

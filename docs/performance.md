@@ -453,29 +453,12 @@ continue without an open browser. The report distinguishes local metadata
 reuse gains, rejected checkout candidates, production RPC timings and the
 Git compression concurrency needed to fit a real isolate.
 
-Each displayed median and cache ratio has a sparkline for up to ten distinct
-commits. A successful rerun replaces that commit's point in place, so repeated
-requests cannot fill the window. Compact history is saved atomically with the
-latest result in `/benchmarks/trends.json`; failed runs do not add points.
-Existing retained runs without commit metadata are deduplicated by build (or
-Worker deployment) and explicitly labelled legacy. Unidentifiable results are
-not assigned invented versions. Trends match group, operation, file count,
-cache setting and operation count; timing noise and workload changes still
-matter when interpreting the first-to-last percentage. Opening the page reads
-saved history and does not execute a benchmark. Deploy committed source with
-`npm run deploy:public` to record its Git SHA alongside the source fingerprint.
-
-
-For iterative production optimization, use the authenticated public-suite
-workflow in [the demo README](../demo/README.md#repeated-production-performance-evaluation).
-Capture a baseline, change one measured bottleneck, run correctness checks,
-deploy, and compare raw CF samples using `npm run bench:public`. Keep an
-implementation change only when representative repeated production measurements
-support it; a single noisy three-sample ratio is insufficient. Results identify
-the deployed Worker version, and deployment changes interrupt in-flight runs
-instead of combining samples from different implementations. Public requests
-continue to observe the ten-minute VFS mtime cache; authenticated evaluation can
-request a fresh run immediately.
+The public chart now uses the paired protocol described below. One point represents
+one commit, with raw observations from up to twelve complete runs; the latest ten
+distinct commits are retained. Old unpaired records remain archived separately.
+Opening the page never runs a benchmark. Deploy committed source with
+`npm run deploy:public`; use `npm run bench:public -- --out cf.json` for an
+authenticated fresh run. Public requests retain the ten-minute VFS mtime cache.
 
 The [ten-round production evaluation](../bench/cf-optimization-2026-10-08/report.md)
 archives every candidate and actual CF run, including rejected optimizations.
@@ -553,45 +536,80 @@ The repository instructions in AGENTS.md require this for future work.
    with matching dependencies. `npm run bench:public -- --out cf.json` requests
    the authenticated full deployed suite and verifies its build identity.
    Existing `bench:check` and SQL/compatibility/bundle guards remain required.
-3. Screen saved results with `npm run bench:assess -- before.json after.json
-   report.json`. Exact workload identities, iteration counts, engine and
-   measurement protocol must match. The report contains per-workload >5%
-   slowdowns, overall/family geometric means, unresolved clock-zero cases,
-   worst slowdown and available SQL counter increases. Exit code 2 means review
-   is required. Missing SQL counters are not evidence of unchanged SQL costs;
-   separately meter statements, rows read and rows written on CF.
-4. Three public samples are descriptive screening, not statistical approval.
-   Investigate every flagged slowdown with at least ten alternating paired
-   trials on the same fixture/environment, use paired confidence intervals,
-   and repeat the full comparison if a systemic shift is suspected. A geometric
-   mean below 1 does not automatically override a confirmed material per-workload
-   regression. Explicit user acceptance of a documented latency tradeoff may
-   authorize adoption; retain the measured regressions in the report.
-   Credential-bound optimizations additionally need matching credential-bound
-   full comparisons: the default public plan uses an unbound VFS and cannot
-   establish their acceleration. Keep the unbound plan as a regression control.
-   SQL reductions and timing improvements are separate claims. Do not convert
-   SQL counts into a dollar savings percentage.
+3. For paired production results, run `npm run bench:assess:paired -- cf.json`.
+   It reports fixed-reference and previous-commit comparisons separately, using
+   the retained raw pairs and run clusters. Exit 2 means improvement is not
+   established or regression review is required. `bench:assess` and the old
+   `--baseline` option remain descriptive tools for legacy results, not an
+   adoption gate. Missing SQL counters are not evidence of unchanged costs;
+   separately meter statements, rows read and rows written.
+4. Collect at least three complete runs per version (eighteen pairs per workload)
+   and repeat across sessions when environment drift is suspected. Preselect the
+   comparison cohort and overall metric; do not stop/retry only until a favorable
+   result appears. Investigate every >5% slowdown with additional matched evidence.
+   A geometric mean below 1 does not automatically override a confirmed material
+   regression unless the user explicitly accepts the documented tradeoff.
+   Credential-bound optimizations need matching credential-bound comparisons:
+   the public unbound plan cannot establish their acceleration. Keep its full
+   suite as a control. SQL reductions and latency gains are separate claims;
+   SQL counts alone do not establish dollar savings.
 5. Adopt only when overall improvement is supported and no material unexplained
    per-workload or cost regression remains, except an explicitly accepted
    per-workload latency tradeoff. Keep POSIX tests and bundle budgets
    passing. Save unsuccessful experiments too. After deploying, rerun the full
    CF suite for the expected build; revert an unaccepted confirmed regression.
 
-The public overview is a descriptive history, not this adoption gate. It shows
-four indices: uncached overall, uncached file operations, uncached Git/coding
-(including recovery), and the metadata-cache variants. Each workload ratio has
-equal weight in its geometric mean; both file counts participate independently.
-The oldest comparable point in the ten-distinct-commit window is 100, and lower
-is better. Cache and uncached rows are not mixed. A point must have the exact
-same full workload identities/iterations as the latest result; known engine or
-protocol changes are omitted. Older history did not record engine/protocol, so
-its comparability is limited to workload identity. A workload with a nonpositive
-or nonfinite time in any comparable point is excluded from every point of that
-series, with counts shown. No artificial epsilon or infinite speedup is used.
-The baseline can move when the history window or comparable cohort changes;
-compare values within the currently displayed series. Opening the page never
-runs a benchmark; same-commit replacement and the ten-minute cache remain.
+### Fixed-reference paired production measurement
+
+`demo/benchmark-reference/runtime.js` freezes the reference library and the full
+fixture implementation. `bench/check-reference.mjs` runs during normal checks and
+deployment, verifying fixture/lockfile hashes and runtime compatibility settings.
+Library optimization does not regenerate the reference. Explicit
+`node bench/pin-reference.mjs --pin` starts a new incompatible series when fixtures,
+dependencies or compatibility settings change; explain that boundary in the report.
+Change the protocol version when timing boundaries or sampling design change.
+The frozen bundle belongs only to the demo, never the published library.
+
+For every workload group, `BenchmarkRunner` invokes reference and candidate in
+balanced alternating order on the **same scratch Durable Object**, resetting and
+initializing its database before each arm. Git identities use a fixed timestamp.
+One warmup pair precedes six measured pairs. The coordinator/result store is a
+separate object, so progress polling does not enter the timed operation. The
+external Worker clock measures operation RPC, assertions, storage and dispatch;
+fixture setup, full-body verification, teardown and result persistence are outside
+timing. Recovery probes retain their own internal setup. Empty RPC controls are
+saved before/after each arm for diagnosis, never subtracted. Sequential pairing
+reduces shared drift but cannot eliminate platform interference or module/JIT bias;
+A/A controls with identical code remain necessary. Request colo is not DO colo.
+
+The four overview indices cover uncached overall, files, Git/coding/recovery, and
+metadata-cache variants. Each workload has equal log weight within a matched pair,
+each pair equal weight within its run, and each retained run equal weight. The
+geometric mean of candidate/reference is multiplied by 100: the frozen reference
+is always 100 and lower is better. The reference never moves when the ten-commit
+window advances. Exact workload identities/iterations, engine and protocol must
+match. Zeros or missing pairs make the affected aggregate unresolved; no workload
+or outlier is silently removed and no epsilon is substituted.
+
+95% Student-t intervals use **run means as clusters** once multiple runs exist;
+with one run the within-run interval is explicitly provisional. Fewer than three
+runs never receives a confirmed faster/slower label. These intervals describe the
+sampled sessions, not a guarantee across regions, time or all 190 simultaneous
+comparisons. Incremental comparisons use Welch intervals between commit run means:
+beating the frozen reference does not mean beating the previous commit. Per-row
+flags are investigative, not independent significance claims.
+
+Repeated runs update one commit point by accumulating raw observations, not by
+replacing its previous measurement. The latest twelve complete runs contribute;
+total collected count is displayed. Raw observations live in per-commit VFS files
+under `/benchmarks/observations/`, with a compact `/benchmarks/trends.json` index,
+so no single history file grows beyond the inline file limit. Raw run archives
+referenced by retained observations, plus the latest twenty runs, are preserved.
+Failed/incomplete runs do not publish a point. The page shows uncertainty and
+sample counts; absolute milliseconds can still fluctuate with platform conditions.
+The chart keeps a zero-origin scale and a minimum 0–200 reference-index range.
+Legacy measurements are labelled and excluded from the new series. The
+Cache / VFS ratio remains a descriptive absolute ratio, separate from the indices.
 
 The [five-hour optimization report](../bench/posix-optimizations-five-hours-2026-10-10.md)
 records matched full-suite CF results, tradeoffs and deployment checkpoints.

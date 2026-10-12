@@ -16,7 +16,12 @@ matching workloads, engines and measurement protocols; a targeted benchmark
 alone cannot approve adoption. Report per-workload regressions, equal-weight
 geometric means (overall and families), and SQL statements/rows read/rows written
 separately. Use `bench:public:local`, `bench:public`, and `bench:assess` for the
-shared full plan and descriptive screening. Zero timings are unresolved, not
+shared full plan and legacy descriptive screening. Use `bench:assess:paired` for
+new paired production results, with at least three complete runs per version.
+Keep the reference frozen across library optimizations; do not repin it to erase
+regressions. Verify A/A calibration and both reference and previous-commit
+comparisons. Never cherry-pick runs, remove unresolved workloads or treat pairs
+within one run as independent sessions. Zero timings are unresolved, not
 infinite speedups. Investigate every >5% slowdown with at least ten alternating
 paired trials; smaller changes within noise are not proven wins. Retain a
 performance candidate only when the overall improvement is supported and no

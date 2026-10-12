@@ -78,12 +78,12 @@ result is eligible; there is no automatic periodic benchmark.
 service binding. It measures each DO RPC from outside the DO: production
 Cloudflare clocks advance after I/O, so timing synchronous SQL inside the DO
 would misreport zero. Timings include dispatch, operation assertions, storage
-and coordination. Full-body validation and final teardown are outside timing.
+and dispatch. Coordinator persistence, fixture initialization, full-body validation and final teardown are outside timing.
 The request colo shown in the UI does not identify the DO's location.
 
 The suite runs 100 and 1,000 approximately 0.8 KiB files, with/without the
 existing 4,096-entry metadata cache. It alternates cache order and discards one
-full warmup before three samples. It exercises writes, stat, stat after one
+warmup pair before six measured reference/candidate pairs per run. It exercises writes, stat, stat after one
 overwrite, reads, listing, append, rename, recursive copy/remove and real Git
 init, populate, add, commit, status, diff, log, branch and checkout. Direct-engine Git add
 uses batches of 32 existing filepath arguments to bound concurrent zlib
@@ -127,13 +127,17 @@ Results, observed limitations and deployment verification are in the
 run using `CF_VFS_PUBLIC_BENCHMARK_TOKEN` or ignored `.dev.vars.public`.
 After a measured implementation change, deploy with
 `npm run deploy:public`, then run
-`npm run bench:public -- --baseline /tmp/baseline.json --out /tmp/candidate.json`.
-The command polls the background job, saves raw samples, and prints matched
-operation median ratios. These three-sample ratios are descriptive; repeat noisy
-runs before retaining a performance change. The public page still uses the
+`npm run bench:public -- --out /tmp/candidate.json`, then
+`npm run bench:assess:paired -- /tmp/candidate.json`.
+The command saves raw reference/candidate pairs and accumulated commit history.
+Collect at least three full runs per version; the assessment separates fixed-reference
+and previous-commit comparisons with run-cluster confidence intervals. The legacy
+`--baseline` option remains descriptive only. See the
+[measurement protocol](../docs/performance.md#fixed-reference-paired-production-measurement)
+for reference pinning, A/A calibration, retention and uncertainty. The public page still uses the
 10-minute mtime rule. The separately authenticated POST `/api/benchmarks/developer` bypasses
 freshness but never starts a second concurrent run. Secrets stay out of the UI.
-Successful results include the CF deployment ID and the latest 20 runs remain at
+Successful results include the CF deployment ID and the raw runs retained by the ten-commit history, plus the latest 20, remain at
 `/benchmarks/history/<run-id>.json` in the VFS. A deployment change interrupts an
 active old-version run rather than publishing mixed-version samples. The CLI
 archives results locally for comparisons across longer histories. This mechanism

@@ -1,55 +1,59 @@
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
 import { BENCHMARK_BUILD_ID, BENCHMARK_COMMIT_HASH } from "./benchmark-build.js";
-import { type BenchmarkJob, type BenchmarkRow, BenchmarkStore } from "./benchmark-store.js";
-import { benchmarkPlan, PublicBenchmarkSuite, summarizeStage } from "./benchmark-suite.js";
+import {
+  armOrder,
+  MEASUREMENT,
+  mergeRows,
+  needsValidation,
+  PAIRS_PER_RUN,
+  PROTOCOL,
+  pairedPlan,
+} from "./benchmark-protocol.js";
+import {
+  type BenchmarkDiagnostics,
+  type BenchmarkJob,
+  type BenchmarkRow,
+  BenchmarkStore,
+} from "./benchmark-store.js";
+import { summarizeStage } from "./benchmark-suite.js";
 
 const WORKSPACE = "shared-results-v1";
 
-/** The coordinator, scratch filesystem, lease and result share one bounded DO. */
+/** Durable coordinator; all timed work belongs to a separate scratch DO. */
 export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
   private readonly store: BenchmarkStore;
-  private readonly suite: PublicBenchmarkSuite;
   private work: Promise<unknown> = Promise.resolve();
-
   constructor(ctx: DurableObjectState, env: VfsBenchmarkEnv) {
     super(ctx, env);
-    let suite: PublicBenchmarkSuite | undefined;
     const fs = new DurableObjectFileSystem(ctx.storage, {
       workspaceId: "public-benchmarks",
       maxEntries: 20_000,
       maxInlineLogicalBytes: 32 * 1024 * 1024,
       maxInFlightBufferedBytes: 16 * 1024 * 1024,
-      onEvent: (event) => suite?.onEvent(event),
     });
-    this.suite = suite = new PublicBenchmarkSuite(fs);
     this.store = new BenchmarkStore(fs);
     ctx.blockConcurrencyWhile(async () => {
       await fs.initialize();
-      const state = await this.store.get();
+      const state = await this.store.get(false);
       const job = await this.store.job();
-      if (state.status === "running" && job !== null && (await ctx.storage.getAlarm()) === null) {
+      if (state.status === "running" && job !== null && (await ctx.storage.getAlarm()) === null)
         await ctx.storage.setAlarm(Date.now() + 1);
-      }
     });
   }
-
-  async snapshot() {
-    const state = await this.store.get();
+  async snapshot(progressOnly = false) {
+    const state = await this.store.get(!progressOnly);
     const job = state.status === "running" ? await this.store.job() : null;
-    return {
-      ...state,
-      buildId: BENCHMARK_BUILD_ID,
-      progress: job === null ? null : Math.floor((job.nextIndex / benchmarkPlan().length) * 100),
-    };
+    const progress = job === null ? null : Math.floor((job.nextIndex / pairedPlan().length) * 100);
+    if (progressOnly)
+      return { status: state.status, error: state.error, buildId: BENCHMARK_BUILD_ID, progress };
+    return { ...state, buildId: BENCHMARK_BUILD_ID, progress };
   }
-
   private exclusive<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.work.then(operation);
     this.work = result.catch(() => undefined);
     return result;
   }
-
   claim(colo: string | null, force = false, expectedBuild?: string, deploymentId?: string) {
     return this.exclusive(async () => {
       if (expectedBuild !== undefined && expectedBuild !== BENCHMARK_BUILD_ID)
@@ -65,87 +69,61 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
           rows: [],
           verified: 0,
           colo,
+          diagnostics: [],
+          orderOffset: (crypto.getRandomValues(new Uint8Array(1))[0] ?? 0) % 2,
         });
         await this.ctx.storage.setAlarm(Date.now() + 1);
       }
       return claim;
     });
   }
-
   private async assertDeployment() {
-    const job = await this.store.job();
-    if (job?.buildId !== BENCHMARK_BUILD_ID)
+    if ((await this.store.job())?.buildId !== BENCHMARK_BUILD_ID)
       throw new Error("Deployment changed during benchmark; request a new run");
   }
-
-  stage(runId: string, index: number) {
-    return this.exclusive(async () => {
-      await this.assertDeployment();
-      await this.store.assertActive(runId);
-      const stage = benchmarkPlan()[index];
-      if (stage === undefined) throw new Error("Invalid benchmark stage");
-      const outcome = await this.suite.run(stage);
-      return { ...outcome, buildId: BENCHMARK_BUILD_ID };
-    });
-  }
-
-  validate(runId: string, index: number) {
-    return this.exclusive(async () => {
-      await this.assertDeployment();
-      await this.store.assertActive(runId);
-      const stage = benchmarkPlan()[index];
-      if (stage === undefined) throw new Error("Invalid benchmark stage");
-      return this.suite.validate(stage);
-    });
-  }
-
   override async alarm(): Promise<void> {
-    const state = await this.store.get();
+    const state = await this.store.get(false);
     if (state.status !== "running") return;
     const job = await this.store.job();
-    if (job === null) return;
+    if (!job) return;
     try {
       await this.assertDeployment();
       await this.store.assertActive(job.runId);
-      const group = await this.env.BENCHMARK_RUNNER.group(job.runId, job.nextIndex);
+      const group = await this.env.BENCHMARK_RUNNER.group(
+        job.runId,
+        job.nextIndex,
+        job.orderOffset ?? 0,
+      );
       await this.exclusive(async () => {
         await this.assertDeployment();
         await this.store.assertActive(job.runId);
-        const rows = [...job.rows];
-        for (const incoming of group.rows) {
-          const index = rows.findIndex(
-            (row) =>
-              row.group === incoming.group &&
-              row.operation === incoming.operation &&
-              row.files === incoming.files &&
-              row.cache === incoming.cache,
-          );
-          const existing = rows[index];
-          const samplesMs = [...(existing?.samplesMs ?? []), ...incoming.samplesMs];
-          const sorted = [...samplesMs].sort((a, b) => a - b);
-          const merged: BenchmarkRow = {
-            ...incoming,
-            samplesMs,
-            medianMs: sorted[Math.floor(sorted.length / 2)] ?? 0,
-            minMs: sorted[0] ?? 0,
-            maxMs: sorted.at(-1) ?? 0,
-          };
-          if (index < 0) rows.push(merged);
-          else rows[index] = merged;
-        }
+        // Alarm redelivery must never count an already published group twice.
+        const active = await this.store.job();
+        if (active?.nextIndex !== job.nextIndex) return;
+        const rows = mergeRows(job.rows, group.rows);
         const next: BenchmarkJob = {
           ...job,
           nextIndex: group.nextIndex,
           rows,
           verified: job.verified + group.verified,
+          diagnostics: [...(job.diagnostics ?? []), group.diagnostics],
         };
-        if (next.nextIndex === benchmarkPlan().length) {
-          const expectedRows = benchmarkPlan().filter((stage) => stage.trial === 0).length;
-          if (rows.length !== expectedRows || rows.some((row) => row.samplesMs.length !== 3))
-            throw new Error("Incomplete benchmark samples");
-          await this.suite.cleanup();
+        if (next.nextIndex === pairedPlan().length) {
+          const expected = pairedPlan()
+            .filter((group) => group.pair === 0)
+            .reduce((sum, group) => sum + group.stages.length, 0);
+          if (
+            rows.length !== expected ||
+            rows.some(
+              (row) =>
+                row.samplesMs.length !== PAIRS_PER_RUN || row.referenceMs?.length !== PAIRS_PER_RUN,
+            )
+          )
+            throw new Error("Incomplete paired benchmark samples");
           await this.store.complete({
-            version: 1,
+            version: 2,
+            protocol: PROTOCOL,
+            diagnostics: next.diagnostics ?? [],
             deploymentId: job.deploymentId ?? this.env.VERSION_METADATA.id,
             buildId: BENCHMARK_BUILD_ID,
             commitHash: job.commitHash ?? BENCHMARK_COMMIT_HASH,
@@ -153,14 +131,13 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
             completedAt: new Date().toISOString(),
             colo: job.colo,
             engine: "isomorphic-git 1.43.1",
-            measurement:
-              "Worker-to-Durable-Object RPC wall time, including dispatch and operation assertions; full-body validation and teardown excluded for operation rows; recovery rows include setup, injected fault, retry, validation and teardown. Coding mixed profiles include four 256 KiB bodies. One warmup and three measured runs. Direct-engine Git add batches 32 files; shell Git uses implementation-bounded batches. SQLite-backed VFS, inline bodies; no R2 or external Git network.",
+            measurement: MEASUREMENT,
             rows,
             verified: next.verified,
           });
           console.log(
             JSON.stringify({
-              message: "public benchmark completed",
+              message: "paired benchmark completed",
               runId: job.runId,
               verified: next.verified,
             }),
@@ -189,46 +166,80 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
   }
 }
 
-/** Measures RPC from outside the DO, so the production platform clock advances. */
+/** Alternates complete groups on one DO; its external clock advances during RPC. */
 export class BenchmarkRunner extends WorkerEntrypoint<VfsBenchmarkEnv> {
-  async group(runId: string, startIndex: number) {
-    const stub = this.env.PUBLIC_BENCHMARKS.getByName(WORKSPACE);
-    const plan = benchmarkPlan();
-    const initial = plan[startIndex];
-    if (initial === undefined) throw new Error("Invalid benchmark group");
-    const rows: BenchmarkRow[] = [];
-    let nextIndex = startIndex;
+  async group(runId: string, startIndex: number, orderOffset: number) {
+    const item = pairedPlan()[startIndex];
+    if (!item) throw new Error("Invalid benchmark group");
+    const stub = this.env.BENCHMARK_WORKSPACES.getByName("paired-scratch-v2", {
+      locationHint: "wnam",
+    });
+    const order = armOrder(item.pair, orderOffset);
+    const versions: Partial<Record<"reference" | "candidate", BenchmarkRow[]>> = {};
+    const checks: Partial<Record<"reference" | "candidate", number[]>> = {};
+    const diagnostics: BenchmarkDiagnostics = {
+      pair: item.pair,
+      group: item.group,
+      order,
+      runnerColo: null,
+      referencePingMs: [],
+      candidatePingMs: [],
+    };
     let verified = 0;
-    for (; nextIndex < plan.length; nextIndex += 1) {
-      const stage = plan[nextIndex];
-      if (
-        stage === undefined ||
-        stage.group !== initial.group ||
-        stage.files !== initial.files ||
-        stage.cache !== initial.cache ||
-        stage.trial !== initial.trial
-      )
-        break;
-      const started = performance.now();
-      const outcome = await stub.stage(runId, nextIndex);
-      const elapsed = performance.now() - started;
-      if (outcome.buildId !== BENCHMARK_BUILD_ID)
+    for (const arm of order) {
+      const token = `${runId}:${startIndex}:${arm}`;
+      if ((await stub.prepare(token, arm, BENCHMARK_BUILD_ID)) !== BENCHMARK_BUILD_ID)
         throw new Error("Worker and DO benchmark implementations differ");
-      verified += outcome.verified;
-      if (stage.trial >= 0) rows.push(summarizeStage(stage, [elapsed], outcome.iterations));
-      if (
-        (["coding-small", "coding-mixed"].includes(stage.group) &&
-          ["clone", "commit-partial", "checkout-base", "checkout-main"].includes(
-            stage.operation,
-          )) ||
-        stage.operation === "remove-tree" ||
-        stage.operation === "checkout-main" ||
-        (stage.group === "git-shell" &&
-          ["add-one", "add-changed", "add-removals"].includes(stage.operation))
-      )
-        verified += await stub.validate(runId, nextIndex);
+      const rows: BenchmarkRow[] = [];
+      const outcomes: number[] = [];
+      const ping = async () => {
+        const started = performance.now();
+        if ((await stub.ping(token)) !== BENCHMARK_BUILD_ID)
+          throw new Error("Benchmark build changed");
+        return performance.now() - started;
+      };
+      const pings = arm === "reference" ? diagnostics.referencePingMs : diagnostics.candidatePingMs;
+      try {
+        pings.push(await ping());
+        for (const stage of item.stages) {
+          const started = performance.now();
+          const outcome = await stub.stage(token, stage);
+          const elapsed = performance.now() - started;
+          if (outcome.buildId !== BENCHMARK_BUILD_ID) throw new Error("Benchmark build changed");
+          const bodies = needsValidation(stage) ? await stub.validate(token, stage) : 0;
+          verified += outcome.verified + bodies;
+          outcomes.push(outcome.iterations, outcome.verified, bodies);
+          rows.push(summarizeStage(stage, [elapsed], outcome.iterations));
+        }
+        pings.push(await ping());
+      } catch (error) {
+        await stub.clear(token).catch((cleanupError) => {
+          console.error("Scratch cleanup failed after benchmark failure", String(cleanupError));
+        });
+        throw error;
+      }
+      await stub.clear(token);
+      versions[arm] = rows;
+      checks[arm] = outcomes;
     }
-    return { nextIndex, rows, verified };
+    if (JSON.stringify(checks.reference) !== JSON.stringify(checks.candidate))
+      throw new Error("Reference and candidate validations differ");
+    const reference = versions.reference;
+    const candidate = versions.candidate;
+    if (!reference || !candidate) throw new Error("Missing benchmark arm");
+    return {
+      nextIndex: startIndex + 1,
+      verified,
+      diagnostics,
+      rows:
+        item.pair < 0
+          ? []
+          : candidate.map((row, index) => {
+              const paired = reference[index];
+              if (!paired) throw new Error("Missing reference workload");
+              return { ...row, referenceMs: paired.samplesMs };
+            }),
+    };
   }
 }
 
@@ -243,7 +254,11 @@ export async function handlePublicBenchmarks(
     "X-Vfs-Deployment": env.VERSION_METADATA.id,
   };
   const stub = env.PUBLIC_BENCHMARKS.getByName(WORKSPACE);
-  if (request.method === "GET") return Response.json(await stub.snapshot(), { headers });
+  if (request.method === "GET")
+    return Response.json(
+      await stub.snapshot(new URL(request.url).searchParams.get("progress") === "1"),
+      { headers },
+    );
   if (request.method !== "POST")
     return Response.json(
       { error: "Method not allowed" },

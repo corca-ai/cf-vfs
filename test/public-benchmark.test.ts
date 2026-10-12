@@ -223,3 +223,94 @@ it("allows authenticated callers to bypass freshness while sharing active runs a
     await new Response(fs.readFile(`/benchmarks/history/${first.runId}.json`).stream).json(),
   ).toMatchObject({ deploymentId: "before" });
 });
+
+function pairedResult(runId: string, value: number): PublicBenchmarkResult {
+  return {
+    version: 2,
+    runId,
+    commitHash: "paired-commit",
+    buildId: "same-build",
+    completedAt: "fixed",
+    colo: null,
+    engine: "test",
+    measurement: "paired-test",
+    verified: 1,
+    protocol: {
+      id: "paired-test",
+      referenceCommit: "reference",
+      referenceHash: "hash",
+      pairsPerRun: 2,
+      warmupPairs: 1,
+      credentials: "unbound",
+    },
+    rows: [
+      {
+        group: "files",
+        operation: "read",
+        files: 100,
+        cache: false,
+        iterations: 100,
+        samplesMs: [value, value],
+        referenceMs: [10, 10],
+        medianMs: value,
+        minMs: value,
+        maxMs: value,
+      },
+    ],
+  };
+}
+it("accumulates same-commit raw pairs durably without recounting reads or replacing them with the last run", async () => {
+  const { store, fs, now } = fixture();
+  for (const value of [8, 12]) {
+    const claim = await store.claim(true);
+    if (!claim.runId) throw new Error("No run");
+    await store.complete(pairedResult(claim.runId, value));
+    await store.get();
+    await store.get();
+  }
+  const index = await new Response(fs.readFile("/benchmarks/trends.json").stream).json();
+  expect(index).toEqual([expect.not.objectContaining({ runs: expect.anything() })]);
+  expect(fs.list("/benchmarks/observations")).toHaveLength(1);
+  expect((await store.get(false)).history).toEqual([]);
+  const state = await new BenchmarkStore(fs, now).get();
+  expect(state.history).toHaveLength(1);
+  expect(state.history[0]).toMatchObject({ totalRuns: 2, rows: [{ medianMs: 10 }] });
+  expect(state.history[0]?.runs?.map((r) => r.rows[0]?.samplesMs)).toEqual([
+    [8, 8],
+    [12, 12],
+  ]);
+});
+it("bounds retained raw observations per commit and records how many runs were collected", async () => {
+  const { store } = fixture();
+  for (let value = 1; value <= 15; value++) {
+    const claim = await store.claim(true);
+    if (!claim.runId) throw new Error("No run");
+    await store.complete(pairedResult(claim.runId, value));
+  }
+  const point = (await store.get()).history[0];
+  expect(point?.totalRuns).toBe(15);
+  expect(point?.runs).toHaveLength(12);
+  expect(point?.rows[0]?.medianMs).toBe(9.5);
+});
+it("rejects malformed pairs and cohort/build mismatches before publishing", async () => {
+  const { store } = fixture();
+  const first = await store.claim(true);
+  if (!first.runId) throw new Error("No run");
+  await store.complete(pairedResult(first.runId, 10));
+  const next = await store.claim(true);
+  if (!next.runId) throw new Error("No run");
+  const bad = pairedResult(next.runId, 8);
+  const badRow = bad.rows[0];
+  if (!badRow) throw new Error("No workload");
+  badRow.referenceMs = [10];
+  await expect(store.complete(bad)).rejects.toThrow("Invalid paired");
+  await expect(
+    store.complete({ ...pairedResult(next.runId, 8), buildId: "different" }),
+  ).rejects.toThrow("different implementations");
+  const changed = pairedResult(next.runId, 8);
+  const changedRow = changed.rows[0];
+  if (!changedRow) throw new Error("No workload");
+  changedRow.iterations = 200;
+  await expect(store.complete(changed)).rejects.toThrow("cohort changed");
+  expect((await store.get()).result?.runId).toBe(first.runId);
+});
