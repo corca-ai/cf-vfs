@@ -143,3 +143,12 @@ reassessed in the final group-paired controls instead of claiming those earlier
 flags were disproved by the aggregate. Node unbound combined cost flags include
 additional returned rows at commit publication; actual CF reads and writes
 are reported separately, since batching can trade more reads for fewer writes.
+
+
+Final adoption and public verification are in the linked report. The two final
+full CF summaries and `cf-final-rechecks-summary.json` retain aggregate results,
+all initial regression flags and their independent repeats. `public-after.json`
+and `public-repeat.json` retain both production screens; their assessments and
+`public-flag-review.json` retain unresolved per-workload variation. The public
+history has one point for source commit `4e449bb` after both executions.
+`private-cleanup.json` records fixture cleanup and deletion of both evaluators.

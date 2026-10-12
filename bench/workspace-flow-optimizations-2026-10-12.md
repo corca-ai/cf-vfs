@@ -424,3 +424,46 @@ remain hash-verifiable in the evidence archive; owned generated links and local
 Workers state are removed. A fresh pre-deployment public run completes all 190
 rows and 60,648 checks on the old build, run
 `57d63a79-27de-4a5c-8274-ce1092d5dd6d`, for a nearby production comparison.
+
+## Public deployment and verification
+
+Source commit: `4e449bb025d9bc7afa591c29c39966a7d808c082`.
+Implementation fingerprint:
+`19f15fc93c61c792929d4b8975ae929205e36aaa4ca8425f8573fbdb3a1ac3c6`.
+Deployment: `5c8a4d4f-ccba-476b-8af2-7373b7d76fcb` at
+<https://vfs.borca.ai/>. No package publication is performed.
+
+The deployed WebSocket demo shell passes a real non-interactive Bash workflow
+using jq, sed, redirection, rename, grep and Unicode sort/uniq, then initializes
+a repository, stages and commits edits, checks clean status, clones locally,
+and checks matching HEAD and edited file contents. Its unique fixture is removed.
+`public-smoke.json` preserves exact expected/actual output matching.
+
+Both fresh post-deployment public runs complete **190 workloads and 60,648
+checks**, with matching build/deployment identities and no unresolved zero
+measurements. They compare to the fresh pre-deployment run:
+
+| Public aggregate, descriptive | First run ratio | Repeat ratio |
+| --- | ---: | ---: |
+| Overall | 0.80752 | 0.82843 |
+| Files | 0.96566 | 1.17744 |
+| Git/coding/recovery | 0.78747 | 0.78847 |
+| Metadata-cache variants | 1.01380 | 1.01766 |
+
+The overall descriptive reductions are **19.25%** and **17.16%**. These are
+three-sample production screens, **not** paired statistical improvement claims;
+the controlled CF full-suite ratios above remain the adoption evidence.
+The first screen has 44 >5% flags and the repeat has 55. Both are preserved,
+including large variable samples (for example the repeat's 1,000-file rename
+samples are 111, 1,736 and 907 ms). The corresponding controlled measurements
+are linked per workload in `public-flag-review.json`, rather than explaining
+all variation away or erasing flags with the aggregate. Some public slowdowns
+remain unresolved; the accepted result is a substantial task/aggregate gain,
+not a guarantee that every operation improves.
+
+Latest public run: `91be35a8-b670-4994-85b2-c4fa54ae2014`; first post-deployment
+run: `cb7e0a99-6dfd-4bd0-9980-43d3a23a08f5`. Public history retains ten points
+and exactly **one** point for the deployed commit despite both executions.
+The live benchmark page displays that point. `public-verification.json` records
+the final API/build/history checks. The deployed source is the implementation
+commit above; the subsequent documentation/artifact commit does not change it.

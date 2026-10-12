@@ -1,4 +1,4 @@
 /** Generated deployment fingerprint; includes library, demo, config and lockfile. */
 export const BENCHMARK_BUILD_ID =
-  "2372eeb50aa33ba94d0964cdd8b38cc7e9af41d06ae29d0868a9153e181e3f2b";
-export const BENCHMARK_COMMIT_HASH = "665c38dec817da15db006ba3de8c75069df0fa43";
+  "19f15fc93c61c792929d4b8975ae929205e36aaa4ca8425f8573fbdb3a1ac3c6";
+export const BENCHMARK_COMMIT_HASH = "4e449bb025d9bc7afa591c29c39966a7d808c082";

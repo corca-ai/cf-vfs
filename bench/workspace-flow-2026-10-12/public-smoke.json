@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-12T04:09:12.321Z",
+  "rows": [
+    {
+      "script": "set -e; mkdir -p '/home/demo/.agent-perf-c2ebec34-827e-492c-8fd9-4a7835b44272'; cd '/home/demo/.agent-perf-c2ebec34-827e-492c-8fd9-4a7835b44272'; printf '%s' '{\"name\":\"agent-demo\",\"version\":\"1.0.0\"}' > package.json; printf '%s' 'old 한글\nold 😀\n' > source.ts; printf '%s' 'set -e\nname=$(jq -r .name package.json)\njq -c '\\''. + {version: \"2.0.0\"}'\\'' package.json > next.json\nmv -f next.json package.json\nsed '\\''s/old/new/g'\\'' source.ts > next.ts\nprintf '\\''%s:%s\\n'\\'' \"$name\" \"$(grep -c new next.ts)\"\njq -r .version package.json\nprintf '\\''%s\\n'\\'' z é 𐀀  é | sort | uniq\n' > task.sh; bash task.sh; cat next.ts; set -e\nmkdir -p repo/src/a repo/src/b\ncd repo\ngit init > /dev/null\ngit config user.name PublicCheck\ngit config user.email public-check@example.invalid\nprintf 'before\\n' > src/a/file\nprintf 'other\\n' > src/b/file\ngit add .\ngit commit -m initial > /dev/null\nsed 's/before/after/g' src/a/file > next\nmv -f next src/a/file\ngit add .\ngit commit -m edited > /dev/null\ntest -z \"$(git status --short)\"\ngit clone . ../clone > /dev/null\ntest \"$(git rev-parse HEAD)\" = \"$(git -C ../clone rev-parse HEAD)\"\ntest \"$(cat ../clone/src/a/file)\" = after\nprintf 'git-workflow-ok\\n'\n",
+      "stdout": "agent-demo:2\n2.0.0\nz\né\n\n𐀀\nnew 한글\nnew 😀\ngit-workflow-ok\n",
+      "stderr": "Cloned local repository into '/home/demo/.agent-perf-c2ebec34-827e-492c-8fd9-4a7835b44272/clone'.\n",
+      "exitCode": 0,
+      "matches": true
+    }
+  ]
+}
