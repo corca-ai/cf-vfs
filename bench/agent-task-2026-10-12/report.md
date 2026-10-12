@@ -430,3 +430,11 @@ Cleanup: the private evaluation Worker was deleted after saving the evidence.
 Its only service consumer was itself. Public production and its R2 bucket were
 not deleted. Owned temporary worktrees/compiled graphs and the copied secret
 file were removed; rejected commits remain on pushed experiment branches.
+
+The evidence commit's first remote CI run (38270884735) timed out the new
+1,000-file/two-fixture task integration at Vitest's default 5,000 ms; all other
+2,054 Node tests passed. The same task had passed locally and in earlier CI.
+Its own timeout is now explicitly 20,000 ms. Assertions, data size, runtime
+implementation, benchmark timing and performance gates are unchanged. The
+focused three-test suite passes after this correction. This CI test timeout
+is separate from the CF scratch-fixture interruption recorded above.

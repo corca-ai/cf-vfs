@@ -4,6 +4,7 @@ import { mergeRows } from "../demo/benchmark-protocol.js";
 import type { BenchmarkRow } from "../demo/benchmark-store.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 
+// Two complete 1,000-file fixtures exceed Vitest's 5s default on shared CI.
 it("executes distinct permission-bound coding cycles with matching commits and all bodies verified", async () => {
   const first = new AgentTask(createTestFileSystem());
   const second = new AgentTask(createTestFileSystem());
@@ -17,7 +18,7 @@ it("executes distinct permission-bound coding cycles with matching commits and a
   expect(await second.cycle()).toEqual(next);
   expect(await first.validate()).toBe(1001);
   expect(await second.validate()).toBe(1001);
-});
+}, 20_000);
 
 it("fails the coding task when the editing principal loses access", async () => {
   const fs = createTestFileSystem();
