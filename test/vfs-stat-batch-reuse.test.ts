@@ -62,3 +62,42 @@ it("preserves whole-body snapshots for both single-chunk and multi-chunk batched
   expect(await new Response(fs.readFile("/small").stream).text()).toBe("replacement");
   expect(await new Response(fs.readFile("/large").stream).text()).toBe("new");
 });
+
+it("keeps path-resolution errors and symlink permissions after a batch lookup", async () => {
+  const fs = createTestFileSystem();
+  await fs.writeFile("/public", "public");
+  await fs.writeFile("/private", "secret", { mode: 0o100600 });
+  const user = fs.forCredentials({ uid: 1000, gid: 1000 });
+  user.statMany?.(["/public", "/private"]);
+  for (const reader of [fs, user]) {
+    expect(() => reader.readFile("/public/")).toThrow(expect.objectContaining({ code: "ENOTDIR" }));
+    expect(() => reader.readFile("/public/../private")).toThrow(
+      expect.objectContaining({ code: "ENOTDIR" }),
+    );
+    expect(() => reader.readFile("/missing/../public")).toThrow(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
+  }
+  await fs.move("/public", "/moved");
+  fs.symlink("/public", "/private");
+  expect(() => user.readFile("/public")).toThrow(expect.objectContaining({ code: "EACCES" }));
+  expect(await new Response(fs.readFile("/public").stream).text()).toBe("secret");
+});
+
+it("discards metadata prefetched by a transaction-begin observer before changing permissions", async () => {
+  let prefetchOnBegin = false;
+  const fs = createTestFileSystem({
+    onStatement(query) {
+      if (prefetchOnBegin && query === "BEGIN") {
+        prefetchOnBegin = false;
+        fs.statMany(["/public", "/other"]);
+      }
+    },
+  });
+  await fs.writeFile("/public", "body");
+  await fs.writeFile("/other", "other");
+  const user = fs.forCredentials({ uid: 1000, gid: 1000 });
+  prefetchOnBegin = true;
+  fs.setMetadata("/public", { mode: 0o100600 });
+  expect(() => user.readFile("/public")).toThrow(expect.objectContaining({ code: "EACCES" }));
+});

@@ -141,7 +141,11 @@ export abstract class SqlRead extends SqlQuery {
     options: ReadFileOptions = {},
     posix?: PosixAccessContext,
   ): InlineReadResult {
+    // Batch keys are canonical regular-file paths collected with no symlinks.
+    // Any mutation invalidates them. Noncanonical requests use normal resolution.
+    const cached = this.readState.takeEntry(path);
     const direct =
+      cached === undefined &&
       posix === undefined &&
       options.range === undefined &&
       !pathRequiresDirectory(path) &&
@@ -149,7 +153,10 @@ export abstract class SqlRead extends SqlQuery {
       this.links() === 0
         ? this.directRead(path)
         : null;
-    const access = direct?.access ?? this.resolveAccess(path);
+    const access =
+      cached === undefined
+        ? (direct?.access ?? this.resolveAccess(path))
+        : { path: cached.path, row: cached, followed: [] };
     const normalized = access.path;
     this.assertTraverse(normalized, access.followed, posix);
     const entry = access.row ?? this.requireEntry(normalized);
@@ -192,9 +199,6 @@ export abstract class SqlRead extends SqlQuery {
   /** One snapshot statement for metadata and a small whole inline body. */
   private directRead(path: string) {
     const normalized = normalizePath(path);
-    const cached = this.readState.takeEntry(normalized);
-    if (cached !== undefined)
-      return { access: { path: normalized, row: cached, followed: [] }, body: undefined };
     const row = firstRow(
       this.sql.exec<SqlRow>(
         `SELECT ${ENTRY_COLUMNS},

@@ -553,7 +553,7 @@ export abstract class SqlBase {
   }
 
   protected transaction<T>(callback: () => T, preservesTraversal = false): T {
-    this.readState.invalidateBatch();
+    this.readState.batch = undefined;
     // Only opt in when directory paths, kinds, owners and modes cannot change.
     // Ordinary nested mutations still disable reuse, and rollback clears it.
     if (!preservesTraversal) {
@@ -570,7 +570,8 @@ export abstract class SqlBase {
           if (this.transactionDepth === 1) this.flushParentTimes();
           return result;
         } finally {
-          this.readState.invalidateBatch();
+          // A storage observer can prefetch between BEGIN and this callback.
+          this.readState.batch = undefined;
           this.transactionDepth -= 1;
           this.readState.depth -= 1;
           if (preservesTraversal) this.readState.stableTraversalDepth -= 1;

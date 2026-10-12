@@ -5,7 +5,8 @@ class SqlReadState {
   generation = 0;
   depth = 0;
   stableTraversalDepth = 0;
-  private batch: Map<string, InlineEntryRow> | undefined;
+  /** The transaction owner clears this before entry and when its callback exits. */
+  batch: Map<string, InlineEntryRow> | undefined;
 
   /** One-use metadata, not file bodies or authorization decisions. */
   rememberBatch(entries: Iterable<EntryRow>): void {
@@ -23,10 +24,6 @@ class SqlReadState {
     const entry = this.batch?.get(path);
     this.batch?.delete(path);
     return entry;
-  }
-
-  invalidateBatch(): void {
-    this.batch = undefined;
   }
 }
 

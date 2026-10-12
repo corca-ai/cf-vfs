@@ -683,16 +683,19 @@ fixture/dependency inputs are verified by the existing reference gate.
 ### One-use metadata after batch lookup
 
 The SQLite backend can carry at most 1,000 inline-file metadata projections
-from `statMany` into subsequent point reads. Each projection is consumed once.
+from `statMany` into subsequent file reads. Each projection is consumed once.
+Ordinary metadata lookups keep their original path and do not probe this state.
 This lets a file read reuse metadata that was just fetched as part of a batch,
 including an EOF read that authorizes a cached Git content hash. Whole-body
 reads still collect the current body and preserve their immutable stream
 snapshot. This is internal reuse; no filesystem capability or option is added.
 
 The state belongs to one SQL storage identity and is shared by VFS owners using
-that storage. Every VFS transaction discards the batch before entering and on
-exit, including nested transactions and rollback. No batch is retained or used
-inside a transaction. Directory and opaque entries are excluded. Permission
+that storage. Every VFS transaction discards the batch before entering and when
+its callback exits, including nested transactions and rollback. Reuse and
+population are disabled while the shared callback depth is nonzero. The exit
+clear also covers a storage observer that prefetches between BEGIN and the
+callback. Neither commit nor rollback leaves stale prefetched metadata behind. Directory and opaque entries are excluded. Permission
 checks still run for the current principal on every access; neither file bodies
 nor permission verdicts are cached by this mechanism. The optional FS adapter's
 metadata cache remains a separate feature.
