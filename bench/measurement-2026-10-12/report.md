@@ -132,3 +132,21 @@ authenticated evaluation bypasses freshness but coalesces active runs.
 The initial full check passed; follow-up statistics/gate tests (eight cases),
 type checks and documentation checks also passed. The deployed source commit's
 GitHub CI passed. No library API, library source or package bundle changed.
+
+## CI follow-up
+
+The evidence commit hit the pre-existing five-second timeout in the monolithic
+100-file integration test; baseline commit `cae52554` had failed the same test
+before this change. The test now executes each dependent operation group as its
+own case, with fresh fixtures matching the production paired runner. Every
+original stage and validation is retained; the timeout and assertions are not
+weakened. This changes tests only, not the deployed benchmark or calibration.
+
+The CLI's adoption policy is shared with its deterministic tests. Tests call
+that policy directly instead of starting a Node subprocess whose startup time
+can itself exceed a test timeout under load. The real CLI was also rechecked
+against the archived CF snapshot and retained its expected exit-2 decision.
+
+The final local `npm run check` passed 2,052 Node tests and 158 Workers tests,
+along with the POSIX oracle, reference verification, documentation/package checks
+and all twelve unchanged bundle budgets.

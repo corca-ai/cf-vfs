@@ -1,8 +1,6 @@
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { expect, it } from "vitest";
+// @ts-expect-error Shared CLI assessment module.
+import { assessPairedSnapshot } from "../bench/paired-assessment.mjs";
 import {
   armOrder,
   benchmarkGroups,
@@ -134,21 +132,7 @@ it("requires regression review even when the overall interval establishes an imp
     p.rows.push(faster);
     for (const run of p.runs) run.rows.push(faster);
   }
-  const directory = mkdtempSync(join(tmpdir(), "vfs-paired-gate-"));
-  try {
-    const input = join(directory, "result.json");
-    writeFileSync(input, JSON.stringify({ result: p, history: [p] }));
-    const execution = spawnSync(process.execPath, ["bench/assess-paired.mjs", input], {
-      encoding: "utf8",
-    });
-    expect(execution.stderr).toBe("");
-    expect(JSON.parse(execution.stdout)).toMatchObject({
-      conclusion: "faster",
-      regressions: 0,
-      review: 1,
-    });
-    expect(execution.status).toBe(2);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  const assessment = assessPairedSnapshot({ result: p, history: [p] });
+  expect(assessment).toMatchObject({ conclusion: "faster", regressions: [], requiresReview: true });
+  expect(assessment.review).toHaveLength(1);
 });

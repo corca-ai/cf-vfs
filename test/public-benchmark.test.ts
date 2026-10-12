@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { benchmarkGroups } from "../demo/benchmark-protocol.js";
 import {
   BENCHMARK_TTL_MS,
   BenchmarkStore,
@@ -157,23 +158,31 @@ it("recovers identifiable legacy runs without inventing commit hashes or duplica
   ]);
 });
 
-it("runs real file and Git operations and verifies the resulting bytes with both cache settings", async () => {
-  let suite: PublicBenchmarkSuite | undefined;
-  const fs = createTestFileSystem({ onEvent: (event) => suite?.onEvent(event) });
-  suite = new PublicBenchmarkSuite(fs);
-  const validations = new Map([
-    ["files/remove-tree", 100],
-    ["git/checkout-main", 100],
-    ["git-shell/add-one", 1],
-    ["git-shell/add-changed", 100],
-    ["git-shell/add-removals", 203],
-  ]);
-  for (const stage of benchmarkPlan().filter((stage) => stage.files === 100 && stage.trial === 0)) {
-    await suite.run(stage);
-    const expected = validations.get(`${stage.group}/${stage.operation}`);
-    if (expected !== undefined) expect(await suite.validate(stage)).toBe(expected);
-  }
-});
+// Keep dependent operations together, with the same fresh group fixtures used on CF.
+// The full 100-file plan exceeds the default per-test timeout on shared CI runners.
+const realOperationGroups = benchmarkGroups()
+  .filter((stages) => stages[0]?.files === 100)
+  .map((stages) => ({ group: stages[0]?.group, cache: stages[0]?.cache, stages }));
+it.each(realOperationGroups)(
+  "runs and validates $group operations (cache=$cache)",
+  async ({ stages }) => {
+    let suite: PublicBenchmarkSuite | undefined;
+    const fs = createTestFileSystem({ onEvent: (event) => suite?.onEvent(event) });
+    suite = new PublicBenchmarkSuite(fs);
+    const validations = new Map([
+      ["files/remove-tree", 100],
+      ["git/checkout-main", 100],
+      ["git-shell/add-one", 1],
+      ["git-shell/add-changed", 100],
+      ["git-shell/add-removals", 203],
+    ]);
+    for (const stage of stages) {
+      await suite.run(stage);
+      const expected = validations.get(`${stage.group}/${stage.operation}`);
+      if (expected !== undefined) expect(await suite.validate(stage)).toBe(expected);
+    }
+  },
+);
 
 it("runs and validates the 1,000-file shell Git workflow", async () => {
   const fs = createTestFileSystem();
