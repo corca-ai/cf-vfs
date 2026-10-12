@@ -82,8 +82,8 @@ and dispatch. Coordinator persistence, fixture initialization, full-body validat
 The request colo shown in the UI does not identify the DO's location.
 
 The suite runs 100 and 1,000 approximately 0.8 KiB files, with/without the
-existing 4,096-entry metadata cache. It alternates cache order and discards one
-warmup pair before six measured reference/candidate pairs per run. It exercises writes, stat, stat after one
+existing 4,096-entry metadata cache. Each arm starts a group with a fresh fixture;
+one warmup pair precedes six measured reference/candidate pairs per run. It exercises writes, stat, stat after one
 overwrite, reads, listing, append, rename, recursive copy/remove and real Git
 init, populate, add, commit, status, diff, log, branch and checkout. Direct-engine Git add
 uses batches of 32 existing filepath arguments to bound concurrent zlib

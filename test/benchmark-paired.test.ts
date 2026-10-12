@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, it } from "vitest";
 import {
   armOrder,
@@ -102,3 +106,49 @@ function first<T>(values: T[]): T {
   if (value === undefined) throw new Error("Expected an observation");
   return value;
 }
+
+it("keeps equal workload weights instead of letting long operations dominate the aggregate", () => {
+  const p = point([0.5, 0.5, 0.5]);
+  const second = {
+    ...row,
+    operation: "write",
+    referenceMs: row.referenceMs.map(() => 10000),
+    samplesMs: row.samplesMs.map(() => 20000),
+  };
+  p.rows.push(second);
+  for (const run of p.runs) run.rows.push(second);
+  const metric = pairedSummary([p], p, [{ id: "overall", includes: () => true }])[0];
+  expect(metric.workloads).toBe(2);
+  expect(metric.points[0].value).toBeCloseTo(100);
+  expect(metric.points[0].status).toBe("uncertain");
+});
+
+it("requires regression review even when the overall interval establishes an improvement", () => {
+  const p = { ...point([1.01, 1.3, 1]), commitHash: "candidate" };
+  for (let index = 0; index < 7; index++) {
+    const faster = {
+      ...row,
+      operation: `control-${index}`,
+      samplesMs: row.samplesMs.map(() => 50),
+    };
+    p.rows.push(faster);
+    for (const run of p.runs) run.rows.push(faster);
+  }
+  const directory = mkdtempSync(join(tmpdir(), "vfs-paired-gate-"));
+  try {
+    const input = join(directory, "result.json");
+    writeFileSync(input, JSON.stringify({ result: p, history: [p] }));
+    const execution = spawnSync(process.execPath, ["bench/assess-paired.mjs", input], {
+      encoding: "utf8",
+    });
+    expect(execution.stderr).toBe("");
+    expect(JSON.parse(execution.stdout)).toMatchObject({
+      conclusion: "faster",
+      regressions: 0,
+      review: 1,
+    });
+    expect(execution.status).toBe(2);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

@@ -45,6 +45,7 @@ const report = {
     const v = previous ? r.previous : r.reference;
     return v?.value > 105 && v?.status === "slower";
   }),
+  review: rows.filter((r) => (previous ? r.previous : r.reference)?.value > 105),
   unresolved: rows.filter((r) => !r.reference),
   rows,
 };
@@ -55,11 +56,12 @@ console.log(
       conclusion: report.conclusion,
       metrics,
       regressions: report.regressions.length,
+      review: report.review.length,
       unresolved: report.unresolved.length,
     },
     null,
     2,
   ),
 );
-if (report.conclusion !== "faster" || report.regressions.length || report.unresolved.length)
+if (report.conclusion !== "faster" || report.review.length || report.unresolved.length)
   process.exitCode = 2;
