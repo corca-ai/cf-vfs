@@ -1,0 +1,4217 @@
+{
+  "commit": "9b356383261a560be9b8cce8cedc37016a7c43ca",
+  "reference": "cae52554ee7dc1dd07d8573508f98e6b3e635add",
+  "previous": null,
+  "note": "Run-cluster intervals on paired log ratios. At least three retained runs per compared commit are required. Individual intervals are pointwise; SQL cost and compatibility gates remain separate. No zero replacement, trimming or best-run selection.",
+  "conclusion": "uncertain",
+  "metrics": [
+    {
+      "id": "overall",
+      "reference": {
+        "value": 100.35832486611275,
+        "ci95": [
+          98.53540102190745,
+          102.21497315155759
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "id": "files",
+      "reference": {
+        "value": 100.56234428453293,
+        "ci95": [
+          91.75327456532946,
+          110.21715721764791
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "id": "git",
+      "reference": {
+        "value": 100.32966785050077,
+        "ci95": [
+          98.88331126423769,
+          101.79718015402169
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "id": "cache",
+      "reference": {
+        "value": 100.12011996080194,
+        "ci95": [
+          98.95595550399817,
+          101.29798019645587
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    }
+  ],
+  "regressions": [
+    {
+      "group": "git-shell",
+      "operation": "remove-files",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 106.30368214600374,
+        "ci95": [
+          100.79652087169791,
+          112.1117350090165
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "slower"
+      },
+      "previous": null
+    }
+  ],
+  "review": [
+    {
+      "group": "files",
+      "operation": "stat",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 117.34171086896701,
+        "ci95": [
+          80.07807494307804,
+          171.94565577960924
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "read",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 106.02692703187235,
+        "ci95": [
+          79.56142483153432,
+          141.29597703441718
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "remove-tree",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 106.1741622906086,
+        "ci95": [
+          92.6089933767011,
+          121.72632837350963
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "add-all",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 105.56402128266862,
+        "ci95": [
+          60.15395991260873,
+          185.25401495690886
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "commit",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 108.72824789887817,
+        "ci95": [
+          88.25776844559286,
+          133.94664401069187
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "diff",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 117.44879007057463,
+        "ci95": [
+          72.90472731969881,
+          189.20883180252594
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "add-one",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 113.58889735452084,
+        "ci95": [
+          69.51378105731598,
+          185.6097799021674
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "status-clean",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 107.64185007327936,
+        "ci95": [
+          85.32489545976094,
+          135.79586385385784
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "diff",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 105.28033135970989,
+        "ci95": [
+          81.10527720424182,
+          136.6612451529926
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "write",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 109.53384445859835,
+        "ci95": [
+          87.76285939558308,
+          136.70547159137155
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "rename",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 105.4859383785007,
+        "ci95": [
+          97.10516559344052,
+          114.59002337919395
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "status-change",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 109.73282363269044,
+        "ci95": [
+          90.7515315618665,
+          132.68418036773778
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "checkout-old",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 108.0397734117293,
+        "ci95": [
+          74.43418743402952,
+          156.81762697017606
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "populate",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 109.17174965306471,
+        "ci95": [
+          87.44905523229,
+          136.29044808606022
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "clone-bare",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 106.63382222327844,
+        "ci95": [
+          81.01815031955311,
+          140.34845274913047
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "change-one",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 122.80916116217706,
+        "ci95": [
+          81.18140982371054,
+          185.78255906258693
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "push-one",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 105.8661738910581,
+        "ci95": [
+          98.06639268360595,
+          114.28631631726537
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "change-all",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 105.74574832601134,
+        "ci95": [
+          89.62971171315644,
+          124.75955880360974
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "remove-files",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 106.30368214600374,
+        "ci95": [
+          100.79652087169791,
+          112.1117350090165
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "slower"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "stat-after-overwrite",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 110.6725279883287,
+        "ci95": [
+          76.538558748478,
+          160.02925390296775
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "read",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 107.33205983032063,
+        "ci95": [
+          85.59374684336338,
+          134.59126971624983
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "readdir",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 106.57420393034927,
+        "ci95": [
+          84.47386167522399,
+          134.45651374452277
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "copy-tree",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 105.50307293931782,
+        "ci95": [
+          78.98800707746064,
+          140.91884086559307
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "remove-tree",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 106.79113506362992,
+        "ci95": [
+          73.79052466941609,
+          154.55028378332156
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "init",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 107.68604490620808,
+        "ci95": [
+          75.60001612620356,
+          153.38997081936466
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "status-change",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 107.7865702195406,
+        "ci95": [
+          62.67171235832072,
+          185.37780894300835
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "add-one",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 110.32876797958662,
+        "ci95": [
+          84.92137583697583,
+          143.33772767955352
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "checkout-old",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 108.58055982098129,
+        "ci95": [
+          85.7158547859661,
+          137.54442512971332
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "commit-partial",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 108.80655718385594,
+        "ci95": [
+          66.37189361422053,
+          178.3716908096046
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "diff",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 107.19805568646368,
+        "ci95": [
+          89.41001416365776,
+          128.52501199612888
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "commit-partial",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 107.62951101074133,
+        "ci95": [
+          90.2061092496264,
+          128.41826054546593
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "status-final",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 105.28527757942348,
+        "ci95": [
+          77.81158116529893,
+          142.4593808398247
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "clone",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 107.3582070980587,
+        "ci95": [
+          83.82383106221084,
+          137.5000937711337
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "status-clean",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 108.15346225717528,
+        "ci95": [
+          99.31950441977325,
+          117.77315509727293
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "add-partial",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 108.64050458429911,
+        "ci95": [
+          81.71634335791855,
+          144.43572425450918
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "add-rest",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 112.09249750710075,
+        "ci95": [
+          85.22847211334398,
+          147.42406716701151
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "status-clean",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 114.24335061430419,
+        "ci95": [
+          96.94938135409326,
+          134.62224283736285
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "edit",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 129.04513912158583,
+        "ci95": [
+          68.94143288713306,
+          241.54774906074553
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "add-partial",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 107.95454624029878,
+        "ci95": [
+          80.83045734401435,
+          144.18060266996403
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    }
+  ],
+  "unresolved": [],
+  "rows": [
+    {
+      "group": "files",
+      "operation": "write",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 95.24962787962788,
+        "ci95": [
+          71.26134194835139,
+          127.31294925351139
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "stat",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 117.34171086896701,
+        "ci95": [
+          80.07807494307804,
+          171.94565577960924
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "stat-after-overwrite",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 98.26933277615592,
+        "ci95": [
+          88.13121857464638,
+          109.57367798212836
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "read",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 106.02692703187235,
+        "ci95": [
+          79.56142483153432,
+          141.29597703441718
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "readdir",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 93.60009352007425,
+        "ci95": [
+          83.53484753249697,
+          104.87811692669247
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "append",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 99.79857453959107,
+        "ci95": [
+          90.30802565103181,
+          110.28649345763348
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "rename",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 88.63202166764772,
+        "ci95": [
+          59.02096241051665,
+          133.09907097507136
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "copy-tree",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 97.86873578953532,
+        "ci95": [
+          86.36781847916552,
+          110.90113903192356
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "remove-tree",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 106.1741622906086,
+        "ci95": [
+          92.6089933767011,
+          121.72632837350963
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "init",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 95.16986844827309,
+        "ci95": [
+          81.67999969173736,
+          110.88765786782719
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "populate",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 101.22600893068707,
+        "ci95": [
+          81.72589597999,
+          125.37892379355952
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "add-all",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 105.56402128266862,
+        "ci95": [
+          60.15395991260873,
+          185.25401495690886
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "commit",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 108.72824789887817,
+        "ci95": [
+          88.25776844559286,
+          133.94664401069187
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "status-clean",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 102.53208073833152,
+        "ci95": [
+          84.13310387641339,
+          124.95470981285159
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "status-change",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 89.95942744085518,
+        "ci95": [
+          56.98796523459679,
+          142.00715102165984
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "diff",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 117.44879007057463,
+        "ci95": [
+          72.90472731969881,
+          189.20883180252594
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "add-one",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 92.14032784634114,
+        "ci95": [
+          67.97201404620246,
+          124.90199289755411
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "commit-one",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 93.405873178875,
+        "ci95": [
+          75.8564055892169,
+          115.01543049053069
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "log",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 100.91456888269728,
+        "ci95": [
+          57.50778496046992,
+          177.08472374272156
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "branch",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 99.27128767649648,
+        "ci95": [
+          91.03317878929256,
+          108.2549097814088
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "checkout-old",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 103.32428088797971,
+        "ci95": [
+          87.17303027314229,
+          122.46800400957657
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "checkout-main",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 101.82023263650595,
+        "ci95": [
+          86.41739761810946,
+          119.96843297650553
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "init",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 95.58100718287139,
+        "ci95": [
+          90.7270670572879,
+          100.69463535422707
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "populate",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 88.6741478933618,
+        "ci95": [
+          64.51776478807132,
+          121.87502977579298
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "add-all",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 99.35718305976926,
+        "ci95": [
+          90.94137906749953,
+          108.55179376865729
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "commit",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 97.9339035859297,
+        "ci95": [
+          81.33132509811524,
+          117.92565115603205
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "clone-bare",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 100.32507592201063,
+        "ci95": [
+          78.47603593515878,
+          128.25725380769177
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "clone-worktree",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 103.70925038935854,
+        "ci95": [
+          84.71611389306494,
+          126.96059960799435
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "fetch-unchanged",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 97.7080057139851,
+        "ci95": [
+          77.44008886465927,
+          123.28051943856909
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "pull-unchanged",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 102.88941304301264,
+        "ci95": [
+          88.61282566978802,
+          119.46612960729641
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "add-unchanged",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 96.74023905542268,
+        "ci95": [
+          85.33129000126003,
+          109.67458539958947
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "change-one",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 102.75509980354664,
+        "ci95": [
+          59.401573688318756,
+          177.74967698731476
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "add-one",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 113.58889735452084,
+        "ci95": [
+          69.51378105731598,
+          185.6097799021674
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "commit-one",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 104.68457778151488,
+        "ci95": [
+          67.17425586655816,
+          163.14078487246434
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "push-one",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 97.23322457805503,
+        "ci95": [
+          75.31088936500382,
+          125.5369580888232
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "pull-one",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 101.03857777227658,
+        "ci95": [
+          89.22491829562337,
+          114.41640287548623
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "change-all",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 103.74003319419059,
+        "ci95": [
+          72.20844516746769,
+          149.04066224071533
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "add-changed",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 91.4582344544818,
+        "ci95": [
+          63.253748567764525,
+          132.23893980875857
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "remove-files",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 84.59190547879444,
+        "ci95": [
+          73.47584214888121,
+          97.38970338079005
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "faster"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "add-removals-repeat",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 104.7316744321752,
+        "ci95": [
+          97.8384603506968,
+          112.11055028922499
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "add-removals",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 102.47168854086833,
+        "ci95": [
+          76.29775278943617,
+          137.6245900897695
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "write",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 99.72785848976835,
+        "ci95": [
+          82.86003794515217,
+          120.02946179603026
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "stat",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 102.5482466026137,
+        "ci95": [
+          95.9193543009853,
+          109.63525513601637
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "stat-after-overwrite",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 102.19096459702759,
+        "ci95": [
+          90.78968107854602,
+          115.0240106718325
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "read",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 97.0204649086964,
+        "ci95": [
+          80.92362204768833,
+          116.31919546992744
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "readdir",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 90.78455347112133,
+        "ci95": [
+          73.88902835754257,
+          111.54342305151674
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "append",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 85.71721587467526,
+        "ci95": [
+          66.99685786396377,
+          109.6684431413868
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "rename",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 91.79729803158915,
+        "ci95": [
+          62.96994048204853,
+          133.8216911337672
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "copy-tree",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 102.48848359155976,
+        "ci95": [
+          91.50788307883991,
+          114.78671471230122
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "remove-tree",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 99.65495025906976,
+        "ci95": [
+          73.70513463364834,
+          134.74107550987168
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "init",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 100.5207184709233,
+        "ci95": [
+          94.3118448618944,
+          107.13834361640392
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "populate",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 98.92686699594981,
+        "ci95": [
+          78.66313973689195,
+          124.4105567915006
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "add-all",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 99.94074325348282,
+        "ci95": [
+          85.82641727125164,
+          116.37619837364686
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "commit",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 91.69974859586962,
+        "ci95": [
+          67.42127060644295,
+          124.72093475708128
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "status-clean",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 107.64185007327936,
+        "ci95": [
+          85.32489545976094,
+          135.79586385385784
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "status-change",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 99.7618271527459,
+        "ci95": [
+          88.72489187484993,
+          112.17170228725264
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "diff",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 105.28033135970989,
+        "ci95": [
+          81.10527720424182,
+          136.6612451529926
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "add-one",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 98.2525840148775,
+        "ci95": [
+          95.46105771147067,
+          101.12574171112061
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "commit-one",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 88.42865527595444,
+        "ci95": [
+          51.925388992133,
+          150.59351938794921
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "log",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 95.07224294163915,
+        "ci95": [
+          87.49512058711646,
+          103.3055479814379
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "branch",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 100.50517425298796,
+        "ci95": [
+          93.02072551160275,
+          108.59182183397942
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "checkout-old",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 104.81335148210775,
+        "ci95": [
+          75.65859356664618,
+          145.2027870335
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "checkout-main",
+      "files": 100,
+      "cache": true,
+      "reference": {
+        "value": 99.06747760373902,
+        "ci95": [
+          90.91722427807733,
+          107.9483584842993
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "write",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 109.53384445859835,
+        "ci95": [
+          87.76285939558308,
+          136.70547159137155
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "stat",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 101.95491789838044,
+        "ci95": [
+          96.92049058833635,
+          107.25085294725525
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "stat-after-overwrite",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 87.126473484892,
+        "ci95": [
+          67.8036482191934,
+          111.9559578471881
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "read",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 104.21147406147062,
+        "ci95": [
+          68.76325803383921,
+          157.933635441186
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "readdir",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 98.56367072467253,
+        "ci95": [
+          70.0216702785049,
+          138.73986650249753
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "append",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 102.91518198596799,
+        "ci95": [
+          76.60039890484715,
+          138.26996771076466
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "rename",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 105.4859383785007,
+        "ci95": [
+          97.10516559344052,
+          114.59002337919395
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "copy-tree",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 101.81367763556277,
+        "ci95": [
+          83.90173662889447,
+          123.5495875315219
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "remove-tree",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 99.9571400440814,
+        "ci95": [
+          75.47874009294866,
+          132.37409412886475
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "init",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 98.26628480108904,
+        "ci95": [
+          85.53180610967821,
+          112.8967476289046
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "populate",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 98.41437515507383,
+        "ci95": [
+          79.62339453629629,
+          121.63999404406871
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "add-all",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 98.92012992010702,
+        "ci95": [
+          93.84543594082805,
+          104.26923808612992
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "commit",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 94.95599269479364,
+        "ci95": [
+          84.86342314114685,
+          106.24884331683171
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "status-clean",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 100.14066642715756,
+        "ci95": [
+          97.93431937653784,
+          102.39671992735255
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "status-change",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 109.73282363269044,
+        "ci95": [
+          90.7515315618665,
+          132.68418036773778
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "diff",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 86.85695577182318,
+        "ci95": [
+          55.78981058031339,
+          135.22416884868497
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "add-one",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 97.43080435898143,
+        "ci95": [
+          81.23027827905345,
+          116.86235525904847
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "commit-one",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 101.43706740892429,
+        "ci95": [
+          62.33284577726119,
+          165.07314107382234
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "log",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 103.41907348069557,
+        "ci95": [
+          81.04809109891158,
+          131.9649187857201
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "branch",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 83.10851305767409,
+        "ci95": [
+          43.45593192759346,
+          158.94320145213115
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "checkout-old",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 108.0397734117293,
+        "ci95": [
+          74.43418743402952,
+          156.81762697017606
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "checkout-main",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 97.86464497186465,
+        "ci95": [
+          84.5083075151081,
+          113.33191986784121
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "init",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 97.73057110381916,
+        "ci95": [
+          87.67341922574157,
+          108.94139424043736
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "populate",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 109.17174965306471,
+        "ci95": [
+          87.44905523229,
+          136.29044808606022
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "add-all",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 101.3809372469439,
+        "ci95": [
+          91.08599182475334,
+          112.83946335945394
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "commit",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 97.60572891607427,
+        "ci95": [
+          84.98675751626921,
+          112.09838562689518
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "clone-bare",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 106.63382222327844,
+        "ci95": [
+          81.01815031955311,
+          140.34845274913047
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "clone-worktree",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 98.19077857822678,
+        "ci95": [
+          55.67837405039151,
+          173.1629050279453
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "fetch-unchanged",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 97.41274693675291,
+        "ci95": [
+          72.7647341415492,
+          130.4099214779572
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "pull-unchanged",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 102.9381269686104,
+        "ci95": [
+          95.12807827666214,
+          111.38938340569156
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "add-unchanged",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 102.10825677616238,
+        "ci95": [
+          63.90796854879242,
+          163.1423488904455
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "change-one",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 122.80916116217706,
+        "ci95": [
+          81.18140982371054,
+          185.78255906258693
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "add-one",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 88.62713586794413,
+        "ci95": [
+          65.36915363650742,
+          120.16017915471818
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "commit-one",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 96.28714478928336,
+        "ci95": [
+          69.7499010418088,
+          132.92082301471882
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "push-one",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 105.8661738910581,
+        "ci95": [
+          98.06639268360595,
+          114.28631631726537
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "pull-one",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 99.86416877068372,
+        "ci95": [
+          50.748667363684255,
+          196.51456328479227
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "change-all",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 105.74574832601134,
+        "ci95": [
+          89.62971171315644,
+          124.75955880360974
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "add-changed",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 101.05975679261108,
+        "ci95": [
+          85.30132596010857,
+          119.72937498952687
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "remove-files",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 106.30368214600374,
+        "ci95": [
+          100.79652087169791,
+          112.1117350090165
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "slower"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "add-removals-repeat",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 101.19097282557337,
+        "ci95": [
+          89.43935812563464,
+          114.48665549458038
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-shell",
+      "operation": "add-removals",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 92.37497651195392,
+        "ci95": [
+          63.22505798371723,
+          134.96446753408492
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "write",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 99.13510069698911,
+        "ci95": [
+          75.83121866367712,
+          129.600557176719
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "stat",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 98.39690335486068,
+        "ci95": [
+          74.97573615566051,
+          129.13445184085498
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "stat-after-overwrite",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 110.6725279883287,
+        "ci95": [
+          76.538558748478,
+          160.02925390296775
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "read",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 107.33205983032063,
+        "ci95": [
+          85.59374684336338,
+          134.59126971624983
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "readdir",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 106.57420393034927,
+        "ci95": [
+          84.47386167522399,
+          134.45651374452277
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "append",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 102.60273037049599,
+        "ci95": [
+          80.79400818285617,
+          130.29827973944373
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "rename",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 103.99987387288006,
+        "ci95": [
+          84.38065266326934,
+          128.18073129556532
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "copy-tree",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 105.50307293931782,
+        "ci95": [
+          78.98800707746064,
+          140.91884086559307
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "files",
+      "operation": "remove-tree",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 106.79113506362992,
+        "ci95": [
+          73.79052466941609,
+          154.55028378332156
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "init",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 107.68604490620808,
+        "ci95": [
+          75.60001612620356,
+          153.38997081936466
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "populate",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 104.46324313228968,
+        "ci95": [
+          79.25313458684238,
+          137.69258746174023
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "add-all",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 98.86541025786285,
+        "ci95": [
+          84.85813918055089,
+          115.18481833143679
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "commit",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 99.29025138364786,
+        "ci95": [
+          75.3978547697669,
+          130.75377343204036
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "status-clean",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 99.03572421237955,
+        "ci95": [
+          77.62234386973971,
+          126.35633222735085
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "status-change",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 107.7865702195406,
+        "ci95": [
+          62.67171235832072,
+          185.37780894300835
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "diff",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 94.85470118325112,
+        "ci95": [
+          79.30628042017226,
+          113.45147305982199
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "add-one",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 110.32876797958662,
+        "ci95": [
+          84.92137583697583,
+          143.33772767955352
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "commit-one",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 92.26867166000073,
+        "ci95": [
+          67.53206402529001,
+          126.0661567624056
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "log",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 97.24029717661271,
+        "ci95": [
+          84.5351853957744,
+          111.85490811579398
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "branch",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 95.53954414162631,
+        "ci95": [
+          85.56808400414384,
+          106.67300315322856
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "checkout-old",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 108.58055982098129,
+        "ci95": [
+          85.7158547859661,
+          137.54442512971332
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git",
+      "operation": "checkout-main",
+      "files": 1000,
+      "cache": true,
+      "reference": {
+        "value": 94.12371179085235,
+        "ci95": [
+          69.83131948066774,
+          126.86675817059509
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "prepare",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 100.68456198638755,
+        "ci95": [
+          81.6462514381056,
+          124.1622345647511
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "clone",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 100.96566177448562,
+        "ci95": [
+          86.20348359471886,
+          118.25583413179316
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "status-clean",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 90.59400203937254,
+        "ci95": [
+          68.59586716203454,
+          119.64675927374645
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "edit",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 102.29211593861609,
+        "ci95": [
+          64.56593035989864,
+          162.0618943283775
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "status-dirty",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 98.62121017268251,
+        "ci95": [
+          82.5924798582165,
+          117.76063768300614
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "diff",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 104.64473340875571,
+        "ci95": [
+          89.88912211164926,
+          121.82252950015639
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "add-partial",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 93.53220603635907,
+        "ci95": [
+          45.924846813049584,
+          190.4910777740928
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "diff-staged",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 90.4757077361273,
+        "ci95": [
+          54.80233056464644,
+          149.37053964697458
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "commit-partial",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 108.80655718385594,
+        "ci95": [
+          66.37189361422053,
+          178.3716908096046
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "add-rest",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 87.70188269756663,
+        "ci95": [
+          51.22308352010968,
+          150.15925828983106
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "commit-rest",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 102.82258335369889,
+        "ci95": [
+          86.67164341450075,
+          121.98319116860672
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "checkout-base",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 101.67230142293641,
+        "ci95": [
+          82.96423234586788,
+          124.598957699526
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "checkout-main",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 101.65134363750639,
+        "ci95": [
+          68.2487730677757,
+          151.40192561482445
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "status-final",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 92.5502830629281,
+        "ci95": [
+          67.17094506002749,
+          127.51874917605352
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "prepare",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 101.84666672773118,
+        "ci95": [
+          71.63189251168038,
+          144.80621912729939
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "clone",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 101.32451309517656,
+        "ci95": [
+          86.26419168114741,
+          119.01412108424512
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "status-clean",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 99.55646285605428,
+        "ci95": [
+          76.06014892655712,
+          130.31120023153449
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "edit",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 93.6850714101146,
+        "ci95": [
+          91.53959398289946,
+          95.8808338909378
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "faster"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "status-dirty",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 99.60184357033914,
+        "ci95": [
+          87.02991848277395,
+          113.98984872741096
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "diff",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 107.19805568646368,
+        "ci95": [
+          89.41001416365776,
+          128.52501199612888
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "add-partial",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 101.74340395939024,
+        "ci95": [
+          66.24709251037896,
+          156.25923881296154
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "diff-staged",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 98.46073054190101,
+        "ci95": [
+          87.5143329630796,
+          110.77631663986682
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "commit-partial",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 107.62951101074133,
+        "ci95": [
+          90.2061092496264,
+          128.41826054546593
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "add-rest",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 99.64221978612062,
+        "ci95": [
+          69.19298598896036,
+          143.49101750702962
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "commit-rest",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 92.99016598122348,
+        "ci95": [
+          82.84022494935242,
+          104.38372148919532
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "checkout-base",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 104.70630330213362,
+        "ci95": [
+          94.98496776374375,
+          115.42257905974873
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "checkout-main",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 90.81578604971335,
+        "ci95": [
+          87.04690969771245,
+          94.74784371402045
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "faster"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "status-final",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 105.28527757942348,
+        "ci95": [
+          77.81158116529893,
+          142.4593808398247
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "prepare",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 103.12548141660915,
+        "ci95": [
+          86.85484267780268,
+          122.44412158868985
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "clone",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 107.3582070980587,
+        "ci95": [
+          83.82383106221084,
+          137.5000937711337
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "status-clean",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 108.15346225717528,
+        "ci95": [
+          99.31950441977325,
+          117.77315509727293
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "edit",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 100.82041461590782,
+        "ci95": [
+          84.34896832525929,
+          120.50836192953894
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "status-dirty",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 102.05157394135375,
+        "ci95": [
+          93.30534475307299,
+          111.6176546099155
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "diff",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 96.91131647179826,
+        "ci95": [
+          78.93862227365112,
+          118.97602200022081
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "add-partial",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 108.64050458429911,
+        "ci95": [
+          81.71634335791855,
+          144.43572425450918
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "diff-staged",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 104.79545429568408,
+        "ci95": [
+          87.75267043867791,
+          125.14818279761822
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "commit-partial",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 101.35628229760331,
+        "ci95": [
+          91.32228252943193,
+          112.49276383209737
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "add-rest",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 112.09249750710075,
+        "ci95": [
+          85.22847211334398,
+          147.42406716701151
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "commit-rest",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 95.50213512995168,
+        "ci95": [
+          67.95488171425254,
+          134.2163739278002
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "checkout-base",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 101.60149747530964,
+        "ci95": [
+          96.33019773957263,
+          107.16124882389504
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "checkout-main",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 103.45332395329424,
+        "ci95": [
+          92.47156384335933,
+          115.73925855860642
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-small",
+      "operation": "status-final",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 100.14841598632542,
+        "ci95": [
+          88.05564979769811,
+          113.90189326423292
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "prepare",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 102.75274533537055,
+        "ci95": [
+          90.76700193189487,
+          116.32120097871676
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "clone",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 98.29566995199066,
+        "ci95": [
+          92.07280392187448,
+          104.93911687004886
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "status-clean",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 114.24335061430419,
+        "ci95": [
+          96.94938135409326,
+          134.62224283736285
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "edit",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 129.04513912158583,
+        "ci95": [
+          68.94143288713306,
+          241.54774906074553
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "status-dirty",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 99.84374744552946,
+        "ci95": [
+          78.5686262132672,
+          126.87982957608762
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "diff",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 100.25682835141625,
+        "ci95": [
+          88.4671276223258,
+          113.6177007350777
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "add-partial",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 107.95454624029878,
+        "ci95": [
+          80.83045734401435,
+          144.18060266996403
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "diff-staged",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 101.59442879698513,
+        "ci95": [
+          65.08520896902496,
+          158.58331141715783
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "commit-partial",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 82.76567454967719,
+        "ci95": [
+          56.09957821750273,
+          122.1071013600932
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "add-rest",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 104.82136953254798,
+        "ci95": [
+          89.09678069611998,
+          123.32117305286052
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "commit-rest",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 94.98040538580041,
+        "ci95": [
+          76.86428909323209,
+          117.3663025271551
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "checkout-base",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 103.11790328243202,
+        "ci95": [
+          73.25076113666721,
+          145.16302373330947
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "checkout-main",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 99.98085627439893,
+        "ci95": [
+          72.89452029657653,
+          137.1320036223832
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "coding-mixed",
+      "operation": "status-final",
+      "files": 1000,
+      "cache": false,
+      "reference": {
+        "value": 104.52441060669335,
+        "ci95": [
+          93.01798502845772,
+          117.45419350176365
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-recovery",
+      "operation": "batch-capacity",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 102.05860067847831,
+        "ci95": [
+          88.5996765066673,
+          117.56203163637144
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-recovery",
+      "operation": "batch-missing-parent",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 98.79496546873574,
+        "ci95": [
+          95.51430782131233,
+          102.18830481636823
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-recovery",
+      "operation": "index-capacity",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 93.87217084985103,
+        "ci95": [
+          73.83524092107467,
+          119.34659317334781
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-recovery",
+      "operation": "cancel-mid-add",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 96.5990611988303,
+        "ci95": [
+          78.79844299860628,
+          118.42085032898947
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-recovery",
+      "operation": "serialized-two-shells",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 97.4212061614533,
+        "ci95": [
+          65.75025052291234,
+          144.34760832804804
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-recovery",
+      "operation": "concurrent-two-adds",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 100.10018076019487,
+        "ci95": [
+          73.51454279648402,
+          136.30019050737965
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-recovery",
+      "operation": "partial-add-retry",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 103.91058145391874,
+        "ci95": [
+          97.47399516604577,
+          110.77220052074634
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    },
+    {
+      "group": "git-recovery",
+      "operation": "checkout-failure",
+      "files": 100,
+      "cache": false,
+      "reference": {
+        "value": 94.58354505019558,
+        "ci95": [
+          83.90970140517405,
+          106.61516897867003
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "previous": null
+    }
+  ],
+  "requiresReview": true
+}

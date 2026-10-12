@@ -1,0 +1,302 @@
+diff --git a/src/vfs/sql-base.ts b/src/vfs/sql-base.ts
+index 3bc3502..ac61085 100644
+--- a/src/vfs/sql-base.ts
++++ b/src/vfs/sql-base.ts
+@@ -25,26 +25,12 @@ import {
+   SETGID_BIT,
+   STICKY_BIT,
+ } from "./sql-posix.js";
++import { sqlReadState } from "./sql-read-state.js";
+ import { traversalAncestors } from "./traversal.js";
+ import type { OpaqueStore } from "./types.js";
+ 
+ type TraversalParent = Pick<DirectoryEntryRow, "path" | "kind" | "mode" | "uid" | "gid">;
+ 
+-interface TraversalState {
+-  generation: number;
+-  depth: number;
+-  stableTraversalDepth: number;
+-}
+-const TRAVERSAL_STATES = new WeakMap<VfsSqlStorage, TraversalState>();
+-function traversalState(sql: VfsSqlStorage): TraversalState {
+-  let state = TRAVERSAL_STATES.get(sql);
+-  if (state === undefined) {
+-    state = { generation: 0, depth: 0, stableTraversalDepth: 0 };
+-    TRAVERSAL_STATES.set(sql, state);
+-  }
+-  return state;
+-}
+-
+ const DEFAULT_MAX_DATABASE_BYTES = 10_000_000_000;
+ const DEFAULT_DATABASE_HEADROOM_BYTES = 64 * 1024 * 1024;
+ 
+@@ -70,7 +56,7 @@ export abstract class SqlBase {
+   /** Non-zero while a transaction body is on the stack. */
+   protected transactionDepth = 0;
+   private traversalParents: Map<string, TraversalParent> | undefined;
+-  private readonly traversalState: TraversalState;
++  protected readonly readState: ReturnType<typeof sqlReadState>;
+   private traversalGeneration = -1;
+   /**
+    * `vfs_usage` as the running transaction has it.
+@@ -217,7 +203,7 @@ export abstract class SqlBase {
+     const limits = resolveFileSystemLimits(options);
+     this.storage = storage;
+     this.sql = storage.sql;
+-    this.traversalState = traversalState(this.sql);
++    this.readState = sqlReadState(this.sql);
+     this.chunkBytes = limits.chunkBytes;
+     this.maxInlineFileBytes = limits.maxInlineFileBytes;
+     this.maxInlineLogicalBytes = limits.maxInlineLogicalBytes;
+@@ -434,10 +420,10 @@ export abstract class SqlBase {
+   }
+ 
+   private refreshTraversalParents(): boolean {
+-    if (this.traversalState.depth !== this.traversalState.stableTraversalDepth) return false;
+-    if (this.traversalGeneration !== this.traversalState.generation) {
++    if (this.readState.depth !== this.readState.stableTraversalDepth) return false;
++    if (this.traversalGeneration !== this.readState.generation) {
+       this.traversalParents?.clear();
+-      this.traversalGeneration = this.traversalState.generation;
++      this.traversalGeneration = this.readState.generation;
+     }
+     return true;
+   }
+@@ -567,27 +553,29 @@ export abstract class SqlBase {
+   }
+ 
+   protected transaction<T>(callback: () => T, preservesTraversal = false): T {
++    this.readState.invalidateBatch();
+     // Only opt in when directory paths, kinds, owners and modes cannot change.
+     // Ordinary nested mutations still disable reuse, and rollback clears it.
+     if (!preservesTraversal) {
+       this.traversalParents?.clear();
+-      this.traversalState.generation += 1;
++      this.readState.generation += 1;
+     }
+     try {
+       const result = this.storage.transactionSync(() => {
+         this.transactionDepth += 1;
+-        this.traversalState.depth += 1;
+-        if (preservesTraversal) this.traversalState.stableTraversalDepth += 1;
++        this.readState.depth += 1;
++        if (preservesTraversal) this.readState.stableTraversalDepth += 1;
+         try {
+           const result = callback();
+           if (this.transactionDepth === 1) this.flushParentTimes();
+           return result;
+         } finally {
++          this.readState.invalidateBatch();
+           this.transactionDepth -= 1;
+-          this.traversalState.depth -= 1;
+-          if (preservesTraversal) this.traversalState.stableTraversalDepth -= 1;
++          this.readState.depth -= 1;
++          if (preservesTraversal) this.readState.stableTraversalDepth -= 1;
+           else {
+-            this.traversalState.generation += 1;
++            this.readState.generation += 1;
+             this.traversalParents?.clear();
+           }
+           // A rollback discards the in-memory total along with the row it
+@@ -605,7 +593,7 @@ export abstract class SqlBase {
+       return result;
+     } catch (error) {
+       if (preservesTraversal) {
+-        this.traversalState.generation += 1;
++        this.readState.generation += 1;
+         this.traversalParents?.clear();
+       }
+       this.pendingUsage = undefined;
+diff --git a/src/vfs/sql-path-base.ts b/src/vfs/sql-path-base.ts
+index cdea122..3027171 100644
+--- a/src/vfs/sql-path-base.ts
++++ b/src/vfs/sql-path-base.ts
+@@ -46,6 +46,8 @@ export abstract class SqlPath extends SqlBase {
+   }
+ 
+   protected oneEntry(path: string): EntryRow | null {
++    const cached = this.readState.takeEntry(path);
++    if (cached !== undefined) return cached;
+     const row = firstRow(
+       this.sql.exec<SqlRow>(
+         `SELECT ${ENTRY_JSON} AS entry
+diff --git a/src/vfs/sql-query-base.ts b/src/vfs/sql-query-base.ts
+index 9f81770..2f7144f 100644
+--- a/src/vfs/sql-query-base.ts
++++ b/src/vfs/sql-query-base.ts
+@@ -103,6 +103,7 @@ export abstract class SqlQuery extends SqlContent {
+         entries.set(row.path, row);
+       }
+     }
++    this.readState.rememberBatch(entries.values());
+     return canonical.map((path) =>
+       statResult(() => {
+         const row = entries.get(path);
+diff --git a/src/vfs/sql-read-base.ts b/src/vfs/sql-read-base.ts
+index b0b14cb..daa01d5 100644
+--- a/src/vfs/sql-read-base.ts
++++ b/src/vfs/sql-read-base.ts
+@@ -192,6 +192,9 @@ export abstract class SqlRead extends SqlQuery {
+   /** One snapshot statement for metadata and a small whole inline body. */
+   private directRead(path: string) {
+     const normalized = normalizePath(path);
++    const cached = this.readState.takeEntry(normalized);
++    if (cached !== undefined)
++      return { access: { path: normalized, row: cached, followed: [] }, body: undefined };
+     const row = firstRow(
+       this.sql.exec<SqlRow>(
+         `SELECT ${ENTRY_COLUMNS},
+diff --git a/src/vfs/sql-read-state.ts b/src/vfs/sql-read-state.ts
+new file mode 100644
+index 0000000..46fa1aa
+--- /dev/null
++++ b/src/vfs/sql-read-state.ts
+@@ -0,0 +1,41 @@
++import type { EntryRow, InlineEntryRow, VfsSqlStorage } from "./sql-model.js";
++
++/** Shared by filesystem owners of one SQL storage, never by separate databases. */
++class SqlReadState {
++  generation = 0;
++  depth = 0;
++  stableTraversalDepth = 0;
++  private batch: Map<string, InlineEntryRow> | undefined;
++
++  /** One-use metadata, not file bodies or authorization decisions. */
++  rememberBatch(entries: Iterable<EntryRow>): void {
++    if (this.depth !== 0) return;
++    this.batch ??= new Map();
++    for (const entry of entries) {
++      if (entry.kind !== "file" || entry.contentClass !== "inline") continue;
++      if (this.batch.size >= 1000 && !this.batch.has(entry.path)) this.batch.clear();
++      this.batch.set(entry.path, entry);
++    }
++  }
++
++  takeEntry(path: string): InlineEntryRow | undefined {
++    if (this.depth !== 0) return undefined;
++    const entry = this.batch?.get(path);
++    this.batch?.delete(path);
++    return entry;
++  }
++
++  invalidateBatch(): void {
++    this.batch = undefined;
++  }
++}
++
++const states = new WeakMap<VfsSqlStorage, SqlReadState>();
++export function sqlReadState(sql: VfsSqlStorage): SqlReadState {
++  let state = states.get(sql);
++  if (state === undefined) {
++    state = new SqlReadState();
++    states.set(sql, state);
++  }
++  return state;
++}
+diff --git a/test/byte-vfs-durable-traversal-permissions.test.ts b/test/byte-vfs-durable-traversal-permissions.test.ts
+index 969bbd3..d267382 100644
+--- a/test/byte-vfs-durable-traversal-permissions.test.ts
++++ b/test/byte-vfs-durable-traversal-permissions.test.ts
+@@ -32,3 +32,32 @@ it("observes parent permissions across filesystem instances and rollback", async
+     expect(first.stat("/dir").mode).toBe(0o40755);
+   });
+ });
++
++it("invalidates one-use batch metadata across owners and nested rollback", async () => {
++  await runInDurableObject(env.VFS_TEST.getByName("stat-batch-shared"), async (_, state) => {
++    await state.storage.deleteAll();
++    const first = new TransactionalFileSystem(state.storage);
++    const second = new DurableObjectFileSystem(state.storage);
++    await first.writeFile("/file", "body");
++    await first.writeFile("/other", "other");
++    const user = first.forCredentials({ uid: 1000, gid: 1000 });
++    const warm = () => user.statMany?.(["/file", "/other"]);
++    warm();
++    second.setMetadata("/file", { mode: 0o100600 });
++    expect(() => user.readFile("/file")).toThrow(expect.objectContaining({ code: "EACCES" }));
++    second.setMetadata("/file", { mode: 0o100644 });
++    warm();
++    expect(() =>
++      first.transact(() => {
++        second.setMetadata("/file", { mode: 0o100000 });
++        warm();
++        expect(() => user.readFile("/file")).toThrow(expect.objectContaining({ code: "EACCES" }));
++        throw new Error("rollback batch metadata");
++      }),
++    ).toThrow("rollback batch metadata");
++    expect(await new Response(user.readFile("/file").stream).text()).toBe("body");
++    warm();
++    await second.writeFile("/file", "new body");
++    expect(await new Response(user.readFile("/file").stream).text()).toBe("new body");
++  });
++});
+diff --git a/test/vfs-stat-batch-reuse.test.ts b/test/vfs-stat-batch-reuse.test.ts
+new file mode 100644
+index 0000000..49e45aa
+--- /dev/null
++++ b/test/vfs-stat-batch-reuse.test.ts
+@@ -0,0 +1,64 @@
++import { expect, it } from "vitest";
++import { createTestFileSystem } from "./helpers/node-sql.js";
++
++it("reuses one batch projection without granting the stat caller permission to read", async () => {
++  let statements = 0;
++  const fs = createTestFileSystem({ onStatement: () => statements++ });
++  await fs.writeFile("/private", "secret", { mode: 0o100600 });
++  await fs.writeFile("/public", "body");
++  const user = fs.forCredentials({ uid: 1000, gid: 1000 });
++  user.statMany?.(["/private", "/public"]);
++  expect(() => user.readFile("/private")).toThrow(expect.objectContaining({ code: "EACCES" }));
++  statements = 0;
++  await user.readFile("/public", { range: { offset: Number.MAX_SAFE_INTEGER } }).stream.cancel();
++  expect(statements).toBe(0);
++  // A snapshot is consumed, not retained indefinitely.
++  await user.readFile("/public", { range: { offset: Number.MAX_SAFE_INTEGER } }).stream.cancel();
++  expect(statements).toBe(1);
++});
++
++it("discards batch snapshots after replacement, deletion, ownership and directory permission changes", async () => {
++  const fs = createTestFileSystem();
++  await fs.writeFile("/a/file", "old", { createParents: true });
++  await fs.writeFile("/other", "other");
++  const user = fs.forCredentials({ uid: 1000, gid: 1000 });
++  const warm = () => user.statMany?.(["/a/file", "/other"]);
++  warm();
++  await fs.writeFile("/a/file", "new and longer");
++  expect(await new Response(user.readFile("/a/file").stream).text()).toBe("new and longer");
++  warm();
++  fs.setMetadata("/a/file", { mode: 0o100600 });
++  expect(() => user.readFile("/a/file")).toThrow(expect.objectContaining({ code: "EACCES" }));
++  warm();
++  fs.setOwnership("/a/file", { uid: 1000, gid: 1000 });
++  await user.readFile("/a/file").stream.cancel();
++  warm();
++  fs.setMetadata("/a", { mode: 0o40000 });
++  expect(() => user.readFile("/a/file")).toThrow(expect.objectContaining({ code: "EACCES" }));
++  fs.setMetadata("/a", { mode: 0o40755 });
++  warm();
++  await fs.remove("/a/file");
++  expect(() => user.readFile("/a/file")).toThrow(expect.objectContaining({ code: "ENOENT" }));
++  await fs.writeFile("/replacement", "replacement");
++  await fs.writeFile("/a/file", "old");
++  warm();
++  await fs.move("/replacement", "/a/file", { replace: true });
++  expect(await new Response(user.readFile("/a/file").stream).text()).toBe("replacement");
++});
++
++it("preserves whole-body snapshots for both single-chunk and multi-chunk batched files", async () => {
++  const fs = createTestFileSystem({ chunkBytes: 4 });
++  await fs.writeFile("/small", "one");
++  await fs.writeFile("/large", "several chunks of content");
++  fs.statMany(["/small", "/large"]);
++  const small = fs.readFile("/small");
++  const large = fs.readFile("/large");
++  await fs.writeFile("/small", "replacement");
++  await fs.writeFile("/large", "new");
++  expect(await new Response(small.stream).text()).toBe("one");
++  expect(await new Response(large.stream).text()).toBe("several chunks of content");
++  expect(small.stat.sizeBytes).toBe(3);
++  expect(large.stat.sizeBytes).toBe(25);
++  expect(await new Response(fs.readFile("/small").stream).text()).toBe("replacement");
++  expect(await new Response(fs.readFile("/large").stream).text()).toBe("new");
++});

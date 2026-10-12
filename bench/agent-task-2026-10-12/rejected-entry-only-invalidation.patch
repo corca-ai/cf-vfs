@@ -1,0 +1,186 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 750ddb8..888da73 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -16,6 +16,11 @@ included.
+ 
+ ## [Unreleased]
+ 
++- Reuse canonical `statMany` file metadata once when reading file contents,
++  while keeping ordinary metadata lookups on their existing path. Per-access
++  POSIX permission checks and invalidation on mutation and rollback remain in
++  place; no filesystem API is added.
++
+ - Batch Git commit tree and commit-object publication through the existing
+   bounded writer before updating refs. Reservations are lazy and released before
+   reads or individual writes; publication failure leaves the branch unchanged.
+diff --git a/docs/performance.md b/docs/performance.md
+index 1c49ed2..90a069b 100644
+--- a/docs/performance.md
++++ b/docs/performance.md
+@@ -683,16 +683,17 @@ fixture/dependency inputs are verified by the existing reference gate.
+ ### One-use metadata after batch lookup
+ 
+ The SQLite backend can carry at most 1,000 inline-file metadata projections
+-from `statMany` into subsequent point reads. Each projection is consumed once.
++from `statMany` into subsequent file reads. Each projection is consumed once.
++Ordinary metadata lookups keep their original path and do not probe this state.
+ This lets a file read reuse metadata that was just fetched as part of a batch,
+ including an EOF read that authorizes a cached Git content hash. Whole-body
+ reads still collect the current body and preserve their immutable stream
+ snapshot. This is internal reuse; no filesystem capability or option is added.
+ 
+ The state belongs to one SQL storage identity and is shared by VFS owners using
+-that storage. Every VFS transaction discards the batch before entering and on
+-exit, including nested transactions and rollback. No batch is retained or used
+-inside a transaction. Directory and opaque entries are excluded. Permission
++that storage. Every VFS transaction discards the batch before entering,
++including nested transactions. No batch is retained, populated or used inside
++a transaction, so neither commit nor rollback can leave a batch behind. Directory and opaque entries are excluded. Permission
+ checks still run for the current principal on every access; neither file bodies
+ nor permission verdicts are cached by this mechanism. The optional FS adapter's
+ metadata cache remains a separate feature.
+diff --git a/src/vfs/sql-base.ts b/src/vfs/sql-base.ts
+index ac61085..615358d 100644
+--- a/src/vfs/sql-base.ts
++++ b/src/vfs/sql-base.ts
+@@ -553,7 +553,7 @@ export abstract class SqlBase {
+   }
+ 
+   protected transaction<T>(callback: () => T, preservesTraversal = false): T {
+-    this.readState.invalidateBatch();
++    this.readState.batch = undefined;
+     // Only opt in when directory paths, kinds, owners and modes cannot change.
+     // Ordinary nested mutations still disable reuse, and rollback clears it.
+     if (!preservesTraversal) {
+@@ -570,7 +570,6 @@ export abstract class SqlBase {
+           if (this.transactionDepth === 1) this.flushParentTimes();
+           return result;
+         } finally {
+-          this.readState.invalidateBatch();
+           this.transactionDepth -= 1;
+           this.readState.depth -= 1;
+           if (preservesTraversal) this.readState.stableTraversalDepth -= 1;
+diff --git a/src/vfs/sql-path-base.ts b/src/vfs/sql-path-base.ts
+index 3027171..cdea122 100644
+--- a/src/vfs/sql-path-base.ts
++++ b/src/vfs/sql-path-base.ts
+@@ -46,8 +46,6 @@ export abstract class SqlPath extends SqlBase {
+   }
+ 
+   protected oneEntry(path: string): EntryRow | null {
+-    const cached = this.readState.takeEntry(path);
+-    if (cached !== undefined) return cached;
+     const row = firstRow(
+       this.sql.exec<SqlRow>(
+         `SELECT ${ENTRY_JSON} AS entry
+diff --git a/src/vfs/sql-read-base.ts b/src/vfs/sql-read-base.ts
+index daa01d5..1f2e368 100644
+--- a/src/vfs/sql-read-base.ts
++++ b/src/vfs/sql-read-base.ts
+@@ -141,7 +141,11 @@ export abstract class SqlRead extends SqlQuery {
+     options: ReadFileOptions = {},
+     posix?: PosixAccessContext,
+   ): InlineReadResult {
++    // Batch keys are canonical regular-file paths collected with no symlinks.
++    // Any mutation invalidates them. Noncanonical requests use normal resolution.
++    const cached = this.readState.takeEntry(path);
+     const direct =
++      cached === undefined &&
+       posix === undefined &&
+       options.range === undefined &&
+       !pathRequiresDirectory(path) &&
+@@ -149,7 +153,10 @@ export abstract class SqlRead extends SqlQuery {
+       this.links() === 0
+         ? this.directRead(path)
+         : null;
+-    const access = direct?.access ?? this.resolveAccess(path);
++    const access =
++      cached === undefined
++        ? (direct?.access ?? this.resolveAccess(path))
++        : { path: cached.path, row: cached, followed: [] };
+     const normalized = access.path;
+     this.assertTraverse(normalized, access.followed, posix);
+     const entry = access.row ?? this.requireEntry(normalized);
+@@ -192,9 +199,6 @@ export abstract class SqlRead extends SqlQuery {
+   /** One snapshot statement for metadata and a small whole inline body. */
+   private directRead(path: string) {
+     const normalized = normalizePath(path);
+-    const cached = this.readState.takeEntry(normalized);
+-    if (cached !== undefined)
+-      return { access: { path: normalized, row: cached, followed: [] }, body: undefined };
+     const row = firstRow(
+       this.sql.exec<SqlRow>(
+         `SELECT ${ENTRY_COLUMNS},
+diff --git a/src/vfs/sql-read-state.ts b/src/vfs/sql-read-state.ts
+index 46fa1aa..4c8847f 100644
+--- a/src/vfs/sql-read-state.ts
++++ b/src/vfs/sql-read-state.ts
+@@ -5,7 +5,8 @@ class SqlReadState {
+   generation = 0;
+   depth = 0;
+   stableTraversalDepth = 0;
+-  private batch: Map<string, InlineEntryRow> | undefined;
++  /** The transaction owner clears this before entering; never populated inside. */
++  batch: Map<string, InlineEntryRow> | undefined;
+ 
+   /** One-use metadata, not file bodies or authorization decisions. */
+   rememberBatch(entries: Iterable<EntryRow>): void {
+@@ -24,10 +25,6 @@ class SqlReadState {
+     this.batch?.delete(path);
+     return entry;
+   }
+-
+-  invalidateBatch(): void {
+-    this.batch = undefined;
+-  }
+ }
+ 
+ const states = new WeakMap<VfsSqlStorage, SqlReadState>();
+diff --git a/test/vfs-stat-batch-reuse.test.ts b/test/vfs-stat-batch-reuse.test.ts
+index 49e45aa..8000c45 100644
+--- a/test/vfs-stat-batch-reuse.test.ts
++++ b/test/vfs-stat-batch-reuse.test.ts
+@@ -62,3 +62,42 @@ it("preserves whole-body snapshots for both single-chunk and multi-chunk batched
+   expect(await new Response(fs.readFile("/small").stream).text()).toBe("replacement");
+   expect(await new Response(fs.readFile("/large").stream).text()).toBe("new");
+ });
++
++it("keeps path-resolution errors and symlink permissions after a batch lookup", async () => {
++  const fs = createTestFileSystem();
++  await fs.writeFile("/public", "public");
++  await fs.writeFile("/private", "secret", { mode: 0o100600 });
++  const user = fs.forCredentials({ uid: 1000, gid: 1000 });
++  user.statMany?.(["/public", "/private"]);
++  for (const reader of [fs, user]) {
++    expect(() => reader.readFile("/public/")).toThrow(expect.objectContaining({ code: "ENOTDIR" }));
++    expect(() => reader.readFile("/public/../private")).toThrow(
++      expect.objectContaining({ code: "ENOTDIR" }),
++    );
++    expect(() => reader.readFile("/missing/../public")).toThrow(
++      expect.objectContaining({ code: "ENOENT" }),
++    );
++  }
++  await fs.move("/public", "/moved");
++  fs.symlink("/public", "/private");
++  expect(() => user.readFile("/public")).toThrow(expect.objectContaining({ code: "EACCES" }));
++  expect(await new Response(fs.readFile("/public").stream).text()).toBe("secret");
++});
++
++it("discards metadata prefetched by a transaction-begin observer before changing permissions", async () => {
++  let prefetchOnBegin = false;
++  const fs = createTestFileSystem({
++    onStatement(query) {
++      if (prefetchOnBegin && query === "BEGIN") {
++        prefetchOnBegin = false;
++        fs.statMany(["/public", "/other"]);
++      }
++    },
++  });
++  await fs.writeFile("/public", "body");
++  await fs.writeFile("/other", "other");
++  const user = fs.forCredentials({ uid: 1000, gid: 1000 });
++  prefetchOnBegin = true;
++  fs.setMetadata("/public", { mode: 0o100600 });
++  expect(() => user.readFile("/public")).toThrow(expect.objectContaining({ code: "EACCES" }));
++});

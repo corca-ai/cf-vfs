@@ -1,0 +1,18 @@
+diff --git a/src/vfs/sql-read-state.ts b/src/vfs/sql-read-state.ts
+index 46fa1aa..a4210ab 100644
+--- a/src/vfs/sql-read-state.ts
++++ b/src/vfs/sql-read-state.ts
+@@ -19,9 +19,10 @@ class SqlReadState {
+   }
+ 
+   takeEntry(path: string): InlineEntryRow | undefined {
+-    if (this.depth !== 0) return undefined;
+-    const entry = this.batch?.get(path);
+-    this.batch?.delete(path);
++    const batch = this.batch;
++    if (batch === undefined || this.depth !== 0) return undefined;
++    const entry = batch.get(path);
++    batch.delete(path);
+     return entry;
+   }
+ 

@@ -1,0 +1,97 @@
+diff --git a/docs/performance.md b/docs/performance.md
+index 1c49ed2..f2f7f83 100644
+--- a/docs/performance.md
++++ b/docs/performance.md
+@@ -683,7 +683,8 @@ fixture/dependency inputs are verified by the existing reference gate.
+ ### One-use metadata after batch lookup
+ 
+ The SQLite backend can carry at most 1,000 inline-file metadata projections
+-from `statMany` into subsequent point reads. Each projection is consumed once.
++from `statMany` into subsequent file reads. Each projection is consumed once.
++Ordinary metadata lookups keep their original path and do not probe this state.
+ This lets a file read reuse metadata that was just fetched as part of a batch,
+ including an EOF read that authorizes a cached Git content hash. Whole-body
+ reads still collect the current body and preserve their immutable stream
+diff --git a/src/vfs/sql-path-base.ts b/src/vfs/sql-path-base.ts
+index 3027171..cdea122 100644
+--- a/src/vfs/sql-path-base.ts
++++ b/src/vfs/sql-path-base.ts
+@@ -46,8 +46,6 @@ export abstract class SqlPath extends SqlBase {
+   }
+ 
+   protected oneEntry(path: string): EntryRow | null {
+-    const cached = this.readState.takeEntry(path);
+-    if (cached !== undefined) return cached;
+     const row = firstRow(
+       this.sql.exec<SqlRow>(
+         `SELECT ${ENTRY_JSON} AS entry
+diff --git a/src/vfs/sql-read-base.ts b/src/vfs/sql-read-base.ts
+index daa01d5..f0e9c68 100644
+--- a/src/vfs/sql-read-base.ts
++++ b/src/vfs/sql-read-base.ts
+@@ -141,14 +141,19 @@ export abstract class SqlRead extends SqlQuery {
+     options: ReadFileOptions = {},
+     posix?: PosixAccessContext,
+   ): InlineReadResult {
++    // Batch keys are canonical regular-file paths collected with no symlinks.
++    // Any mutation invalidates them. Noncanonical requests use normal resolution.
++    const cached = this.readState.takeEntry(path);
+     const direct =
+-      posix === undefined &&
+-      options.range === undefined &&
+-      !pathRequiresDirectory(path) &&
+-      !hasDotSegments(path) &&
+-      this.links() === 0
+-        ? this.directRead(path)
+-        : null;
++      cached !== undefined
++        ? { access: { path: cached.path, row: cached, followed: [] }, body: undefined }
++        : posix === undefined &&
++            options.range === undefined &&
++            !pathRequiresDirectory(path) &&
++            !hasDotSegments(path) &&
++            this.links() === 0
++          ? this.directRead(path)
++          : null;
+     const access = direct?.access ?? this.resolveAccess(path);
+     const normalized = access.path;
+     this.assertTraverse(normalized, access.followed, posix);
+@@ -192,9 +197,6 @@ export abstract class SqlRead extends SqlQuery {
+   /** One snapshot statement for metadata and a small whole inline body. */
+   private directRead(path: string) {
+     const normalized = normalizePath(path);
+-    const cached = this.readState.takeEntry(normalized);
+-    if (cached !== undefined)
+-      return { access: { path: normalized, row: cached, followed: [] }, body: undefined };
+     const row = firstRow(
+       this.sql.exec<SqlRow>(
+         `SELECT ${ENTRY_COLUMNS},
+diff --git a/test/vfs-stat-batch-reuse.test.ts b/test/vfs-stat-batch-reuse.test.ts
+index 49e45aa..342db2a 100644
+--- a/test/vfs-stat-batch-reuse.test.ts
++++ b/test/vfs-stat-batch-reuse.test.ts
+@@ -62,3 +62,24 @@ it("preserves whole-body snapshots for both single-chunk and multi-chunk batched
+   expect(await new Response(fs.readFile("/small").stream).text()).toBe("replacement");
+   expect(await new Response(fs.readFile("/large").stream).text()).toBe("new");
+ });
++
++it("keeps path-resolution errors and symlink permissions after a batch lookup", async () => {
++  const fs = createTestFileSystem();
++  await fs.writeFile("/public", "public");
++  await fs.writeFile("/private", "secret", { mode: 0o100600 });
++  const user = fs.forCredentials({ uid: 1000, gid: 1000 });
++  user.statMany?.(["/public", "/private"]);
++  for (const reader of [fs, user]) {
++    expect(() => reader.readFile("/public/")).toThrow(expect.objectContaining({ code: "ENOTDIR" }));
++    expect(() => reader.readFile("/public/../private")).toThrow(
++      expect.objectContaining({ code: "ENOTDIR" }),
++    );
++    expect(() => reader.readFile("/missing/../public")).toThrow(
++      expect.objectContaining({ code: "ENOENT" }),
++    );
++  }
++  await fs.move("/public", "/moved");
++  fs.symlink("/public", "/private");
++  expect(() => user.readFile("/public")).toThrow(expect.objectContaining({ code: "EACCES" }));
++  expect(await new Response(fs.readFile("/public").stream).text()).toBe("secret");
++});

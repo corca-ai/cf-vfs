@@ -1,6 +1,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
 async function files(root) {
   const entries = await readdir(root, { withFileTypes: true });
@@ -12,12 +13,20 @@ async function files(root) {
   }
   return paths;
 }
+const configIndex = process.argv.indexOf("--config");
+const config = configIndex < 0 ? "wrangler.benchmark.jsonc" : process.argv[configIndex + 1];
+if (!config || config.startsWith("--")) throw new Error("--config needs a path");
 execFileSync(process.execPath, ["bench/check-reference.mjs"], { stdio: "inherit" });
+const deployment = JSON.parse(await readFile(config, "utf8"));
 const hash = createHash("sha256");
 const paths = [
   ...(await files("src")),
   ...(await files("demo")),
   "bench/remote-worker.ts",
+  "bench/metered-sql.ts",
+  ...(config === "wrangler.benchmark.jsonc"
+    ? []
+    : [config, join(dirname(config), deployment.main)]),
   "package-lock.json",
   "wrangler.benchmark.jsonc",
 ].sort();
@@ -43,7 +52,10 @@ await writeFile(
   `/** Generated deployment fingerprint; includes library, demo, config and lockfile. */\nexport const BENCHMARK_BUILD_ID =\n  "${id}";\nexport const BENCHMARK_COMMIT_HASH = "${commit}";\n`,
 );
 console.log(`Implementation: ${id}`);
-const child = spawn("npx", ["wrangler", "deploy", "--config", "wrangler.benchmark.jsonc"], {
+const secretIndex = process.argv.indexOf("--secrets-file");
+const secrets = secretIndex < 0 ? [] : ["--secrets-file", process.argv[secretIndex + 1]];
+if (secrets.some((value) => !value)) throw new Error("--secrets-file needs a path");
+const child = spawn("npx", ["wrangler", "deploy", "--config", config, ...secrets], {
   stdio: "inherit",
 });
 const code = await new Promise((resolve, reject) => {
