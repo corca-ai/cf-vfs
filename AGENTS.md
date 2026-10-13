@@ -27,6 +27,10 @@ paired trials; smaller changes within noise are not proven wins. Retain a
 performance candidate only when the overall improvement is supported and no
 material per-workload or SQL-cost regression remains unexplained. Preserve
 POSIX behavior and bundle budgets. Save raw evidence and rejected experiments.
+Finish deployment and logging configuration before measurement cohorts. Do not
+attach or detach `wrangler tail` or dashboard live logs during measurements:
+Cloudflare can replace Durable Objects when live logging is enabled, even with
+an unchanged source build. Preserve affected runs as excluded diagnostics.
 After deployment rerun the full CF suite and verify the measured build/commit;
 revert an unaccepted confirmed regression. A user may explicitly accept a
 documented per-workload latency tradeoff when the full-suite geometric mean

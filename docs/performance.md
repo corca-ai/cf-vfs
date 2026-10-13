@@ -559,6 +559,21 @@ The repository instructions in AGENTS.md require this for future work.
    passing. Save unsuccessful experiments too. After deploying, rerun the full
    CF suite for the expected build; revert an unaccepted confirmed regression.
 
+### Avoid measurement-time instrumentation updates
+
+Finish deployment and logging configuration before starting a measurement cohort.
+Do not connect or disconnect `wrangler tail` or dashboard live logs during the
+cohort. Cloudflare documents that enabling live logging requires a software
+update and can replace a Durable Object instance; the source build identifier
+can remain unchanged. Preserve affected runs as excluded diagnostics and collect
+a fresh, preselected cohort after instrumentation has settled. See Cloudflare's
+[Durable Objects known issues](https://developers.cloudflare.com/durable-objects/platform/known-issues/).
+
+The remote client retries read-only progress requests after transport failures,
+keeping the original run and build identity. It saves the claim beside the output
+as `.claim.json`. A lost POST response is not retried automatically because it
+could create another benchmark; inspect the existing server run before continuing.
+
 ### Fixed-reference paired production measurement
 
 `demo/benchmark-reference/runtime.js` freezes the reference library and the full

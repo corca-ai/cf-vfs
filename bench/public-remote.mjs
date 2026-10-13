@@ -27,17 +27,32 @@ const localBuild = (
   await readFile(new URL("../demo/benchmark-build.ts", import.meta.url), "utf8")
 ).match(/"([a-f0-9]{64})"/u)?.[1];
 const expectedBuild = option("--build") ?? localBuild;
+const output = option("--out");
 async function json(path, init) {
   const deadline = Date.now() + 10 * 60_000;
   for (;;) {
-    const response = await fetch(new URL(path, base), init);
-    if ([409, 503].includes(response.status) && Date.now() < deadline) {
-      await response.body?.cancel();
+    try {
+      const response = await fetch(new URL(path, base), {
+        signal: AbortSignal.timeout(30_000),
+        ...init,
+      });
+      if ([409, 503].includes(response.status) && Date.now() < deadline) {
+        await response.body?.cancel();
+        await delay(2000);
+        continue;
+      }
+      if (!response.ok) throw new Error(`Benchmark endpoint returned ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      const transportError =
+        error instanceof TypeError ||
+        (error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name));
+      // Retrying a lost claim response could start another benchmark. Polling
+      // is read-only and can safely resume the original, identified run.
+      if (init?.method === "POST" || !transportError || Date.now() >= deadline) throw error;
+      console.error("Polling connection failed; retrying GET for the same benchmark");
       await delay(2000);
-      continue;
     }
-    if (!response.ok) throw new Error(`Benchmark endpoint returned ${response.status}`);
-    return response.json();
   }
 }
 const claim = await json(`${endpoint}/developer`, {
@@ -48,6 +63,22 @@ const claim = await json(`${endpoint}/developer`, {
   },
 });
 console.error(claim.reused ? "Joining active run" : "Started fresh CF benchmark");
+console.error(`Run ${claim.runId ?? "already active"}; deployment ${claim.deploymentId}`);
+if (output)
+  await writeFile(
+    `${output}.claim.json`,
+    `${JSON.stringify(
+      {
+        requestedAt: new Date().toISOString(),
+        runId: claim.runId,
+        reused: claim.reused,
+        buildId: claim.buildId,
+        deploymentId: claim.deploymentId,
+      },
+      null,
+      2,
+    )}\n`,
+  );
 const expectedBuildAtStart = expectedBuild;
 if (expectedBuildAtStart && claim.buildId !== expectedBuildAtStart)
   throw new Error("Expected implementation is not active; retry after propagation");
@@ -59,7 +90,10 @@ while (state.status === "running") {
   state = await json(`${endpoint}?progress=1`);
 }
 if (state.status === "ready") state = await json(endpoint);
-if (state.status !== "ready" || !state.result) throw new Error(state.error ?? "Benchmark failed");
+if (state.status !== "ready" || !state.result) {
+  if (output) await writeFile(output, `${JSON.stringify(state, null, 2)}\n`);
+  throw new Error(state.error ?? "Benchmark failed");
+}
 const result = state.result;
 if (
   (expectedBuild && result.buildId !== expectedBuild) ||
@@ -96,7 +130,6 @@ if (baselinePath) {
     );
   }
 }
-const output = option("--out");
 if (output) await writeFile(output, `${JSON.stringify(state, null, 2)}\n`);
 else console.log(JSON.stringify(state, null, 2));
 console.error(
