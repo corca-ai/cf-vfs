@@ -78,7 +78,6 @@ export abstract class SqlQuery extends SqlContent {
         statResult(() => this.statEntry(path, options.follow !== false, access)),
       );
     const follow = options.follow !== false;
-    const batchSnapshot = this.readState.beginBatch();
     const canonical = canonicalStatPaths(paths);
     if (canonical === undefined || this.links() !== 0)
       return paths.map((path) => statResult(() => this.statEntry(path, follow, access)));
@@ -104,7 +103,6 @@ export abstract class SqlQuery extends SqlContent {
         entries.set(row.path, row);
       }
     }
-    this.readState.rememberBatch(entries.values(), batchSnapshot);
     return canonical.map((path) =>
       statResult(() => {
         const row = entries.get(path);
