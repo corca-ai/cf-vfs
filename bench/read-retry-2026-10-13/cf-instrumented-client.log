@@ -1,0 +1,78 @@
+Started fresh CF benchmark
+Completed 70be9bb2-889e-4d2a-9519-78f9ac68c6d5; deployment 4d17fb62-77a4-47f5-974d-a0a98d2a9fb0; 28028 checks
+Started fresh CF benchmark
+Completed c91fe150-99e5-4ec7-8f18-9e56843e9ad6; deployment 4d17fb62-77a4-47f5-974d-a0a98d2a9fb0; 28028 checks
+Started fresh CF benchmark
+Completed d49cf5fc-1e2f-4d4e-8293-916d8c96b711; deployment 4d17fb62-77a4-47f5-974d-a0a98d2a9fb0; 28028 checks
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+[TypeError: fetch failed] {
+  [cause]: AggregateError [ETIMEDOUT]: 
+      at internalConnectMultiple (node:net:1194:18)
+      at internalConnectMultiple (node:net:1270:5)
+      at Timeout.internalConnectMultipleTimeout (node:net:1811:5)
+      at listOnTimeout (node:internal/timers:607:11)
+      at process.processTimers (node:internal/timers:541:7) {
+    code: 'ETIMEDOUT',
+    [errors]: [
+      Error: connect ETIMEDOUT 172.67.223.143:443
+          at createConnectionError (node:net:1747:14)
+          at Timeout.internalConnectMultipleTimeout (node:net:1806:38)
+          at listOnTimeout (node:internal/timers:607:11)
+          at process.processTimers (node:internal/timers:541:7) {
+        errno: -60,
+        code: 'ETIMEDOUT',
+        syscall: 'connect',
+        address: '172.67.223.143',
+        port: 443
+      },
+      Error: connect EHOSTUNREACH 2606:4700:3037::6815:3629:443 - Local (:::58628)
+          at internalConnectMultiple (node:net:1266:16)
+          at Timeout.internalConnectMultipleTimeout (node:net:1811:5)
+          at listOnTimeout (node:internal/timers:607:11)
+          at process.processTimers (node:internal/timers:541:7) {
+        errno: -65,
+        code: 'EHOSTUNREACH',
+        syscall: 'connect',
+        address: '2606:4700:3037::6815:3629',
+        port: 443
+      },
+      Error: connect ETIMEDOUT 104.21.54.41:443
+          at createConnectionError (node:net:1747:14)
+          at Timeout.internalConnectMultipleTimeout (node:net:1806:38)
+          at listOnTimeout (node:internal/timers:607:11)
+          at process.processTimers (node:internal/timers:541:7) {
+        errno: -60,
+        code: 'ETIMEDOUT',
+        syscall: 'connect',
+        address: '104.21.54.41',
+        port: 443
+      },
+      Error: connect EHOSTUNREACH 2606:4700:3033::ac43:df8f:443 - Local (:::58630)
+          at internalConnectMultiple (node:net:1266:16)
+          at Timeout.internalConnectMultipleTimeout (node:net:1811:5)
+          at listOnTimeout (node:internal/timers:607:11)
+          at process.processTimers (node:internal/timers:541:7) {
+        errno: -65,
+        code: 'EHOSTUNREACH',
+        syscall: 'connect',
+        address: '2606:4700:3033::ac43:df8f',
+        port: 443
+      }
+    ]
+  }
+}
+
+Node.js v24.18.0
+file:///Users/ak/prjs/cc/cf-vfs/bench/read-retry-2026-10-13/remote-verified.mjs:3
+async function run(args){const c=spawn(process.execPath,args,{stdio:'inherit'});const code=await new Promise((r,j)=>{c.once('exit',r);c.once('error',j)});if(code!==0)throw Error('Failed '+args[0]+': '+code);}
+                                                                                                                                                                            ^
+
+Error: Failed bench/public-remote.mjs: 1
+    at run (file:///Users/ak/prjs/cc/cf-vfs/bench/read-retry-2026-10-13/remote-verified.mjs:3:173)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/ak/prjs/cc/cf-vfs/bench/read-retry-2026-10-13/remote-verified.mjs:5:22
+
+Node.js v24.18.0

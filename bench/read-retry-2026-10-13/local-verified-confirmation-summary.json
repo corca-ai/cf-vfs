@@ -1,0 +1,383 @@
+[
+  {
+    "mode": "unbound",
+    "kind": "confirmation",
+    "session": 1,
+    "cases": [
+      {
+        "stage": {
+          "group": "files",
+          "operation": "stat",
+          "files": 1000,
+          "cache": false,
+          "trial": 0
+        },
+        "value": 101.87284812811926,
+        "ci95": [
+          96.00901036102255,
+          108.09482512849766
+        ],
+        "runs": 1,
+        "pairs": 10,
+        "intervalScope": "within one run",
+        "status": "collecting",
+        "orderIndices": [
+          104.57977360822794,
+          99.23598825727755
+        ]
+      },
+      {
+        "stage": {
+          "group": "git-recovery",
+          "operation": "index-capacity",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "value": 99.2370533432846,
+        "ci95": [
+          93.61825620031873,
+          105.19308045201963
+        ],
+        "runs": 1,
+        "pairs": 10,
+        "intervalScope": "within one run",
+        "status": "collecting",
+        "orderIndices": [
+          93.9702994410185,
+          104.79899303118762
+        ]
+      }
+    ],
+    "otherFlags": [],
+    "costs": []
+  },
+  {
+    "mode": "unbound",
+    "kind": "confirmation",
+    "session": 2,
+    "cases": [
+      {
+        "stage": {
+          "group": "files",
+          "operation": "stat",
+          "files": 1000,
+          "cache": false,
+          "trial": 0
+        },
+        "value": 107.64529717127131,
+        "ci95": [
+          94.5799022374051,
+          122.51556333823956
+        ],
+        "runs": 1,
+        "pairs": 10,
+        "intervalScope": "within one run",
+        "status": "collecting",
+        "orderIndices": [
+          105.0142208110182,
+          110.3422937731833
+        ]
+      },
+      {
+        "stage": {
+          "group": "git-recovery",
+          "operation": "index-capacity",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "value": 95.94304581960658,
+        "ci95": [
+          74.90071751616254,
+          122.89692737798943
+        ],
+        "runs": 1,
+        "pairs": 10,
+        "intervalScope": "within one run",
+        "status": "collecting",
+        "orderIndices": [
+          100.777967349207,
+          91.34008437823053
+        ]
+      }
+    ],
+    "otherFlags": [],
+    "costs": []
+  },
+  {
+    "mode": "unbound",
+    "kind": "aa",
+    "session": 1,
+    "cases": [
+      {
+        "stage": {
+          "group": "files",
+          "operation": "stat",
+          "files": 1000,
+          "cache": false,
+          "trial": 0
+        },
+        "value": 98.51451200464997,
+        "ci95": [
+          91.75097402799095,
+          105.77663265518615
+        ],
+        "runs": 1,
+        "pairs": 10,
+        "intervalScope": "within one run",
+        "status": "collecting",
+        "orderIndices": [
+          104.18649322313178,
+          93.15131717437984
+        ]
+      },
+      {
+        "stage": {
+          "group": "git-recovery",
+          "operation": "index-capacity",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "value": 100.52547248717612,
+        "ci95": [
+          95.49211507980273,
+          105.82413647791704
+        ],
+        "runs": 1,
+        "pairs": 10,
+        "intervalScope": "within one run",
+        "status": "collecting",
+        "orderIndices": [
+          95.96949284864942,
+          105.29773909201414
+        ]
+      }
+    ],
+    "otherFlags": [],
+    "costs": [
+      {
+        "stage": {
+          "group": "git-recovery",
+          "operation": "checkout-failure",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "baseline": {
+          "median": 32.08816650000017,
+          "p10": 31.334145499999977,
+          "p90": 33.41909190000015
+        },
+        "candidate": {
+          "median": 32.08864549999953,
+          "p10": 31.64135439999991,
+          "p90": 32.90411699999995
+        },
+        "ratio": {
+          "median": 0.9913646506881613,
+          "p10": 0.975348655824102,
+          "p90": 1.0215556947118356,
+          "ci95": [
+            0.9869899348993958,
+            1.0166211772706901
+          ]
+        },
+        "costs": [
+          {
+            "pair": 0,
+            "version": "baseline",
+            "profile": true,
+            "stage": {
+              "group": "git-recovery",
+              "operation": "checkout-failure",
+              "files": 100,
+              "cache": false,
+              "trial": 0
+            },
+            "ms": 32.20716700000048,
+            "statements": 3610,
+            "returnedRows": 3181,
+            "verified": 0
+          },
+          {
+            "pair": 0,
+            "version": "candidate",
+            "profile": true,
+            "stage": {
+              "group": "git-recovery",
+              "operation": "checkout-failure",
+              "files": 100,
+              "cache": false,
+              "trial": 0
+            },
+            "ms": 32.76808300000084,
+            "statements": 3613,
+            "returnedRows": 3182,
+            "verified": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "mode": "bound",
+    "kind": "confirmation",
+    "session": 1,
+    "cases": [
+      {
+        "stage": {
+          "group": "files",
+          "operation": "stat",
+          "files": 1000,
+          "cache": false,
+          "trial": 0
+        },
+        "value": 101.50396566733531,
+        "ci95": [
+          87.7552726051656,
+          117.40667814402195
+        ],
+        "runs": 1,
+        "pairs": 10,
+        "intervalScope": "within one run",
+        "status": "collecting",
+        "orderIndices": [
+          94.81900113268502,
+          108.66023606152527
+        ]
+      },
+      {
+        "stage": {
+          "group": "git-recovery",
+          "operation": "index-capacity",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "value": 99.94090499476414,
+        "ci95": [
+          97.18710458493109,
+          102.77273444692314
+        ],
+        "runs": 1,
+        "pairs": 10,
+        "intervalScope": "within one run",
+        "status": "collecting",
+        "orderIndices": [
+          99.38508101663783,
+          100.49983749070317
+        ]
+      }
+    ],
+    "otherFlags": [],
+    "costs": []
+  },
+  {
+    "mode": "bound",
+    "kind": "confirmation",
+    "session": 2,
+    "cases": [
+      {
+        "stage": {
+          "group": "files",
+          "operation": "stat",
+          "files": 1000,
+          "cache": false,
+          "trial": 0
+        },
+        "value": 96.68917466054192,
+        "ci95": [
+          83.7845403513748,
+          111.58140221728124
+        ],
+        "runs": 1,
+        "pairs": 10,
+        "intervalScope": "within one run",
+        "status": "collecting",
+        "orderIndices": [
+          105.22802349111797,
+          88.84322052600267
+        ]
+      },
+      {
+        "stage": {
+          "group": "git-recovery",
+          "operation": "index-capacity",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "value": 113.21091188929809,
+        "ci95": [
+          95.40098169226955,
+          134.34568851868497
+        ],
+        "runs": 1,
+        "pairs": 10,
+        "intervalScope": "within one run",
+        "status": "collecting",
+        "orderIndices": [
+          102.45209829766107,
+          125.09954196905903
+        ]
+      }
+    ],
+    "otherFlags": [],
+    "costs": []
+  },
+  {
+    "mode": "bound",
+    "kind": "aa",
+    "session": 1,
+    "cases": [
+      {
+        "stage": {
+          "group": "files",
+          "operation": "stat",
+          "files": 1000,
+          "cache": false,
+          "trial": 0
+        },
+        "value": 98.8357032172773,
+        "ci95": [
+          91.05878825284354,
+          107.27680894818707
+        ],
+        "runs": 1,
+        "pairs": 10,
+        "intervalScope": "within one run",
+        "status": "collecting",
+        "orderIndices": [
+          101.20550152414849,
+          96.52139541171951
+        ]
+      },
+      {
+        "stage": {
+          "group": "git-recovery",
+          "operation": "index-capacity",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "value": 100.19825440036247,
+        "ci95": [
+          95.11894146135909,
+          105.54880059255348
+        ],
+        "runs": 1,
+        "pairs": 10,
+        "intervalScope": "within one run",
+        "status": "collecting",
+        "orderIndices": [
+          97.58948238230097,
+          102.87676437866398
+        ]
+      }
+    ],
+    "otherFlags": [],
+    "costs": []
+  }
+]

@@ -1,0 +1,88 @@
+Started fresh CF benchmark
+Run 029a7931-f80a-4074-b3ea-87a9f0b45db9; deployment c1082afc-dea0-489a-b78a-d66bd3ccd2fc
+Polling connection failed; retrying GET for the same benchmark
+Completed 029a7931-f80a-4074-b3ea-87a9f0b45db9; deployment c1082afc-dea0-489a-b78a-d66bd3ccd2fc; 212268 checks
+Started fresh CF benchmark
+Run 0097f882-8363-4bcc-ae5d-f2ca7b3d1e00; deployment c1082afc-dea0-489a-b78a-d66bd3ccd2fc
+Polling connection failed; retrying GET for the same benchmark
+Completed 0097f882-8363-4bcc-ae5d-f2ca7b3d1e00; deployment c1082afc-dea0-489a-b78a-d66bd3ccd2fc; 212268 checks
+Started fresh CF benchmark
+Run 9a17fe28-5de2-4c84-b3df-df2b058ce8e3; deployment c1082afc-dea0-489a-b78a-d66bd3ccd2fc
+Completed 9a17fe28-5de2-4c84-b3df-df2b058ce8e3; deployment c1082afc-dea0-489a-b78a-d66bd3ccd2fc; 212268 checks
+Started fresh CF benchmark
+Run b299ccf2-b8cb-479a-a487-58bbd50411b2; deployment c1082afc-dea0-489a-b78a-d66bd3ccd2fc
+Polling connection failed; retrying GET for the same benchmark
+Polling connection failed; retrying GET for the same benchmark
+Completed b299ccf2-b8cb-479a-a487-58bbd50411b2; deployment c1082afc-dea0-489a-b78a-d66bd3ccd2fc; 28028 checks
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+[TypeError: fetch failed] {
+  [cause]: AggregateError [ETIMEDOUT]: 
+      at internalConnectMultiple (node:net:1194:18)
+      at internalConnectMultiple (node:net:1270:5)
+      at Timeout.internalConnectMultipleTimeout (node:net:1811:5)
+      at listOnTimeout (node:internal/timers:607:11)
+      at process.processTimers (node:internal/timers:541:7) {
+    code: 'ETIMEDOUT',
+    [errors]: [
+      Error: connect ETIMEDOUT 104.21.88.252:443
+          at createConnectionError (node:net:1747:14)
+          at Timeout.internalConnectMultipleTimeout (node:net:1806:38)
+          at listOnTimeout (node:internal/timers:607:11)
+          at process.processTimers (node:internal/timers:541:7) {
+        errno: -60,
+        code: 'ETIMEDOUT',
+        syscall: 'connect',
+        address: '104.21.88.252',
+        port: 443
+      },
+      Error: connect EHOSTUNREACH 2606:4700:3030::6815:58fc:443 - Local (:::62735)
+          at internalConnectMultiple (node:net:1266:16)
+          at Timeout.internalConnectMultipleTimeout (node:net:1811:5)
+          at listOnTimeout (node:internal/timers:607:11)
+          at process.processTimers (node:internal/timers:541:7) {
+        errno: -65,
+        code: 'EHOSTUNREACH',
+        syscall: 'connect',
+        address: '2606:4700:3030::6815:58fc',
+        port: 443
+      },
+      Error: connect ETIMEDOUT 172.67.155.49:443
+          at createConnectionError (node:net:1747:14)
+          at Timeout.internalConnectMultipleTimeout (node:net:1806:38)
+          at listOnTimeout (node:internal/timers:607:11)
+          at process.processTimers (node:internal/timers:541:7) {
+        errno: -60,
+        code: 'ETIMEDOUT',
+        syscall: 'connect',
+        address: '172.67.155.49',
+        port: 443
+      },
+      Error: connect EHOSTUNREACH 2606:4700:3030::ac43:9b31:443 - Local (:::62737)
+          at internalConnectMultiple (node:net:1266:16)
+          at Timeout.internalConnectMultipleTimeout (node:net:1811:5)
+          at listOnTimeout (node:internal/timers:607:11)
+          at process.processTimers (node:internal/timers:541:7) {
+        errno: -65,
+        code: 'EHOSTUNREACH',
+        syscall: 'connect',
+        address: '2606:4700:3030::ac43:9b31',
+        port: 443
+      }
+    ]
+  }
+}
+
+Node.js v24.18.0
+file:///Users/ak/prjs/cc/cf-vfs/bench/read-retry-2026-10-13/remote-clean.mjs:9
+async function run(args){const child=spawn(process.execPath,args,{stdio:'inherit'});const code=await new Promise((resolve,reject)=>{child.once('exit',resolve);child.once('error',reject)});if(code!==0)throw Error('Failed '+args[0]+': '+code);}
+                                                                                                                                                                                                              ^
+
+Error: Failed bench/public-remote.mjs: 1
+    at run (file:///Users/ak/prjs/cc/cf-vfs/bench/read-retry-2026-10-13/remote-clean.mjs:9:207)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/ak/prjs/cc/cf-vfs/bench/read-retry-2026-10-13/remote-clean.mjs:11:63
+
+Node.js v24.18.0

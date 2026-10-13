@@ -1,0 +1,29 @@
+{
+  "createdAt": "2026-10-13T19:17:12.365528+00:00",
+  "candidateCommit": "8f25ac0afe02186cfdcee6665de469085270731a",
+  "candidateBuild": "44923cbdfc4ffca108ed19b2b8fbfb5f4225a74ed7520b6314cc51e68f54eafd",
+  "candidateDeployment": "4241d751-694f-46ce-9b92-9c6a6321c498",
+  "url": "https://cf-vfs-read-evaluation-20261014.donghun.workers.dev",
+  "baselineCommit": "2700b6da336d04b604238220b900c0433a822298",
+  "baselineBuild": "6202f9e15d94839fc9e38617cad41db18a0aec1f54d93914e5572f539d2c0607",
+  "baselineFullFiles": [
+    "cf-clean-baseline-full-1.json",
+    "cf-clean-baseline-full-2.json",
+    "cf-clean-baseline-full-3.json"
+  ],
+  "candidateFullRuns": 5,
+  "candidateTaskInitialRuns": 3,
+  "costAudits": 3,
+  "extraTaskOrder": [
+    "baseline-task-4",
+    "candidate-task-4",
+    "candidate-task-5",
+    "baseline-task-5"
+  ],
+  "taskTotalPerVersion": 5,
+  "confirmation": "Full candidate runs 4-5 are preselected confirmation; task 4-5 follow earlier preselected baseline/candidate/candidate/baseline plan. All retained.",
+  "metric": "Equal-weight 146 uncached overall; file/Git/cache families, all per-workload flags, separate statements/rowsRead/rowsWritten. Absolute-time diagnostics of both arms.",
+  "exclusions": "No pre-fence candidate data, no live-tail data. Existing unchanged baseline remains valid and is retained without normalization/repinning.",
+  "cohortControls": "Finish deployment and untimed build-propagation health probe first. No further deploy/logging changes while measurements run. Stop on real server failure; safe unsent-connect/GET transport retries only.",
+  "localQualification": "Three full sessions per mode improve overall; all initial flags investigated with >=10 alternating pairs, plus two independent confirmations/A-A for persistent/new signals. Initial bound diff-staged spikes at pair 5 in all full sessions; medians near baseline, independent confirmations do not reproduce >5% slowdown. Raw evidence retained; CF validation remains required."
+}

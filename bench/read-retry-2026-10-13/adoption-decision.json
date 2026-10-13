@@ -1,0 +1,25 @@
+{
+  "decidedAt": "2026-10-13T23:04:18.834577+00:00",
+  "decision": "held_for_explicit_latency_tradeoff_acceptance",
+  "candidate": "8f25ac0afe02186cfdcee6665de469085270731a",
+  "candidateBranch": "perf/read-metadata-retry-20261013",
+  "publicDeploymentUnchanged": "c1082afc-dea0-489a-b78a-d66bd3ccd2fc",
+  "overallSameTopology": {
+    "value": 98.1552359842692,
+    "ci95": [
+      96.98832866850466,
+      99.33618285203218
+    ]
+  },
+  "taskReference": {
+    "value": 89.48543893255797,
+    "ci95": [
+      84.06666060420463,
+      95.2535014879853
+    ]
+  },
+  "taskReadReductionPercent": 23.910155778287645,
+  "materialSignalsFile": "cf-material-tradeoffs.json",
+  "policy": "AGENTS.md comprehensive regression protocol permits an explicit user-accepted documented per-workload latency tradeoff when overall geometric mean improves. No blanket acceptance inferred.",
+  "nextIfAccepted": "Restore exact candidate src/tests/changelog/docs section, commit/push and deploy public; rerun full actual CF verification and review all regressions."
+}

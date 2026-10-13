@@ -1,0 +1,20 @@
+Started fresh CF benchmark
+file:///Users/ak/prjs/cc/cf-vfs/bench/public-remote.mjs:62
+if (state.status !== "ready" || !state.result) throw new Error(state.error ?? "Benchmark failed");
+                                                     ^
+
+Error: Benchmark did not complete. The previous saved result is retained; you can request a retry.
+    at file:///Users/ak/prjs/cc/cf-vfs/bench/public-remote.mjs:62:54
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+Node.js v24.18.0
+file:///Users/ak/prjs/cc/cf-vfs/bench/read-retry-2026-10-13/remote-baseline.mjs:2
+async function run(args){const c=spawn(process.execPath,args,{stdio:'inherit'});const code=await new Promise((r,j)=>{c.once('exit',r);c.once('error',j)});if(code!==0)throw Error('Failed '+args[0]+': '+code);}
+                                                                                                                                                                            ^
+
+Error: Failed bench/public-remote.mjs: 1
+    at run (file:///Users/ak/prjs/cc/cf-vfs/bench/read-retry-2026-10-13/remote-baseline.mjs:2:173)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/ak/prjs/cc/cf-vfs/bench/read-retry-2026-10-13/remote-baseline.mjs:3:22
+
+Node.js v24.18.0

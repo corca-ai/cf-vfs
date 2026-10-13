@@ -566,6 +566,9 @@ baseline and candidate deployments. A public baseline and a newly created
 private Worker can have different coordinator-to-scratch RPC latency even with
 the same location hint and runtime. Request colo does not identify DO placement.
 Compare the saved before/after RPC pings on both arms across complete runs.
+Cloudflare's [data-location documentation](https://developers.cloudflare.com/durable-objects/reference/data-location/)
+explains that hints are best effort and only the first access respects them;
+repeating the hint does not relocate an existing object.
 
 An additive network delay does not cancel in a candidate/reference ratio, so
 normalization alone cannot make different topologies comparable. Preserve such
@@ -727,3 +730,9 @@ authenticated evaluation. `demo/benchmark-task-reference` is independently
 frozen. `node bench/pin-reference.mjs --pin --task` explicitly starts a new task
 series; ordinary optimizations must not run it. Both reference hashes and
 fixture/dependency inputs are verified by the existing reference gate.
+
+The [guarded ranged-read evaluation](../bench/read-retry-2026-10-13/report.md)
+records matching-topology CF calibration, full-suite and task indices, native
+SQL costs and retained latency regressions. Its candidate remains on an
+experimental branch pending explicit acceptance of the documented tradeoff;
+the production library is unchanged.

@@ -1,0 +1,39 @@
+
+ RUN  v4.1.10 /private/tmp/cf-vfs-read-retry-20261013
+
+ ❯ test/vfs-storage-lifetime.test.ts (2 tests | 2 failed) 9ms
+   × rejects an EOF read after the backing storage closes, even after metadata prefetch 7ms
+   × observes a permission mutation at the next storage access after metadata prefetch 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/vfs-storage-lifetime.test.ts > rejects an EOF read after the backing storage closes, even after metadata prefetch
+AssertionError: expected [Function] to throw an error
+ ❯ test/vfs-storage-lifetime.test.ts:15:7
+     13|     expect(() =>
+     14|       user.readFile("/public", { range: { offset: Number.MAX_SAFE_INTE…
+     15|     ).toThrow();
+       |       ^
+     16|   } finally {
+     17|     fs.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  test/vfs-storage-lifetime.test.ts > observes a permission mutation at the next storage access after metadata prefetch
+AssertionError: expected function to throw an error, but it didn't
+ ❯ test/vfs-storage-lifetime.test.ts:47:7
+     45|     expect(() =>
+     46|       user.readFile("/public", { range: { offset: Number.MAX_SAFE_INTE…
+     47|     ).toThrow(expect.objectContaining({ code: "EACCES" }));
+       |       ^
+     48|   } finally {
+     49|     fs.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  03:20:08
+   Duration  167ms (transform 85ms, setup 0ms, import 105ms, tests 9ms, environment 0ms)
+

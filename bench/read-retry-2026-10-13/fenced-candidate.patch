@@ -1,0 +1,580 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 750ddb8..7eacd52 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -16,6 +16,10 @@ included.
+ 
+ ## [Unreleased]
+ 
++- Reuse canonical `statMany` metadata once for explicitly ranged file reads,
++  retaining ordinary whole-body queries, storage-lifetime checks, fresh POSIX permission checks and
++  invalidation on mutation and rollback. No filesystem API is added.
++
+ - Batch Git commit tree and commit-object publication through the existing
+   bounded writer before updating refs. Reservations are lazy and released before
+   reads or individual writes; publication failure leaves the branch unchanged.
+diff --git a/docs/performance.md b/docs/performance.md
+index a85605b..08369a2 100644
+--- a/docs/performance.md
++++ b/docs/performance.md
+@@ -679,3 +679,28 @@ authenticated evaluation. `demo/benchmark-task-reference` is independently
+ frozen. `node bench/pin-reference.mjs --pin --task` explicitly starts a new task
+ series; ordinary optimizations must not run it. Both reference hashes and
+ fixture/dependency inputs are verified by the existing reference gate.
++
++### One-use metadata for ranged reads
++
++The SQLite backend retains at most 1,000 canonical inline-file metadata
++projections from `statMany` for subsequent explicitly ranged reads. A ranged
++read consumes its projection once. This avoids another metadata query for the
++EOF read that authorizes a cached Git content hash. Reuse still executes a row-free
++SQL probe through the ordinary storage API, so closed/replaced storage is not
++bypassed. A mutation during that probe discards the captured projection and
++falls back to ordinary resolution. This reduces metadata reads/copies, not the
++number of SQL API calls. Ordinary whole-body reads
++keep their existing combined metadata/body query. No API or schema is added.
++
++The state belongs to one SQL storage identity, shared by VFS owners using that
++storage. Transactions clear it before entry and when their callback exits,
++including nested calls and rollback. Population and reuse are disabled inside
++transaction callbacks. Permission checks run for the current principal on each
++read; directory and opaque entries, file bodies and authorization verdicts are
++not retained. Noncanonical paths follow ordinary path resolution.
++
++Batch population also checks the identity captured before its SQL queries. If
++a reentrant storage observer mutates the filesystem while a query snapshot is
++returned, that invalidated snapshot is never retained for a later ranged read.
++The error path also discards metadata prefetched by a closing storage observer
++when a commit attempt fails and rolls back after the callback has returned.
+diff --git a/src/vfs/sql-base.ts b/src/vfs/sql-base.ts
+index 3bc3502..5cdb986 100644
+--- a/src/vfs/sql-base.ts
++++ b/src/vfs/sql-base.ts
+@@ -25,26 +25,12 @@ import {
+   SETGID_BIT,
+   STICKY_BIT,
+ } from "./sql-posix.js";
++import { sqlReadState } from "./sql-read-state.js";
+ import { traversalAncestors } from "./traversal.js";
+ import type { OpaqueStore } from "./types.js";
+ 
+ type TraversalParent = Pick<DirectoryEntryRow, "path" | "kind" | "mode" | "uid" | "gid">;
+ 
+-interface TraversalState {
+-  generation: number;
+-  depth: number;
+-  stableTraversalDepth: number;
+-}
+-const TRAVERSAL_STATES = new WeakMap<VfsSqlStorage, TraversalState>();
+-function traversalState(sql: VfsSqlStorage): TraversalState {
+-  let state = TRAVERSAL_STATES.get(sql);
+-  if (state === undefined) {
+-    state = { generation: 0, depth: 0, stableTraversalDepth: 0 };
+-    TRAVERSAL_STATES.set(sql, state);
+-  }
+-  return state;
+-}
+-
+ const DEFAULT_MAX_DATABASE_BYTES = 10_000_000_000;
+ const DEFAULT_DATABASE_HEADROOM_BYTES = 64 * 1024 * 1024;
+ 
+@@ -70,7 +56,7 @@ export abstract class SqlBase {
+   /** Non-zero while a transaction body is on the stack. */
+   protected transactionDepth = 0;
+   private traversalParents: Map<string, TraversalParent> | undefined;
+-  private readonly traversalState: TraversalState;
++  protected readonly readState: ReturnType<typeof sqlReadState>;
+   private traversalGeneration = -1;
+   /**
+    * `vfs_usage` as the running transaction has it.
+@@ -217,7 +203,7 @@ export abstract class SqlBase {
+     const limits = resolveFileSystemLimits(options);
+     this.storage = storage;
+     this.sql = storage.sql;
+-    this.traversalState = traversalState(this.sql);
++    this.readState = sqlReadState(this.sql);
+     this.chunkBytes = limits.chunkBytes;
+     this.maxInlineFileBytes = limits.maxInlineFileBytes;
+     this.maxInlineLogicalBytes = limits.maxInlineLogicalBytes;
+@@ -434,10 +420,10 @@ export abstract class SqlBase {
+   }
+ 
+   private refreshTraversalParents(): boolean {
+-    if (this.traversalState.depth !== this.traversalState.stableTraversalDepth) return false;
+-    if (this.traversalGeneration !== this.traversalState.generation) {
++    if (this.readState.depth !== this.readState.stableTraversalDepth) return false;
++    if (this.traversalGeneration !== this.readState.generation) {
+       this.traversalParents?.clear();
+-      this.traversalGeneration = this.traversalState.generation;
++      this.traversalGeneration = this.readState.generation;
+     }
+     return true;
+   }
+@@ -567,27 +553,30 @@ export abstract class SqlBase {
+   }
+ 
+   protected transaction<T>(callback: () => T, preservesTraversal = false): T {
++    this.readState.batch = undefined;
+     // Only opt in when directory paths, kinds, owners and modes cannot change.
+     // Ordinary nested mutations still disable reuse, and rollback clears it.
+     if (!preservesTraversal) {
+       this.traversalParents?.clear();
+-      this.traversalState.generation += 1;
++      this.readState.generation += 1;
+     }
+     try {
+       const result = this.storage.transactionSync(() => {
+         this.transactionDepth += 1;
+-        this.traversalState.depth += 1;
+-        if (preservesTraversal) this.traversalState.stableTraversalDepth += 1;
++        this.readState.depth += 1;
++        if (preservesTraversal) this.readState.stableTraversalDepth += 1;
+         try {
+           const result = callback();
+           if (this.transactionDepth === 1) this.flushParentTimes();
+           return result;
+         } finally {
++          // A storage observer can prefetch between BEGIN and this callback.
++          this.readState.batch = undefined;
+           this.transactionDepth -= 1;
+-          this.traversalState.depth -= 1;
+-          if (preservesTraversal) this.traversalState.stableTraversalDepth -= 1;
++          this.readState.depth -= 1;
++          if (preservesTraversal) this.readState.stableTraversalDepth -= 1;
+           else {
+-            this.traversalState.generation += 1;
++            this.readState.generation += 1;
+             this.traversalParents?.clear();
+           }
+           // A rollback discards the in-memory total along with the row it
+@@ -604,8 +593,9 @@ export abstract class SqlBase {
+       if (this.transactionDepth === 0) this.emitCommittedMutations();
+       return result;
+     } catch (error) {
++      this.readState.batch = undefined;
+       if (preservesTraversal) {
+-        this.traversalState.generation += 1;
++        this.readState.generation += 1;
+         this.traversalParents?.clear();
+       }
+       this.pendingUsage = undefined;
+diff --git a/src/vfs/sql-query-base.ts b/src/vfs/sql-query-base.ts
+index 9f81770..f994ae8 100644
+--- a/src/vfs/sql-query-base.ts
++++ b/src/vfs/sql-query-base.ts
+@@ -78,6 +78,7 @@ export abstract class SqlQuery extends SqlContent {
+         statResult(() => this.statEntry(path, options.follow !== false, access)),
+       );
+     const follow = options.follow !== false;
++    const batchSnapshot = this.readState.beginBatch();
+     const canonical = canonicalStatPaths(paths);
+     if (canonical === undefined || this.links() !== 0)
+       return paths.map((path) => statResult(() => this.statEntry(path, follow, access)));
+@@ -103,6 +104,7 @@ export abstract class SqlQuery extends SqlContent {
+         entries.set(row.path, row);
+       }
+     }
++    this.readState.rememberBatch(entries.values(), batchSnapshot);
+     return canonical.map((path) =>
+       statResult(() => {
+         const row = entries.get(path);
+diff --git a/src/vfs/sql-read-base.ts b/src/vfs/sql-read-base.ts
+index b0b14cb..4e9ced5 100644
+--- a/src/vfs/sql-read-base.ts
++++ b/src/vfs/sql-read-base.ts
+@@ -136,12 +136,35 @@ export abstract class SqlRead extends SqlQuery {
+     return digest;
+   }
+ 
++  private rangedBatchEntry(
++    path: string,
++    range: ReadFileOptions["range"],
++  ): InlineEntryRow | undefined {
++    const entry = this.readState.takeRangeEntry(path, range);
++    if (entry === undefined) return;
++    const batch = this.readState.batch;
++    try {
++      // Even EOF authorization must access storage to detect a closed or
++      // replaced SQL owner. This probe fetches no file metadata or rows.
++      this.sql.exec("SELECT 1 LIMIT 0").toArray();
++    } catch (error) {
++      this.readState.batch = undefined;
++      throw error;
++    }
++    // A storage observer can mutate the file before the probe executes.
++    return this.readState.batch === batch ? entry : undefined;
++  }
++
+   readFile(
+     path: string,
+     options: ReadFileOptions = {},
+     posix?: PosixAccessContext,
+   ): InlineReadResult {
++    // Only ranged reads consume one-use canonical batch metadata. Whole-body reads
++    // keep the combined metadata/body query; mutations discard every projection.
++    const cached = this.rangedBatchEntry(path, options.range);
+     const direct =
++      cached === undefined &&
+       posix === undefined &&
+       options.range === undefined &&
+       !pathRequiresDirectory(path) &&
+@@ -149,7 +172,10 @@ export abstract class SqlRead extends SqlQuery {
+       this.links() === 0
+         ? this.directRead(path)
+         : null;
+-    const access = direct?.access ?? this.resolveAccess(path);
++    const access =
++      cached === undefined
++        ? (direct?.access ?? this.resolveAccess(path))
++        : { path: cached.path, row: cached, followed: [] };
+     const normalized = access.path;
+     this.assertTraverse(normalized, access.followed, posix);
+     const entry = access.row ?? this.requireEntry(normalized);
+diff --git a/src/vfs/sql-read-state.ts b/src/vfs/sql-read-state.ts
+new file mode 100644
+index 0000000..0b9fc56
+--- /dev/null
++++ b/src/vfs/sql-read-state.ts
+@@ -0,0 +1,44 @@
++import type { EntryRow, InlineEntryRow, VfsSqlStorage } from "./sql-model.js";
++import type { ReadFileOptions } from "./types.js";
++
++/** Shared by filesystem owners of one SQL storage, never by separate databases. */
++class SqlReadState {
++  generation = 0;
++  depth = 0;
++  stableTraversalDepth = 0;
++  /** The transaction owner clears this before entry and when its callback exits. */
++  batch: Map<string, InlineEntryRow> | undefined;
++
++  beginBatch(): Map<string, InlineEntryRow> | undefined {
++    if (this.depth !== 0) return;
++    this.batch ??= new Map();
++    return this.batch;
++  }
++
++  /** Ignore a query snapshot if a reentrant observer invalidated its batch. */
++  rememberBatch(entries: Iterable<EntryRow>, batch: Map<string, InlineEntryRow> | undefined): void {
++    if (batch === undefined || batch !== this.batch || this.depth !== 0) return;
++    for (const entry of entries) {
++      if (entry.kind !== "file" || entry.contentClass !== "inline") continue;
++      if (batch.size >= 1000 && !batch.has(entry.path)) batch.clear();
++      batch.set(entry.path, entry);
++    }
++  }
++
++  takeRangeEntry(path: string, range: ReadFileOptions["range"]): InlineEntryRow | undefined {
++    if (range === undefined || this.depth !== 0) return undefined;
++    const entry = this.batch?.get(path);
++    this.batch?.delete(path);
++    return entry;
++  }
++}
++
++const states = new WeakMap<VfsSqlStorage, SqlReadState>();
++export function sqlReadState(sql: VfsSqlStorage): SqlReadState {
++  let state = states.get(sql);
++  if (state === undefined) {
++    state = new SqlReadState();
++    states.set(sql, state);
++  }
++  return state;
++}
+diff --git a/test/byte-vfs-durable-traversal-permissions.test.ts b/test/byte-vfs-durable-traversal-permissions.test.ts
+index 969bbd3..6f8e058 100644
+--- a/test/byte-vfs-durable-traversal-permissions.test.ts
++++ b/test/byte-vfs-durable-traversal-permissions.test.ts
+@@ -32,3 +32,40 @@ it("observes parent permissions across filesystem instances and rollback", async
+     expect(first.stat("/dir").mode).toBe(0o40755);
+   });
+ });
++
++it("invalidates one-use batch metadata across owners and nested rollback", async () => {
++  await runInDurableObject(env.VFS_TEST.getByName("stat-batch-shared"), async (_, state) => {
++    await state.storage.deleteAll();
++    const first = new TransactionalFileSystem(state.storage);
++    const second = new DurableObjectFileSystem(state.storage);
++    await first.writeFile("/file", "body");
++    await first.writeFile("/other", "other");
++    const user = first.forCredentials({ uid: 1000, gid: 1000 });
++    const warm = () => user.statMany?.(["/file", "/other"]);
++    warm();
++    second.setMetadata("/file", { mode: 0o100600 });
++    expect(() => user.readFile("/file", { range: { offset: 0 } })).toThrow(
++      expect.objectContaining({ code: "EACCES" }),
++    );
++    second.setMetadata("/file", { mode: 0o100644 });
++    warm();
++    expect(() =>
++      first.transact(() => {
++        second.setMetadata("/file", { mode: 0o100000 });
++        warm();
++        expect(() => user.readFile("/file", { range: { offset: 0 } })).toThrow(
++          expect.objectContaining({ code: "EACCES" }),
++        );
++        throw new Error("rollback batch metadata");
++      }),
++    ).toThrow("rollback batch metadata");
++    expect(await new Response(user.readFile("/file", { range: { offset: 0 } }).stream).text()).toBe(
++      "body",
++    );
++    warm();
++    await second.writeFile("/file", "new body");
++    expect(await new Response(user.readFile("/file", { range: { offset: 0 } }).stream).text()).toBe(
++      "new body",
++    );
++  });
++});
+diff --git a/test/vfs-stat-batch-reuse.test.ts b/test/vfs-stat-batch-reuse.test.ts
+new file mode 100644
+index 0000000..c2c1a2a
+--- /dev/null
++++ b/test/vfs-stat-batch-reuse.test.ts
+@@ -0,0 +1,190 @@
++import { expect, it } from "vitest";
++import { NodeSqlFileSystem } from "../src/testing/node.js";
++import { createTestFileSystem } from "./helpers/node-sql.js";
++
++it("reuses one batch projection without granting the stat caller permission to read", async () => {
++  let statements = 0;
++  let returnedRows = 0;
++  const fs = createTestFileSystem({
++    onStatement: (_query, rows) => {
++      statements++;
++      returnedRows += rows;
++    },
++  });
++  await fs.writeFile("/private", "secret", { mode: 0o100600 });
++  await fs.writeFile("/public", "body");
++  const user = fs.forCredentials({ uid: 1000, gid: 1000 });
++  user.statMany?.(["/private", "/public"]);
++  expect(() => user.readFile("/private", { range: { offset: 0 } })).toThrow(
++    expect.objectContaining({ code: "EACCES" }),
++  );
++  statements = 0;
++  returnedRows = 0;
++  await user.readFile("/public", { range: { offset: Number.MAX_SAFE_INTEGER } }).stream.cancel();
++  expect(statements).toBe(1);
++  expect(returnedRows).toBe(0);
++  // A snapshot is consumed, not retained indefinitely.
++  await user.readFile("/public", { range: { offset: Number.MAX_SAFE_INTEGER } }).stream.cancel();
++  expect(statements).toBe(2);
++  expect(returnedRows).toBe(1);
++});
++
++it("discards batch snapshots after replacement, deletion, ownership and directory permission changes", async () => {
++  const fs = createTestFileSystem();
++  await fs.writeFile("/a/file", "old", { createParents: true });
++  await fs.writeFile("/other", "other");
++  const user = fs.forCredentials({ uid: 1000, gid: 1000 });
++  const warm = () => user.statMany?.(["/a/file", "/other"]);
++  warm();
++  await fs.writeFile("/a/file", "new and longer");
++  expect(await new Response(user.readFile("/a/file", { range: { offset: 0 } }).stream).text()).toBe(
++    "new and longer",
++  );
++  warm();
++  fs.setMetadata("/a/file", { mode: 0o100600 });
++  expect(() => user.readFile("/a/file", { range: { offset: 0 } })).toThrow(
++    expect.objectContaining({ code: "EACCES" }),
++  );
++  warm();
++  fs.setOwnership("/a/file", { uid: 1000, gid: 1000 });
++  await user.readFile("/a/file", { range: { offset: 0 } }).stream.cancel();
++  warm();
++  fs.setMetadata("/a", { mode: 0o40000 });
++  expect(() => user.readFile("/a/file", { range: { offset: 0 } })).toThrow(
++    expect.objectContaining({ code: "EACCES" }),
++  );
++  fs.setMetadata("/a", { mode: 0o40755 });
++  warm();
++  await fs.remove("/a/file");
++  expect(() => user.readFile("/a/file", { range: { offset: 0 } })).toThrow(
++    expect.objectContaining({ code: "ENOENT" }),
++  );
++  await fs.writeFile("/replacement", "replacement");
++  await fs.writeFile("/a/file", "old");
++  warm();
++  await fs.move("/replacement", "/a/file", { replace: true });
++  expect(await new Response(user.readFile("/a/file", { range: { offset: 0 } }).stream).text()).toBe(
++    "replacement",
++  );
++});
++
++it("preserves ranged snapshots for both single-chunk and multi-chunk batched files", async () => {
++  const fs = createTestFileSystem({ chunkBytes: 4 });
++  await fs.writeFile("/small", "one");
++  await fs.writeFile("/large", "several chunks of content");
++  fs.statMany(["/small", "/large"]);
++  const small = fs.readFile("/small", { range: { offset: 0 } });
++  const large = fs.readFile("/large", { range: { offset: 0 } });
++  await fs.writeFile("/small", "replacement");
++  await fs.writeFile("/large", "new");
++  expect(await new Response(small.stream).text()).toBe("one");
++  expect(await new Response(large.stream).text()).toBe("several chunks of content");
++  expect(small.stat.sizeBytes).toBe(3);
++  expect(large.stat.sizeBytes).toBe(25);
++  expect(await new Response(fs.readFile("/small", { range: { offset: 0 } }).stream).text()).toBe(
++    "replacement",
++  );
++  expect(await new Response(fs.readFile("/large", { range: { offset: 0 } }).stream).text()).toBe(
++    "new",
++  );
++});
++
++it("keeps path-resolution errors and symlink permissions after a batch lookup", async () => {
++  const fs = createTestFileSystem();
++  await fs.writeFile("/public", "public");
++  await fs.writeFile("/private", "secret", { mode: 0o100600 });
++  const user = fs.forCredentials({ uid: 1000, gid: 1000 });
++  user.statMany?.(["/public", "/private"]);
++  for (const reader of [fs, user]) {
++    expect(() => reader.readFile("/public/", { range: { offset: 0 } })).toThrow(
++      expect.objectContaining({ code: "ENOTDIR" }),
++    );
++    expect(() => reader.readFile("/public/../private", { range: { offset: 0 } })).toThrow(
++      expect.objectContaining({ code: "ENOTDIR" }),
++    );
++    expect(() => reader.readFile("/missing/../public", { range: { offset: 0 } })).toThrow(
++      expect.objectContaining({ code: "ENOENT" }),
++    );
++  }
++  await fs.move("/public", "/moved");
++  fs.symlink("/public", "/private");
++  expect(() => user.readFile("/public", { range: { offset: 0 } })).toThrow(
++    expect.objectContaining({ code: "EACCES" }),
++  );
++  expect(await new Response(fs.readFile("/public", { range: { offset: 0 } }).stream).text()).toBe(
++    "secret",
++  );
++});
++
++it("discards metadata prefetched by a transaction-begin observer before changing permissions", async () => {
++  let prefetchOnBegin = false;
++  const fs = createTestFileSystem({
++    onStatement(query) {
++      if (prefetchOnBegin && query === "BEGIN") {
++        prefetchOnBegin = false;
++        fs.statMany(["/public", "/other"]);
++      }
++    },
++  });
++  await fs.writeFile("/public", "body");
++  await fs.writeFile("/other", "other");
++  const user = fs.forCredentials({ uid: 1000, gid: 1000 });
++  prefetchOnBegin = true;
++  fs.setMetadata("/public", { mode: 0o100600 });
++  expect(() => user.readFile("/public", { range: { offset: 0 } })).toThrow(
++    expect.objectContaining({ code: "EACCES" }),
++  );
++});
++
++it("does not retain batch metadata when a query observer changes permissions", async () => {
++  let changeOnBatch = false;
++  const fs = createTestFileSystem({
++    onStatement(query) {
++      if (changeOnBatch && query.includes("FROM requested CROSS JOIN")) {
++        changeOnBatch = false;
++        fs.setMetadata("/public", { mode: 0o100600 });
++      }
++    },
++  });
++  await fs.writeFile("/public", "body");
++  await fs.writeFile("/other", "other");
++  const user = fs.forCredentials({ uid: 1000, gid: 1000 });
++  changeOnBatch = true;
++  user.statMany?.(["/public", "/other"]);
++  expect(() => user.readFile("/public", { range: { offset: Number.MAX_SAFE_INTEGER } })).toThrow(
++    expect.objectContaining({ code: "EACCES" }),
++  );
++});
++
++it("discards metadata prefetched after a callback when committing the transaction fails", async () => {
++  class CommitObserverFileSystem extends NodeSqlFileSystem {
++    beforeCommit: (() => void) | undefined;
++    constructor() {
++      super();
++      const transact = this.storage.transactionSync.bind(this.storage);
++      this.storage.transactionSync = (callback) =>
++        transact(() => {
++          const result = callback();
++          this.beforeCommit?.();
++          return result;
++        });
++    }
++  }
++  const fs = new CommitObserverFileSystem();
++  try {
++    await fs.writeFile("/public", "body");
++    await fs.writeFile("/other", "other");
++    const user = fs.forCredentials({ uid: 1000, gid: 1000 });
++    fs.beforeCommit = () => {
++      fs.beforeCommit = undefined;
++      user.statMany?.(["/public", "/other"]);
++      throw new Error("injected commit failure");
++    };
++    expect(() => fs.setMetadata("/public", { mode: 0o100600 })).toThrow("injected commit failure");
++    expect(
++      await new Response(user.readFile("/public", { range: { offset: 0 } }).stream).text(),
++    ).toBe("body");
++  } finally {
++    fs.close();
++  }
++});
+diff --git a/test/vfs-storage-lifetime.test.ts b/test/vfs-storage-lifetime.test.ts
+new file mode 100644
+index 0000000..81aa2ba
+--- /dev/null
++++ b/test/vfs-storage-lifetime.test.ts
+@@ -0,0 +1,51 @@
++import { expect, it } from "vitest";
++import { NodeSqlFileSystem } from "../src/testing/node.js";
++import type { VfsSqlBinding, VfsSqlCursor, VfsSqlRow } from "../src/vfs/sql.js";
++
++it("rejects an EOF read after the backing storage closes, even after metadata prefetch", async () => {
++  const fs = new NodeSqlFileSystem();
++  try {
++    await fs.writeFile("/public", "body");
++    await fs.writeFile("/other", "other");
++    const user = fs.forCredentials({ uid: 1000, gid: 1000 });
++    user.statMany?.(["/public", "/other"]);
++    fs.close();
++    expect(() =>
++      user.readFile("/public", { range: { offset: Number.MAX_SAFE_INTEGER } }),
++    ).toThrow();
++  } finally {
++    fs.close();
++  }
++});
++
++it("observes a permission mutation at the next storage access after metadata prefetch", async () => {
++  class BeforeQueryFileSystem extends NodeSqlFileSystem {
++    beforeNextQuery: (() => void) | undefined;
++    constructor() {
++      super();
++      const execute = this.sql.exec.bind(this.sql);
++      this.sql.exec = <Row extends VfsSqlRow>(
++        query: string,
++        ...bindings: VfsSqlBinding[]
++      ): VfsSqlCursor<Row> => {
++        const before = this.beforeNextQuery;
++        this.beforeNextQuery = undefined;
++        before?.();
++        return execute<Row>(query, ...bindings);
++      };
++    }
++  }
++  const fs = new BeforeQueryFileSystem();
++  try {
++    await fs.writeFile("/public", "body");
++    await fs.writeFile("/other", "other");
++    const user = fs.forCredentials({ uid: 1000, gid: 1000 });
++    user.statMany?.(["/public", "/other"]);
++    fs.beforeNextQuery = () => fs.setMetadata("/public", { mode: 0o100600 });
++    expect(() => user.readFile("/public", { range: { offset: Number.MAX_SAFE_INTEGER } })).toThrow(
++      expect.objectContaining({ code: "EACCES" }),
++    );
++  } finally {
++    fs.close();
++  }
++});

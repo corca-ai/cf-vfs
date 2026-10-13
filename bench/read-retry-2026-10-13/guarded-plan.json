@@ -1,0 +1,27 @@
+{
+  "candidate": "987825c",
+  "correctness": "Previous variants fail a new permission query-observer regression; guarded variant passes. New candidate cohort, no earlier candidate samples pooled.",
+  "baseline": {
+    "full": "3 completed 9b35638 sessions plus 1 completed 2700b6d diagnostic session; equivalent runtime verified by empty git diff across src/demo/worker/meter/lock/config except generated source identifier.",
+    "task": "3 completed 9b35638 sessions",
+    "failedAttempts": "both new 2700b6d attempts retained; second has CF RPC internal error at group 37; no further baseline retries"
+  },
+  "local": {
+    "sessions": 3,
+    "pairs": 6,
+    "warmups": 2,
+    "credentials": [
+      "unbound",
+      "uid1000 gid1000"
+    ],
+    "taskPairs": 30,
+    "followupPairs": 10
+  },
+  "cloudflare": {
+    "full": 5,
+    "task": 3,
+    "sqlCostReplays": 3,
+    "failedRunPolicy": "stop the cohort; preserve all partial/failure evidence; no automatic retry until lucky"
+  },
+  "adoption": "fixed-reference and all equivalent previous-baseline run-cluster comparisons; retain 3+2 confirmation partition; explain every >5% flag with >=10 alternating pairs; SQL costs/correctness/bundle gates unchanged; post-deploy full-suite verification"
+}

@@ -1,0 +1,22 @@
+{
+  "change": "Only explicitly ranged file reads consume batch metadata; ordinary whole-body reads use the original resolution/query path.",
+  "reason": "Original candidate unbound mixed clone +5.248% in 10-pair followup; isolated SQL replay also had small increases. Preserve original evidence; restart candidate cohort.",
+  "local": {
+    "sessions": 3,
+    "pairs": 6,
+    "warmups": 2,
+    "modes": [
+      "unbound",
+      "uid=1000,gid=1000"
+    ],
+    "taskPairs": 30
+  },
+  "cloudflare": {
+    "fullRuns": 3,
+    "taskRuns": 3,
+    "allFailuresRetained": true,
+    "fullConfirmationRuns": 2,
+    "confirmationRationale": "Preselected before any candidate CF results: two further complete runs add twelve alternating pairs for per-workload review; assess all five runs and the confirmation cohort separately."
+  },
+  "adoption": "full-suite geometric means, all >5% flags reviewed with 10 alternating pairs, native SQL/correctness/bundle gates; references remain frozen"
+}

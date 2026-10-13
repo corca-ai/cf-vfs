@@ -1,0 +1,344 @@
+[
+  {
+    "mode": "unbound",
+    "session": 1,
+    "confirmed": [
+      {
+        "stage": {
+          "group": "files",
+          "operation": "stat",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "estimate": {
+          "value": 138.12545442690683,
+          "ci95": [
+            106.56408450356354,
+            179.03443969437487
+          ],
+          "runs": 1,
+          "pairs": 10,
+          "intervalScope": "within one run",
+          "status": "collecting"
+        },
+        "orderIndices": [
+          193.16425682200315,
+          98.76900351300542
+        ]
+      },
+      {
+        "stage": {
+          "group": "git-shell",
+          "operation": "add-unchanged",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "estimate": {
+          "value": 108.15765681140728,
+          "ci95": [
+            100.32587485049982,
+            116.60081453928008
+          ],
+          "runs": 1,
+          "pairs": 10,
+          "intervalScope": "within one run",
+          "status": "collecting"
+        },
+        "orderIndices": [
+          119.3023140952823,
+          98.05408064081085
+        ]
+      },
+      {
+        "stage": {
+          "group": "files",
+          "operation": "append",
+          "files": 100,
+          "cache": true,
+          "trial": 0
+        },
+        "estimate": {
+          "value": 118.74912647256161,
+          "ci95": [
+            103.57712836185249,
+            136.14352184714528
+          ],
+          "runs": 1,
+          "pairs": 10,
+          "intervalScope": "within one run",
+          "status": "collecting"
+        },
+        "orderIndices": [
+          102.54450002967286,
+          137.51449403835397
+        ]
+      },
+      {
+        "stage": {
+          "group": "git",
+          "operation": "checkout-old",
+          "files": 100,
+          "cache": true,
+          "trial": 0
+        },
+        "estimate": {
+          "value": 108.45724236633028,
+          "ci95": [
+            100.01993453708525,
+            117.60628994760489
+          ],
+          "runs": 1,
+          "pairs": 10,
+          "intervalScope": "within one run",
+          "status": "collecting"
+        },
+        "orderIndices": [
+          98.91929521567342,
+          118.91485271970585
+        ]
+      }
+    ],
+    "costs": [
+      {
+        "stage": {
+          "group": "git-shell",
+          "operation": "clone-worktree",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "costs": [
+          {
+            "version": "baseline",
+            "statements": 1987,
+            "returnedRows": 1580
+          },
+          {
+            "version": "candidate",
+            "statements": 1992,
+            "returnedRows": 1582
+          }
+        ]
+      },
+      {
+        "stage": {
+          "group": "git-shell",
+          "operation": "clone-worktree",
+          "files": 1000,
+          "cache": false,
+          "trial": 0
+        },
+        "costs": [
+          {
+            "version": "baseline",
+            "statements": 12050,
+            "returnedRows": 9731
+          },
+          {
+            "version": "candidate",
+            "statements": 12050,
+            "returnedRows": 9733
+          }
+        ]
+      },
+      {
+        "stage": {
+          "group": "coding-small",
+          "operation": "clone",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "costs": [
+          {
+            "version": "baseline",
+            "statements": 1861,
+            "returnedRows": 1448
+          },
+          {
+            "version": "candidate",
+            "statements": 1866,
+            "returnedRows": 1450
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "mode": "unbound",
+    "session": 2,
+    "confirmed": [
+      {
+        "stage": {
+          "group": "files",
+          "operation": "append",
+          "files": 100,
+          "cache": true,
+          "trial": 0
+        },
+        "estimate": {
+          "value": 117.90395569021112,
+          "ci95": [
+            101.93773346446595,
+            136.37092266962242
+          ],
+          "runs": 1,
+          "pairs": 10,
+          "intervalScope": "within one run",
+          "status": "collecting"
+        },
+        "orderIndices": [
+          99.0671080851808,
+          140.32248478926513
+        ]
+      }
+    ],
+    "costs": []
+  },
+  {
+    "mode": "bound",
+    "session": 1,
+    "confirmed": [],
+    "costs": [
+      {
+        "stage": {
+          "group": "git",
+          "operation": "add-all",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "costs": [
+          {
+            "version": "baseline",
+            "statements": 3171,
+            "returnedRows": 2168
+          },
+          {
+            "version": "candidate",
+            "statements": 3171,
+            "returnedRows": 2169
+          }
+        ]
+      },
+      {
+        "stage": {
+          "group": "git-shell",
+          "operation": "add-changed",
+          "files": 100,
+          "cache": false,
+          "trial": 0
+        },
+        "costs": [
+          {
+            "version": "baseline",
+            "statements": 2090,
+            "returnedRows": 2214
+          },
+          {
+            "version": "candidate",
+            "statements": 2090,
+            "returnedRows": 2215
+          }
+        ]
+      },
+      {
+        "stage": {
+          "group": "git",
+          "operation": "add-all",
+          "files": 1000,
+          "cache": false,
+          "trial": 0
+        },
+        "costs": [
+          {
+            "version": "baseline",
+            "statements": 23031,
+            "returnedRows": 12984
+          },
+          {
+            "version": "candidate",
+            "statements": 23031,
+            "returnedRows": 12986
+          }
+        ]
+      },
+      {
+        "stage": {
+          "group": "git",
+          "operation": "add-all",
+          "files": 1000,
+          "cache": true,
+          "trial": 0
+        },
+        "costs": [
+          {
+            "version": "baseline",
+            "statements": 23000,
+            "returnedRows": 12953
+          },
+          {
+            "version": "candidate",
+            "statements": 23000,
+            "returnedRows": 12955
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "mode": "bound",
+    "session": 2,
+    "confirmed": [
+      {
+        "stage": {
+          "group": "git",
+          "operation": "branch",
+          "files": 1000,
+          "cache": false,
+          "trial": 0
+        },
+        "estimate": {
+          "value": 157.3659740219026,
+          "ci95": [
+            104.70485096577515,
+            236.51291751474565
+          ],
+          "runs": 1,
+          "pairs": 10,
+          "intervalScope": "within one run",
+          "status": "collecting"
+        },
+        "orderIndices": [
+          104.3331492825695,
+          237.35552842167817
+        ]
+      }
+    ],
+    "costs": [
+      {
+        "stage": {
+          "group": "git",
+          "operation": "add-all",
+          "files": 1000,
+          "cache": true,
+          "trial": 0
+        },
+        "costs": [
+          {
+            "version": "candidate",
+            "statements": 23000,
+            "returnedRows": 12956
+          },
+          {
+            "version": "baseline",
+            "statements": 23000,
+            "returnedRows": 12953
+          }
+        ]
+      }
+    ]
+  }
+]

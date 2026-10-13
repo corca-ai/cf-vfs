@@ -1,0 +1,312 @@
+{
+  "note": "Identical baseline graph and deterministic filesystem clocks in both arms; returned rows are Node diagnostic counts, not CF native billed reads.",
+  "rows": [
+    {
+      "run": 1,
+      "stage": {
+        "group": "git-shell",
+        "operation": "add-changed",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "statements": 2090,
+        "returnedRows": 2212
+      },
+      "candidate": {
+        "statements": 2090,
+        "returnedRows": 2211
+      },
+      "queries": []
+    },
+    {
+      "run": 1,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "statements": 23031,
+        "returnedRows": 13464
+      },
+      "candidate": {
+        "statements": 23031,
+        "returnedRows": 13467
+      },
+      "queries": [
+        {
+          "q": "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+          "before": 8213,
+          "after": 8210
+        },
+        {
+          "q": "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version,\n          (SELECT json_group_array(json_array(path,kind,mode,uid,gid))\n             FROM vfs_entries INDEXED BY vfs_entries_path\n             WHERE path IN (SELECT value FROM json_each(?))) AS parents\n       FROM (SELECT 1) seed\n       LEFT JOIN vfs_entries e INDEXED BY vfs_entries_path ON e.path = ?",
+          "before": 953,
+          "after": 956
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "stage": {
+        "group": "git-shell",
+        "operation": "add-changed",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "statements": 14332,
+        "returnedRows": 14751
+      },
+      "candidate": {
+        "statements": 14331,
+        "returnedRows": 14745
+      },
+      "queries": [
+        {
+          "q": "SELECT path, kind, mode, uid, gid\n         FROM vfs_entries INDEXED BY vfs_entries_path\n         WHERE path IN (SELECT value FROM json_each(?))",
+          "before": 748,
+          "after": 747
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "statements": 4995,
+        "returnedRows": 4745
+      },
+      "candidate": {
+        "statements": 4990,
+        "returnedRows": 4743
+      },
+      "queries": [
+        {
+          "q": "BEGIN",
+          "before": 224,
+          "after": 223
+        },
+        {
+          "q": "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+          "before": 220,
+          "after": 219
+        },
+        {
+          "q": "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+          "before": 219,
+          "after": 218
+        },
+        {
+          "q": "COMMIT",
+          "before": 220,
+          "after": 219
+        },
+        {
+          "q": "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (?) AND kind = 'directory'\n      RETURNING path, mutation_version",
+          "before": 116,
+          "after": 115
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "statements": 3171,
+        "returnedRows": 2168
+      },
+      "candidate": {
+        "statements": 3171,
+        "returnedRows": 2169
+      },
+      "queries": [
+        {
+          "q": "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+          "before": 1063,
+          "after": 1062
+        },
+        {
+          "q": "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version,\n          (SELECT json_group_array(json_array(path,kind,mode,uid,gid))\n             FROM vfs_entries INDEXED BY vfs_entries_path\n             WHERE path IN (SELECT value FROM json_each(?))) AS parents\n       FROM (SELECT 1) seed\n       LEFT JOIN vfs_entries e INDEXED BY vfs_entries_path ON e.path = ?",
+          "before": 103,
+          "after": 104
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "stage": {
+        "group": "git-shell",
+        "operation": "add-changed",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "statements": 2090,
+        "returnedRows": 2213
+      },
+      "candidate": {
+        "statements": 2090,
+        "returnedRows": 2212
+      },
+      "queries": []
+    },
+    {
+      "run": 2,
+      "stage": {
+        "group": "coding-small",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "statements": 4954,
+        "returnedRows": 4016
+      },
+      "candidate": {
+        "statements": 4959,
+        "returnedRows": 4018
+      },
+      "queries": [
+        {
+          "q": "BEGIN",
+          "before": 219,
+          "after": 220
+        },
+        {
+          "q": "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+          "before": 215,
+          "after": 216
+        },
+        {
+          "q": "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+          "before": 214,
+          "after": 215
+        },
+        {
+          "q": "COMMIT",
+          "before": 215,
+          "after": 216
+        },
+        {
+          "q": "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (?) AND kind = 'directory'\n      RETURNING path, mutation_version",
+          "before": 112,
+          "after": 113
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "stage": {
+        "group": "git-shell",
+        "operation": "add-changed",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "statements": 2090,
+        "returnedRows": 2214
+      },
+      "candidate": {
+        "statements": 2090,
+        "returnedRows": 2213
+      },
+      "queries": []
+    },
+    {
+      "run": 3,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 1000,
+        "cache": true,
+        "trial": 0
+      },
+      "baseline": {
+        "statements": 23000,
+        "returnedRows": 16460
+      },
+      "candidate": {
+        "statements": 23000,
+        "returnedRows": 16458
+      },
+      "queries": [
+        {
+          "q": "SELECT json_object('id',e.id,'path',e.path,'parent_path',e.parent_path,'name',e.name,'kind',e.kind,'content_class',e.content_class,'opaque_object_id',e.opaque_object_id,'link_target',e.link_target,'size_bytes',e.size_bytes,'mode',e.mode,'uid',e.uid,'gid',e.gid,'created_at_ms',e.created_at_ms,'link_identity',e.link_identity,'link_count',e.link_count,'modified_at_ms',e.modified_at_ms,'changed_at_ms',COALESCE(e.changed_at_ms, e.modified_at_ms),'revision',e.revision,'mutation_version',e.mutation_version) AS entry\n       FROM vfs_entries e INDEXED BY vfs_entries_path\n       WHERE e.path = ?",
+          "before": 8180,
+          "after": 8182
+        },
+        {
+          "q": "SELECT e.id AS id,e.path AS path,e.parent_path AS parent_path,e.name AS name,e.kind AS kind,e.content_class AS content_class,e.opaque_object_id AS opaque_object_id,e.link_target AS link_target,e.size_bytes AS size_bytes,e.mode AS mode,e.uid AS uid,e.gid AS gid,e.created_at_ms AS created_at_ms,e.link_identity AS link_identity,e.link_count AS link_count,e.modified_at_ms AS modified_at_ms,COALESCE(e.changed_at_ms, e.modified_at_ms) AS changed_at_ms,e.revision AS revision,e.mutation_version AS mutation_version,\n          (SELECT json_group_array(json_array(path,kind,mode,uid,gid))\n             FROM vfs_entries INDEXED BY vfs_entries_path\n             WHERE path IN (SELECT value FROM json_each(?))) AS parents\n       FROM (SELECT 1) seed\n       LEFT JOIN vfs_entries e INDEXED BY vfs_entries_path ON e.path = ?",
+          "before": 955,
+          "after": 953
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "stage": {
+        "group": "coding-small",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "trial": 0
+      },
+      "baseline": {
+        "statements": 4954,
+        "returnedRows": 4016
+      },
+      "candidate": {
+        "statements": 4959,
+        "returnedRows": 4018
+      },
+      "queries": [
+        {
+          "q": "BEGIN",
+          "before": 219,
+          "after": 220
+        },
+        {
+          "q": "SELECT inline_bytes, entries FROM vfs_usage WHERE singleton = 1",
+          "before": 215,
+          "after": 216
+        },
+        {
+          "q": "UPDATE vfs_usage SET\n         inline_bytes = inline_bytes + ?, entries = entries + ?,\n         next_ino = MAX(next_ino, ?)\n       WHERE singleton = 1",
+          "before": 214,
+          "after": 215
+        },
+        {
+          "q": "COMMIT",
+          "before": 215,
+          "after": 216
+        },
+        {
+          "q": "UPDATE vfs_entries INDEXED BY vfs_entries_path SET modified_at_ms = ?, changed_at_ms = ?,\n      revision = revision + 1, mutation_version = mutation_version + 1,\n      link_count = link_count\n      WHERE path IN (?) AND kind = 'directory'\n      RETURNING path, mutation_version",
+          "before": 112,
+          "after": 113
+        }
+      ]
+    }
+  ]
+}

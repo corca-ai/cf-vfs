@@ -1,0 +1,29 @@
+
+ RUN  v4.1.10 /private/tmp/cf-vfs-read-retry-20261013
+
+ ❯ test/vfs-stat-batch-reuse.test.ts (7 tests | 1 failed) 38ms
+   × discards metadata prefetched after a callback when committing the transaction fails 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/vfs-stat-batch-reuse.test.ts > discards metadata prefetched after a callback when committing the transaction fails
+VfsError: permission denied
+ ❯ CommitObserverFileSystem.assertPermission src/vfs/sql-base.ts:310:13
+    308|       return;
+    309|     if ((posixPermissions(entry, access) & required) !== required) {
+    310|       throw new VfsError("EACCES", "permission denied", path);
+       |             ^
+    311|     }
+    312|   }
+ ❯ CommitObserverFileSystem.readFile src/vfs/sql-read-base.ts:166:10
+ ❯ PosixFileSystemView.readFile src/vfs/sql.ts:233:23
+ ❯ test/vfs-stat-batch-reuse.test.ts:175:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  00:46:57
+   Duration  210ms (transform 96ms, setup 0ms, import 120ms, tests 38ms, environment 0ms)
+

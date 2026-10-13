@@ -1,0 +1,26 @@
+
+ RUN  v4.1.10 /private/tmp/cf-vfs-read-retry-20261013
+
+ ❯ test/vfs-stat-batch-reuse.test.ts (6 tests | 1 failed) 25ms
+   × does not retain batch metadata when a query observer changes permissions 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/vfs-stat-batch-reuse.test.ts > does not retain batch metadata when a query observer changes permissions
+AssertionError: expected function to throw an error, but it didn't
+ ❯ test/vfs-stat-batch-reuse.test.ts:120:90
+    118|   changeOnBatch = true;
+    119|   user.statMany?.(["/public", "/other"]);
+    120|   expect(() => user.readFile("/public", { range: { offset: Number.MAX_…
+       |                                                                                          ^
+    121|     expect.objectContaining({ code: "EACCES" }),
+    122|   );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  00:30:38
+   Duration  172ms (transform 79ms, setup 0ms, import 97ms, tests 25ms, environment 0ms)
+
