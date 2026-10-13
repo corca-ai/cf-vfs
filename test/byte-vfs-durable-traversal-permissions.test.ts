@@ -44,20 +44,28 @@ it("invalidates one-use batch metadata across owners and nested rollback", async
     const warm = () => user.statMany?.(["/file", "/other"]);
     warm();
     second.setMetadata("/file", { mode: 0o100600 });
-    expect(() => user.readFile("/file")).toThrow(expect.objectContaining({ code: "EACCES" }));
+    expect(() => user.readFile("/file", { range: { offset: 0 } })).toThrow(
+      expect.objectContaining({ code: "EACCES" }),
+    );
     second.setMetadata("/file", { mode: 0o100644 });
     warm();
     expect(() =>
       first.transact(() => {
         second.setMetadata("/file", { mode: 0o100000 });
         warm();
-        expect(() => user.readFile("/file")).toThrow(expect.objectContaining({ code: "EACCES" }));
+        expect(() => user.readFile("/file", { range: { offset: 0 } })).toThrow(
+          expect.objectContaining({ code: "EACCES" }),
+        );
         throw new Error("rollback batch metadata");
       }),
     ).toThrow("rollback batch metadata");
-    expect(await new Response(user.readFile("/file").stream).text()).toBe("body");
+    expect(await new Response(user.readFile("/file", { range: { offset: 0 } }).stream).text()).toBe(
+      "body",
+    );
     warm();
     await second.writeFile("/file", "new body");
-    expect(await new Response(user.readFile("/file").stream).text()).toBe("new body");
+    expect(await new Response(user.readFile("/file", { range: { offset: 0 } }).stream).text()).toBe(
+      "new body",
+    );
   });
 });

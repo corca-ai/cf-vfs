@@ -694,3 +694,7 @@ including nested calls and rollback. Population and reuse are disabled inside
 transaction callbacks. Permission checks run for the current principal on each
 read; directory and opaque entries, file bodies and authorization verdicts are
 not retained. Noncanonical paths follow ordinary path resolution.
+
+Batch population also checks the identity captured before its SQL queries. If
+a reentrant storage observer mutates the filesystem while a query snapshot is
+returned, that invalidated snapshot is never retained for a later ranged read.

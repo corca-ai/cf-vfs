@@ -9,14 +9,19 @@ class SqlReadState {
   /** The transaction owner clears this before entry and when its callback exits. */
   batch: Map<string, InlineEntryRow> | undefined;
 
-  /** One-use metadata, not file bodies or authorization decisions. */
-  rememberBatch(entries: Iterable<EntryRow>): void {
+  beginBatch(): Map<string, InlineEntryRow> | undefined {
     if (this.depth !== 0) return;
     this.batch ??= new Map();
+    return this.batch;
+  }
+
+  /** Ignore a query snapshot if a reentrant observer invalidated its batch. */
+  rememberBatch(entries: Iterable<EntryRow>, batch: Map<string, InlineEntryRow> | undefined): void {
+    if (batch === undefined || batch !== this.batch || this.depth !== 0) return;
     for (const entry of entries) {
       if (entry.kind !== "file" || entry.contentClass !== "inline") continue;
-      if (this.batch.size >= 1000 && !this.batch.has(entry.path)) this.batch.clear();
-      this.batch.set(entry.path, entry);
+      if (batch.size >= 1000 && !batch.has(entry.path)) batch.clear();
+      batch.set(entry.path, entry);
     }
   }
 
