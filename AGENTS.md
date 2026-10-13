@@ -34,6 +34,12 @@ performance candidate only when the overall improvement is supported and no
 material per-workload or SQL-cost regression remains unexplained. Preserve
 POSIX behavior and bundle budgets. Save raw evidence and rejected experiments.
 Finish deployment and logging configuration before measurement cohorts. Do not
+compare different CF evaluation topologies as if only library code changed.
+Reuse the evaluation Worker, DO names/bindings and entry point across baseline
+and candidate cohorts; record both arms' RPC ping distributions. Additive RPC
+delay does not cancel in ratios. Preserve cross-topology results as diagnostics,
+and require same-topology full-suite evidence before attributing gains to code.
+Never subtract RPC pings from timings. Do not
 attach or detach `wrangler tail` or dashboard live logs during measurements:
 Cloudflare can replace Durable Objects when live logging is enabled, even with
 an unchanged source build. Preserve affected runs as excluded diagnostics.
