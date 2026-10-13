@@ -4,7 +4,13 @@ import { createTestFileSystem } from "./helpers/node-sql.js";
 
 it("reuses one batch projection without granting the stat caller permission to read", async () => {
   let statements = 0;
-  const fs = createTestFileSystem({ onStatement: () => statements++ });
+  let returnedRows = 0;
+  const fs = createTestFileSystem({
+    onStatement: (_query, rows) => {
+      statements++;
+      returnedRows += rows;
+    },
+  });
   await fs.writeFile("/private", "secret", { mode: 0o100600 });
   await fs.writeFile("/public", "body");
   const user = fs.forCredentials({ uid: 1000, gid: 1000 });
@@ -13,11 +19,14 @@ it("reuses one batch projection without granting the stat caller permission to r
     expect.objectContaining({ code: "EACCES" }),
   );
   statements = 0;
-  await user.readFile("/public", { range: { offset: Number.MAX_SAFE_INTEGER } }).stream.cancel();
-  expect(statements).toBe(0);
-  // A snapshot is consumed, not retained indefinitely.
+  returnedRows = 0;
   await user.readFile("/public", { range: { offset: Number.MAX_SAFE_INTEGER } }).stream.cancel();
   expect(statements).toBe(1);
+  expect(returnedRows).toBe(0);
+  // A snapshot is consumed, not retained indefinitely.
+  await user.readFile("/public", { range: { offset: Number.MAX_SAFE_INTEGER } }).stream.cancel();
+  expect(statements).toBe(2);
+  expect(returnedRows).toBe(1);
 });
 
 it("discards batch snapshots after replacement, deletion, ownership and directory permission changes", async () => {

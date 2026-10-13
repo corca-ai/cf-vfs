@@ -136,6 +136,25 @@ export abstract class SqlRead extends SqlQuery {
     return digest;
   }
 
+  private rangedBatchEntry(
+    path: string,
+    range: ReadFileOptions["range"],
+  ): InlineEntryRow | undefined {
+    const entry = this.readState.takeRangeEntry(path, range);
+    if (entry === undefined) return;
+    const batch = this.readState.batch;
+    try {
+      // Even EOF authorization must access storage to detect a closed or
+      // replaced SQL owner. This probe fetches no file metadata or rows.
+      this.sql.exec("SELECT 1 LIMIT 0").toArray();
+    } catch (error) {
+      this.readState.batch = undefined;
+      throw error;
+    }
+    // A storage observer can mutate the file before the probe executes.
+    return this.readState.batch === batch ? entry : undefined;
+  }
+
   readFile(
     path: string,
     options: ReadFileOptions = {},
@@ -143,7 +162,7 @@ export abstract class SqlRead extends SqlQuery {
   ): InlineReadResult {
     // Only ranged reads consume one-use canonical batch metadata. Whole-body reads
     // keep the combined metadata/body query; mutations discard every projection.
-    const cached = this.readState.takeRangeEntry(path, options.range);
+    const cached = this.rangedBatchEntry(path, options.range);
     const direct =
       cached === undefined &&
       posix === undefined &&

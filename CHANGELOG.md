@@ -17,7 +17,7 @@ included.
 ## [Unreleased]
 
 - Reuse canonical `statMany` metadata once for explicitly ranged file reads,
-  retaining ordinary whole-body queries, fresh POSIX permission checks and
+  retaining ordinary whole-body queries, storage-lifetime checks, fresh POSIX permission checks and
   invalidation on mutation and rollback. No filesystem API is added.
 
 - Batch Git commit tree and commit-object publication through the existing

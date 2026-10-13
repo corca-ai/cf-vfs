@@ -685,7 +685,11 @@ fixture/dependency inputs are verified by the existing reference gate.
 The SQLite backend retains at most 1,000 canonical inline-file metadata
 projections from `statMany` for subsequent explicitly ranged reads. A ranged
 read consumes its projection once. This avoids another metadata query for the
-EOF read that authorizes a cached Git content hash. Ordinary whole-body reads
+EOF read that authorizes a cached Git content hash. Reuse still executes a row-free
+SQL probe through the ordinary storage API, so closed/replaced storage is not
+bypassed. A mutation during that probe discards the captured projection and
+falls back to ordinary resolution. This reduces metadata reads/copies, not the
+number of SQL API calls. Ordinary whole-body reads
 keep their existing combined metadata/body query. No API or schema is added.
 
 The state belongs to one SQL storage identity, shared by VFS owners using that
