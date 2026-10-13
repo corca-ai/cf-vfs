@@ -679,3 +679,18 @@ authenticated evaluation. `demo/benchmark-task-reference` is independently
 frozen. `node bench/pin-reference.mjs --pin --task` explicitly starts a new task
 series; ordinary optimizations must not run it. Both reference hashes and
 fixture/dependency inputs are verified by the existing reference gate.
+
+### One-use metadata for ranged reads
+
+The SQLite backend retains at most 1,000 canonical inline-file metadata
+projections from `statMany` for subsequent explicitly ranged reads. A ranged
+read consumes its projection once. This avoids another metadata query for the
+EOF read that authorizes a cached Git content hash. Ordinary whole-body reads
+keep their existing combined metadata/body query. No API or schema is added.
+
+The state belongs to one SQL storage identity, shared by VFS owners using that
+storage. Transactions clear it before entry and when their callback exits,
+including nested calls and rollback. Population and reuse are disabled inside
+transaction callbacks. Permission checks run for the current principal on each
+read; directory and opaque entries, file bodies and authorization verdicts are
+not retained. Noncanonical paths follow ordinary path resolution.

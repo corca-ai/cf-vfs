@@ -1,0 +1,105 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "cf-vfs-read-evaluation-20261014",
+  "main": "../agent-task-2026-10-12/worker.ts",
+  "account_id": "b23e9b2e3a9159dd7eb3fa51f839c5c5",
+  "compatibility_date": "2026-07-24",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "version_metadata": {
+    "binding": "VERSION_METADATA"
+  },
+  "secrets": {
+    "required": [
+      "BENCHMARK_TOKEN",
+      "PUBLIC_BENCHMARK_TOKEN"
+    ]
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01
+    }
+  },
+  "assets": {
+    "directory": "../../demo/public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "services": [
+    {
+      "binding": "BENCHMARK_RUNNER",
+      "service": "cf-vfs-read-evaluation-20261014",
+      "entrypoint": "BenchmarkRunner"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BENCHMARK_BUCKET",
+      "bucket_name": "cf-vfs-benchmark"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PUBLIC_BENCHMARKS",
+        "class_name": "PublicBenchmarks"
+      },
+      {
+        "name": "BENCHMARK_WORKSPACES",
+        "class_name": "BenchmarkWorkspace"
+      },
+      {
+        "name": "BENCHMARK",
+        "class_name": "VfsBenchmark"
+      },
+      {
+        "name": "DEMO_WORKSPACES",
+        "class_name": "DemoWorkspace"
+      },
+      {
+        "name": "COST_WORKSPACES",
+        "class_name": "CostWorkspace"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "VfsBenchmark"
+      ]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": [
+        "DemoWorkspace"
+      ]
+    },
+    {
+      "tag": "v3",
+      "new_sqlite_classes": [
+        "PublicBenchmarks"
+      ]
+    },
+    {
+      "tag": "v4",
+      "new_sqlite_classes": [
+        "BenchmarkWorkspace"
+      ]
+    },
+    {
+      "tag": "v5",
+      "new_sqlite_classes": [
+        "CostWorkspace"
+      ]
+    }
+  ]
+}

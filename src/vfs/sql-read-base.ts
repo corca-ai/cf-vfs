@@ -141,7 +141,11 @@ export abstract class SqlRead extends SqlQuery {
     options: ReadFileOptions = {},
     posix?: PosixAccessContext,
   ): InlineReadResult {
+    // Only ranged reads consume one-use canonical batch metadata. Whole-body reads
+    // keep the combined metadata/body query; mutations discard every projection.
+    const cached = this.readState.takeRangeEntry(path, options.range);
     const direct =
+      cached === undefined &&
       posix === undefined &&
       options.range === undefined &&
       !pathRequiresDirectory(path) &&
@@ -149,7 +153,10 @@ export abstract class SqlRead extends SqlQuery {
       this.links() === 0
         ? this.directRead(path)
         : null;
-    const access = direct?.access ?? this.resolveAccess(path);
+    const access =
+      cached === undefined
+        ? (direct?.access ?? this.resolveAccess(path))
+        : { path: cached.path, row: cached, followed: [] };
     const normalized = access.path;
     this.assertTraverse(normalized, access.followed, posix);
     const entry = access.row ?? this.requireEntry(normalized);

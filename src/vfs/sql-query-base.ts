@@ -103,6 +103,7 @@ export abstract class SqlQuery extends SqlContent {
         entries.set(row.path, row);
       }
     }
+    this.readState.rememberBatch(entries.values());
     return canonical.map((path) =>
       statResult(() => {
         const row = entries.get(path);
