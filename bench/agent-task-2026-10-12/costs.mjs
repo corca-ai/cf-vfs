@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
+import { neverConnected } from "../connection-errors.mjs";
 
 const [base, build, output] = process.argv.slice(2);
 assert.ok(base?.startsWith("https://") && build && output);
@@ -8,14 +10,26 @@ const token = vars
   .match(/^\s*PUBLIC_BENCHMARK_TOKEN\s*=\s*(.+?)\s*$/m)?.[1]
   ?.replace(/^(["'])(.*)\1$/, "$2");
 assert.ok(token);
+async function postCosts(group) {
+  const deadline = Date.now() + 10 * 60_000;
+  for (;;) {
+    try {
+      return await fetch(new URL(`/costs?group=${group}`, base), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(180000),
+      });
+    } catch (error) {
+      if (!neverConnected(error) || Date.now() >= deadline) throw error;
+      console.error(`Cost group ${group}: connection failed before sending; retrying`);
+      await delay(2000);
+    }
+  }
+}
 const rows = [];
 let groups = 1;
 for (let group = 0; group < groups; group++) {
-  const response = await fetch(new URL(`/costs?group=${group}`, base), {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(180000),
-  });
+  const response = await postCosts(group);
   assert.equal(response.status, 200);
   const value = await response.json();
   assert.equal(value.reference.build, build);

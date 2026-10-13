@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { assessPairs } from "../demo/public/benchmarks/summary.js";
+import { neverConnected } from "./connection-errors.mjs";
 import { comparePublicResults } from "./public-comparison.mjs";
 
 const args = process.argv.slice(2);
@@ -28,19 +29,6 @@ const localBuild = (
 ).match(/"([a-f0-9]{64})"/u)?.[1];
 const expectedBuild = option("--build") ?? localBuild;
 const output = option("--out");
-function neverConnected(error) {
-  const cause = error instanceof Error ? error.cause : undefined;
-  const attempts = cause instanceof AggregateError ? cause.errors : [cause];
-  return (
-    attempts.length > 0 &&
-    attempts.every(
-      (attempt) =>
-        attempt instanceof Error &&
-        attempt.syscall === "connect" &&
-        ["ECONNREFUSED", "ETIMEDOUT", "EHOSTUNREACH", "ENETUNREACH"].includes(attempt.code),
-    )
-  );
-}
 async function json(path, init) {
   const deadline = Date.now() + 10 * 60_000;
   for (;;) {
