@@ -698,3 +698,5 @@ not retained. Noncanonical paths follow ordinary path resolution.
 Batch population also checks the identity captured before its SQL queries. If
 a reentrant storage observer mutates the filesystem while a query snapshot is
 returned, that invalidated snapshot is never retained for a later ranged read.
+The error path also discards metadata prefetched by a closing storage observer
+when a commit attempt fails and rolls back after the callback has returned.

@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { NodeSqlFileSystem } from "../src/testing/node.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 
 it("reuses one batch projection without granting the stat caller permission to read", async () => {
@@ -144,4 +145,37 @@ it("does not retain batch metadata when a query observer changes permissions", a
   expect(() => user.readFile("/public", { range: { offset: Number.MAX_SAFE_INTEGER } })).toThrow(
     expect.objectContaining({ code: "EACCES" }),
   );
+});
+
+it("discards metadata prefetched after a callback when committing the transaction fails", async () => {
+  class CommitObserverFileSystem extends NodeSqlFileSystem {
+    beforeCommit: (() => void) | undefined;
+    constructor() {
+      super();
+      const transact = this.storage.transactionSync.bind(this.storage);
+      this.storage.transactionSync = (callback) =>
+        transact(() => {
+          const result = callback();
+          this.beforeCommit?.();
+          return result;
+        });
+    }
+  }
+  const fs = new CommitObserverFileSystem();
+  try {
+    await fs.writeFile("/public", "body");
+    await fs.writeFile("/other", "other");
+    const user = fs.forCredentials({ uid: 1000, gid: 1000 });
+    fs.beforeCommit = () => {
+      fs.beforeCommit = undefined;
+      user.statMany?.(["/public", "/other"]);
+      throw new Error("injected commit failure");
+    };
+    expect(() => fs.setMetadata("/public", { mode: 0o100600 })).toThrow("injected commit failure");
+    expect(
+      await new Response(user.readFile("/public", { range: { offset: 0 } }).stream).text(),
+    ).toBe("body");
+  } finally {
+    fs.close();
+  }
 });

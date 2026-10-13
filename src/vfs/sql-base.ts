@@ -593,6 +593,7 @@ export abstract class SqlBase {
       if (this.transactionDepth === 0) this.emitCommittedMutations();
       return result;
     } catch (error) {
+      this.readState.batch = undefined;
       if (preservesTraversal) {
         this.readState.generation += 1;
         this.traversalParents?.clear();
