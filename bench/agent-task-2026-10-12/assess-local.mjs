@@ -7,6 +7,7 @@ import { summaryMetrics, workloadKey } from "../../demo/public/benchmarks/summar
 const [input, output] = process.argv.slice(2);
 const bytes = await readFile(input);
 const raw = JSON.parse(input.endsWith(".gz") ? gunzipSync(bytes) : bytes);
+if (raw.protocol?.id === "local-group-v1") assert.equal(raw.complete, true);
 const indexed = new Map();
 for (const row of raw.rows.filter((r) => !r.profile)) {
   const key = `${row.pair}:${workloadKey(row.stage)}:${row.version}`;
@@ -27,7 +28,7 @@ function estimate(stages) {
     estimate: estimatePaired([logs]),
     // Diagnostic only: both orders remain in the primary equal-weight mean.
     orderIndices: [0, 1].map((order) => {
-      const values = logs.filter((_, pair) => pair % 2 === order);
+      const values = logs.filter((_, pair) => (pair + (raw.orderOffset ?? 0)) % 2 === order);
       return 100 * Math.exp(values.reduce((a, b) => a + b, 0) / values.length);
     }),
   };
@@ -48,6 +49,10 @@ const review = workloads.filter(
 );
 const assessment = {
   input,
+  measurementProtocol: raw.protocol ?? {
+    id: "legacy-local-stage-v1",
+    orderOffset: raw.orderOffset ?? 0,
+  },
   protocol:
     "Equal workload weights and mean log paired ratios, matching paired production statistics. One local session: interval is within-run, not a production adoption decision. Legacy median-bootstrap flags also remain in review.",
   metrics,

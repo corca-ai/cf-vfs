@@ -42,6 +42,8 @@ const credentials =
       ? { uid: 0, gid: 0 }
       : undefined;
 const stageOrder = process.env.STAGE_ORDER === "1";
+const orderOffset = Number(process.env.ORDER_OFFSET ?? 0);
+assert.ok(orderOffset === 0 || orderOffset === 1, "ORDER_OFFSET must be 0 or 1");
 const rows = [];
 function validate(stage) {
   return (
@@ -80,7 +82,7 @@ for (const profile of [false, true]) {
     try {
       for (const [stageIndex, stage] of plan.entries()) {
         let expected;
-        for (const version of pairOrder(pair + (stageOrder ? stageIndex : 0))) {
+        for (const version of pairOrder(pair + (stageOrder ? stageIndex : 0) + orderOffset)) {
           const { suite, cost } = engines[version];
           cost.statements = 0;
           cost.returnedRows = 0;
@@ -159,7 +161,7 @@ const costRegressions = workloads.filter(({ costs }) => {
 });
 await writeFile(
   output,
-  `${JSON.stringify({ trials, warmups, baselineRoot, candidateRoot, credentials, fixtureRootMode: credentials?.uid === 1000 ? 0o40777 : 0o40755, identityTime, fullPlan: groupFilter.size === 0, groups: [...groupFilter], stageOrder, metrics, regressions, confirmed, costRegressions, workloads, rows }, null, 2)}\n`,
+  `${JSON.stringify({ trials, warmups, baselineRoot, candidateRoot, credentials, fixtureRootMode: credentials?.uid === 1000 ? 0o40777 : 0o40755, identityTime, fullPlan: groupFilter.size === 0, groups: [...groupFilter], stageOrder, orderOffset, metrics, regressions, confirmed, costRegressions, workloads, rows }, null, 2)}\n`,
 );
 console.log(
   JSON.stringify({

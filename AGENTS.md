@@ -18,6 +18,12 @@ geometric means (overall and families), and SQL statements/rows read/rows writte
 separately. Use `bench:public:local`, `bench:public`, and `bench:assess` for the
 shared full plan and legacy descriptive screening. Use `bench:assess:paired` for
 new paired production results, with at least three complete runs per version.
+For paired local adoption evidence, use `bench:local:paired` with immutable
+compiled baseline/candidate graphs. Its `local-group-v1` protocol creates fresh
+fixtures per arm/group and completes a group before switching arms, matching CF.
+Balance `ORDER_OFFSET=0/1` across preselected independent local sessions. Legacy
+stage-interleaved local runs are screening evidence and must not be pooled with
+the group protocol. Retain GC pauses; never trim or subtract them to fix a score.
 Keep the reference frozen across library optimizations; do not repin it to erase
 regressions. Verify A/A calibration and both reference and previous-commit
 comparisons. Never cherry-pick runs, remove unresolved workloads or treat pairs

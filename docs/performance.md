@@ -578,6 +578,22 @@ the claim automatically; disconnects after sending the request still fail closed
 
 ### Fixed-reference paired production measurement
 
+For new paired local comparisons, `npm run bench:local:paired -- BASELINE_GRAPH
+CANDIDATE_GRAPH OUTPUT.json` uses `local-group-v1`: fresh SQLite fixtures per
+arm/group, the same full workload plan and limits as CF, a complete group before
+switching arms, and a separate SQL replay. Set `FIXED_GIT_TIME=1`, use matching
+`CREDENTIALS=demo` for UID/GID 1000, and balance `ORDER_OFFSET=0/1` across
+preselected independent sessions. `PAIRS` defaults to six and `WARMUPS` to two.
+The arguments are immutable compiled graphs, not source checkouts; the existing
+`bench/agent-task-2026-10-12/compile.mjs SOURCE NEW_GRAPH` helper prepares them.
+
+Legacy local stage-by-stage interleaving can transfer GC/event-loop effects
+between arms at each command boundary. Short windows can also end after one
+arm's GC pause but before the other's. These runs remain screening evidence;
+do not pool them with group-protocol sessions, trim pauses, or subtract GC time.
+The real-SQLite protocol check verifies fresh fixtures, both starting orders,
+group execution and separation of SQL instrumentation from timing.
+
 `demo/benchmark-reference/runtime.js` freezes the reference library and the full
 fixture implementation. `bench/check-reference.mjs` runs during normal checks and
 deployment, verifying fixture/lockfile hashes and runtime compatibility settings.
