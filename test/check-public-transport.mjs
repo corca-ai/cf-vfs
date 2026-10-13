@@ -8,7 +8,7 @@ import { join } from "node:path";
 const buildId = "a".repeat(64);
 const runId = "transport-test-run";
 const directory = await mkdtemp(join(tmpdir(), "cf-vfs-public-transport-"));
-async function exercise(loseClaim) {
+async function exercise(loseClaim, delayListen = false) {
   let claims = 0;
   let polls = 0;
   const server = createServer((request, response) => {
@@ -24,14 +24,17 @@ async function exercise(loseClaim) {
     }
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const output = join(directory, loseClaim ? "lost-claim.json" : "recovered.json");
+  const port = server.address().port;
+  if (delayListen) await new Promise((resolve) => server.close(resolve));
+  let restarted = false;
+  const output = join(directory, loseClaim ? "lost-claim.json" : `${delayListen}.json`);
   try {
     const child = spawn(
       process.execPath,
       [
         "bench/public-remote.mjs",
         "--url",
-        `http://127.0.0.1:${server.address().port}`,
+        `http://127.0.0.1:${port}`,
         "--build",
         buildId,
         "--out",
@@ -40,12 +43,17 @@ async function exercise(loseClaim) {
       {
         env: { ...process.env, CF_VFS_PUBLIC_BENCHMARK_TOKEN: "transport-test-only" },
         stdio: ["ignore", "pipe", "pipe"],
+        timeout: 15_000,
       },
     );
     let stderr = "";
     child.stdout.resume();
     child.stderr.on("data", (chunk) => {
       stderr += chunk;
+      if (delayListen && !restarted && stderr.includes("retrying unsent benchmark claim")) {
+        restarted = true;
+        server.listen(port, "127.0.0.1");
+      }
     });
     const code = await new Promise((resolve, reject) => {
       child.once("error", reject);
@@ -60,6 +68,7 @@ async function exercise(loseClaim) {
       assert.equal(JSON.parse(await readFile(output, "utf8")).result.runId, runId);
       assert.equal(JSON.parse(await readFile(`${output}.claim.json`, "utf8")).runId, runId);
       assert.match(stderr, /retrying GET/);
+      if (delayListen) assert.equal(restarted, true);
     }
   } finally {
     server.closeAllConnections();
@@ -69,6 +78,7 @@ async function exercise(loseClaim) {
 try {
   await exercise(false);
   await exercise(true);
+  await exercise(false, true);
   console.log("Public benchmark transport recovery and single-claim checks passed");
 } finally {
   await rm(directory, { recursive: true, force: true });

@@ -573,6 +573,8 @@ The remote client retries read-only progress requests after transport failures,
 keeping the original run and build identity. It saves the claim beside the output
 as `.claim.json`. A lost POST response is not retried automatically because it
 could create another benchmark; inspect the existing server run before continuing.
+Only explicit TCP `connect` failures proving the request was never sent may retry
+the claim automatically; disconnects after sending the request still fail closed.
 
 ### Fixed-reference paired production measurement
 

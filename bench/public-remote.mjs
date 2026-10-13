@@ -28,6 +28,19 @@ const localBuild = (
 ).match(/"([a-f0-9]{64})"/u)?.[1];
 const expectedBuild = option("--build") ?? localBuild;
 const output = option("--out");
+function neverConnected(error) {
+  const cause = error instanceof Error ? error.cause : undefined;
+  const attempts = cause instanceof AggregateError ? cause.errors : [cause];
+  return (
+    attempts.length > 0 &&
+    attempts.every(
+      (attempt) =>
+        attempt instanceof Error &&
+        attempt.syscall === "connect" &&
+        ["ECONNREFUSED", "ETIMEDOUT", "EHOSTUNREACH", "ENETUNREACH"].includes(attempt.code),
+    )
+  );
+}
 async function json(path, init) {
   const deadline = Date.now() + 10 * 60_000;
   for (;;) {
@@ -49,8 +62,14 @@ async function json(path, init) {
         (error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name));
       // Retrying a lost claim response could start another benchmark. Polling
       // is read-only and can safely resume the original, identified run.
-      if (init?.method === "POST" || !transportError || Date.now() >= deadline) throw error;
-      console.error("Polling connection failed; retrying GET for the same benchmark");
+      const claim = init?.method === "POST";
+      if ((claim && !neverConnected(error)) || !transportError || Date.now() >= deadline)
+        throw error;
+      console.error(
+        claim
+          ? "Could not connect; retrying unsent benchmark claim"
+          : "Polling connection failed; retrying GET for the same benchmark",
+      );
       await delay(2000);
     }
   }
