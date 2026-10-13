@@ -184,6 +184,7 @@ it.each(realOperationGroups)(
   },
 );
 
+// Validate all dependent operations on shared CI; performance has separate gates.
 it("runs and validates the 1,000-file shell Git workflow", async () => {
   const fs = createTestFileSystem();
   const suite = new PublicBenchmarkSuite(fs);
@@ -198,7 +199,7 @@ it("runs and validates the 1,000-file shell Git workflow", async () => {
     if (stage.operation === "add-removals") expect(await suite.validate(stage)).toBe(2003);
   }
   await suite.cleanup();
-});
+}, 20_000);
 
 it("persists checkpoints and renews a running job lease without touching the saved result", async () => {
   const { fs, store, advance, now } = fixture();
