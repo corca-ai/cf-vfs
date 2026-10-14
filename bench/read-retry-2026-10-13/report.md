@@ -1,6 +1,6 @@
 # Ranged-read metadata reuse: correctness, measurement and CF evaluation
 
-Status: evaluation is complete. Production remains `2700b6d`; candidate `8f25ac0` is preserved on the pushed `perf/read-metadata-retry-20261013` branch. The same-topology full-suite improvement is supported, correctness and SQL-cost gates pass, but four material previous-code latency signals remain unexplained. **Adoption and public deployment await explicit acceptance of that documented tradeoff.** The prepared main integration passed all checks and has been removed from main pending that decision.
+Status: evaluation completed with a supported same-topology overall gain and four documented latency risks. The user explicitly accepted this tradeoff on 2026-10-14. Candidate `8f25ac0` is being adopted without changing the measured library source; [adoption and public verification](../read-adoption-2026-10-14/report.md) records the acceptance, deployment and post-deployment results. The original measurements and held decision below are preserved as the evaluation history.
 
 ## Change and safety boundary
 

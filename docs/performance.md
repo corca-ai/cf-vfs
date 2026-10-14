@@ -733,6 +733,31 @@ fixture/dependency inputs are verified by the existing reference gate.
 
 The [guarded ranged-read evaluation](../bench/read-retry-2026-10-13/report.md)
 records matching-topology CF calibration, full-suite and task indices, native
-SQL costs and retained latency regressions. Its candidate remains on an
-experimental branch pending explicit acceptance of the documented tradeoff;
-the production library is unchanged.
+SQL costs and retained latency regressions. The documented per-workload latency
+tradeoff was explicitly accepted before adoption; the original regression
+evidence remains available.
+
+### One-use metadata for ranged reads
+
+The SQLite backend retains at most 1,000 canonical inline-file metadata
+projections from `statMany` for subsequent explicitly ranged reads. A ranged
+read consumes its projection once. This avoids another metadata query for the
+EOF read that authorizes a cached Git content hash. Reuse still executes a row-free
+SQL probe through the ordinary storage API, so closed/replaced storage is not
+bypassed. A mutation during that probe discards the captured projection and
+falls back to ordinary resolution. This reduces metadata reads/copies, not the
+number of SQL API calls. Ordinary whole-body reads
+keep their existing combined metadata/body query. No API or schema is added.
+
+The state belongs to one SQL storage identity, shared by VFS owners using that
+storage. Transactions clear it before entry and when their callback exits,
+including nested calls and rollback. Population and reuse are disabled inside
+transaction callbacks. Permission checks run for the current principal on each
+read; directory and opaque entries, file bodies and authorization verdicts are
+not retained. Noncanonical paths follow ordinary path resolution.
+
+Batch population also checks the identity captured before its SQL queries. If
+a reentrant storage observer mutates the filesystem while a query snapshot is
+returned, that invalidated snapshot is never retained for a later ranged read.
+The error path also discards metadata prefetched by a closing storage observer
+when a commit attempt fails and rolls back after the callback has returned.
