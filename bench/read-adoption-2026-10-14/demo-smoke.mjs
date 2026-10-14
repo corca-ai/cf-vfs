@@ -129,7 +129,7 @@ try {
   if (pending) clearTimeout(pending.timeout);
   socket.close();
   await writeFile(
-    `${root}/${cleanupOnly ? "demo-smoke-initial-cleanup" : "demo-smoke"}.json`,
+    `${root}/${cleanupOnly ? "demo-smoke-initial-cleanup" : process.argv.includes("--rollback") ? "rollback-demo-smoke" : "demo-smoke"}.json`,
     `${JSON.stringify(record, null, 2)}\n`,
   );
   console.log(
