@@ -16,10 +16,6 @@ included.
 
 ## [Unreleased]
 
-- Reuse canonical `statMany` metadata once for explicitly ranged file reads,
-  retaining ordinary whole-body queries, storage-lifetime checks, fresh POSIX permission checks and
-  invalidation on mutation and rollback. No filesystem API is added.
-
 - Batch Git commit tree and commit-object publication through the existing
   bounded writer before updating refs. Reservations are lazy and released before
   reads or individual writes; publication failure leaves the branch unchanged.

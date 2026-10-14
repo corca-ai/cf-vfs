@@ -1,0 +1,767 @@
+{
+  "recordedAt": "2026-10-14T04:58:51.569907+00:00",
+  "decision": "Revert guarded ranged metadata reuse under preselected regression gate",
+  "overallPrevious": 97.09185354449583,
+  "newUnacceptedStages": [
+    {
+      "stage": {
+        "group": "git-shell",
+        "operation": "populate",
+        "files": 100,
+        "cache": false
+      },
+      "previous": {
+        "value": 121.8920614028817,
+        "ci95": [
+          104.74047966718152,
+          141.85226838997622
+        ],
+        "previousRuns": 3,
+        "currentRuns": 5,
+        "status": "slower"
+      },
+      "initial": {
+        "value": 116.45264126761458,
+        "ci95": [
+          81.74159150992288,
+          165.90351873143416
+        ],
+        "previousRuns": 3,
+        "currentRuns": 3,
+        "status": "uncertain"
+      },
+      "confirmation": {
+        "value": 130.53126281150506,
+        "ci95": [
+          112.35572353306185,
+          151.64701926513314
+        ],
+        "previousRuns": 3,
+        "currentRuns": 2,
+        "status": "collecting"
+      },
+      "frozenReference": {
+        "value": 97.78371692869243,
+        "ci95": [
+          84.95183960142127,
+          112.55383451673578
+        ],
+        "runs": 5,
+        "pairs": 30,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "baselineReference": {
+        "value": 80.22156308071158,
+        "ci95": [
+          70.44951179847374,
+          91.34909552704677
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "faster"
+      },
+      "absolute": {
+        "reference": {
+          "estimate": {
+            "value": 79.02867281383028,
+            "ci95": [
+              66.41144179044632,
+              94.04299859085269
+            ],
+            "previousRuns": 3,
+            "currentRuns": 5,
+            "status": "faster"
+          },
+          "medianMs": [
+            122,
+            105
+          ]
+        },
+        "candidate": {
+          "estimate": {
+            "value": 96.32967839211639,
+            "ci95": [
+              87.89796838517327,
+              105.57020952368038
+            ],
+            "previousRuns": 3,
+            "currentRuns": 5,
+            "status": "uncertain"
+          },
+          "medianMs": [
+            111.5,
+            104
+          ]
+        }
+      },
+      "rawRuns": {
+        "baseline": [
+          {
+            "runId": "029a7931-f80a-4074-b3ea-87a9f0b45db9",
+            "reference": [
+              117,
+              117,
+              111,
+              111,
+              144,
+              157
+            ],
+            "candidate": [
+              87,
+              121,
+              101,
+              119,
+              116,
+              99
+            ]
+          },
+          {
+            "runId": "0097f882-8363-4bcc-ae5d-f2ca7b3d1e00",
+            "reference": [
+              222,
+              137,
+              170,
+              117,
+              108,
+              128
+            ],
+            "candidate": [
+              126,
+              113,
+              114,
+              106,
+              114,
+              100
+            ]
+          },
+          {
+            "runId": "9a17fe28-5de2-4c84-b3df-df2b058ce8e3",
+            "reference": [
+              113,
+              127,
+              347,
+              146,
+              111,
+              113
+            ],
+            "candidate": [
+              104,
+              110,
+              122,
+              121,
+              110,
+              104
+            ]
+          }
+        ],
+        "candidate": [
+          {
+            "runId": "04912ba2-c1dd-40c8-a35f-40500d0256cc",
+            "reference": [
+              120,
+              105,
+              111,
+              108,
+              100,
+              108
+            ],
+            "candidate": [
+              116,
+              98,
+              112,
+              117,
+              114,
+              110
+            ]
+          },
+          {
+            "runId": "6aa94761-92c0-4112-bf90-785e61a149ed",
+            "reference": [
+              101,
+              112,
+              135,
+              114,
+              109,
+              95
+            ],
+            "candidate": [
+              104,
+              99,
+              106,
+              104,
+              106,
+              144
+            ]
+          },
+          {
+            "runId": "9eee84ca-fd38-4002-bfe0-459a5218c188",
+            "reference": [
+              106,
+              232,
+              98,
+              89,
+              123,
+              99
+            ],
+            "candidate": [
+              102,
+              101,
+              98,
+              92,
+              95,
+              79
+            ]
+          },
+          {
+            "runId": "c7ad6875-edeb-408e-8dd1-bddd0130ce93",
+            "reference": [
+              104,
+              105,
+              96,
+              91,
+              96,
+              96
+            ],
+            "candidate": [
+              105,
+              103,
+              93,
+              108,
+              103,
+              115
+            ]
+          },
+          {
+            "runId": "9935b6ce-c927-4ee5-9d69-3a7262f0e7bd",
+            "reference": [
+              123,
+              114,
+              100,
+              105,
+              102,
+              108
+            ],
+            "candidate": [
+              200,
+              115,
+              83,
+              98,
+              88,
+              117
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 1000,
+        "cache": true
+      },
+      "previous": {
+        "value": 110.5968169874718,
+        "ci95": [
+          102.70154725447071,
+          119.09904236839886
+        ],
+        "previousRuns": 3,
+        "currentRuns": 5,
+        "status": "slower"
+      },
+      "initial": {
+        "value": 109.10293942982511,
+        "ci95": [
+          98.81146561009199,
+          120.46629729386733
+        ],
+        "previousRuns": 3,
+        "currentRuns": 3,
+        "status": "uncertain"
+      },
+      "confirmation": {
+        "value": 112.87607329911565,
+        "ci95": [
+          99.61313505569763,
+          127.90489844841576
+        ],
+        "previousRuns": 3,
+        "currentRuns": 2,
+        "status": "collecting"
+      },
+      "frozenReference": {
+        "value": 105.67990038756052,
+        "ci95": [
+          100.99819449816525,
+          110.57862372111612
+        ],
+        "runs": 5,
+        "pairs": 30,
+        "intervalScope": "between runs",
+        "status": "slower"
+      },
+      "baselineReference": {
+        "value": 95.55419700689195,
+        "ci95": [
+          87.25904219160876,
+          104.63791873376715
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "absolute": {
+        "reference": {
+          "estimate": {
+            "value": 91.22425150362976,
+            "ci95": [
+              80.48649381192872,
+              103.3945407268335
+            ],
+            "previousRuns": 3,
+            "currentRuns": 5,
+            "status": "uncertain"
+          },
+          "medianMs": [
+            21,
+            19
+          ]
+        },
+        "candidate": {
+          "estimate": {
+            "value": 100.89111848366036,
+            "ci95": [
+              80.73902615319363,
+              126.07308105959072
+            ],
+            "previousRuns": 3,
+            "currentRuns": 5,
+            "status": "uncertain"
+          },
+          "medianMs": [
+            20,
+            20
+          ]
+        }
+      },
+      "rawRuns": {
+        "baseline": [
+          {
+            "runId": "029a7931-f80a-4074-b3ea-87a9f0b45db9",
+            "reference": [
+              15,
+              19,
+              19,
+              22,
+              35,
+              27
+            ],
+            "candidate": [
+              19,
+              26,
+              23,
+              23,
+              20,
+              21
+            ]
+          },
+          {
+            "runId": "0097f882-8363-4bcc-ae5d-f2ca7b3d1e00",
+            "reference": [
+              17,
+              22,
+              22,
+              19,
+              19,
+              20
+            ],
+            "candidate": [
+              18,
+              20,
+              19,
+              20,
+              17,
+              18
+            ]
+          },
+          {
+            "runId": "9a17fe28-5de2-4c84-b3df-df2b058ce8e3",
+            "reference": [
+              16,
+              18,
+              22,
+              29,
+              27,
+              23
+            ],
+            "candidate": [
+              19,
+              20,
+              21,
+              17,
+              27,
+              20
+            ]
+          }
+        ],
+        "candidate": [
+          {
+            "runId": "04912ba2-c1dd-40c8-a35f-40500d0256cc",
+            "reference": [
+              20,
+              19,
+              23,
+              22,
+              18,
+              21
+            ],
+            "candidate": [
+              27,
+              26,
+              21,
+              19,
+              19,
+              19
+            ]
+          },
+          {
+            "runId": "6aa94761-92c0-4112-bf90-785e61a149ed",
+            "reference": [
+              15,
+              19,
+              16,
+              19,
+              19,
+              18
+            ],
+            "candidate": [
+              17,
+              21,
+              17,
+              20,
+              18,
+              21
+            ]
+          },
+          {
+            "runId": "9eee84ca-fd38-4002-bfe0-459a5218c188",
+            "reference": [
+              19,
+              20,
+              18,
+              20,
+              23,
+              23
+            ],
+            "candidate": [
+              22,
+              20,
+              24,
+              17,
+              18,
+              22
+            ]
+          },
+          {
+            "runId": "c7ad6875-edeb-408e-8dd1-bddd0130ce93",
+            "reference": [
+              34,
+              17,
+              17,
+              18,
+              16,
+              18
+            ],
+            "candidate": [
+              20,
+              20,
+              17,
+              23,
+              34,
+              17
+            ]
+          },
+          {
+            "runId": "9935b6ce-c927-4ee5-9d69-3a7262f0e7bd",
+            "reference": [
+              17,
+              22,
+              18,
+              21,
+              19,
+              19
+            ],
+            "candidate": [
+              18,
+              25,
+              18,
+              20,
+              20,
+              22
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false
+      },
+      "previous": {
+        "value": 118.29664905219059,
+        "ci95": [
+          104.26829996934947,
+          134.21238459906633
+        ],
+        "previousRuns": 3,
+        "currentRuns": 5,
+        "status": "slower"
+      },
+      "initial": {
+        "value": 112.8748720551437,
+        "ci95": [
+          97.6642063453852,
+          130.4545157148772
+        ],
+        "previousRuns": 3,
+        "currentRuns": 3,
+        "status": "uncertain"
+      },
+      "confirmation": {
+        "value": 126.92150119099432,
+        "ci95": [
+          38.39691135975155,
+          419.540710283834
+        ],
+        "previousRuns": 3,
+        "currentRuns": 2,
+        "status": "collecting"
+      },
+      "frozenReference": {
+        "value": 107.93100386593339,
+        "ci95": [
+          95.21620425155604,
+          122.34368810514478
+        ],
+        "runs": 5,
+        "pairs": 30,
+        "intervalScope": "between runs",
+        "status": "uncertain"
+      },
+      "baselineReference": {
+        "value": 91.23758342327683,
+        "ci95": [
+          89.15038434661291,
+          93.37364824536131
+        ],
+        "runs": 3,
+        "pairs": 18,
+        "intervalScope": "between runs",
+        "status": "faster"
+      },
+      "absolute": {
+        "reference": {
+          "estimate": {
+            "value": 92.89486374357075,
+            "ci95": [
+              80.96767777935804,
+              106.57901951260575
+            ],
+            "previousRuns": 3,
+            "currentRuns": 5,
+            "status": "uncertain"
+          },
+          "medianMs": [
+            167.5,
+            163
+          ]
+        },
+        "candidate": {
+          "estimate": {
+            "value": 109.89151095024232,
+            "ci95": [
+              94.60710532582648,
+              127.64521372191906
+            ],
+            "previousRuns": 3,
+            "currentRuns": 5,
+            "status": "uncertain"
+          },
+          "medianMs": [
+            154,
+            172.5
+          ]
+        }
+      },
+      "rawRuns": {
+        "baseline": [
+          {
+            "runId": "029a7931-f80a-4074-b3ea-87a9f0b45db9",
+            "reference": [
+              191,
+              158,
+              176,
+              200,
+              265,
+              166
+            ],
+            "candidate": [
+              263,
+              162,
+              153,
+              184,
+              155,
+              136
+            ]
+          },
+          {
+            "runId": "0097f882-8363-4bcc-ae5d-f2ca7b3d1e00",
+            "reference": [
+              143,
+              169,
+              170,
+              244,
+              153,
+              183
+            ],
+            "candidate": [
+              166,
+              158,
+              151,
+              151,
+              149,
+              189
+            ]
+          },
+          {
+            "runId": "9a17fe28-5de2-4c84-b3df-df2b058ce8e3",
+            "reference": [
+              257,
+              164,
+              162,
+              147,
+              161,
+              152
+            ],
+            "candidate": [
+              144,
+              196,
+              148,
+              142,
+              170,
+              144
+            ]
+          }
+        ],
+        "candidate": [
+          {
+            "runId": "04912ba2-c1dd-40c8-a35f-40500d0256cc",
+            "reference": [
+              183,
+              207,
+              205,
+              211,
+              173,
+              194
+            ],
+            "candidate": [
+              184,
+              180,
+              170,
+              193,
+              299,
+              154
+            ]
+          },
+          {
+            "runId": "6aa94761-92c0-4112-bf90-785e61a149ed",
+            "reference": [
+              175,
+              163,
+              150,
+              152,
+              162,
+              160
+            ],
+            "candidate": [
+              193,
+              190,
+              155,
+              178,
+              143,
+              205
+            ]
+          },
+          {
+            "runId": "9eee84ca-fd38-4002-bfe0-459a5218c188",
+            "reference": [
+              157,
+              167,
+              186,
+              136,
+              161,
+              133
+            ],
+            "candidate": [
+              172,
+              182,
+              154,
+              140,
+              173,
+              129
+            ]
+          },
+          {
+            "runId": "c7ad6875-edeb-408e-8dd1-bddd0130ce93",
+            "reference": [
+              174,
+              197,
+              144,
+              136,
+              158,
+              181
+            ],
+            "candidate": [
+              195,
+              177,
+              792,
+              143,
+              136,
+              153
+            ]
+          },
+          {
+            "runId": "9935b6ce-c927-4ee5-9d69-3a7262f0e7bd",
+            "reference": [
+              159,
+              168,
+              162,
+              123,
+              163,
+              163
+            ],
+            "candidate": [
+              181,
+              156,
+              138,
+              217,
+              151,
+              152
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "originalFourCaseAcceptancePreserved": true,
+  "additionalAcceptance": "No explicit additional acceptance received at decision point. Silence is not approval.",
+  "libraryRestoreSource": "d0442cf049487e3618b4225f208da0854586a12a",
+  "expectedLibraryTree": "8162c78bbdefd63417c83d0942716802985c3ff5"
+}

@@ -734,12 +734,11 @@ fixture/dependency inputs are verified by the existing reference gate.
 The [guarded ranged-read evaluation](../bench/read-retry-2026-10-13/report.md)
 records matching-topology CF calibration, full-suite and task indices, native
 SQL costs and retained latency regressions. The documented per-workload latency
-tradeoff was explicitly accepted before adoption; the original regression
-evidence remains available.
+tradeoff was explicitly accepted before adoption. The subsequent [public verification](../bench/read-adoption-2026-10-14/report.md) supported the overall gain but found three additional regression signals outside that acceptance. The guarded metadata optimization was reverted under the regression gate; all original and public evidence remains available.
 
-### One-use metadata for ranged reads
+### One-use metadata for ranged reads (experiment, not retained)
 
-The SQLite backend retains at most 1,000 canonical inline-file metadata
+The experimental SQLite backend retained at most 1,000 canonical inline-file metadata
 projections from `statMany` for subsequent explicitly ranged reads. A ranged
 read consumes its projection once. This avoids another metadata query for the
 EOF read that authorizes a cached Git content hash. Reuse still executes a row-free

@@ -29,9 +29,33 @@ const slots = ["full", "task"].flatMap((kind) =>
     output: `${root}/public-${kind}-${i + 1}.json`,
   })),
 );
-for (const slot of slots) await unused(slot.output);
+const resume = process.argv.includes("--resume");
 const ids = new Set();
-for (const { kind, output } of slots) {
+const pending = [];
+for (const slot of slots) {
+  let snapshot;
+  if (resume) {
+    try {
+      snapshot = JSON.parse(await readFile(slot.output, "utf8"));
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  if (snapshot) {
+    assert.equal(snapshot.status, "ready");
+    assert.equal(snapshot.result.buildId, runtime.build);
+    assert.equal(snapshot.result.commitHash, runtime.commit);
+    assert.equal(snapshot.result.deploymentId, runtime.deployment);
+    assert.equal(snapshot.result.rows.length, slot.kind === "full" ? 190 : 1);
+    assert.equal(snapshot.result.verified, slot.kind === "full" ? 212268 : 28028);
+    assert.ok(!ids.has(snapshot.result.runId));
+    ids.add(snapshot.result.runId);
+  } else {
+    await unused(slot.output);
+    pending.push(slot);
+  }
+}
+for (const { kind, output } of pending) {
   if (stopping) throw Error("Stopped before next claim");
   await unused(output);
   const child = spawn(
