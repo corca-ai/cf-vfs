@@ -1,0 +1,39 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  // Agent evaluation workspaces. Deliberately a separate Worker from
+  // `cf-vfs-benchmark`: deploying or exercising it never changes the public
+  // benchmark build fingerprint, isolates, logs or measurement schedule.
+  "name": "cf-vfs-agent-eval",
+  "main": "worker.ts",
+  "account_id": "b23e9b2e3a9159dd7eb3fa51f839c5c5",
+  "compatibility_date": "2026-07-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "eval.vfs.borca.ai",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    // Registered instances, including ones still being created or deleted.
+    "AGENT_EVAL_MAX_INSTANCES": "20"
+  },
+  "secrets": {
+    "required": ["AGENT_EVAL_TOKEN"]
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    }
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "EVAL_REGISTRY", "class_name": "EvalRegistry" },
+      { "name": "EVAL_WORKSPACES", "class_name": "EvalWorkspace" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["EvalRegistry", "EvalWorkspace"] }]
+}

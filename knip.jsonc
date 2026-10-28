@@ -63,12 +63,16 @@
     "bench/workspace-flow-2026-10-12/commit-worker.ts",
     "bench/workspace-flow-2026-10-12/final-worker.ts",
     "scripts/*.mjs",
+    "eval/worker.ts",
+    "eval/test/*.test.ts",
     "vitest*.config.ts"
   ],
-  "project": ["src/**/*.ts", "test/**/*.ts", "bench/**/*.ts", "scripts/**/*.mjs"],
+  "project": ["src/**/*.ts", "test/**/*.ts", "bench/**/*.ts", "eval/**/*.ts", "scripts/**/*.mjs"],
   // `cloudflare:workers` and `cloudflare:test` are workerd built-in modules
   // with no package behind them.
   "ignoreDependencies": ["cloudflare"],
+  // A separate package with its own dependencies, deployed with `cf`.
+  "ignore": ["eval/cloudflare.config.ts"],
   "rules": {
     // A library legitimately exports types consumers never import in this repo.
     "types": "warn",
