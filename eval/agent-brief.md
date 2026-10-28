@@ -42,7 +42,7 @@ cat drafts/plan.md
 EOF
 ```
 
-The response is JSON. The fields you need:
+The response is a JSON object:
 
 | Field | Meaning |
 | --- | --- |
@@ -50,8 +50,8 @@ The response is JSON. The fields you need:
 | `exitCode` | Exit status of the script. |
 | `cwd` | Working directory after the script. |
 
-Other fields can be ignored. A request the server rejects returns a 4xx status
-with `{"error": "..."}`.
+A request the server cannot run returns a 4xx or 5xx status with
+`{"error": "..."}`.
 
 ## How the shell behaves
 

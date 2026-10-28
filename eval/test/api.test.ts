@@ -1,7 +1,7 @@
 import { env, runDurableObjectAlarm, runInDurableObject, SELF } from "cloudflare:test";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import type { Instance } from "../registry.js";
-import type { ExecLogEntry, ExecResult, WorkspaceInfo } from "../workspace.js";
+import type { ExecLogEntry, WorkspaceInfo } from "../workspace.js";
 
 const AUTH = { Authorization: "Bearer test-token" };
 
@@ -18,13 +18,29 @@ async function create(input: Record<string, unknown> = {}): Promise<Instance> {
   return ((await response.json()) as { instance: Instance }).instance;
 }
 
-async function exec(id: string, script: string): Promise<ExecResult & { workerMs: number }> {
+interface ShellResponse {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  cwd: string;
+}
+
+async function exec(id: string, script: string): Promise<ShellResponse> {
   const response = await api(`/api/instances/${id}/exec`, {
     method: "POST",
     body: JSON.stringify({ script }),
   });
   expect(response.status).toBe(200);
-  return (await response.json()) as ExecResult & { workerMs: number };
+  const result = (await response.json()) as ShellResponse;
+  // Anything beyond what a shell shows would tell the agent about the harness.
+  expect(Object.keys(result).sort()).toEqual(["cwd", "exitCode", "stderr", "stdout"]);
+  return result;
+}
+
+async function log(id: string, after = 0): Promise<ExecLogEntry[]> {
+  const response = await api(`/api/instances/${id}/log?after=${after}`);
+  expect(response.status).toBe(200);
+  return ((await response.json()) as { entries: ExecLogEntry[] }).entries;
 }
 
 async function list(): Promise<Instance[]> {
@@ -83,8 +99,9 @@ it("keeps the working directory between executions but not variables", async () 
   await exec(id, "cd /workspace && rm -r notes");
   await exec(id, "mkdir gone && cd gone");
   await exec(id, "rmdir /workspace/gone");
-  const reset = await exec(id, "pwd");
-  expect(reset).toMatchObject({ cwdReset: true, stdout: "/workspace\n" });
+  expect((await exec(id, "pwd")).stdout).toBe("/workspace\n");
+  const entries = await log(id);
+  expect(entries.map((entry) => entry.cwdReset)).toEqual([...Array(6).fill(false), true]);
 });
 
 it("looks like an ordinary Linux account", async () => {
@@ -97,34 +114,39 @@ it("looks like an ordinary Linux account", async () => {
   expect(result.stdout).toBe("user\n/home/user\nuser 644\n1777\n");
 });
 
-it("reports status, output, commands and SQL cost for each execution", async () => {
+it("returns only shell output and logs the measurements", async () => {
   const { id } = await create();
   const result = await exec(id, "echo hi > a.txt; cat a.txt; cat missing.txt");
-  expect(result).toMatchObject({ exitCode: 1, stdout: "hi\n", error: null, seq: 1 });
+  expect(result).toMatchObject({ exitCode: 1, stdout: "hi\n", cwd: "/workspace" });
   expect(result.stderr).toContain("missing.txt");
-  // A command that fails by throwing emits no `shell.command` event, so the
-  // failing `cat` is visible only through status and stderr.
-  expect(result.commands.map((command) => command.name)).toEqual(["echo", "cat"]);
-  expect(result.sql.statements).toBeGreaterThan(0);
-  expect(result.sql.rowsWritten).toBeGreaterThan(0);
-  expect(result.mutations).toBeGreaterThan(0);
 
   const unsupported = await exec(id, "arr=(1 2 3); echo ${arr[1]}");
   expect(unsupported.exitCode).not.toBe(0);
   expect(unsupported.stderr).not.toBe("");
 
-  const response = await api(`/api/instances/${id}/log?after=1`);
-  const { entries } = (await response.json()) as { entries: ExecLogEntry[] };
-  expect(entries).toHaveLength(1);
-  expect(entries[0]).toMatchObject({ seq: 2, script: "arr=(1 2 3); echo ${arr[1]}" });
+  const [first] = await log(id);
+  expect(first).toMatchObject({ seq: 1, exitCode: 1, stdout: "hi\n", error: null });
+  // A command that fails by throwing emits no `shell.command` event, so the
+  // failing `cat` is visible only through status and stderr.
+  expect(first?.commands.map((command) => command.name)).toEqual(["echo", "cat"]);
+  expect(first?.sql.statements).toBeGreaterThan(0);
+  expect(first?.sql.rowsWritten).toBeGreaterThan(0);
+  expect(first?.mutations).toBeGreaterThan(0);
+  // The Worker records its timing after responding.
+  await vi.waitFor(async () => expect((await log(id))[0]?.workerMs).toBeTypeOf("number"));
+
+  const page = await log(id, 1);
+  expect(page).toHaveLength(1);
+  expect(page[0]).toMatchObject({ seq: 2, script: "arr=(1 2 3); echo ${arr[1]}" });
 });
 
 it("records an execution limit as a failure code", async () => {
   const { id } = await create();
   const result = await exec(id, "while true; do :; done");
   expect(result.exitCode).not.toBe(0);
-  expect(result.failureCode).not.toBeNull();
-  expect(result.limits.length).toBeGreaterThan(0);
+  const [entry] = await log(id);
+  expect(entry?.failureCode).not.toBeNull();
+  expect(entry?.limits.length).toBeGreaterThan(0);
 });
 
 it("seeds fixture files as the agent account, at creation and later", async () => {

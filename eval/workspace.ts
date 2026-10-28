@@ -91,27 +91,28 @@ interface SqlCost {
   readonly rowsWritten: number;
 }
 
-export interface ExecResult {
+/**
+ * What an execution returns: only what a shell would show its caller.
+ * Measurements go to the execution log, which the agent never sees.
+ */
+interface ExecResult {
   readonly seq: number;
+  /** `null` when the shell threw instead of returning a status; the log keeps the error. */
   readonly exitCode: number | null;
   readonly stdout: string;
   readonly stderr: string;
   readonly cwd: string;
-  /** The stored directory no longer existed, so this execution started in the workspace. */
-  readonly cwdReset: boolean;
-  /** Reported by the shell. Durable Object clocks advance only across I/O, so it can read 0. */
-  readonly shellMs: number | null;
-  readonly failureCode: string | null;
-  /** An exception the shell did not turn into a status, such as an invariant failure. */
-  readonly error: string | null;
-  readonly sql: SqlCost;
-  readonly mutations: number;
-  readonly commands: readonly { readonly name: string; readonly exitCode: number }[];
-  readonly limits: readonly {
-    readonly limit: string;
-    readonly used: number;
-    readonly max: number;
-  }[];
+}
+
+interface CommandRecord {
+  readonly name: string;
+  readonly exitCode: number;
+}
+
+interface LimitRecord {
+  readonly limit: string;
+  readonly used: number;
+  readonly max: number;
 }
 
 export interface SeedFile {
@@ -135,17 +136,24 @@ export interface ExecLogEntry {
   readonly script: string;
   readonly cwdBefore: string;
   readonly cwdAfter: string;
+  /** The stored directory no longer existed, so this execution started in the workspace. */
+  readonly cwdReset: boolean;
   readonly exitCode: number | null;
   readonly stdout: string;
   readonly stderr: string;
   readonly stdoutBytes: number;
   readonly stderrBytes: number;
+  /** Reported by the shell. Durable Object clocks advance only across I/O, so it can read 0. */
   readonly shellMs: number | null;
+  /** Measured by the Worker around the Durable Object call and recorded after the response. */
+  readonly workerMs: number | null;
   readonly failureCode: string | null;
+  /** An exception the shell did not turn into a status, such as an invariant failure. */
   readonly error: string | null;
   readonly sql: SqlCost;
-  readonly commands: ExecResult["commands"];
-  readonly limits: ExecResult["limits"];
+  readonly mutations: number;
+  readonly commands: readonly CommandRecord[];
+  readonly limits: readonly LimitRecord[];
 }
 
 type Outcome<Value> =
@@ -160,8 +168,8 @@ interface Recording {
   failureCode: string | null;
   shellMs: number | null;
   mutations: number;
-  commands: { name: string; exitCode: number }[];
-  limits: { limit: string; used: number; max: number }[];
+  commands: CommandRecord[];
+  limits: LimitRecord[];
 }
 
 function truncate(text: string, maxBytes: number): string {
@@ -207,17 +215,20 @@ export class EvalWorkspace extends DurableObject<AgentEvalEnv> {
         script TEXT NOT NULL,
         cwd_before TEXT NOT NULL,
         cwd_after TEXT NOT NULL,
+        cwd_reset INTEGER NOT NULL,
         exit_code INTEGER,
         stdout TEXT NOT NULL,
         stderr TEXT NOT NULL,
         stdout_bytes INTEGER NOT NULL,
         stderr_bytes INTEGER NOT NULL,
         shell_ms INTEGER,
+        worker_ms INTEGER,
         failure_code TEXT,
         error TEXT,
         statements INTEGER NOT NULL,
         rows_read INTEGER NOT NULL,
         rows_written INTEGER NOT NULL,
+        mutations INTEGER NOT NULL,
         commands TEXT NOT NULL,
         limits TEXT NOT NULL
       )`);
@@ -301,14 +312,15 @@ export class EvalWorkspace extends DurableObject<AgentEvalEnv> {
       const encoder = new TextEncoder();
       const row = this.ctx.storage.sql
         .exec<{ seq: number }>(
-          `INSERT INTO eval_exec_log (at, script, cwd_before, cwd_after, exit_code, stdout, stderr,
-             stdout_bytes, stderr_bytes, shell_ms, failure_code, error, statements, rows_read,
-             rows_written, commands, limits)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING seq`,
+          `INSERT INTO eval_exec_log (at, script, cwd_before, cwd_after, cwd_reset, exit_code,
+             stdout, stderr, stdout_bytes, stderr_bytes, shell_ms, failure_code, error,
+             statements, rows_read, rows_written, mutations, commands, limits)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING seq`,
           Date.now(),
           script,
           startCwd,
           cwd,
+          cwdReset ? 1 : 0,
           exitCode,
           truncate(stdout, LOGGED_OUTPUT_BYTES),
           truncate(stderr, LOGGED_OUTPUT_BYTES),
@@ -320,29 +332,23 @@ export class EvalWorkspace extends DurableObject<AgentEvalEnv> {
           sql.statements,
           sql.rowsRead,
           sql.rowsWritten,
+          recording.mutations,
           JSON.stringify(recording.commands),
           JSON.stringify(recording.limits),
         )
         .one();
-      return {
-        ok: true,
-        value: {
-          seq: row.seq,
-          exitCode,
-          stdout,
-          stderr,
-          cwd,
-          cwdReset,
-          shellMs: recording.shellMs,
-          failureCode: recording.failureCode,
-          error,
-          sql,
-          mutations: recording.mutations,
-          commands: recording.commands,
-          limits: recording.limits,
-        },
-      };
+      return { ok: true, value: { seq: row.seq, exitCode, stdout, stderr, cwd } };
     });
+  }
+
+  /** Not serialized: a single statement that may land while a later execution runs. */
+  recordWorkerMs(seq: number, workerMs: number): void {
+    if (this.destroyed || this.meta === null) return;
+    this.ctx.storage.sql.exec(
+      "UPDATE eval_exec_log SET worker_ms = ? WHERE seq = ?",
+      workerMs,
+      seq,
+    );
   }
 
   /**
@@ -412,12 +418,14 @@ export class EvalWorkspace extends DurableObject<AgentEvalEnv> {
         script: String(row["script"]),
         cwdBefore: String(row["cwd_before"]),
         cwdAfter: String(row["cwd_after"]),
+        cwdReset: row["cwd_reset"] === 1,
         exitCode: row["exit_code"] === null ? null : Number(row["exit_code"]),
         stdout: String(row["stdout"]),
         stderr: String(row["stderr"]),
         stdoutBytes: Number(row["stdout_bytes"]),
         stderrBytes: Number(row["stderr_bytes"]),
         shellMs: row["shell_ms"] === null ? null : Number(row["shell_ms"]),
+        workerMs: row["worker_ms"] === null ? null : Number(row["worker_ms"]),
         failureCode: row["failure_code"] === null ? null : String(row["failure_code"]),
         error: row["error"] === null ? null : String(row["error"]),
         sql: {
@@ -425,6 +433,7 @@ export class EvalWorkspace extends DurableObject<AgentEvalEnv> {
           rowsRead: Number(row["rows_read"]),
           rowsWritten: Number(row["rows_written"]),
         },
+        mutations: Number(row["mutations"]),
         commands: JSON.parse(String(row["commands"])) as ExecLogEntry["commands"],
         limits: JSON.parse(String(row["limits"])) as ExecLogEntry["limits"],
       })),

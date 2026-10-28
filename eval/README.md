@@ -32,9 +32,7 @@ notices that it is not on Linux is itself something to record.
 
 [`agent-brief.md`](agent-brief.md) is the text given to an agent: how to call
 `exec` with `curl`, given `WORKSPACE_URL` and `WORKSPACE_TOKEN`. It describes
-only what a remote shell would, and its suggested `jq` filter shows only
-`stdout`, `stderr`, `exitCode` and `cwd`. A raw response still carries `sql`,
-`mutations` and timing fields, so a blind arm should strip them in its runner.
+only what a remote shell would.
 
 ## API
 
@@ -47,7 +45,7 @@ returns `401`.
 | `GET` | `/api/instances` | | `{ instances }` |
 | `GET` | `/api/instances/:id` | | `{ instance, workspace }` |
 | `DELETE` | `/api/instances/:id` | | `204` |
-| `POST` | `/api/instances/:id/exec` | `{ script }` | execution result |
+| `POST` | `/api/instances/:id/exec` | `{ script }` | `{ exitCode, stdout, stderr, cwd }` |
 | `POST` | `/api/instances/:id/files` | `{ files: [{ path, content }] }` | `{ written, sql }` |
 | `GET` | `/api/instances/:id/log` | `?after=0&limit=100` | `{ entries }` |
 
@@ -59,22 +57,29 @@ and 8 MiB, so load a large fixture in several `files` calls.
 At most `AGENT_EVAL_MAX_INSTANCES` instances (default 20) may be registered,
 including ones being created or deleted; creation beyond that returns `429`.
 
-An execution result contains:
+`exec` returns only what a shell shows its caller: the unit's exit status, its
+complete output and the working directory afterwards. If the shell throws
+instead of returning a status, `exec` answers `500 { error: "internal error" }`.
+Measurements never appear in the response, because an agent reading them would
+learn about the harness; they go to the execution log, which an agent is never
+given.
+
+Each log entry contains:
 
 | Field | Meaning |
 | --- | --- |
-| `exitCode`, `stdout`, `stderr` | The unit's status and complete output. `exitCode` is `null` only with `error`. |
-| `cwd`, `cwdReset` | Directory after the unit; whether it started in `/workspace` because the stored one was gone. |
+| `seq`, `at`, `script` | Position in the instance's log, start time and the submitted source. |
+| `cwdBefore`, `cwdAfter`, `cwdReset` | Directories around the unit; whether it started in `/workspace` because the stored one was gone. |
+| `exitCode`, `error` | The unit's status, or the exception that replaced it. |
+| `stdout`, `stderr`, `stdoutBytes`, `stderrBytes` | Up to 64 KiB of each stream and its full size. |
 | `failureCode`, `limits` | Present when an execution or storage limit ended the unit. |
 | `commands` | Up to 500 `{ name, exitCode }` for commands that returned a status. |
-| `sql` | Statements, rows read and rows written by the filesystem during this unit. |
-| `mutations` | Committed namespace changes. |
-| `workerMs` | Worker-measured time around the Durable Object call, including RPC. |
+| `sql`, `mutations` | Statements, rows read and rows written by the filesystem; committed namespace changes. |
 | `shellMs` | Shell-reported time. A Durable Object's clock advances only across I/O, so it can read 0. |
-| `seq` | Position in the instance's execution log. |
+| `workerMs` | Worker-measured time around the Durable Object call, including RPC. Recorded after the response, so briefly `null`. |
 
-The log keeps every execution with up to 64 KiB of each stream, plus the full
-stream sizes, for replay against a real shell and for analysis.
+The log supports replaying each execution against a real shell and analysing
+failures and cost.
 
 ## Lifecycle
 

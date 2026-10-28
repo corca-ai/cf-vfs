@@ -133,7 +133,11 @@ function nonnegativeInteger(value: string | null, fallback: number, name: string
   return parsed;
 }
 
-async function route(request: Request, env: AgentEvalEnv): Promise<Response> {
+async function route(
+  request: Request,
+  env: AgentEvalEnv,
+  ctx: ExecutionContext,
+): Promise<Response> {
   const url = new URL(request.url);
   const segments = url.pathname.split("/").filter((segment) => segment !== "");
   if (segments[0] !== "api" || segments[1] !== "instances") {
@@ -184,7 +188,12 @@ async function route(request: Request, env: AgentEvalEnv): Promise<Response> {
     const outcome = await workspace.exec(script);
     const workerMs = Date.now() - started;
     if (!outcome.ok) throw new HttpError(outcome.status, outcome.error);
-    return json({ ...outcome.value, workerMs });
+    const { seq, exitCode, stdout, stderr, cwd } = outcome.value;
+    // Recorded after responding, so the agent's round trip carries no second call.
+    ctx.waitUntil(workspace.recordWorkerMs(seq, workerMs));
+    // The log holds the details; the agent sees only what a shell would show.
+    if (exitCode === null) throw new HttpError(500, "internal error");
+    return json({ exitCode, stdout, stderr, cwd });
   }
   if (action === "files" && request.method === "POST") {
     const files = seedFiles((await body(request))["files"]);
@@ -203,12 +212,12 @@ async function route(request: Request, env: AgentEvalEnv): Promise<Response> {
 }
 
 export default {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, ctx): Promise<Response> {
     if (!(await authorized(request, env.AGENT_EVAL_TOKEN))) {
       return json({ error: "unauthorized" }, 401);
     }
     try {
-      return await route(request, env);
+      return await route(request, env, ctx);
     } catch (caught) {
       if (caught instanceof HttpError) return json({ error: caught.message }, caught.status);
       throw caught;
