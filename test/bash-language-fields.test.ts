@@ -66,3 +66,17 @@ bashSuite("case modification and dotted mkdir -p", [
     stdout: "/a/b\n/w/c\n/w/d\n",
   },
 ]);
+
+bashSuite("substitutions in a redirected compound command", [
+  {
+    name: "keeps a for loop's output when its word list substitutes and stderr joins stdout",
+    script:
+      "for f in $(echo 1 2); do echo x$f; done 2>&1 | cat; for f in $(echo 3); do echo y$f; done 2>/dev/null",
+    stdout: "x1\nx2\ny3\n",
+  },
+  {
+    name: "sends a compound's substitution stderr where the compound redirects it",
+    script: "case $(echo err >&2; echo a) in a) echo matched;; esac 2>&1 | cat",
+    stdout: "err\nmatched\n",
+  },
+]);

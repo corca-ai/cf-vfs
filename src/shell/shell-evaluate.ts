@@ -320,13 +320,17 @@ export async function runCommandNode(
       const substitutionStatus = expansion.lastSubstitutionStatus();
       if (substitutionStatus !== undefined) prepared = { ...prepared, substitutionStatus };
     }
+    // A compound command expands its words (`for x in $(...)`, `case $(...)`)
+    // after its redirections apply, so its substitutions use those
+    // descriptors; the originals may already be released by `2>&1`.
+    const bodyExpansion = node.type === "command" ? expansion : expansionRuntime(fds, runtime);
     const status = await executeCommandNode(
       node,
       prepared,
       session,
       fds,
       runtime,
-      expansion,
+      bodyExpansion,
       context,
     );
     semanticStderr = fallbackStderr;

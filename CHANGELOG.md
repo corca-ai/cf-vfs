@@ -16,6 +16,10 @@ included.
 
 ## [Unreleased]
 
+- A compound command expands its words with its own redirected descriptors.
+  `for f in $(...); do ...; done 2>&1` failed with "sink is closed", and with
+  `2>/dev/null` lost its output, because the substitution cloned a descriptor
+  the redirection had already released.
 - Bound glob matches per pathname expansion or `find` instead of per
   execution, charging the total to expansion work; `grep -r` charges its walk
   to expansion work only. `awk` loops charge expansion work rather than the
