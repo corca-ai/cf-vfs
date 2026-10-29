@@ -392,3 +392,13 @@ describe("ls listings", () => {
     ]);
   });
 });
+
+it("reports a missing ls operand and still lists the rest", async () => {
+  const harness = createBashHarness();
+  await harness.fileSystem.writeFile("/m/a.txt", "a", { createParents: true });
+  await expect(harness.run("cd /m && ls nope a.txt .")).resolves.toEqual({
+    exitCode: 2,
+    stdout: "a.txt\n\n.:\na.txt\n",
+    stderr: "ls: cannot access 'nope': No such file or directory\n",
+  });
+});

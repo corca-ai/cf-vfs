@@ -2,10 +2,10 @@ import { VfsError } from "../../core/errors.js";
 import { compareUtf8, dirname } from "../../core/path.js";
 import type { VfsStat } from "../../vfs/types.js";
 import { identityLabel, type ResolvedIdentityNames, resolveIdentityNames } from "../identity.js";
-import type { ShellCommandContext } from "../types.js";
+import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import { type AppletSpecWithOptions, defineApplet, parseAppletOptions } from "./applet.js";
 import { modeString } from "./format.js";
-import { BufferedTextWriter, commandPath } from "./helpers.js";
+import { BufferedTextWriter, commandPath, writeText } from "./helpers.js";
 
 const LS = {
   name: "ls",
@@ -220,20 +220,38 @@ function listsThrough(
   return entry.kind === "symlink" && !options.long && linkTargetsDirectory(context, normalized);
 }
 
-/** GNU prints file operands first, sorted and aligned together, then each directory. */
+function lstatOperand(context: ShellCommandContext, normalized: string): VfsStat | undefined {
+  try {
+    return context.fileSystem.lstat(normalized);
+  } catch (error) {
+    if (error instanceof VfsError && error.code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+/**
+ * GNU prints file operands first, sorted and aligned together, then each
+ * directory. A missing operand is reported and skipped, and makes the status 2.
+ */
 async function listOperands(
   context: ShellCommandContext,
   writer: LsWriter,
   paths: readonly string[],
   options: LsOptions,
-): Promise<void> {
+  stderr: ShellFileDescriptors[2],
+): Promise<number> {
   const files: LsRow[] = [];
   const directories: Array<{ readonly path: string; readonly normalized: string }> = [];
+  let status = 0;
   for (const path of [...paths].sort(compareUtf8)) {
     const normalized = commandPath(context, path);
-    const entry = context.fileSystem.lstat(normalized);
-    if (listsThrough(context, entry, normalized, options)) directories.push({ path, normalized });
-    else files.push({ entry, name: path });
+    const entry = lstatOperand(context, normalized);
+    if (entry === undefined) {
+      await writeText(stderr, `ls: cannot access '${path}': No such file or directory\n`);
+      status = 2;
+    } else if (listsThrough(context, entry, normalized, options)) {
+      directories.push({ path, normalized });
+    } else files.push({ entry, name: path });
   }
   if (files.length > 0) await writer.entries(files);
   for (const { path, normalized } of directories) {
@@ -241,6 +259,7 @@ async function listOperands(
     const pending = await writer.directory(normalized, heading);
     if (options.recursive) await walkDirectories(context, writer, pending);
   }
+  return status;
 }
 
 /**
@@ -263,10 +282,16 @@ export const lsCommand = /* @__PURE__ */ defineApplet(LS, async (context, argv, 
   const output = new BufferedTextWriter(context, fds[1]);
   const writer = new LsWriter(context, output, { long, numeric, human: has("human") }, hidden);
   try {
-    await listOperands(context, writer, paths, { directory, long, recursive });
+    const status = await listOperands(
+      context,
+      writer,
+      paths,
+      { directory, long, recursive },
+      fds[2],
+    );
     await output.flush();
+    return status;
   } finally {
     output.abort();
   }
-  return 0;
 });
