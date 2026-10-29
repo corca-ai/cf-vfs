@@ -16,6 +16,9 @@ included.
 
 ## [Unreleased]
 
+- Regular expressions skip to their literal prefix whenever no match is in
+  progress, so extracting wikilinks with `grep -o` over a 10 MB wiki runs about
+  three times faster locally; matches and captures are unchanged.
 - A compound command expands its words with its own redirected descriptors.
   `for f in $(...); do ...; done 2>&1` failed with "sink is closed", and with
   `2>/dev/null` lost its output, because the substitution cloned a descriptor

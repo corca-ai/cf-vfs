@@ -77,3 +77,27 @@ it("rejects long concatenations before exhausting the compiler stack", () => {
     expect.objectContaining({ code: "EINVAL", message: "test: pattern is too complex" }),
   );
 });
+
+it("skips to a literal prefix without changing matches or captures", () => {
+  const links = compilePosixRegex("\\[\\[[^]]*\\]\\]", "extended", "grep");
+  const line = "a [[x and [[y]] then [[z]] [[";
+  const found: string[] = [];
+  for (let from = 0; ; ) {
+    const match = links.exec(line, from);
+    if (match === undefined) break;
+    found.push(line.slice(match.index, match.end));
+    from = match.end;
+  }
+  // The first `[[` never closes before the next one opens, so it extends to `y]]`.
+  expect(found).toEqual(["[[x and [[y]]", "[[z]]"]);
+
+  const overlap = compilePosixRegex("aab", "basic", "grep");
+  expect(overlap.exec("aaab", 0)).toMatchObject({ index: 1, end: 4 });
+
+  const grouped = compilePosixRegex("\\(ab\\)c", "basic", "sed");
+  expect(grouped.exec("xab abc", 0)).toMatchObject({ index: 4, end: 7, groups: ["abc", "ab"] });
+  expect(grouped.test("ab ab ac")).toBe(false);
+
+  const emoji = compilePosixRegex("😀x", "extended", "grep");
+  expect(emoji.exec("a😀y😀x", 0)).toMatchObject({ index: 4, end: 7 });
+});

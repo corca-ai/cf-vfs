@@ -34,6 +34,35 @@ export function posixLiteral(program: readonly PosixRegexInstruction[]): string 
   return literal;
 }
 
+/** A single literal code point an instruction accepts, or `undefined`. */
+function literalPoint(instruction: PosixRegexInstruction | undefined): number | undefined {
+  if (instruction?.op !== "set" || instruction.set.negated) return undefined;
+  const range = instruction.set.ranges[0];
+  if (instruction.set.ranges.length !== 1 || range === undefined || range[0] !== range[1]) {
+    return undefined;
+  }
+  // indexOf can match half a surrogate pair; the code-point matcher cannot.
+  return range[0] >= 0xd800 && range[0] <= 0xdfff ? undefined : range[0];
+}
+
+/**
+ * The literal text every match must begin with, read from the start of the
+ * program up to its first branch, class, anchor or repetition. Threads only
+ * start at instruction zero, so nothing can bypass these instructions; a
+ * search may therefore skip straight to the next occurrence whenever no
+ * thread is alive, which leaves every match and capture unchanged.
+ */
+export function posixLiteralPrefix(program: readonly PosixRegexInstruction[]): string {
+  let prefix = "";
+  for (const instruction of program) {
+    if (instruction.op === "save") continue;
+    const point = literalPoint(instruction);
+    if (point === undefined) break;
+    prefix += String.fromCodePoint(point);
+  }
+  return prefix;
+}
+
 interface Thread {
   pc: number;
   caps: readonly number[];
@@ -72,6 +101,7 @@ class Matcher {
     private readonly text: string,
     private readonly command: string,
     private readonly capture: boolean,
+    private readonly prefix: string,
   ) {
     this.seen = new Int32Array(program.length).fill(-1);
   }
@@ -154,14 +184,28 @@ class Matcher {
     this.next.length = 0;
   }
 
+  /** Starts a thread at `position`, opening a new generation when none is alive. */
+  private seed(mark: number, empty: readonly number[], position: number): number {
+    const generation = this.current.length === 0 ? this.mark() : mark;
+    this.add(this.current, generation, 0, empty, position);
+    return generation;
+  }
+
+  /** With no thread alive, the next match can only start where the prefix does. */
+  private startAt(position: number): number {
+    if (this.current.length > 0 || this.prefix === "") return position;
+    return this.text.indexOf(this.prefix, position);
+  }
+
   run(from: number, slots: number): readonly number[] | undefined {
     const empty = new Array<number>(slots).fill(-1);
     let currentMark = 0;
     let matched: readonly number[] | undefined;
     for (let position = from; ; ) {
       if (matched === undefined) {
-        if (this.current.length === 0) currentMark = this.mark();
-        this.add(this.current, currentMark, 0, empty, position);
+        position = this.startAt(position);
+        if (position < 0) return undefined;
+        currentMark = this.seed(currentMark, empty, position);
       }
       const nextMark = this.mark();
       const code = this.text.codePointAt(position) ?? -1;
@@ -184,6 +228,7 @@ export function runPosixRegex(
   from: number,
   slots: number,
   command: string,
+  prefix = "",
 ): readonly number[] | undefined {
-  return new Matcher(program, text, command, slots > 0).run(from, slots);
+  return new Matcher(program, text, command, slots > 0, prefix).run(from, slots);
 }

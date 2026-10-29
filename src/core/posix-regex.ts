@@ -7,6 +7,7 @@ import {
 import {
   type PosixRegexInstruction as Instruction,
   posixLiteral,
+  posixLiteralPrefix,
   runPosixRegex,
 } from "./posix-regex-matcher.js";
 
@@ -452,6 +453,7 @@ function capturedGroups(
 export class PosixRegex {
   private readonly slots: number;
   private readonly literal: string | undefined;
+  private readonly prefix: string;
 
   constructor(
     private readonly program: readonly Instruction[],
@@ -460,11 +462,12 @@ export class PosixRegex {
   ) {
     this.slots = (groups + 1) * 2;
     this.literal = groups === 0 ? posixLiteral(program) : undefined;
+    this.prefix = posixLiteralPrefix(program);
   }
 
   test(text: string): boolean {
     if (this.literal !== undefined) return text.includes(this.literal);
-    return runPosixRegex(this.program, text, 0, 0, this.command) !== undefined;
+    return runPosixRegex(this.program, text, 0, 0, this.command, this.prefix) !== undefined;
   }
 
   /** Finds the leftmost match at or after the string offset `from`. */
@@ -480,7 +483,7 @@ export class PosixRegex {
         ? undefined
         : { index, end: index + this.literal.length, groups: [this.literal] };
     }
-    const found = runPosixRegex(this.program, text, start, this.slots, this.command);
+    const found = runPosixRegex(this.program, text, start, this.slots, this.command, this.prefix);
     if (found === undefined) return undefined;
     const groups = capturedGroups(text, found, this.slots);
     return { index: found[0] ?? 0, end: found[1] ?? 0, groups };
