@@ -254,8 +254,11 @@ interface TextLineState {
   records: number;
 }
 
+/**
+ * Counts one decoded record. It charges no step: reading is bounded by the
+ * I/O byte limit, and steps are kept for work input size does not bound.
+ */
 function accountRecord(state: TextLineState, context: ShellCommandContext, path?: string): void {
-  context.budget.step();
   state.records += 1;
   if (state.records > context.budget.limits.maxBufferedRecords) {
     throw new VfsError("E2BIG", "input record limit exceeded", path);

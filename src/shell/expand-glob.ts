@@ -131,7 +131,12 @@ export async function expandGlob(
   fileSystem: ShellFileSystem,
   budget: ShellBudget,
 ): Promise<string[]> {
-  const search = globSearch(pattern, session.cwd, fileSystem);
+  // A trailing slash keeps only directories, links to them included, and
+  // stays on each result, as `*/` does in Bash.
+  const directoriesOnly = /[^/]\/+$/u.test(pattern);
+  const bareValue = directoriesOnly ? value.replace(/\/+$/u, "") : value;
+  const barePattern = directoriesOnly ? pattern.replace(/\/+$/u, "") : pattern;
+  const search = globSearch(barePattern, session.cwd, fileSystem);
   let matches: string[];
   try {
     matches = scanGlob(search, fileSystem, budget);
@@ -139,7 +144,20 @@ export async function expandGlob(
     if (error instanceof VfsError && error.code === "ENOENT") return [];
     throw error;
   }
+  if (directoriesOnly) matches = matches.filter((path) => isDirectory(fileSystem, path));
   matches.sort(compareUtf8);
   budget.glob(matches.length);
-  return matches.map((path) => displayedGlobPath(value, pattern, session.cwd, path));
+  return matches.map(
+    (path) =>
+      `${displayedGlobPath(bareValue, barePattern, session.cwd, path)}${directoriesOnly ? "/" : ""}`,
+  );
+}
+
+function isDirectory(fileSystem: ShellFileSystem, path: string): boolean {
+  try {
+    return fileSystem.stat(path).kind === "directory";
+  } catch (error) {
+    if (error instanceof VfsError) return false;
+    throw error;
+  }
 }

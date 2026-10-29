@@ -19,8 +19,19 @@ it("bounds multibyte replacement growth before a discarded result is assembled",
 });
 
 it("charges global substitution loops even when matching produces no output", async () => {
-  const { run } = createBashHarness({ limits: { maxSteps: 40 } });
+  const { run } = createBashHarness({ limits: { maxExpansionWork: 40 } });
   const result = await run("sed -n 's/x//g'", { stdin: "x".repeat(100) });
   expect(result.exitCode).not.toBe(0);
-  expect(result.stderr).toMatch(/step limit/);
+  expect(result.stderr).toMatch(/expansion work limit/);
+});
+
+it("charges a step only for a branch back, so long input passes a small step limit", async () => {
+  const { run } = createBashHarness({ limits: { maxSteps: 8 } });
+  const lines = Array.from({ length: 50 }, (_, index) => `${index}`).join("\n");
+  await expect(run("sed 's/1/one/;/0/d' | wc -l", { stdin: `${lines}\n` })).resolves.toMatchObject({
+    exitCode: 0,
+    stdout: "45\n",
+  });
+  const loop = await run("sed ':a;ba'", { stdin: "x\n" });
+  expect(loop.stderr).toMatch(/step limit/);
 });

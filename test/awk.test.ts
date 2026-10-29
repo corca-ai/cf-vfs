@@ -345,12 +345,16 @@ it.each([
   expect(result.stderr).toContain(diagnostic);
 });
 
-it("shares the shell step bound across record evaluation", async () => {
-  const result = await awkHarness({ limits: { maxSteps: 8 } }).run(
+it("bounds loops by the shared iteration limit rather than charging records steps", async () => {
+  const records = await awkHarness({ limits: { maxSteps: 8 } }).run(
     `/bin/awk '{ total += $1 } END { print total }'`,
     { stdin: "1\n2\n3\n" },
   );
+  expect(records).toMatchObject({ exitCode: 0, stdout: "6\n" });
 
-  expect(result.exitCode).toBe(1);
-  expect(result.stderr).toContain("shell execution step limit exceeded");
+  const loop = await awkHarness({ limits: { maxLoopIterations: 8 } }).run(
+    `/bin/awk 'BEGIN { while (1) x++ }'`,
+  );
+  expect(loop.exitCode).toBe(1);
+  expect(loop.stderr).toContain("loop iteration limit exceeded");
 });

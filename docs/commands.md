@@ -163,7 +163,8 @@ Supported syntax:
   bitwise, logical, conditional, and comma operators;
 - `<`, `>`, `>>`, `2>`, `2>>`, combined `&>`/`&>>`, left-to-right `2>&1` and
   `>&2` (also spelled `1>&2`), `<<`, `<<-`, and `<<<`;
-- pathname expansion with `*`, `?`, and bracket/range expressions;
+- pathname expansion with `*`, `?`, and bracket/range expressions; a trailing
+  `/` matches only directories and stays on each result;
 - comments beginning with `#` at a word boundary.
 
 The complete submitted script is parsed before any command runs. Unsupported
@@ -634,7 +635,8 @@ row there would mean nothing and could be removed while `/bin/cat` kept working.
 Listing them is not supported, and a `home` or `cwd` option inside one is a
 usage error.
 
-`LINUX_PROFILE_VARIABLES` names what the profile sets. Seven of them are
+`LINUX_PROFILE_VARIABLES` names what the profile sets, including `0`, which
+makes `$0` read `bash` as it does under `bash -c` and is not exported. Eight of them are
 defaults: a caller may override one by passing its own value after the
 profile's, and a script may reassign it. `LC_ALL` and `TZ` are controlled — the
 session sets them after the caller's environment, so they always read `C` and
@@ -659,11 +661,11 @@ decides which directory is provisioned; pass the same path as the execution
 | discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
 | help | `help -s`, from the dedicated `/shell/commands/help` subpath |
 | shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
-| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p -P` (a `SRC/.` operand and an existing destination directory merge, as in GNU), `ls -l -n -d -a -A -h -1 -R`, `find` expressions (`-name -iname -path -ipath -type -empty -mindepth -maxdepth -prune -print -print0 -exec`, `! -not -a -o ( )`), `stat -L -c` (`%i` identity, `%u/%g/%U/%G` ownership), `chmod`, `chown`, `du`, `tree`, `basename` (with `SUFFIX`, `-s`, and `-a`), `dirname`, `realpath`, `mktemp`, `file` |
+| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f -n`, `cp -r -f -n -p -P` (several sources into a directory; an existing destination is overwritten unless `-n`, as in GNU; a `SRC/.` operand and an existing destination directory merge), `ls -l -n -d -a -A -h -1 -R`, `find` expressions (`-name -iname -path -ipath -type -empty -mindepth -maxdepth -prune -print -print0 -exec`, `! -not -a -o ( )`), `stat -L -c` (`%i` identity, `%u/%g/%U/%G` ownership), `chmod`, `chown`, `du`, `tree`, `basename` (with `SUFFIX`, `-s`, and `-a`), `dirname`, `realpath`, `mktemp`, `file` |
 | links | `ln -s -f`, `readlink -f`, from the dedicated `/shell/commands/link` subpath |
-| streaming text/bytes | `cat`, `grep -i -v -n -x -F -E -c -l -L -q -r -R -h`, `head -n -c`, `wc -l -w -c`, `uniq -c -d -u -i -f -s -w`, `od -A -t -c -b -d -o -x -v -j -N -w` (GNU element widths, aligned formats, `*` for repeated lines, and the `z` column), `cut -d -f -c -s`, `tr -c -d -s` (escapes, ranges, `[:class:]`), `nl`, `fold -w`, `sed -E -r -n -e -i` (see the sed profile), `seq -s -w` |
+| streaming text/bytes | `cat`, `grep -i -v -n -x -F -E -c -l -L -q -r -R -h`, `head -n -c -q -v` (a `==> name <==` header per file when there are several), `wc -l -w -c`, `uniq -c -d -u -i -f -s -w`, `od -A -t -c -b -d -o -x -v -j -N -w` (GNU element widths, aligned formats, `*` for repeated lines, and the `z` column), `cut -d -f -c -s`, `tr -c -d -s` (escapes, ranges, `[:class:]`), `nl`, `fold -w`, `sed -E -r -n -e -i` (see the sed profile), `seq -s -w` |
 | deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, from the dedicated `/shell/commands/system` subpath |
-| bounded barriers | `sort -b -f -n -r -s -u -t SEP -k POS1[,POS2]` (GNU keys: fields keep their leading blanks without `-t`, a key with options of its own inherits none of the global ones, and equal keys fall back to the whole line unless `-s` or `-u`), `tail -n -c`, `tee -a`, `paste`, `cmp -s`, `diff -r -q -u` (unified output with three lines of context, as GNU writes it), `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
+| bounded barriers | `sort -b -f -n -r -s -u -t SEP -k POS1[,POS2]` (GNU keys: fields keep their leading blanks without `-t`, a key with options of its own inherits none of the global ones, and equal keys fall back to the whole line unless `-s` or `-u`), `tail -n -c -q -v` (`+N` starts from a record or byte), `tee -a`, `paste`, `cmp -s`, `diff -r -q -u` (unified output with three lines of context, as GNU writes it), `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
 | argument dispatch | `xargs -n -0 -r -t`, from the dedicated `/shell/commands/xargs` subpath |
 | opt-in record language | `awk -F -v -f`, from the dedicated `/shell/commands/awk` subpath; not part of `defaultShellCommands` |
 

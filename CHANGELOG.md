@@ -16,6 +16,16 @@ included.
 
 ## [Unreleased]
 
+- **Breaking:** `cp` and `mv` overwrite an existing destination as GNU does,
+  and `-n` keeps it; both take several sources into a directory. Requiring
+  `-f` broke `sed ... > tmp && mv tmp file` in two of three agent scenarios.
+- Steps no longer count decoded records, per-record `sed` and `awk` work, or
+  substitution matches; those are bounded by I/O and expansion work. A
+  `grep -r` over a 2,000-page wiki was refused after 100,000 lines.
+- `head` and `tail` name each of several files and take `-q` and `-v`;
+  `tail -n +N` and `-c +N` start from a position. A glob ending in `/` matches
+  only directories. The Linux profile sets `$0` to `bash`. `awk` reads `\t` in
+  `-F`, `-v` and regular expressions, and `name (expr)` concatenates.
 - `sed` runs GNU scripts with blocks, branches and labels (`{}`, `b`, `t`, `T`,
   `:`), the hold space (`h`, `H`, `g`, `G`, `x`), multi-line `n`, `N`, `P`,
   `D`, text commands `a`, `i`, `c`, `=`, and `y`, `z`, `Q` and `-r`, with both

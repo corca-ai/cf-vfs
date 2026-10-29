@@ -238,6 +238,7 @@ it("publishes environment defaults naming the applet directories", () => {
     LANG: "C",
     LC_ALL: "C",
     TZ: "UTC",
+    "0": "bash",
   });
   expect(linuxShellEnvironment({ user: "agent" })).toMatchObject({
     USER: "agent",

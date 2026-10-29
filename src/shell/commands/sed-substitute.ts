@@ -77,8 +77,10 @@ function substituteSelectedMatches(
   let seen = 0;
   let changed = false;
   let previousEnd = -1;
+  // Each match charges expansion work rather than a step: a global
+  // substitution that writes nothing is still bounded by the shared counter.
   for (let from = 0; from <= record.length; ) {
-    budget.step();
+    budget.expansionWork(1);
     const match = command.pattern.exec(record, from);
     if (match === undefined) break;
     // An empty match touching the end of the previous one is not a separate

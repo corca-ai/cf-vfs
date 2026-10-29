@@ -67,6 +67,31 @@ function decodeEscape(character: string): string {
   return character;
 }
 
+/** Decodes awk's string escapes, as `-v` assignments and `-F` values get them. */
+export function decodeAwkEscapes(value: string): string {
+  let output = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index] ?? "";
+    const next = value[index + 1];
+    if (character === "\\" && next !== undefined) {
+      output += next === "\\" ? "\\" : decodeEscape(next);
+      index += 1;
+    } else output += character;
+  }
+  return output;
+}
+
+/**
+ * Turns `\t`, `\n`, `\r`, `\f` and `\v` in a regular expression into the
+ * characters they name, as awk does, and leaves every other escape to the
+ * regular-expression translator.
+ */
+export function awkRegexSource(pattern: string): string {
+  return pattern.replace(/\\([\s\S])/gu, (sequence: string, next: string) =>
+    "tnrfv".includes(next) ? decodeEscape(next) : sequence,
+  );
+}
+
 function isNumberStart(source: string, index: number): boolean {
   const character = source[index] ?? "";
   return /[0-9]/u.test(character) || (character === "." && /[0-9]/u.test(source[index + 1] ?? ""));

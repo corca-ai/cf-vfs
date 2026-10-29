@@ -18,46 +18,70 @@ const SLICE_OPTIONS = {
   short: {
     n: { name: "lines", argument: true },
     c: { name: "bytes", argument: true },
+    q: { name: "quiet" },
+    v: { name: "verbose" },
   },
   long: {
     lines: { name: "lines", argument: true },
     bytes: { name: "bytes", argument: true },
+    quiet: { name: "quiet" },
+    silent: { name: "quiet" },
+    verbose: { name: "verbose" },
   },
   oldStyleCount: "lines",
 } as const;
 
+type SliceOption = "lines" | "bytes" | "quiet" | "verbose";
+
 const HEAD = {
   name: "head",
-  usage: "[-n COUNT] [-c BYTES] [FILE...]",
+  usage: "[-qv] [-n COUNT] [-c BYTES] [FILE...]",
   summary: "prints the leading records or bytes of its input",
   options: SLICE_OPTIONS,
-} as const satisfies AppletSpecWithOptions<"lines" | "bytes">;
+} as const satisfies AppletSpecWithOptions<SliceOption>;
 
 const TAIL = {
   name: "tail",
-  usage: "[-n COUNT] [-c BYTES] [FILE...]",
+  usage: "[-qv] [-n [+]COUNT] [-c [+]BYTES] [FILE...]",
   summary: "prints the trailing records or bytes of its input",
   options: SLICE_OPTIONS,
-} as const satisfies AppletSpecWithOptions<"lines" | "bytes">;
+} as const satisfies AppletSpecWithOptions<SliceOption>;
+
+interface SliceInvocation {
+  readonly count: number;
+  readonly bytes: boolean;
+  /** `tail -n +N`: start at record N rather than keep the last N. */
+  readonly fromStart: boolean;
+  readonly paths: readonly string[];
+  readonly headers: boolean;
+}
 
 function sliceCount(
-  spec: AppletSpecWithOptions<"lines" | "bytes">,
+  spec: AppletSpecWithOptions<SliceOption>,
   argv: readonly string[],
   defaultCount: number,
-): { count: number; bytes: boolean; paths: readonly string[] } {
+): SliceInvocation {
   const parsed = parseAppletOptions(spec, argv);
   let count = defaultCount;
   let bytes = false;
+  let fromStart = false;
+  let headers: boolean | undefined;
   for (const option of parsed.options) {
-    if (option.name === "lines" && "argument" in option) {
-      bytes = false;
-      count = parseInteger(option.argument, `${spec.name}: line count`);
-    } else if (option.name === "bytes" && "argument" in option) {
-      bytes = true;
-      count = parseInteger(option.argument, `${spec.name}: byte count`);
-    }
+    if (option.name === "quiet") headers = false;
+    else if (option.name === "verbose") headers = true;
+    if (!("argument" in option)) continue;
+    bytes = option.name === "bytes";
+    fromStart = spec === TAIL && option.argument.startsWith("+");
+    const value = fromStart ? option.argument.slice(1) : option.argument;
+    count = parseInteger(value, `${spec.name}: ${bytes ? "byte" : "line"} count`);
   }
-  return { count, bytes, paths: parsed.operands };
+  const paths = parsed.operands;
+  return { count, bytes, fromStart, paths, headers: headers ?? paths.length > 1 };
+}
+
+/** GNU names each file before its slice when there is more than one. */
+async function writeHeader(sink: ShellSink, name: string, first: boolean): Promise<void> {
+  await writeText(sink, `${first ? "" : "\n"}==> ${name === "-" ? "standard input" : name} <==\n`);
 }
 
 class HeadLineAccount {
@@ -86,7 +110,6 @@ class HeadLineAccount {
   private completeRecord(): void {
     this.currentLineBytes = 0;
     this.records += 1;
-    this.context.budget.step();
     if (this.records > this.context.budget.limits.maxBufferedRecords) {
       throw new VfsError("E2BIG", "input record limit exceeded", this.path);
     }
@@ -208,7 +231,10 @@ export const headCommand = /* @__PURE__ */ defineApplet(HEAD, async (context, ar
   const options = sliceCount(HEAD, argv, 10);
   const wanted: ByteRange | undefined =
     options.bytes && options.count > 0 ? { offset: 0, length: options.count } : undefined;
+  let first = true;
   for await (const input of inputStreams(context, options.paths, fds[0], wanted)) {
+    if (options.headers) await writeHeader(fds[1], input.name, first);
+    first = false;
     if (options.bytes) await headBytes(context, input.stream, options.count, fds[1]);
     else if (options.count === 0) {
       await input.stream.cancel(new VfsError("EPIPE", "head reached its line limit"));
@@ -217,16 +243,29 @@ export const headCommand = /* @__PURE__ */ defineApplet(HEAD, async (context, ar
   return 0;
 });
 
+function tailSlice<T>(
+  items: { slice(start: number): T; length: number },
+  options: SliceInvocation,
+): T {
+  if (options.fromStart) return items.slice(Math.max(0, options.count - 1));
+  return items.slice(Math.max(0, items.length - options.count));
+}
+
 export const tailCommand = /* @__PURE__ */ defineApplet(TAIL, async (context, argv, fds) => {
   const options = sliceCount(TAIL, argv, 10);
+  let first = true;
   if (options.bytes) {
-    const wanted: ByteRange | undefined = options.count > 0 ? { suffix: options.count } : undefined;
+    const wanted: ByteRange | undefined =
+      options.count > 0 && !options.fromStart ? { suffix: options.count } : undefined;
     for await (const input of inputStreams(context, options.paths, fds[0], wanted)) {
+      if (options.headers) await writeHeader(fds[1], input.name, first);
+      first = false;
       const collected = await collectStream(context, input.stream);
       try {
+        const bytes = collected.value;
         await writeBytes(
           fds[1],
-          collected.value.slice(Math.max(0, collected.value.byteLength - options.count)),
+          tailSlice({ slice: (start) => bytes.slice(start), length: bytes.byteLength }, options),
         );
       } finally {
         collected.release();
@@ -237,8 +276,9 @@ export const tailCommand = /* @__PURE__ */ defineApplet(TAIL, async (context, ar
   const collected = await inputTexts(context, options.paths, fds[0]);
   try {
     for (const input of collected.value) {
-      const lines = splitLines(input.text);
-      await writeText(fds[1], lines.slice(Math.max(0, lines.length - options.count)).join(""));
+      if (options.headers) await writeHeader(fds[1], input.name, first);
+      first = false;
+      await writeText(fds[1], tailSlice(splitLines(input.text), options).join(""));
     }
     return 0;
   } finally {

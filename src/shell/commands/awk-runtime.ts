@@ -4,6 +4,7 @@ import { compilePosixRegex, type PosixRegex } from "../../core/posix-regex.js";
 import { utf8ByteLength } from "../../core/unicode.js";
 import type { ShellCommandContext } from "../types.js";
 import type { AwkRule } from "./awk-ast.js";
+import { awkRegexSource } from "./awk-lexer.js";
 import { joinAwkStrings, retainAwkVariable } from "./awk-strings.js";
 
 export interface AwkString {
@@ -228,7 +229,7 @@ export function setField(state: AwkRuntimeState, index: number, value: AwkValue)
 export function compiledRegex(state: AwkRuntimeState, source: string): PosixRegex {
   const cached = state.regexCache.get(source);
   if (cached !== undefined) return cached;
-  const pattern = compilePosixRegex(source, "extended", "awk");
+  const pattern = compilePosixRegex(awkRegexSource(source), "extended", "awk");
   state.regexCache.set(source, pattern);
   return pattern;
 }

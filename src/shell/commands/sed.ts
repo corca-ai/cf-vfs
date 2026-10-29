@@ -212,7 +212,10 @@ class SedRunner {
       this.substituted = false;
       this.output.beginCycle();
       let outcome = await this.cycle();
-      while (outcome === "restart") outcome = await this.cycle();
+      while (outcome === "restart") {
+        this.budget.step();
+        outcome = await this.cycle();
+      }
       await this.flushAppended();
       if (outcome === "quit") {
         await this.output.finish(true);
@@ -236,13 +239,16 @@ class SedRunner {
   private async cycle(): Promise<"next" | "restart" | "quit"> {
     let pc = 0;
     while (pc < this.commands.length) {
-      this.budget.step();
       const command = this.commands[pc];
       if (command === undefined) break;
       const action = await this.step(command, pc);
       if (action === undefined) pc += 1;
-      else if ("jump" in action) pc = action.jump;
-      else return this.finishCycle(action);
+      else if ("jump" in action) {
+        // A forward pass is bounded by the script and the input; only a
+        // branch back can repeat, so only that charges a step.
+        if (action.jump <= pc) this.budget.step();
+        pc = action.jump;
+      } else return this.finishCycle(action);
     }
     await this.autoprint();
     return "next";

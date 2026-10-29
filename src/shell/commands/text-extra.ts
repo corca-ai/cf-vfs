@@ -116,7 +116,6 @@ function sequenceValues(context: ShellCommandContext, invocation: SequenceInvoca
     ascending ? value <= invocation.last : value >= invocation.last;
     value += invocation.increment
   ) {
-    context.budget.step();
     context.budget.expansionOutput(String(value).length, 1);
     values.push(value);
   }

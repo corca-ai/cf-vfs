@@ -80,7 +80,6 @@ function dynamicRegex(value: AwkValue, state: RuntimeState): PosixRegex {
 
 function expressionRegex(expression: Expression, state: RuntimeState): PosixRegex {
   if (expression.kind === "regex") {
-    state.context.budget.step();
     return expression.pattern;
   }
   return dynamicRegex(evaluate(expression, state), state);
@@ -124,7 +123,6 @@ function substitute(
     output += value;
   };
   for (;;) {
-    state.context.budget.step();
     const match = pattern.exec(source, offset);
     if (match === undefined) break;
     const matched = source.slice(match.index, match.end);
@@ -440,7 +438,6 @@ function evaluateRegexBinary(
     expression.right.kind === "regex"
       ? expression.right.pattern
       : dynamicRegex(evaluate(expression.right, state), state);
-  if (expression.right.kind === "regex") state.context.budget.step();
   const matched = pattern.test(asString(left));
   return expression.operator === "~" ? (matched ? 1 : 0) : matched ? 0 : 1;
 }
@@ -485,7 +482,6 @@ export function evaluate(expression: Expression, state: RuntimeState): AwkValue 
   return checkAwkString(state, evaluateNode(expression, state));
 }
 function evaluateNode(expression: Expression, state: RuntimeState): AwkValue {
-  state.context.budget.step();
   switch (expression.kind) {
     case "number":
       return expression.value;

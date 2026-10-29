@@ -1,4 +1,5 @@
 import { describe } from "vitest";
+import { awkCommand } from "../src/shell/commands/awk.js";
 import { bashCases } from "./helpers/bash.js";
 
 // Text utilities an agent reached for while maintaining a Markdown wiki, each
@@ -187,4 +188,85 @@ describe("od, basename, uniq and printf escapes", () => {
       stdout: "ABé\\q\nxAy\n",
     },
   ]);
+});
+
+describe("copying and moving over existing files", () => {
+  bashCases([
+    {
+      name: "overwrites an existing destination, as GNU cp and mv do",
+      script:
+        "echo a > /a; echo b > /b; cp /a /b; cat /b; echo c > /c; mv /c /b; cat /b; sed 's/c/d/' /b > /t && mv /t /b; cat /b",
+      stdout: "a\nc\nd\n",
+    },
+    {
+      name: "keeps an existing destination with -n",
+      script: "echo a > /a; echo b > /b; cp -n /a /b; mv -n /a /b; cat /b /a",
+      stdout: "b\na\n",
+    },
+    {
+      name: "moves and copies several sources into a directory",
+      script: "mkdir /d /e; echo 1 > /x; echo 2 > /y; mv /x /y /d; ls /d; cp /d/x /d/y /e; ls /e",
+      stdout: "x\ny\nx\ny\n",
+    },
+    {
+      name: "refuses several sources without a directory",
+      script: "echo 1 > /x; echo 2 > /y; mv /x /y /nodir",
+      exitCode: 1,
+      stderrIncludes: "target '/nodir' is not a directory",
+    },
+    {
+      name: "overwrites files while merging a directory copy",
+      script: "mkdir -p /m/s /n/s; echo new > /m/s/f; echo old > /n/s/f; cp -r /m/. /n; cat /n/s/f",
+      stdout: "new\n",
+    },
+  ]);
+});
+
+describe("head and tail", () => {
+  const files = { "/d/a": "1\n2\n3\n", "/d/b": "4\n5\n" };
+  bashCases([
+    {
+      name: "names each file when there are several",
+      files,
+      script: "cd /d && head -n1 a b && tail -n1 a b",
+      stdout: "==> a <==\n1\n\n==> b <==\n4\n==> a <==\n3\n\n==> b <==\n5\n",
+    },
+    {
+      name: "drops headers with -q and adds one with -v",
+      files,
+      script: "cd /d && head -qn1 a b && printf 'q\\n' | head -v -n1",
+      stdout: "1\n4\n==> standard input <==\nq\n",
+    },
+    {
+      name: "starts from a record or byte with +N",
+      files,
+      script: "tail -n +2 /d/a; printf 'abcdef' | tail -c +4; echo",
+      stdout: "2\n3\ndef\n",
+    },
+  ]);
+});
+
+describe("awk spellings agents use", () => {
+  const awk = { extraCommands: [awkCommand] };
+  bashCases(
+    [
+      {
+        name: "reads a tab field separator and regex escapes",
+        script:
+          "printf 'a\\tb\\n' | awk -F'\\t' '{print $2}'; printf 'a\\tb\\n' | awk '/\\t/{print \"tab\"}'",
+        stdout: "b\ntab\n",
+      },
+      {
+        name: "concatenates a name with a parenthesized group",
+        script: `awk 'BEGIN { out = "x"; out = out (1 > 0 ? "-" : "") "y"; print out; print length ("abc") }'`,
+        stdout: "x-y\n3\n",
+      },
+      {
+        name: "decodes escapes in -v values",
+        script: "awk -v s='a\\tb' 'BEGIN { print length(s) }'",
+        stdout: "3\n",
+      },
+    ],
+    awk,
+  );
 });

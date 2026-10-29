@@ -490,3 +490,12 @@ bashSuite("IFS field splitting and read", [
     stdout: "<lead><x><y><z:w><><x>\n",
   },
 ]);
+
+bashSuite("directory-only pathname expansion", [
+  {
+    name: "matches only directories with a trailing slash and keeps it",
+    files: { "/d/a/x": "", "/d/b/y": "", "/d/f": "" },
+    script: `cd /d; echo */; echo /d/*/; for d in */; do printf '[%s]' "$d"; done; echo; echo none*/`,
+    stdout: "a/ b/\n/d/a/ /d/b/\n[a/][b/]\nnone*/\n",
+  },
+]);

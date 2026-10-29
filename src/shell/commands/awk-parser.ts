@@ -12,7 +12,7 @@ import {
   type Statement,
   UNARY_OPERATORS,
 } from "./awk-ast.js";
-import { AwkSyntaxError, type AwkToken } from "./awk-lexer.js";
+import { AwkSyntaxError, type AwkToken, awkRegexSource } from "./awk-lexer.js";
 import { AwkParserCursor } from "./awk-parser-cursor.js";
 
 class Parser extends AwkParserCursor {
@@ -448,7 +448,13 @@ class Parser extends AwkParserCursor {
     if (["function", "getline", "return"].includes(token.value)) {
       this.fail(`unsupported construct ${token.value}`, token);
     }
-    if (this.atOperator("(")) return this.nested(() => this.callExpression(token.value, token));
+    // A built-in may be followed by blanks before its `(`; any other name
+    // followed by blanks and `(` is a variable concatenated with a group, as
+    // in `out = out (sep) x`, because a user function call has no blank.
+    const adjacent = this.current().offset === token.offset + token.value.length;
+    if (this.atOperator("(") && (adjacent || AWK_BUILTINS.has(token.value))) {
+      return this.nested(() => this.callExpression(token.value, token));
+    }
     if (token.value === "length") return this.node({ kind: "call", name: "length", arguments: [] });
     if (this.atOperator("[")) return this.nested(() => this.arrayExpression(token.value));
     return this.node({ kind: "variable", name: token.value });
@@ -474,7 +480,7 @@ class Parser extends AwkParserCursor {
     if (token.kind === "regex") {
       return this.node({
         kind: "regex",
-        pattern: compilePosixRegex(token.value, "extended", "awk"),
+        pattern: compilePosixRegex(awkRegexSource(token.value), "extended", "awk"),
       });
     }
     if (token.kind === "identifier") return this.identifierExpression(token);

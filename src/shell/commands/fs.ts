@@ -21,6 +21,9 @@ import { commandPath, destinationPath, writeText } from "./helpers.js";
 
 export { catCommand, fileCommand } from "./fs-content.js";
 export { cpCommand } from "./fs-copy.js";
+
+import { requireDirectoryTarget } from "./fs-copy.js";
+
 export { duCommand, findCommand, treeCommand } from "./fs-find.js";
 export { basenameCommand, dirnameCommand, mktempCommand, realpathCommand } from "./fs-path.js";
 
@@ -75,13 +78,13 @@ const RMDIR = {
 
 const MV = {
   name: "mv",
-  usage: "[-f] SOURCE DESTINATION",
-  summary: "renames a path, replacing the destination only with -f",
+  usage: "[-fn] SOURCE... DESTINATION",
+  summary: "renames paths, replacing an existing destination unless -n",
   options: {
-    short: { f: { name: "force" } },
-    long: { force: { name: "force" } },
+    short: { f: { name: "force" }, n: { name: "no-clobber" } },
+    long: { force: { name: "force" }, "no-clobber": { name: "no-clobber" } },
   },
-} as const satisfies AppletSpecWithOptions<"force">;
+} as const satisfies AppletSpecWithOptions<"force" | "no-clobber">;
 
 const STAT = {
   name: "stat",
@@ -219,14 +222,20 @@ export const rmdirCommand = /* @__PURE__ */ defineApplet(RMDIR, async (context, 
   return 0;
 });
 
+/** Like GNU, `mv` replaces an existing destination unless `-n` keeps it. */
 export const mvCommand = /* @__PURE__ */ defineApplet(MV, async (context, argv) => {
   const parsed = parseAppletOptions(MV, argv);
-  const replace = parsed.options.some((option) => option.name === "force");
+  const noClobber = parsed.options.some((option) => option.name === "no-clobber");
   const values = parsed.operands;
-  if (values.length !== 2) throw appletUsageError(MV, "requires source and destination");
-  const source = commandPath(context, values[0]);
-  const target = destinationPath(context, source, values[1] ?? "");
-  await context.fileSystem.move(source, target, { replace });
+  if (values.length < 2) throw appletUsageError(MV, "requires source and destination");
+  requireDirectoryTarget(context, values);
+  const destination = values.at(-1) ?? "";
+  for (const operand of values.slice(0, -1)) {
+    const source = commandPath(context, operand);
+    const target = destinationPath(context, source, destination);
+    if (noClobber && context.fileSystem.inspectWriteTarget(target, false) !== null) continue;
+    await context.fileSystem.move(source, target, { replace: !noClobber });
+  }
   return 0;
 });
 

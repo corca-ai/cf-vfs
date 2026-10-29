@@ -10,7 +10,7 @@ import {
 import type { AwkRule as Rule, Statement } from "./awk-ast.js";
 import { arrayKey, evaluate } from "./awk-evaluate.js";
 import { formatAwk } from "./awk-format.js";
-import { tokenizeAwk } from "./awk-lexer.js";
+import { decodeAwkEscapes, tokenizeAwk } from "./awk-lexer.js";
 import { parseAwkProgram } from "./awk-parser.js";
 import {
   type AwkValue,
@@ -184,8 +184,9 @@ async function executeStatements(
   state: RuntimeState,
   output: BufferedTextWriter,
 ): Promise<Control> {
+  // Statements run once per record or per loop iteration, which the I/O and
+  // loop-iteration limits bound, so they charge no step of their own.
   for (const statement of statements) {
-    state.context.budget.step();
     const control = await executeStatement(statement, state, output);
     if (control.kind !== "none") return control;
   }
@@ -240,7 +241,7 @@ function assignment(value: string): readonly [string, AwkValue] {
   if (["NR", "FNR", "NF", "FILENAME"].includes(name)) {
     throw appletUsageError(AWK, `cannot initialize ${name}`);
   }
-  return [name, inputValue(parsed[2] ?? "")];
+  return [name, inputValue(decodeAwkEscapes(parsed[2] ?? ""))];
 }
 
 interface AwkOptionValue {
@@ -316,8 +317,10 @@ function initialVariables(options: readonly AwkOptionValue[]): Map<string, AwkVa
   ]);
   for (const option of options) {
     if (option.argument === undefined) continue;
-    if (option.name === "field-separator") variables.set("FS", stringValue(option.argument));
-    else if (option.name === "assign") {
+    if (option.name === "field-separator") {
+      // `-F '\t'` names a tab, as POSIX awk processes escapes in the value.
+      variables.set("FS", stringValue(decodeAwkEscapes(option.argument)));
+    } else if (option.name === "assign") {
       const [name, value] = assignment(option.argument);
       variables.set(name, value);
     }

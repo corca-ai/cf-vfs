@@ -117,6 +117,7 @@ export const LINUX_PROFILE_VARIABLES: readonly string[] = [
   "LANG",
   "LC_ALL",
   "TZ",
+  "0",
 ];
 
 /**
@@ -139,6 +140,8 @@ export function linuxShellEnvironment(options: LinuxProfileOptions = {}): Record
     LANG: "C",
     LC_ALL: "C",
     TZ: "UTC",
+    // `$0`, which `bash -c` sets to the shell's own name.
+    "0": "bash",
   };
 }
 
