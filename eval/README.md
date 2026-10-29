@@ -18,7 +18,8 @@ namespace, provisioned with the Linux profile:
 
 - the agent runs as `user` (UID/GID 1000), `HOME=/home/user`, starting in
   `/workspace`; `/tmp` and `/var/tmp` are mode `1777`;
-- commands are `defaultShellCommands` plus `git`; there is no network;
+- commands are `defaultShellCommands` plus the opt-in `awk` and `git`; there is
+  no network;
 - every execution runs one complete source unit with the library's default
   execution limits.
 

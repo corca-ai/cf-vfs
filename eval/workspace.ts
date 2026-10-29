@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { meterSqlStorage, type SqlMeter } from "../bench/metered-sql.js";
 import { VfsError } from "../src/core/errors.js";
+import { awkCommand } from "../src/shell/commands/awk.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { gitCommand } from "../src/shell/commands/git.js";
 import type { ShellEvent } from "../src/shell/events.js";
@@ -37,7 +38,7 @@ const EVAL_CREDENTIALS = Object.freeze({
   supplementaryGids: Object.freeze([]),
 }) satisfies PosixCredentials;
 const EVAL_UMASK = 0o022;
-const EVAL_COMMANDS = [...defaultShellCommands, gitCommand];
+const EVAL_COMMANDS = [...defaultShellCommands, awkCommand, gitCommand];
 
 const META_KEY = "eval:meta";
 const CWD_KEY = "eval:cwd";
