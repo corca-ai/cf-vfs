@@ -1,0 +1,16 @@
+{
+  "decision": "retain",
+  "acceptedBy": "user",
+  "acceptedAt": "2026-10-29",
+  "candidate": "02d96c7 perf(regex): skip to a pattern's literal prefix between matches",
+  "baseline": "2a95471 (library identical to 2892132)",
+  "scope": "off the full plan's path: the 190 public workloads never compile a POSIX regular expression; only the agent task runs sed and grep",
+  "accepted": "Adoption on a targeted gain with no suite-wide improvement established. The full-suite and task indices are within noise, not supported improvements, which the protocol otherwise requires for retention.",
+  "evidence": {
+    "targeted": "S3 wiki grep -rhoE over 2,000 pages: 489 ms -> 147 ms median of five (local/targeted-grep.log)",
+    "localFull": "four paired sessions, overall 1.0010, 1.0012, 1.0022, 1.0029; A/A 0.9946; three >5% pooled workloads rechecked with 12 pairs in two sessions, overall 0.9922 and 0.9967",
+    "cfTask": "3 runs per version, previous-commit index 104.17 [87.77, 123.62], uncertain; SQL 3,560 statements / 8,281 rows read / 520 rows written on both versions",
+    "cfFullControl": "one candidate run against two baseline runs: overall 1.0013 versus baseline mean; 71 rows >5% slower against 68 in the baseline A/A pair"
+  },
+  "notAWaiver": "This accepts this documented change only, not future changes without suite evidence."
+}

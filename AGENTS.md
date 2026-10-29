@@ -38,7 +38,8 @@ describes: a change the full plan executes (VFS, SQL, storage, Git) needs at
 least three complete CF full-suite runs per version; a change off that path
 needs three runs per version of the series that exercises it (the agent task
 for shell utilities) and one candidate full-suite control run, escalating to
-the full protocol on any >5% slowdown or SQL-cost change. Report per-workload regressions, equal-weight
+the full protocol when the control run departs from the baseline A/A spread,
+a workload that runs the changed code slows down, or any SQL cost changes. Report per-workload regressions, equal-weight
 geometric means (overall and families), and SQL statements/rows read/rows written
 separately. Use `bench:public:local`, `bench:public`, and `bench:assess` for the
 shared full plan and legacy descriptive screening. Use `bench:assess:paired` for

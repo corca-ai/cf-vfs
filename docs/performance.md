@@ -512,6 +512,11 @@ with explicit user acceptance of that latency tradeoff in favor of the full
 geometric-mean improvement. Raw trials, earlier rejected patches and added
 permission/rollback tests are retained.
 
+The [literal-prefix regex prefilter](../bench/regex-prefix-2026-10-29/report.md)
+cut a wiki-wide `grep -o` from 489 to 147 ms but is off the public plan's path,
+so neither suite could show it; the user retained it on that targeted gain with
+no regression found. It was the first change measured under scoped CF evidence.
+
 The adopted cache retains at most 256 parent metadata projections, with no
 file bodies or authorization verdicts. Each access checks its principal's
 permissions. A generation and transaction-depth guard shared by filesystem
@@ -546,7 +551,14 @@ the plan never reaches.
   regression control against the retained baseline runs. Record how the path
   was established, such as the workloads' scripts or a coverage trace.
 - **Escalate** to the full three-run protocol, and the ten-pair investigation,
-  when a control run shows a workload slowdown above 5% or any SQL-cost change.
+  when the control run departs from what two baseline runs of the same code
+  show (A/A): an overall geometric mean outside their spread, or clearly more
+  rows slower than 5% than the A/A pair has. Also escalate when a workload that
+  runs the changed code slows down, or any SQL cost changes. A fixed 5% bar
+  per workload cannot be the trigger: one full run cannot resolve a single
+  workload, and two runs of unchanged code differ by more than 5% on about a
+  third of the rows ([evidence](../bench/regex-prefix-2026-10-29/report.md)).
+  Keep at least two baseline full runs so the A/A spread exists.
 - **Batch** off-path changes: several may share one baseline cohort, and a full
   three-run cohort is repeated before a release that includes performance
   changes.
