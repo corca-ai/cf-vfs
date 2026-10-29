@@ -278,7 +278,9 @@ class Parser extends AwkExpressionParser {
   private deleteStatement(): Statement {
     this.take();
     const target = this.primary();
-    if (target.kind !== "array") this.fail("delete requires an array element");
+    // `delete name` empties the whole array, as gawk, mawk and POSIX 2024 allow.
+    if (target.kind === "variable") return this.node({ kind: "delete-array", name: target.name });
+    if (target.kind !== "array") this.fail("delete requires an array or an array element");
     return this.node({ kind: "delete", target });
   }
 

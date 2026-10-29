@@ -3,6 +3,7 @@ import type { EntryKind, VfsStat } from "../../vfs/types.js";
 import { matchesShellPattern } from "../pattern.js";
 import type { ShellCommandContext } from "../types.js";
 import { type AppletSpec, appletUsageError } from "./applet.js";
+import { commandPath } from "./helpers.js";
 
 export interface FindExec {
   readonly argv: readonly string[];
@@ -145,6 +146,13 @@ export class FindExpressionParser {
         return this.typeTest();
       case "-empty":
         return { kind: "test", test: emptyEntry };
+      case "-newer":
+        return this.newerTest();
+      case "-mtime":
+      case "-mmin":
+        return this.ageTest(word === "-mtime" ? 86_400_000 : 60_000);
+      case "-size":
+        return this.sizeTest();
       case "-true":
         return ALWAYS;
       case "-false":
@@ -211,6 +219,58 @@ export class FindExpressionParser {
     return { kind: "test", test: (entry) => kinds.includes(entry.stat.kind) };
   }
 
+  /** `-newer FILE`: modified more recently than FILE, which is read once. */
+  private newerTest(): FindNode {
+    const reference = this.value("-newer", "a file");
+    let threshold: number | undefined;
+    return {
+      kind: "test",
+      test: (entry, context) => {
+        threshold ??= context.fileSystem.stat(commandPath(context, reference)).modifiedAtMs;
+        return entry.stat.modifiedAtMs > threshold;
+      },
+    };
+  }
+
+  /** `-mtime`/`-mmin [+-]N`: whole days or minutes since modification, fractions dropped. */
+  private ageTest(unit: number): FindNode {
+    const comparison = this.numericComparison(unit === 60_000 ? "-mmin" : "-mtime");
+    return {
+      kind: "test",
+      test: (entry, context) =>
+        comparison(Math.floor((context.now() - entry.stat.modifiedAtMs) / unit)),
+    };
+  }
+
+  /** `-size [+-]N[bcwkMG]`: size in units rounded up, 512-byte blocks by default. */
+  private sizeTest(): FindNode {
+    const value = this.value("-size", "a size");
+    const match = /^([+-]?\d+)([bcwkMG]?)$/u.exec(value);
+    if (match === null) throw appletUsageError(this.spec, `invalid -size ${value}`);
+    const units: Readonly<Record<string, number>> = {
+      "": 512,
+      b: 512,
+      c: 1,
+      w: 2,
+      k: 1024,
+      M: 1048576,
+      G: 1073741824,
+    };
+    const unit = units[match[2] ?? ""] ?? 512;
+    const comparison = comparisonFor(match[1] ?? "0");
+    return {
+      kind: "test",
+      test: (entry) => comparison(Math.ceil(entry.stat.sizeBytes / unit)),
+    };
+  }
+
+  private numericComparison(option: string): (value: number) => boolean {
+    const value = this.value(option, "a number");
+    if (!/^[+-]?\d+$/u.test(value))
+      throw appletUsageError(this.spec, `${option} requires a number`);
+    return comparisonFor(value);
+  }
+
   private depthValue(option: string): number {
     const value = this.value(option, "a non-negative integer");
     if (!/^[0-9]+$/u.test(value)) {
@@ -238,6 +298,14 @@ export class FindExpressionParser {
     }
     return { argv: command, batch };
   }
+}
+
+/** GNU's numeric arguments: `+N` more than N, `-N` less than N, `N` exactly N. */
+function comparisonFor(value: string): (actual: number) => boolean {
+  const number = Math.abs(Number(value));
+  if (value.startsWith("+")) return (actual) => actual > number;
+  if (value.startsWith("-")) return (actual) => actual < number;
+  return (actual) => actual === number;
 }
 
 function emptyEntry(entry: FindEntry, context: ShellCommandContext): boolean {

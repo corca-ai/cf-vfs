@@ -10,10 +10,8 @@ import {
   collectStream,
   commandPath,
   inputStreams,
-  inputTexts,
   parseInteger,
   readTextLines,
-  splitLines,
   writeBytes,
   writeText,
 } from "./helpers.js";
@@ -23,6 +21,7 @@ export { commCommand, joinCommand } from "./text-compare.js";
 export { cmpCommand, diffCommand } from "./text-diff.js";
 export { base64Command, patchCommand, seqCommand } from "./text-extra.js";
 export { odCommand } from "./text-od.js";
+export { pasteCommand } from "./text-paste.js";
 export { grepCommand } from "./text-search.js";
 export { headCommand, tailCommand } from "./text-slice.js";
 export { sortCommand } from "./text-sort.js";
@@ -93,12 +92,6 @@ const FOLD = {
   summary: "wraps records to a fixed character width",
   options: { short: { w: { name: "width", argument: true } } },
 } as const satisfies AppletSpecWithOptions<"width">;
-
-const PASTE = {
-  name: "paste",
-  usage: "[FILE...]",
-  summary: "merges corresponding records of files into tab-separated rows",
-} as const satisfies AppletSpec;
 
 const SHA256SUM = {
   name: "sha256sum",
@@ -405,24 +398,6 @@ export const foldCommand = /* @__PURE__ */ defineApplet(FOLD, async (context, ar
     output.abort();
   }
   return 0;
-});
-
-export const pasteCommand = /* @__PURE__ */ defineApplet(PASTE, async (context, argv, fds) => {
-  const inputs = await inputTexts(context, argv, fds[0]);
-  try {
-    const columns = inputs.value.map((input) =>
-      splitLines(input.text).map((line) => line.replace(/\n$/u, "")),
-    );
-    const rows = Math.max(0, ...columns.map((column) => column.length));
-    let output = "";
-    for (let row = 0; row < rows; row += 1) {
-      output += `${columns.map((column) => column[row] ?? "").join("\t")}\n`;
-    }
-    await writeText(fds[1], output);
-    return 0;
-  } finally {
-    inputs.release();
-  }
 });
 
 export const sha256sumCommand = /* @__PURE__ */ defineApplet(

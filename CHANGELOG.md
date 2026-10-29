@@ -16,6 +16,10 @@ included.
 
 ## [Unreleased]
 
+- Add the utilities agents reached for and found missing: `paste -s -d`,
+  `cmp -` for standard input, `sort -c`/`-C`, `jq -R` (with `-Rs`), `find`
+  tests `-newer`, `-mtime`, `-mmin` and `-size`, and `awk`'s whole-array
+  `delete`.
 - Regular expressions skip to their literal prefix whenever no match is in
   progress, so extracting wikilinks with `grep -o` over a 10 MB wiki runs about
   three times faster locally; matches and captures are unchanged.

@@ -142,3 +142,48 @@ describe("awk functions and output redirection", () => {
     { extraCommands: [awkCommand] },
   );
 });
+
+describe("paste, cmp, sort -c, jq -R, find tests and awk delete", () => {
+  bashCases(
+    [
+      {
+        name: "joins lines with -s and cycles -d delimiters",
+        script:
+          "printf 'a\\nb\\nc\\n' | paste -sd,; printf '1\\n2\\n' > /x; printf '3\\n4\\n' > /y; paste -d'|' /x /y; printf 'a\\nb\\nc\\nd\\n' | paste -s -d ':\\n'",
+        stdout: "a,b,c\n1|3\n2|4\na:b\nc:d\n",
+      },
+      {
+        name: "compares standard input with cmp -",
+        script:
+          "printf 'x\\n' > /e; printf 'x\\n' | cmp - /e; echo $?; printf 'y\\n' | cmp -s - /e; echo $?",
+        stdout: "0\n1\n",
+      },
+      {
+        name: "checks order with sort -c and -C",
+        script:
+          "printf 'a\\nb\\n' | sort -c; echo $?; printf 'b\\na\\n' | sort -c; echo $?; printf 'b\\na\\n' | sort -C; echo $?; printf '1\\n1\\n' | sort -cu; echo $?",
+        stdout: "0\n1\n1\n1\n",
+        stderr: "sort: -:2: disorder: a\nsort: -:2: disorder: 1\n",
+      },
+      {
+        name: "reads raw lines with jq -R and the whole input with -Rs",
+        script:
+          "printf 'a\\nb\\n' | jq -R 'length'; printf 'a\\nb\\n' | jq -Rs '.'; printf 'x\\ny' | jq -Rs '.'",
+        stdout: '1\n1\n"a\\nb\\n"\n"x\\ny"\n',
+      },
+      {
+        name: "selects by size and by a newer reference file",
+        files: { "/f/small": "x", "/f/big": "y".repeat(3000) },
+        script:
+          "cd /f; find . -type f -size +1k; find . -type f -size -2; find . -newer small -type f | grep -c small; find . -mmin -5 -type f | sort",
+        stdout: "./big\n./small\n0\n./big\n./small\n",
+      },
+      {
+        name: "empties a whole awk array with delete",
+        script: `awk 'BEGIN { a[1]; a[2]; delete a; n = 0; for (k in a) n++; print n, length(a) }'`,
+        stdout: "0 0\n",
+      },
+    ],
+    { extraCommands: [awkCommand] },
+  );
+});

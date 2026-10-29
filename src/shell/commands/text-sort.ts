@@ -10,11 +10,13 @@ import { checkedTextLines } from "./text-lines.js";
 
 const SORT = {
   name: "sort",
-  usage: "[-bfnrsu] [-t SEP] [-k POS1[,POS2]]... [FILE...]",
+  usage: "[-bcCfnrsu] [-t SEP] [-k POS1[,POS2]]... [FILE...]",
   summary: "sorts records by UTF-8 byte order, by keys, or numerically",
   options: {
     short: {
       b: { name: "ignore-blanks" },
+      c: { name: "check" },
+      C: { name: "check-quiet" },
       f: { name: "fold" },
       r: { name: "reverse" },
       s: { name: "stable" },
@@ -25,6 +27,7 @@ const SORT = {
     },
     long: {
       "ignore-leading-blanks": { name: "ignore-blanks" },
+      check: { name: "check" },
       "ignore-case": { name: "fold" },
       reverse: { name: "reverse" },
       stable: { name: "stable" },
@@ -35,7 +38,16 @@ const SORT = {
     },
   },
 } as const satisfies AppletSpecWithOptions<
-  "ignore-blanks" | "fold" | "reverse" | "stable" | "unique" | "numeric" | "separator" | "key"
+  | "ignore-blanks"
+  | "check"
+  | "check-quiet"
+  | "fold"
+  | "reverse"
+  | "stable"
+  | "unique"
+  | "numeric"
+  | "separator"
+  | "key"
 >;
 
 interface NumericSortKey {
@@ -98,6 +110,8 @@ interface SortKey extends SortOrdering {
 
 interface SortInvocation {
   readonly operands: readonly string[];
+  /** `-c` reports the first disorder; `-C` only sets the status. */
+  readonly check: "report" | "quiet" | undefined;
   readonly keys: readonly SortKey[];
   readonly separator: string | undefined;
   readonly unique: boolean;
@@ -160,6 +174,7 @@ function parseSortInvocation(argv: readonly string[]): SortInvocation {
   const keys = values("key").map((value) => parseKey(value, global));
   return {
     operands: parsed.operands,
+    check: has("check") ? "report" : has("check-quiet") ? "quiet" : undefined,
     // Without -k the whole line is the one key.
     keys:
       keys.length > 0
@@ -245,8 +260,8 @@ function compareKeys(left: SortRecord, right: SortRecord, keys: readonly SortKey
   return 0;
 }
 
-function sortedRecords(lines: readonly string[], invocation: SortInvocation): SortRecord[] {
-  let records = lines.map((line): SortRecord => {
+function sortRecords(lines: readonly string[], invocation: SortInvocation): SortRecord[] {
+  return lines.map((line): SortRecord => {
     const value = line.endsWith("\n") ? line.slice(0, -1) : line;
     const bounds = fieldBounds(value, invocation.separator);
     const keys = invocation.keys.map((key) => {
@@ -255,14 +270,35 @@ function sortedRecords(lines: readonly string[], invocation: SortInvocation): So
     });
     return { value, keys };
   });
+}
+
+function compareRecords(left: SortRecord, right: SortRecord, invocation: SortInvocation): number {
+  const order = compareKeys(left, right, invocation.keys);
   // The last-resort comparison of whole lines, which -s and -u turn off.
-  const lastResort = !invocation.stable && !invocation.unique;
-  records.sort((left, right) => {
-    const order = compareKeys(left, right, invocation.keys);
-    if (order !== 0 || !lastResort) return order;
-    const whole = compareUtf8(left.value, right.value);
-    return invocation.reverse ? -whole : whole;
-  });
+  if (order !== 0 || invocation.stable || invocation.unique) return order;
+  const whole = compareUtf8(left.value, right.value);
+  return invocation.reverse ? -whole : whole;
+}
+
+/** The 1-based line of the first record out of order, `-u` also refusing equal neighbours. */
+function firstDisorder(
+  records: readonly SortRecord[],
+  invocation: SortInvocation,
+): number | undefined {
+  for (let index = 1; index < records.length; index += 1) {
+    const order = compareRecords(
+      records[index - 1] as SortRecord,
+      records[index] as SortRecord,
+      invocation,
+    );
+    if (order > 0 || (invocation.unique && order === 0)) return index + 1;
+  }
+  return undefined;
+}
+
+function sortedRecords(lines: readonly string[], invocation: SortInvocation): SortRecord[] {
+  let records = sortRecords(lines, invocation);
+  records.sort((left, right) => compareRecords(left, right, invocation));
   if (invocation.unique) {
     records = records.filter(
       (record, index) =>
@@ -283,6 +319,17 @@ export const sortCommand = /* @__PURE__ */ defineApplet(SORT, async (context, ar
       context.budget.limits.maxBufferedRecords,
       context.budget.limits.maxLineBytes,
     );
+    if (invocation.check !== undefined) {
+      const records = sortRecords(lines, invocation);
+      const disorder = firstDisorder(records, invocation);
+      if (disorder === undefined) return 0;
+      if (invocation.check === "report") {
+        const name = invocation.operands[0] ?? "-";
+        const line = records[disorder - 1]?.value ?? "";
+        await writeText(fds[2], `sort: ${name}:${disorder}: disorder: ${line}\n`);
+      }
+      return 1;
+    }
     const records = sortedRecords(lines, invocation);
     await writeText(fds[1], records.map((record) => `${record.value}\n`).join(""));
     return 0;

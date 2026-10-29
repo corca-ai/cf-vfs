@@ -13,7 +13,7 @@ import { BufferedTextWriter, inputTexts, writeText } from "./helpers.js";
 
 const JQ = {
   name: "jq",
-  usage: "[-cejnrsS] [--tab] [--arg NAME VALUE] [--argjson NAME JSON] FILTER [PATH...]",
+  usage: "[-cejnrRsS] [--tab] [--arg NAME VALUE] [--argjson NAME JSON] FILTER [PATH...]",
   summary: "runs a filter over JSON input",
   options: {
     short: {
@@ -22,6 +22,7 @@ const JQ = {
       j: { name: "join-output" },
       n: { name: "null-input" },
       r: { name: "raw-output" },
+      R: { name: "raw-input" },
       s: { name: "slurp" },
       S: { name: "sort-keys" },
     },
@@ -32,6 +33,7 @@ const JQ = {
       "join-output": { name: "join-output" },
       "null-input": { name: "null-input" },
       "raw-output": { name: "raw-output" },
+      "raw-input": { name: "raw-input" },
       slurp: { name: "slurp" },
       "sort-keys": { name: "sort-keys" },
       tab: { name: "tab" },
@@ -45,6 +47,7 @@ const JQ = {
   | "join-output"
   | "null-input"
   | "raw-output"
+  | "raw-input"
   | "slurp"
   | "sort-keys"
   | "tab"
@@ -108,19 +111,34 @@ function jqInvocation(argv: readonly string[], budget: JqEvaluationBudget): JqIn
   }
 }
 
-async function jqInputs(
+/**
+ * The values the filter runs on: each JSON value, or each line with `-R`;
+ * `-s` gathers them into one array, and `-Rs` reads the input as one string.
+ */
+async function jqSubjects(
   context: ShellCommandContext,
   paths: readonly string[],
   fds: ShellFileDescriptors,
   budget: JqEvaluationBudget,
+  has: (name: string) => boolean,
 ): Promise<JsonValue[]> {
+  if (has("null-input")) return [null];
+  const raw = has("raw-input");
+  const slurp = has("slurp");
   const inputs: JsonValue[] = [];
   const collected = await inputTexts(context, paths, fds[0]);
   try {
+    if (raw && slurp) return [collected.value.map((input) => input.text).join("")];
     for (const input of collected.value) {
-      for (const value of parseJsonStream(input.text, "jq", budget)) inputs.push(value);
+      if (raw) {
+        const lines = input.text.split("\n");
+        if (lines.at(-1) === "") lines.pop();
+        inputs.push(...lines);
+      } else {
+        for (const value of parseJsonStream(input.text, "jq", budget)) inputs.push(value);
+      }
     }
-    return inputs;
+    return slurp ? [inputs] : inputs;
   } finally {
     collected.release();
   }
@@ -202,15 +220,14 @@ export const jqCommand = /* @__PURE__ */ defineApplet(JQ, async (context, argv, 
       return FILTER_REJECTED;
     }
 
-    let inputs: JsonValue[];
+    let subjects: JsonValue[];
     try {
-      inputs = has("null-input") ? [] : await jqInputs(context, paths, fds, budget);
+      subjects = await jqSubjects(context, paths, fds, budget, has);
     } catch (error) {
       await writeText(fds[2], `${isVfsError(error) ? error.message : String(error)}\n`);
       return RUNTIME_FAILED;
     }
 
-    const subjects = has("null-input") ? [null] : has("slurp") ? [inputs] : inputs;
     const { status, last } = await runJqFilter(context, fds, filter, subjects, has, budget);
     if (status !== 0) return status;
 

@@ -668,7 +668,7 @@ decides which directory is provisioned; pass the same path as the execution
 | links | `ln -s -f`, `readlink -f`, from the dedicated `/shell/commands/link` subpath |
 | streaming text/bytes | `cat -A -b -e -E -n -s -t -T -u -v`, `grep -i -v -n -x -w -F -E -c -l -L -q -r -R -h -H -s -o -e -f -A -B -C -m --include --exclude --exclude-dir` (several patterns select a line when any matches; context lines use `-` and groups are separated by `--`; an unreadable operand is reported and the rest are searched, with status 2), `head -n -c -q -v` (a `==> name <==` header per file when there are several), `wc -l -w -c`, `uniq -c -d -u -i -f -s -w`, `od -A -t -c -b -d -o -x -v -j -N -w` (GNU element widths, aligned formats, `*` for repeated lines, and the `z` column), `cut -d -f -c -s`, `tr -c -d -s` (escapes, ranges, `[:class:]`), `nl`, `fold -w`, `sed -E -r -n -e -i` (see the sed profile), `seq -s -w` |
 | deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, from the dedicated `/shell/commands/system` subpath |
-| bounded barriers | `sort -b -f -n -r -s -u -t SEP -k POS1[,POS2]` (GNU keys: fields keep their leading blanks without `-t`, a key with options of its own inherits none of the global ones, and equal keys fall back to the whole line unless `-s` or `-u`), `tail -n -c -q -v` (`+N` starts from a record or byte), `tee -a`, `paste`, `cmp -s`, `diff -r -q -u` (unified output with three lines of context, as GNU writes it), `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
+| bounded barriers | `sort -b -f -n -r -s -u -c -C -t SEP -k POS1[,POS2]` (`-c` reports the first disorder; GNU keys: fields keep their leading blanks without `-t`, a key with options of its own inherits none of the global ones, and equal keys fall back to the whole line unless `-s` or `-u`), `tail -n -c -q -v` (`+N` starts from a record or byte), `tee -a`, `paste -s -d LIST`, `cmp -s` (`-` reads standard input), `diff -r -q -u` (unified output with three lines of context, as GNU writes it), `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
 | argument dispatch | `xargs -n -0 -r -t`, from the dedicated `/shell/commands/xargs` subpath |
 | opt-in record language | `awk -F -v -f`, from the dedicated `/shell/commands/awk` subpath; not part of `defaultShellCommands` |
 
@@ -961,7 +961,8 @@ than one file can be searched, so `grep -r x one.txt` prints bare lines.
 
 `find` evaluates a GNU expression for every entry, in path order: tests
 `-name`, `-iname`, `-path`/`-wholename`, `-ipath` (where `*` also matches `/`),
-`-type` (with a comma list), `-empty`, `-true`, `-false`; operators `!`/`-not`,
+`-type` (with a comma list), `-empty`, `-newer`, `-mtime`, `-mmin`, `-size`
+(`+N`, `-N` or `N`; sizes in `c`, `w`, `b`, `k`, `M` or `G`), `-true`, `-false`; operators `!`/`-not`,
 `-a`/`-and` or juxtaposition, `-o`/`-or`, and parentheses; actions `-print`,
 `-print0`, `-exec`, and `-prune`; and the global `-mindepth` and `-maxdepth`.
 An expression without an action prints what it selects. `-name` sees the
@@ -1033,9 +1034,10 @@ not-yet-used names passed by reference, and extra parameters as locals. Calls
 are bounded by `maxFunctionDepth`. `print` and `printf` redirect with `> file`,
 which replaces the file once per run, and `>> file`, which appends; the files
 are published when the program ends, `close(file)` lets a later `>` start the
-file again, and `/dev/stdout` and `/dev/stderr` name the streams. Loops charge
+file again, and `/dev/stdout` and `/dev/stderr` name the streams. `delete
+array` empties a whole array. Loops charge
 expansion work rather than the shell's loop-iteration limit. `getline`,
-`system`, output pipes, whole-array `delete`, assignments after the program,
+`system`, output pipes, assignments after the program,
 and locale-dependent behavior are outside the profile and fail explicitly
 instead of being approximated. The
 third capture-array argument to `match` is also outside the profile. Records
@@ -1064,7 +1066,8 @@ Builtins: `add`, `all`, `any`, `empty`, `first`, `flatten`, `from_entries`,
 `has`, `join`, `keys`, `keys_unsorted`, `last`, `length`, `map`, `max`, `min`,
 `not`, `range`, `reverse`, `select`, `sort`, `sort_by`, `split`, `to_entries`,
 `tonumber`, `tostring`, `type`, `unique`, `values`. Options: `-c`, `-e`, `-j`,
-`-n`, `-r`, `-s`, `-S`, `--tab`, `--arg`, `--argjson`.
+`-n`, `-r`, `-R` (each line is a string; with `-s`, the whole input is one),
+`-s`, `-S`, `--tab`, `--arg`, `--argjson`.
 
 **Refused.** `def`, `reduce`, `foreach`, `try`/`catch`, `label`, `as` bindings,
 recursive descent `..`, string interpolation, format strings such as

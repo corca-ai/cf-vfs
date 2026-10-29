@@ -102,6 +102,7 @@ export type Statement =
       readonly body: readonly Statement[];
     }
   | { readonly kind: "delete"; readonly target: Extract<LValue, { kind: "array" }> }
+  | { readonly kind: "delete-array"; readonly name: string }
   | { readonly kind: "break" }
   | { readonly kind: "continue" }
   | { readonly kind: "next" }

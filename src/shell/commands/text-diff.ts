@@ -7,7 +7,14 @@ import {
   defineApplet,
   parseAppletOptions,
 } from "./applet.js";
-import { type BufferLease, commandPath, inputTexts, readFileBytes, writeText } from "./helpers.js";
+import {
+  type BufferLease,
+  collectStream,
+  commandPath,
+  inputTexts,
+  readFileBytes,
+  writeText,
+} from "./helpers.js";
 
 const CMP = {
   name: "cmp",
@@ -85,10 +92,15 @@ export const cmpCommand = /* @__PURE__ */ defineApplet(CMP, async (context, argv
   const silent = parsed.options.some((option) => option.name === "silent");
   const [leftName = "", rightName = ""] = parsed.operands;
   if (parsed.operands.length !== 2) throw appletUsageError(CMP, "requires two files");
-  const left = await readFileBytes(context, leftName);
+  if (leftName === "-" && rightName === "-")
+    throw appletUsageError(CMP, "only one operand may be -");
+  // `-` is standard input, as in `... | cmp - expected`.
+  const read = (name: string): Promise<BufferLease<Uint8Array>> =>
+    name === "-" ? collectStream(context, fds[0]) : readFileBytes(context, name);
+  const left = await read(leftName);
   let right: BufferLease<Uint8Array>;
   try {
-    right = await readFileBytes(context, rightName);
+    right = await read(rightName);
   } catch (error) {
     left.release();
     throw error;

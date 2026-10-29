@@ -10,6 +10,7 @@ import {
   asNumber,
   asString,
   bindsByReference,
+  clearArray,
   getArray,
   getVariable,
   inputValue,
@@ -238,6 +239,9 @@ function executeStatement(statement: Statement, state: RuntimeState, output: Awk
       removeArrayEntry(state, array, arrayKey(statement.target.indices, state));
       return NO_CONTROL;
     }
+    case "delete-array":
+      clearArray(state, statement.name);
+      return NO_CONTROL;
     case "break":
     case "continue":
     case "next":
