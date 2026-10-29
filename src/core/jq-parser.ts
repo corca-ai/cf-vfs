@@ -79,6 +79,12 @@ const BUILTIN_NAMES = new Set([
   "add",
   "all",
   "any",
+  "ascii_downcase",
+  "ascii_upcase",
+  "endswith",
+  "ltrimstr",
+  "rtrimstr",
+  "startswith",
   "empty",
   "first",
   "flatten",
@@ -106,6 +112,9 @@ const BUILTIN_NAMES = new Set([
   "unique",
   "values",
 ]);
+
+/** `jq` matches these with Oniguruma; this repository has a POSIX engine, so they are refused. */
+const REGEX_BUILTINS = new Set(["test", "match", "capture", "scan", "splits", "sub", "gsub"]);
 
 class Parser {
   private offset = 0;
@@ -372,6 +381,11 @@ class Parser {
       args.push(this.pipe());
       while (this.eat(";")) args.push(this.pipe());
       this.expect(")");
+    }
+    if (REGEX_BUILTINS.has(name)) {
+      throw new JqSyntaxError(
+        `jq: ${name} uses regular expressions, which this profile leaves out; use grep, sed or awk`,
+      );
     }
     if (!BUILTIN_NAMES.has(name)) {
       throw new JqSyntaxError(`jq: ${name} is not a function in this profile`);

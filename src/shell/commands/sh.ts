@@ -1,10 +1,11 @@
+import { BASH_COMPATIBILITY_VERSION } from "../parser.js";
 import { type AppletSpec, appletUsageError, defineApplet } from "./applet.js";
 import { commandPath, writeText } from "./helpers.js";
 
 const SH = {
   name: "sh",
   aliases: ["bash"],
-  usage: "[-c COMMAND [NAME [ARGUMENT...]] | FILE [ARGUMENT...]]",
+  usage: "[--version | -c COMMAND [NAME [ARGUMENT...]] | FILE [ARGUMENT...]]",
   summary: "runs a bounded source unit in an isolated child shell",
 } as const satisfies AppletSpec;
 
@@ -34,6 +35,14 @@ export const shCommand = /* @__PURE__ */ defineApplet(SH, async (context, argv, 
     if (source === undefined) throw appletUsageError(SH, "-c requires a command");
     // Bash names the shell itself when `-c` is given no explicit `$0`.
     return await context.executeScript(source, name ?? SH.name, args, fds);
+  }
+  if (first === "--version") {
+    // Says what this is rather than imitate GNU Bash's banner.
+    await writeText(
+      fds[1],
+      `cf-vfs shell: a bounded Bash ${BASH_COMPATIBILITY_VERSION} language profile, not GNU Bash\n`,
+    );
+    return 0;
   }
   if (first.startsWith("-")) throw appletUsageError(SH, `unsupported option ${first}`);
   // A named file does not need the executable bit: naming the interpreter is

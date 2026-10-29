@@ -151,9 +151,9 @@ it("performs no storage work for a device", async () => {
   expect(statements).toEqual([]);
 });
 
-it("costs the same I/O budget as writing the bytes to a file", async () => {
+it("costs the same budget as writing the bytes to a file", async () => {
   const run = async (limit: number, target: string): Promise<number> => {
-    const harness = createBashHarness({ limits: { maxTotalIoBytes: limit } });
+    const harness = createBashHarness({ limits: { maxReadBytes: limit } });
     await harness.fileSystem.writeFile("/big.txt", "x".repeat(100_000));
     return (await harness.run(`cat /big.txt > ${target}`)).exitCode;
   };

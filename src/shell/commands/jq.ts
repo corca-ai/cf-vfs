@@ -9,11 +9,27 @@ import {
   defineApplet,
   parseAppletOptions,
 } from "./applet.js";
-import { BufferedTextWriter, inputTexts, writeText } from "./helpers.js";
+import { BufferedTextWriter, inputTexts, readFileText, writeText } from "./helpers.js";
+import type { ParsedUtilityOptions } from "./options.js";
+
+type JqOption =
+  | "compact"
+  | "exit-status"
+  | "join-output"
+  | "null-input"
+  | "raw-output"
+  | "raw-input"
+  | "slurp"
+  | "sort-keys"
+  | "tab"
+  | "from-file"
+  | "arg"
+  | "argjson";
 
 const JQ = {
   name: "jq",
-  usage: "[-cejnrRsS] [--tab] [--arg NAME VALUE] [--argjson NAME JSON] FILTER [PATH...]",
+  usage:
+    "[-cejnrRsS] [--tab] [--arg NAME VALUE] [--argjson NAME JSON] (FILTER | -f FILE) [PATH...]",
   summary: "runs a filter over JSON input",
   options: {
     short: {
@@ -25,6 +41,7 @@ const JQ = {
       R: { name: "raw-input" },
       s: { name: "slurp" },
       S: { name: "sort-keys" },
+      f: { name: "from-file", argument: true },
     },
     long: {
       compact: { name: "compact" },
@@ -37,23 +54,12 @@ const JQ = {
       slurp: { name: "slurp" },
       "sort-keys": { name: "sort-keys" },
       tab: { name: "tab" },
+      "from-file": { name: "from-file", argument: true },
       arg: { name: "arg", argument: true },
       argjson: { name: "argjson", argument: true },
     },
   },
-} as const satisfies AppletSpecWithOptions<
-  | "compact"
-  | "exit-status"
-  | "join-output"
-  | "null-input"
-  | "raw-output"
-  | "raw-input"
-  | "slurp"
-  | "sort-keys"
-  | "tab"
-  | "arg"
-  | "argjson"
->;
+} as const satisfies AppletSpecWithOptions<JqOption>;
 
 /** `jq`'s own statuses for the failures this profile can produce. */
 const NO_TRUE_OUTPUT = 1;
@@ -96,12 +102,32 @@ function bindingValue(option: string, value: string, budget: JqEvaluationBudget)
     throw appletUsageError(JQ, "--argjson value is not valid JSON");
   }
 }
-function jqInvocation(argv: readonly string[], budget: JqEvaluationBudget): JqInvocation {
+/** The filter is the first operand, or the contents of `-f FILE`, after which every operand is input. */
+async function filterSource(
+  context: ShellCommandContext,
+  parsed: ParsedUtilityOptions<JqOption>,
+  operands: string[],
+): Promise<string | undefined> {
+  const file = parsed.options.filter((option) => option.name === "from-file").at(-1);
+  if (file === undefined || !("argument" in file)) return operands.shift();
+  const read = await readFileText(context, file.argument, context.budget.limits.maxScriptBytes);
+  try {
+    return read.value;
+  } finally {
+    read.release();
+  }
+}
+
+async function jqInvocation(
+  context: ShellCommandContext,
+  argv: readonly string[],
+  budget: JqEvaluationBudget,
+): Promise<JqInvocation> {
   const { rest, variables } = extractBindings(argv, budget);
   const parsed = parseAppletOptions(JQ, rest);
   const has = (name: string): boolean => parsed.options.some((option) => option.name === name);
   const operands = [...parsed.operands];
-  const source = operands.shift();
+  const source = await filterSource(context, parsed, operands);
   if (source === undefined) throw appletUsageError(JQ, "missing filter");
   try {
     return { filter: compileJq(source, { variables }), paths: operands, has };
@@ -214,7 +240,7 @@ async function runJqFilter(
 export const jqCommand = /* @__PURE__ */ defineApplet(JQ, async (context, argv, fds) => {
   const budget = new JqEvaluationBudget(context.budget);
   try {
-    const { filter, paths, has } = jqInvocation(argv, budget);
+    const { filter, paths, has } = await jqInvocation(context, argv, budget);
     if (filter instanceof JqSyntaxError) {
       await writeText(fds[2], `${filter.message}\n`);
       return FILTER_REJECTED;

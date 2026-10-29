@@ -38,6 +38,12 @@ export function nullaryBuiltin(
       return input === null ? SKIP : input;
     case "add":
       return sumValues(input, budget);
+    case "ascii_downcase":
+    case "ascii_upcase":
+      if (typeof input !== "string") throw new JqRuntimeError(`jq: ${name} input must be a string`);
+      return name === "ascii_downcase"
+        ? input.replace(/[A-Z]/gu, (letter) => letter.toLowerCase())
+        : input.replace(/[a-z]/gu, (letter) => letter.toUpperCase());
     case "tostring":
       return typeof input === "string" ? input : renderJson(input, { budget });
     case "tonumber":

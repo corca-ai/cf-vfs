@@ -663,12 +663,12 @@ decides which directory is provisioned; pass the same path as the execution
 | shell | `:`, `true`, `false`, `echo -n`, `printf` (Bash's format escapes, including `\NNN`, `\xHH`, and `\uHHHH`; `%b`, `%c`, `%d`, `%i`, `%o`, `%s`, `%u`, `%x`, `%X`), `pwd`, `cd -`, `export`, `env`, `unset`, `read [-r]`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (clustered `-eu/+eu`, `-o/+o errexit`, `-o/+o nounset`, `-o/+o pipefail`, `--` positional replacement), `test`/`[` (`-e -f -d -s -r -w -x`, string and integer comparison), `id -u -g -G -n`, `groups` |
 | discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
 | help | `help -s`, from the dedicated `/shell/commands/help` subpath |
-| shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
-| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f -n`, `cp -r -f -n -p -P` (several sources into a directory; an existing destination is overwritten unless `-n`, as in GNU; a `SRC/.` operand and an existing destination directory merge), `ls -l -n -d -a -A -h -1 -R`, `find` expressions (`-name -iname -path -ipath -type -empty -mindepth -maxdepth -prune -print -print0 -exec`, `! -not -a -o ( )`), `stat -L -c` (`%i` identity, `%u/%g/%U/%G` ownership), `chmod`, `chown`, `du`, `tree`, `basename` (with `SUFFIX`, `-s`, and `-a`), `dirname`, `realpath`, `mktemp`, `file` |
+| shell profile | `sh -c`, `sh FILE`, `sh --version` (which says this is a Bash 5 language profile, not GNU Bash), and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
+| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f -n`, `cp -r -f -n -p -P -a` (`-a` is `-r -p -P`; several sources into a directory; an existing destination is overwritten unless `-n`, as in GNU; a `SRC/.` operand and an existing destination directory merge), `ls -l -n -d -a -A -h -1 -R`, `find` expressions (`-name -iname -path -ipath -type -empty -mindepth -maxdepth -prune -print -print0 -exec`, `! -not -a -o ( )`), `stat -L -c` (`%i` identity, `%u/%g/%U/%G` ownership), `chmod`, `chown`, `du`, `tree`, `basename` (with `SUFFIX`, `-s`, and `-a`), `dirname`, `realpath`, `mktemp`, `file` |
 | links | `ln -s -f`, `readlink -f`, from the dedicated `/shell/commands/link` subpath |
-| streaming text/bytes | `cat -A -b -e -E -n -s -t -T -u -v`, `grep -i -v -n -x -w -F -E -c -l -L -q -r -R -h -H -s -o -e -f -A -B -C -m --include --exclude --exclude-dir` (several patterns select a line when any matches; context lines use `-` and groups are separated by `--`; an unreadable operand is reported and the rest are searched, with status 2), `head -n -c -q -v` (a `==> name <==` header per file when there are several), `wc -l -w -c`, `uniq -c -d -u -i -f -s -w`, `od -A -t -c -b -d -o -x -v -j -N -w` (GNU element widths, aligned formats, `*` for repeated lines, and the `z` column), `cut -d -f -c -s`, `tr -c -d -s` (escapes, ranges, `[:class:]`), `nl`, `fold -w`, `sed -E -r -n -e -i` (see the sed profile), `seq -s -w` |
-| deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, from the dedicated `/shell/commands/system` subpath |
-| bounded barriers | `sort -b -f -n -r -s -u -c -C -t SEP -k POS1[,POS2]` (`-c` reports the first disorder; GNU keys: fields keep their leading blanks without `-t`, a key with options of its own inherits none of the global ones, and equal keys fall back to the whole line unless `-s` or `-u`), `tail -n -c -q -v` (`+N` starts from a record or byte), `tee -a`, `paste -s -d LIST`, `cmp -s` (`-` reads standard input), `diff -r -q -u` (unified output with three lines of context, as GNU writes it), `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
+| streaming text/bytes | `cat -A -b -e -E -n -s -t -T -u -v`, `grep -i -v -n -x -w -F -E -P -c -l -L -q -r -R -h -H -s -o -e -f -A -B -C -m --include --exclude --exclude-dir` (several patterns select a line when any matches; context lines use `-` and groups are separated by `--`; an unreadable operand is reported and the rest are searched, with status 2), `head -n -c -q -v` (a `==> name <==` header per file when there are several), `wc -l -w -c`, `uniq -c -d -u -i -f -s -w`, `od -A -t -c -b -d -o -x -v -j -N -w` (GNU element widths, aligned formats, `*` for repeated lines, and the `z` column), `cut -d -f -c -s`, `tr -c -d -s` (escapes, ranges, `[:class:]`), `nl`, `fold -w`, `sed -E -r -n -e -i` (see the sed profile), `seq -s -w` |
+| deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, `uname -a -s -n -r -v -m -p -i -o` (kernel name `Linux`, node name from `/etc/hostname` or `localhost`, `cf-vfs` as release and operating system, machine `unknown`), from the dedicated `/shell/commands/system` subpath |
+| bounded barriers | `sort -b -f -n -r -s -u -c -C -t SEP -k POS1[,POS2]` (`-c` reports the first disorder; GNU keys: fields keep their leading blanks without `-t`, a key with options of its own inherits none of the global ones, and equal keys fall back to the whole line unless `-s` or `-u`), `tail -n -c -q -v` (`+N` starts from a record or byte), `tee -a`, `paste -s -d LIST`, `cmp -s` (`-` reads standard input), `diff -r -q -u` (unified output with three lines of context, as GNU writes it), `sha256sum` (`-` or no operand reads standard input), `md5sum` (streamed, so an opaque body is read when the session may stream it), `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
 | argument dispatch | `xargs -n -0 -r -t`, from the dedicated `/shell/commands/xargs` subpath |
 | opt-in record language | `awk -F -v -f`, from the dedicated `/shell/commands/awk` subpath; not part of `defaultShellCommands` |
 
@@ -692,6 +692,15 @@ extended ones. Patterns are parsed and matched here rather than handed to the
 JavaScript engine, so no JavaScript-only construct can mean something here that
 it does not mean in `grep`: `a+` repeats in an extended expression and is a
 literal plus in a basic one, and `(?:a)` does not open a non-capturing group.
+
+`grep -P` takes the part of PCRE that means the same in the extended dialect
+and translates it: `\d`, `\w`, `\s` and their negations, `\t`, `\r`, `\n`,
+`\xHH`, `\x{H…}` and other character escapes, escapes inside a bracket
+expression, `(?:…)`, and a leading `(?i)`. Lookaround, back-references, lazy
+and possessive quantifiers, `\b` and the other assertions are refused where
+they are written. PCRE takes the first alternative that matches and POSIX the
+longest, so a pattern with `|` is refused under `-o`, the one mode where the
+two print different text.
 
 `grep -o` prints the matched parts rather than the lines holding them, one to a
 record, with the file name and `-n` line number repeated on each — which is
@@ -1065,9 +1074,11 @@ object construction including `{a}` shorthand and a computed `(expr):` key.
 Builtins: `add`, `all`, `any`, `empty`, `first`, `flatten`, `from_entries`,
 `has`, `join`, `keys`, `keys_unsorted`, `last`, `length`, `map`, `max`, `min`,
 `not`, `range`, `reverse`, `select`, `sort`, `sort_by`, `split`, `to_entries`,
-`tonumber`, `tostring`, `type`, `unique`, `values`. Options: `-c`, `-e`, `-j`,
-`-n`, `-r`, `-R` (each line is a string; with `-s`, the whole input is one),
-`-s`, `-S`, `--tab`, `--arg`, `--argjson`.
+`tonumber`, `tostring`, `type`, `unique`, `values`. String builtins:
+`ascii_downcase`, `ascii_upcase`, `startswith`, `endswith`, `ltrimstr`,
+`rtrimstr`. Options: `-c`, `-e`, `-f FILE` (the filter from a file; every
+operand is then input), `-j`, `-n`, `-r`, `-R` (each line is a string; with
+`-s`, the whole input is one), `-s`, `-S`, `--tab`, `--arg`, `--argjson`.
 
 **Refused.** `def`, `reduce`, `foreach`, `try`/`catch`, `label`, `as` bindings,
 recursive descent `..`, string interpolation, format strings such as
@@ -1218,6 +1229,7 @@ reader; see "Opaque R2 content".
 | `sort`, `sed`, `cut`, `tr`, `nl`, `fold`, `base64`, `tail -n`, `uniq`, `paste` | `ENOTSUP`: each holds all of its input |
 | `cmp`, `diff`, `patch`, `join`, `comm` | `ENOTSUP` if an opaque body is required |
 | `sha256sum` | emits a trusted verified digest; otherwise `ENOTSUP` |
+| `md5sum` | streams the body like `cat`; otherwise `ENOTSUP` |
 | `>>` and append `tee` | `ENOTSUP` |
 | `>` | atomically replaces the entry with bounded inline bytes and queues old R2 content if unreachable |
 

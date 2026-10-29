@@ -3,7 +3,7 @@ import { splitLinesPreservingEndings } from "../../core/lines.js";
 import { basename, normalizeFileSystemPath } from "../../core/path.js";
 import { encodeUtf8, utf8ByteLength } from "../../core/unicode.js";
 import type { ByteRange, EntryPage, InlineReadResult } from "../../vfs/types.js";
-import { openContent } from "../content.js";
+import { chargeConsumed, fileBody, openContent } from "../content.js";
 import type { ShellCommandContext, ShellSink } from "../types.js";
 
 export interface BufferLease<T> {
@@ -306,7 +306,7 @@ export async function* readTextLines(
         finished = true;
         break;
       }
-      context.budget.io(read.value.byteLength);
+      chargeConsumed(context.budget, stream, read.value.byteLength);
       state.pending += decodeUtf8(decoder, read.value, path);
       for (;;) {
         const line = takeTextLine(state, context, path);
@@ -348,7 +348,7 @@ export async function collectStream(
       const result = await readWithAbort(reader, context.signal);
       if (result.done) break;
       total += result.value.byteLength;
-      context.budget.io(result.value.byteLength);
+      chargeConsumed(context.budget, stream, result.value.byteLength);
       if (total > maximumBytes)
         throw new VfsError("E2BIG", "buffered command input limit exceeded");
       release();
@@ -402,7 +402,7 @@ export async function collectText(
       const result = await readWithAbort(reader, context.signal);
       if (result.done) break;
       total += result.value.byteLength;
-      context.budget.io(result.value.byteLength);
+      chargeConsumed(context.budget, stream, result.value.byteLength);
       if (total > maximumBytes) {
         throw new VfsError("E2BIG", "buffered command input limit exceeded");
       }
@@ -425,7 +425,9 @@ export async function collectText(
 }
 
 function readFile(context: ShellCommandContext, path: string): InlineReadResult {
-  return context.fileSystem.readFile(commandPath(context, path));
+  const read = context.fileSystem.readFile(commandPath(context, path));
+  fileBody(read.stream);
+  return read;
 }
 
 export async function readFileBytes(
@@ -444,7 +446,7 @@ export async function readFileText(
   const normalized = commandPath(context, path);
   const read = context.fileSystem.readFile(normalized);
   try {
-    return await collectText(context, read.stream, normalized, maximumBytes);
+    return await collectText(context, fileBody(read.stream), normalized, maximumBytes);
   } catch (error) {
     if (error instanceof VfsError && error.path === undefined) {
       throw new VfsError(error.code, error.message, normalized);
@@ -466,7 +468,7 @@ export async function pipeToSink(
       }
       const result = await readWithAbort(reader, context.signal);
       if (result.done) break;
-      context.budget.io(result.value.byteLength);
+      chargeConsumed(context.budget, stream, result.value.byteLength);
       await sink.write(result.value);
     }
   } catch (error) {

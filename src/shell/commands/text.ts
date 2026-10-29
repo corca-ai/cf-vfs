@@ -1,3 +1,5 @@
+import { sha256Hex } from "../../vfs/digest.js";
+import type { ShellCommandContext } from "../types.js";
 import {
   type AppletSpec,
   type AppletSpecWithOptions,
@@ -20,6 +22,7 @@ import type { ParsedUtilityOption } from "./options.js";
 export { commCommand, joinCommand } from "./text-compare.js";
 export { cmpCommand, diffCommand } from "./text-diff.js";
 export { base64Command, patchCommand, seqCommand } from "./text-extra.js";
+export { md5sumCommand } from "./text-md5.js";
 export { odCommand } from "./text-od.js";
 export { pasteCommand } from "./text-paste.js";
 export { grepCommand } from "./text-search.js";
@@ -95,8 +98,8 @@ const FOLD = {
 
 const SHA256SUM = {
   name: "sha256sum",
-  usage: "FILE...",
-  summary: "prints the SHA-256 digest of each file",
+  usage: "[FILE...]",
+  summary: "prints the SHA-256 digest of each file or of standard input",
 } as const satisfies AppletSpec;
 export const teeCommand = /* @__PURE__ */ defineApplet(TEE, async (context, argv, fds) => {
   const parsed = parseAppletOptions(TEE, argv);
@@ -400,12 +403,27 @@ export const foldCommand = /* @__PURE__ */ defineApplet(FOLD, async (context, ar
   return 0;
 });
 
+async function standardInputDigest(
+  context: ShellCommandContext,
+  stdin: ReadableStream<Uint8Array>,
+): Promise<string> {
+  const input = await collectStream(context, stdin);
+  try {
+    return await sha256Hex([input.value], input.value.byteLength);
+  } finally {
+    input.release();
+  }
+}
+
 export const sha256sumCommand = /* @__PURE__ */ defineApplet(
   SHA256SUM,
   async (context, argv, fds) => {
-    if (argv.length === 0) throw appletUsageError(SHA256SUM, "missing operand");
-    for (const path of argv) {
-      const digest = await context.fileSystem.digestFile(commandPath(context, path));
+    for (const path of argv.length === 0 ? ["-"] : argv) {
+      // Standard input has no stored digest, so it is hashed as it is read.
+      const digest =
+        path === "-"
+          ? await standardInputDigest(context, fds[0])
+          : await context.fileSystem.digestFile(commandPath(context, path));
       await writeText(fds[1], `${digest}  ${path}\n`);
     }
     return 0;

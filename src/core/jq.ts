@@ -345,6 +345,12 @@ export class JqFilter {
         return yield* this.range(undefined, argument, input);
       case "flatten":
         return yield* this.flatten(argument, input);
+      case "startswith":
+      case "endswith":
+      case "ltrimstr":
+      case "rtrimstr":
+        for (const affix of this.evaluate(argument, input)) yield affixed(name, input, affix);
+        return;
       default:
         throw new JqSyntaxError(`jq: ${name}/1 is not a function in this profile`);
     }
@@ -428,6 +434,21 @@ export class JqFilter {
       yield flatten(requireArray(input, "flatten"), requireNumber(value, "flatten"), this.budget);
     }
   }
+}
+
+/**
+ * `startswith` and `endswith` require strings, as `jq` does; `ltrimstr` and
+ * `rtrimstr` return anything that is not a string with that prefix unchanged.
+ */
+function affixed(name: string, input: JsonValue, affix: JsonValue): JsonValue {
+  const strings = typeof input === "string" && typeof affix === "string";
+  if (name === "startswith" || name === "endswith") {
+    if (!strings) throw new JqRuntimeError(`jq: ${name}() requires string inputs`);
+    return name === "startswith" ? input.startsWith(affix) : input.endsWith(affix);
+  }
+  if (!strings || affix === "") return input;
+  if (name === "ltrimstr") return input.startsWith(affix) ? input.slice(affix.length) : input;
+  return input.endsWith(affix) ? input.slice(0, input.length - affix.length) : input;
 }
 
 /** Parses one `--argjson` value, which is ordinary JSON. */

@@ -1,10 +1,15 @@
 import { VfsError } from "../../core/errors.js";
 import { compilePosixRegex, type PosixRegex } from "../../core/posix-regex.js";
 import { utf8ByteLength } from "../../core/unicode.js";
+import { perlPattern } from "./text-search-pcre.js";
 
 export interface GrepMatchOptions {
   readonly fixed: boolean;
   readonly extended: boolean;
+  /** `-P`: the PCRE subset `text-search-pcre.ts` translates into the extended dialect. */
+  readonly perl: boolean;
+  /** `-o`, under which `-P` refuses alternation. */
+  readonly onlyMatching: boolean;
   readonly ignoreCase: boolean;
   /** `-x`: a match must be the whole line. */
   readonly line: boolean;
@@ -80,9 +85,15 @@ export class GrepMatcher {
 
   private compile(pattern: string): CompiledPattern {
     if (utf8ByteLength(pattern) > 4096) throw new VfsError("E2BIG", "grep pattern is too large");
-    const { fixed, extended, ignoreCase, line } = this.options;
-    if (fixed) return { regex: undefined, needle: ignoreCase ? asciiLower(pattern) : pattern };
-    const source = line ? wholeLinePattern(pattern, extended) : pattern;
+    const { fixed, perl, line } = this.options;
+    if (fixed) {
+      return { regex: undefined, needle: this.options.ignoreCase ? asciiLower(pattern) : pattern };
+    }
+    const translated = perl ? perlPattern(pattern, this.options.onlyMatching) : undefined;
+    const extended = perl || this.options.extended;
+    const ignoreCase = this.options.ignoreCase || translated?.ignoreCase === true;
+    const body = translated?.source ?? pattern;
+    const source = line ? wholeLinePattern(body, extended) : body;
     return {
       regex: compilePosixRegex(source, extended ? "extended" : "basic", "grep", {
         ...(ignoreCase ? { ignoreCase: true } : {}),

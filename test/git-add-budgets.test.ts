@@ -28,13 +28,13 @@ it("charges original configuration bytes even when UTF-8 decoding replaces an in
     const shell = new Shell({
       fileSystem: vfs,
       commands: [probe],
-      limits: { maxTotalIoBytes: limit },
+      limits: { maxReadBytes: limit },
     });
     expect((await shell.executeText({ script: "probe" })).exitCode).toBe(expected);
   }
 });
 
-it("counts every coalesced configuration reader against the shell I/O limit", async () => {
+it("counts every coalesced configuration reader against the shell read limit", async () => {
   const vfs = createTestFileSystem();
   const shell = new Shell({ fileSystem: vfs, commands: [gitCommand] });
   const run = async (script: string, cwd = "/repo") => {
@@ -51,14 +51,14 @@ it("counts every coalesced configuration reader against the shell I/O limit", as
   const bounded = new Shell({
     fileSystem: vfs,
     commands: [gitCommand],
-    limits: { maxTotalIoBytes: 128 * 1024 },
+    limits: { maxReadBytes: 128 * 1024 },
     onEvent: (event) => {
       if (event.type === "shell.limit") refusedLimits.push(event.limit);
     },
   });
   const result = await bounded.executeText({ script: "git add -A", cwd: "/repo" });
   expect(result.exitCode).toBe(1);
-  expect(refusedLimits).toContain("maxTotalIoBytes");
+  expect(refusedLimits).toContain("maxReadBytes");
   expect(vfs.getMutationToken("/repo/.git/index")).toBe(index);
   // A failed execution cannot poison the next command's configuration reads.
   await run("git add -A");

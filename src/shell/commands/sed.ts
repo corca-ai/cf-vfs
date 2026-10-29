@@ -1,4 +1,5 @@
 import { VfsError } from "../../core/errors.js";
+import { fileBody } from "../content.js";
 import type { ShellBudget, ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import { appletUsageError, defineApplet, parseAppletOptions } from "./applet.js";
 import {
@@ -509,7 +510,7 @@ async function editInPlace(
     current.stat.path === normalized
       ? current.stat.mutationToken
       : context.fileSystem.getMutationToken(normalized);
-  const source = await collectText(context, current.stream, normalized);
+  const source = await collectText(context, fileBody(current.stream), normalized);
   // `-i` numbers each file on its own, as GNU's implied `-s` does.
   const edited = new SedText(context.budget, context.budget.limits.maxBufferedBytes);
   let quit: boolean;

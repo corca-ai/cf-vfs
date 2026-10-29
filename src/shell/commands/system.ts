@@ -10,6 +10,8 @@ import {
 } from "./applet.js";
 import { writeText } from "./helpers.js";
 
+export { unameCommand } from "./uname.js";
+
 const DATE = {
   name: "date",
   usage: "[-u] [+FORMAT]",

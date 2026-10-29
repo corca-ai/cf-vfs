@@ -12,7 +12,7 @@ import { commandPath, destinationPath } from "./helpers.js";
 
 const CP = {
   name: "cp",
-  usage: "[-rRfnpP] SOURCE... DESTINATION",
+  usage: "[-arRfnpP] SOURCE... DESTINATION",
   summary: "copies files or, with -r, directory subtrees",
   options: {
     short: {
@@ -22,6 +22,7 @@ const CP = {
       R: { name: "recursive" },
       p: { name: "preserve" },
       P: { name: "no-dereference" },
+      a: { name: "archive" },
     },
     long: {
       force: { name: "force" },
@@ -29,10 +30,11 @@ const CP = {
       recursive: { name: "recursive" },
       preserve: { name: "preserve" },
       "no-dereference": { name: "no-dereference" },
+      archive: { name: "archive" },
     },
   },
 } as const satisfies AppletSpecWithOptions<
-  "force" | "no-clobber" | "recursive" | "preserve" | "no-dereference"
+  "force" | "no-clobber" | "recursive" | "preserve" | "no-dereference" | "archive"
 >;
 
 /** A source whose final component is `.` names a directory's contents, as in `cp -r src/. dst`. */
@@ -141,9 +143,10 @@ export const cpCommand = /* @__PURE__ */ defineApplet(CP, async (context, argv) 
   const parsed = parseAppletOptions(CP, argv);
   const has = (name: string): boolean => parsed.options.some((option) => option.name === name);
   const request: CopyRequest = {
-    recursive: has("recursive"),
-    preserve: has("preserve"),
-    noDereference: has("no-dereference"),
+    // `-a` is GNU's `-dR --preserve=all`: recursive, links kept, metadata kept.
+    recursive: has("recursive") || has("archive"),
+    preserve: has("preserve") || has("archive"),
+    noDereference: has("no-dereference") || has("archive"),
     noClobber: has("no-clobber"),
   };
   const values = parsed.operands;

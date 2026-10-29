@@ -212,7 +212,7 @@ describe("grep profile", () => {
       name: "rejects both -F and -E together",
       script: "grep -FE x /dev-null-placeholder",
       exitCode: 2,
-      stderrIncludes: "grep: specify at most one of -F and -E",
+      stderrIncludes: "grep: specify at most one of -F, -E and -P",
     },
     {
       name: "rejects a pattern outside the declared subset",

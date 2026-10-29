@@ -21,6 +21,7 @@ export const DEFAULT_SHELL_LIMITS: ShellLimits = {
   maxStderrBytes: 8 * 1024 * 1024,
   maxMaterializedOutputBytes: 8 * 1024 * 1024,
   maxTotalIoBytes: 64 * 1024 * 1024,
+  maxReadBytes: 1024 * 1024 * 1024,
   maxBufferedBytes: 16 * 1024 * 1024,
   maxLineBytes: 1024 * 1024,
   maxBufferedRecords: 100_000,
@@ -58,6 +59,7 @@ export class ExecutionBudget implements ShellBudget {
   private commands = 0;
   private loopIterations = 0;
   private ioBytes = 0;
+  private readBytes = 0;
   private diagnostics = false;
   private mutations = 0;
   private expansionWorkUnits = 0;
@@ -149,6 +151,15 @@ export class ExecutionBudget implements ShellBudget {
         "E2BIG",
         "shell total I/O byte limit exceeded",
       );
+    }
+  }
+
+  read(bytes: number): void {
+    if (this.diagnostics) return;
+    this.checkDeadline();
+    this.readBytes += bytes;
+    if (this.readBytes > this.limits.maxReadBytes) {
+      this.exceeded("maxReadBytes", this.readBytes, "E2BIG", "shell file read byte limit exceeded");
     }
   }
 

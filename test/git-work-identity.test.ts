@@ -119,7 +119,7 @@ it("isolates identical opaque tokens in independent filesystems", async () => {
   expect(await first.ok("git status --porcelain")).toBe("");
 });
 
-it.each(["maxTotalIoBytes", "maxBufferedBytes"] as const)(
+it.each(["maxReadBytes", "maxBufferedBytes"] as const)(
   "preserves %s on warm cached bodies",
   async (limit) => {
     const { raw, view } = await fixture("x".repeat(128 * 1024));

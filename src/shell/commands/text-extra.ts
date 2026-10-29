@@ -1,4 +1,5 @@
 import { applyUnifiedPatch } from "../../core/unified-patch.js";
+import { fileBody } from "../content.js";
 import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import {
   type AppletSpec,
@@ -35,7 +36,7 @@ export const patchCommand = /* @__PURE__ */ defineApplet(PATCH, async (context, 
     current.stat.path === path
       ? current.stat.mutationToken
       : context.fileSystem.getMutationToken(path);
-  const source = await collectText(context, current.stream, path);
+  const source = await collectText(context, fileBody(current.stream), path);
   try {
     const patch =
       argv[1] === undefined

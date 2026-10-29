@@ -26,6 +26,7 @@ type GrepOption =
   | "line-numbers"
   | "fixed"
   | "extended"
+  | "perl"
   | "count"
   | "files-with-matches"
   | "files-without-match"
@@ -49,7 +50,7 @@ type GrepOption =
 
 const GREP = {
   name: "grep",
-  usage: "[-cinvowxFEHlLqrRhs] [-e PATTERN]... [-f FILE] [-A|-B|-C N] [-m N] PATTERN [PATH...]",
+  usage: "[-cinvowxFEPHlLqrRhs] [-e PATTERN]... [-f FILE] [-A|-B|-C N] [-m N] PATTERN [PATH...]",
   summary: "prints records matching a pattern",
   options: {
     short: {
@@ -58,6 +59,7 @@ const GREP = {
       n: { name: "line-numbers" },
       F: { name: "fixed" },
       E: { name: "extended" },
+      P: { name: "perl" },
       c: { name: "count" },
       l: { name: "files-with-matches" },
       L: { name: "files-without-match" },
@@ -83,6 +85,7 @@ const GREP = {
       "line-number": { name: "line-numbers" },
       "fixed-strings": { name: "fixed" },
       "extended-regexp": { name: "extended" },
+      "perl-regexp": { name: "perl" },
       count: { name: "count" },
       "files-with-matches": { name: "files-with-matches" },
       "files-without-match": { name: "files-without-match" },
@@ -125,8 +128,9 @@ interface GrepOutputMode {
 /**
  * Prints records matching a pattern.
  *
- * Patterns are POSIX basic regular expressions, extended ones under `-E`, or
- * fixed strings under `-F`; `-e` and `-f` supply several, and a line is
+ * Patterns are POSIX basic regular expressions, extended ones under `-E`, the
+ * PCRE subset that means the same thing under `-P`, or fixed strings under
+ * `-F`; `-e` and `-f` supply several, and a line is
  * selected when any matches. They are translated rather than handed to the
  * JavaScript engine, so no JavaScript-only construct can mean something here
  * that it does not mean in `grep`. `-r` walks a directory operand through the
@@ -228,8 +232,9 @@ async function parseGrepInvocation(
   const parsed = parseAppletOptions(GREP, argv);
   const names = new Set(parsed.options.map((option) => option.name));
   const has = (name: GrepOption): boolean => names.has(name);
-  if (has("fixed") && has("extended")) {
-    throw appletUsageError(GREP, "specify at most one of -F and -E");
+  const dialects: readonly GrepOption[] = ["fixed", "extended", "perl"];
+  if (dialects.filter(has).length > 1) {
+    throw appletUsageError(GREP, "specify at most one of -F, -E and -P");
   }
   const paths = [...parsed.operands];
   const patterns = await patternsFor(context, parsed, paths);
@@ -237,6 +242,8 @@ async function parseGrepInvocation(
   const matcher = new GrepMatcher(patterns, {
     fixed: has("fixed"),
     extended: has("extended"),
+    perl: has("perl"),
+    onlyMatching: has("only-matching"),
     ignoreCase: has("ignore-case"),
     line: has("line-regexp"),
     word: has("word-regexp"),

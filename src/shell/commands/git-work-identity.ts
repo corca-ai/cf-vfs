@@ -46,7 +46,7 @@ export function cachedWorkIdentity(repo: GitRepository) {
         repo.fs.check();
         const release = repo.fs.context.budget.buffered(read.stat.sizeBytes);
         release();
-        repo.fs.context.budget.io(read.stat.sizeBytes);
+        repo.fs.context.budget.read(read.stat.sizeBytes);
         return `${mode}:${cached.oid}`;
       }
     }

@@ -16,6 +16,21 @@ included.
 
 ## [Unreleased]
 
+- **Breaking:** reading a file body counts against a new `maxReadBytes` limit
+  (1 GiB) instead of `maxTotalIoBytes`, which keeps bounding pipes, standard
+  input and command substitutions at 64 MiB; `ShellBudget` gains `read`.
+  Rereading a 10 MB wiki eleven times in one execution exhausted the shared
+  limit, though a rereading pass holds nothing and the deadline bounds it.
+- Add `uname`, which reports a `Linux` kernel name and names this shell for the
+  rest, and `sh --version`; agents run both first to learn the environment.
+- `grep -P` takes the part of PCRE that means the same in the extended dialect
+  (`\d`, `\w`, `\s`, character escapes such as `\r` and `\xHH`, `(?:…)`,
+  a leading `(?i)`) and refuses lookaround, back-references, lazy quantifiers
+  and `\b`.
+- Add `md5sum`, `cp -a`, `sha256sum` over standard input, `jq -f`, and jq's
+  `startswith`, `endswith`, `ltrimstr`, `rtrimstr`, `ascii_downcase` and
+  `ascii_upcase`; jq's regular-expression builtins now point at grep, sed and
+  awk.
 - Add the utilities agents reached for and found missing: `paste -s -d`,
   `cmp -` for standard input, `sort -c`/`-C`, `jq -R` (with `-Rs`), `find`
   tests `-newer`, `-mtime`, `-mmin` and `-size`, and `awk`'s whole-array

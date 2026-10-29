@@ -2,6 +2,7 @@ import { VfsError } from "../../core/errors.js";
 import { encodeUtf8 } from "../../core/unicode.js";
 import { FsStats } from "../../fs/stats.js";
 import { NO_ENTRY_IDENTITY, type VfsStat } from "../../vfs/types.js";
+import { fileBody } from "../content.js";
 import type { ShellCommandContext } from "../types.js";
 import { GitCheckoutWrites } from "./git-checkout-writes.js";
 import { GitObjectWrites, isLooseGitObject } from "./git-object-writes.js";
@@ -47,7 +48,7 @@ export class GitFileSystem {
     const work = this.workReads;
     if (work !== undefined && (work.snapshots.size < work.limit || work.snapshots.has(resolved)))
       work.snapshots.set(resolved, read.stat);
-    return collectStream(this.context, read.stream);
+    return collectStream(this.context, fileBody(read.stream));
   }
 
   /** Share only overlapping reads, never a completed configuration snapshot. */
@@ -164,8 +165,8 @@ export class GitFileSystem {
   private async readConfig(path: string): Promise<ConfigRead> {
     if (this.pendingConfig !== undefined) {
       const value = await this.pendingConfig;
-      // Each logical reader still consumes its execution's I/O allowance.
-      this.context.budget.io(value.byteLength);
+      // Each logical reader still consumes its execution's read allowance.
+      this.context.budget.read(value.byteLength);
       return value;
     }
     const pending = this.loadConfig(path);

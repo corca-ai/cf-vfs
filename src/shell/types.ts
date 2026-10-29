@@ -154,7 +154,10 @@ export interface ShellLimits {
   maxStdoutBytes: number;
   maxStderrBytes: number;
   maxMaterializedOutputBytes: number;
+  /** Bytes moving through pipes, standard input and redirected output. */
   maxTotalIoBytes: number;
+  /** Bytes read from file bodies; reading a file again holds nothing. */
+  maxReadBytes: number;
   maxBufferedBytes: number;
   maxLineBytes: number;
   maxBufferedRecords: number;
@@ -400,6 +403,8 @@ export interface ShellBudget {
   command(): void;
   loop(): void;
   io(bytes: number): void;
+  /** Charges bytes read from a file body against `maxReadBytes`. */
+  read(bytes: number): void;
   mutation(count?: number): void;
   glob(count?: number): void;
   expansionWork(count?: number): void;

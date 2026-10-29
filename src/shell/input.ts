@@ -1,4 +1,5 @@
 import { VfsError } from "../core/errors.js";
+import { chargeConsumed } from "./content.js";
 import type { ShellBudget } from "./types.js";
 
 export interface InputRecord {
@@ -122,7 +123,7 @@ class ShellInputCursor {
         }
         const newline = result.value.indexOf(0x0a);
         const consumedBytes = newline < 0 ? result.value.byteLength : newline + 1;
-        budget.io(consumedBytes);
+        chargeConsumed(budget, this.source, consumedBytes);
         if (contentBytes + consumedBytes > budget.limits.maxLineBytes) {
           throw new VfsError("E2BIG", "read: line byte limit exceeded");
         }

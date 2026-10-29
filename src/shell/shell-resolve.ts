@@ -215,7 +215,7 @@ async function loadScriptSource(
   if (interpreterError !== undefined) return interpreterError;
   const release = runtime.budget.buffered(bytes.byteLength);
   try {
-    runtime.budget.io(bytes.byteLength);
+    runtime.budget.read(bytes.byteLength);
     const source = decodeScript(bytes);
     if (source === undefined) {
       release();

@@ -1,6 +1,6 @@
 import { isVfsError, VfsError } from "../core/errors.js";
 import type { ByteRange, VfsStat } from "../vfs/types.js";
-import type { ShellFileSystem } from "./types.js";
+import type { ShellBudget, ShellFileSystem } from "./types.js";
 
 /**
  * One opened body.
@@ -72,6 +72,34 @@ export function scopedContentReader(
 }
 
 /**
+ * Streams that carry a file's body. Their bytes count against
+ * `maxReadBytes` rather than `maxTotalIoBytes`: reading a file again holds
+ * nothing and is bounded by the deadline, while pipes and redirections keep
+ * the tighter bound on data moving between commands.
+ */
+const FILE_BODIES = new WeakSet<ReadableStream<Uint8Array>>();
+
+/** Marks `stream` as a file body and returns it. */
+export function fileBody(stream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+  FILE_BODIES.add(stream);
+  return stream;
+}
+
+export function isFileBody(stream: ReadableStream<Uint8Array>): boolean {
+  return FILE_BODIES.has(stream);
+}
+
+/** Charges bytes consumed from `stream` to the limit its source falls under. */
+export function chargeConsumed(
+  budget: Pick<ShellBudget, "io" | "read">,
+  stream: ReadableStream<Uint8Array>,
+  bytes: number,
+): void {
+  if (FILE_BODIES.has(stream)) budget.read(bytes);
+  else budget.io(bytes);
+}
+
+/**
  * Opens a path's content, using the opaque capability only when allowed.
  *
  * This is the single place the decision is made. An inline file is read the
@@ -104,7 +132,9 @@ export async function openContent(
   } catch (error) {
     if (!isVfsError(error) || error.code !== "ENOTSUP") throw error;
   }
-  return options.reader.open(path, options.range, options.signal);
+  const body = await options.reader.open(path, options.range, options.signal);
+  fileBody(body.stream);
+  return body;
 }
 
 /**
@@ -118,7 +148,7 @@ export async function openContent(
 function openInline(fileSystem: ShellFileSystem, path: string, range?: ByteRange): ContentBody {
   try {
     const inline = fileSystem.readFile(path, range === undefined ? undefined : { range });
-    return { stat: inline.stat, stream: inline.stream };
+    return { stat: inline.stat, stream: fileBody(inline.stream) };
   } catch (error) {
     if (isVfsError(error) && (error.code === "EISDIR" || error.code === "ENOTSUP")) {
       throw new VfsError(error.code, error.message, path);

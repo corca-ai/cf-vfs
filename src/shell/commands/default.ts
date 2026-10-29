@@ -52,7 +52,7 @@ import { lnCommand, readlinkCommand } from "./link.js";
 import { lsCommand } from "./ls.js";
 import { sedCommand } from "./sed.js";
 import { shCommand } from "./sh.js";
-import { dateCommand, exprCommand, sleepCommand } from "./system.js";
+import { dateCommand, exprCommand, sleepCommand, unameCommand } from "./system.js";
 import {
   base64Command,
   cmpCommand,
@@ -63,6 +63,7 @@ import {
   grepCommand,
   headCommand,
   joinCommand,
+  md5sumCommand,
   nlCommand,
   odCommand,
   pasteCommand,
@@ -147,6 +148,7 @@ export const defaultShellCommands = [
   cmpCommand,
   diffCommand,
   sha256sumCommand,
+  md5sumCommand,
   sedCommand,
   commCommand,
   joinCommand,
@@ -156,6 +158,7 @@ export const defaultShellCommands = [
   dateCommand,
   sleepCommand,
   exprCommand,
+  unameCommand,
   xargsCommand,
   jqCommand,
 ] as const;
