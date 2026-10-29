@@ -73,9 +73,9 @@ bashCases([
   },
   {
     name: "refuses a command outside the subset",
-    script: "printf 'x\\n' | sed 'y/a/b/'",
+    script: "printf 'x\\n' | sed 'l'",
     exitCode: 2,
-    stderrIncludes: "sed: unsupported command y",
+    stderrIncludes: "sed: unsupported command l",
   },
   {
     name: "refuses an unterminated expression",

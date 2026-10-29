@@ -22,6 +22,7 @@ import type { ParsedUtilityOption } from "./options.js";
 export { commCommand, joinCommand } from "./text-compare.js";
 export { cmpCommand, diffCommand } from "./text-diff.js";
 export { base64Command, patchCommand, seqCommand } from "./text-extra.js";
+export { odCommand } from "./text-od.js";
 export { grepCommand } from "./text-search.js";
 export { headCommand, tailCommand } from "./text-slice.js";
 export { sortCommand } from "./text-sort.js";
@@ -40,10 +41,31 @@ const TEE = {
 
 const UNIQ = {
   name: "uniq",
-  usage: "[-c] [FILE...]",
+  usage: "[-cdiu] [-f N] [-s N] [-w N] [FILE...]",
   summary: "collapses adjacent duplicate records",
-  options: { short: { c: { name: "count" } } },
-} as const satisfies AppletSpecWithOptions<"count">;
+  options: {
+    short: {
+      c: { name: "count" },
+      d: { name: "repeated" },
+      u: { name: "unique" },
+      i: { name: "ignore-case" },
+      f: { name: "skip-fields", argument: true },
+      s: { name: "skip-chars", argument: true },
+      w: { name: "check-chars", argument: true },
+    },
+    long: {
+      count: { name: "count" },
+      repeated: { name: "repeated" },
+      unique: { name: "unique" },
+      "ignore-case": { name: "ignore-case" },
+      "skip-fields": { name: "skip-fields", argument: true },
+      "skip-chars": { name: "skip-chars", argument: true },
+      "check-chars": { name: "check-chars", argument: true },
+    },
+  },
+} as const satisfies AppletSpecWithOptions<
+  "count" | "repeated" | "unique" | "ignore-case" | "skip-fields" | "skip-chars" | "check-chars"
+>;
 
 const CUT = {
   name: "cut",
@@ -100,28 +122,68 @@ export const teeCommand = /* @__PURE__ */ defineApplet(TEE, async (context, argv
   }
 });
 
+interface UniqKey {
+  readonly skipFields: number;
+  readonly skipChars: number;
+  readonly checkChars: number | undefined;
+  readonly ignoreCase: boolean;
+}
+
+/** The part GNU compares: after `-f` blank-separated fields and `-s` characters, `-w` long. */
+function uniqKey(value: string, key: UniqKey): string {
+  let index = 0;
+  for (let field = 0; field < key.skipFields; field += 1) {
+    while (value[index] === " " || value[index] === "\t") index += 1;
+    while (index < value.length && value[index] !== " " && value[index] !== "\t") index += 1;
+  }
+  const characters = [...value.slice(index)].slice(key.skipChars);
+  const checked = key.checkChars === undefined ? characters : characters.slice(0, key.checkChars);
+  const text = checked.join("");
+  return key.ignoreCase ? text.replace(/[A-Z]/gu, (letter) => letter.toLowerCase()) : text;
+}
+
+function uniqCount(
+  parsed: ReturnType<typeof parseAppletOptions<string>>,
+  name: string,
+): number | undefined {
+  const option = parsed.options.filter((candidate) => candidate.name === name).at(-1);
+  if (option === undefined || !("argument" in option)) return undefined;
+  return parseInteger(option.argument, `${UNIQ.name}: ${name}`);
+}
+
 export const uniqCommand = /* @__PURE__ */ defineApplet(UNIQ, async (context, argv, fds) => {
   const parsed = parseAppletOptions(UNIQ, argv);
-  const count = parsed.options.some((option) => option.name === "count");
+  const has = (name: string): boolean => parsed.options.some((option) => option.name === name);
+  const count = has("count");
+  const repeated = has("repeated");
+  const unique = has("unique");
+  const key: UniqKey = {
+    skipFields: uniqCount(parsed, "skip-fields") ?? 0,
+    skipChars: uniqCount(parsed, "skip-chars") ?? 0,
+    checkChars: uniqCount(parsed, "check-chars"),
+    ignoreCase: has("ignore-case"),
+  };
   const output = new BufferedTextWriter(context, fds[1]);
-  let previous: string | undefined;
+  let previous: { value: string; key: string } | undefined;
   let repeats = 0;
   const emit = async (): Promise<void> => {
     if (previous === undefined) return;
-    await output.write(`${count ? `${String(repeats).padStart(7)} ` : ""}${previous}\n`);
+    if ((repeated && repeats < 2) || (unique && repeats > 1)) return;
+    await output.write(`${count ? `${String(repeats).padStart(7)} ` : ""}${previous.value}\n`);
   };
   try {
     for await (const input of inputStreams(context, parsed.operands, fds[0])) {
       for await (const line of readTextLines(context, input.stream, input.name)) {
         const value = line.endsWith("\n") ? line.slice(0, -1) : line;
-        if (previous === undefined || previous === value) {
-          previous = value;
+        const current = uniqKey(value, key);
+        // A group keeps its first record, as GNU prints it.
+        if (previous !== undefined && previous.key === current) {
           repeats += 1;
-        } else {
-          await emit();
-          previous = value;
-          repeats = 1;
+          continue;
         }
+        await emit();
+        previous = { value, key: current };
+        repeats = 1;
       }
     }
     await emit();

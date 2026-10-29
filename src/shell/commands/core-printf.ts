@@ -267,20 +267,67 @@ function parseIntegerValue(inputValue: string, unsigned = false): ParsedInteger 
   return { value, ...(diagnostic === undefined ? {} : { diagnostic }) };
 }
 
+const SIMPLE_ESCAPES: Readonly<Record<string, string>> = {
+  "\\": "\\",
+  a: "\x07",
+  b: "\b",
+  e: "\x1b",
+  f: "\f",
+  n: "\n",
+  r: "\r",
+  t: "\t",
+  v: "\v",
+  '"': '"',
+};
+
+const HEX_WIDTHS: Readonly<Record<string, number>> = { x: 2, u: 4, U: 8 };
+
+function digitRun(value: string, from: number, digit: RegExp, limit: number): string {
+  let digits = "";
+  while (digits.length < limit && digit.test(value[from + digits.length] ?? "")) {
+    digits += value[from + digits.length];
+  }
+  return digits;
+}
+
+/**
+ * Decodes the escape at `offset`, a backslash, as Bash's `printf` does:
+ * `\NNN` octal (for `%b`, `\0NNN`), `\xHH`, `\uHHHH`, `\UHHHHHHHH`, and the
+ * single-letter escapes. An unknown escape keeps its backslash.
+ */
+function escapeAt(
+  value: string,
+  offset: number,
+  argument: boolean,
+): { text: string; length: number } {
+  const next = value[offset + 1];
+  if (next === undefined) return { text: "\\", length: 1 };
+  const simple = Object.hasOwn(SIMPLE_ESCAPES, next) ? SIMPLE_ESCAPES[next] : undefined;
+  if (simple !== undefined) return { text: simple, length: 2 };
+  // `%b` spells octal with a leading zero; the format accepts it bare.
+  const octalStart = argument && next === "0" ? offset + 2 : offset + 1;
+  const octal = digitRun(value, octalStart, /^[0-7]$/u, 3);
+  if (octal !== "" || (argument && next === "0")) {
+    const code = octal === "" ? 0 : Number.parseInt(octal, 8) & 0xff;
+    return { text: String.fromCharCode(code), length: octalStart - offset + octal.length };
+  }
+  const width = Object.hasOwn(HEX_WIDTHS, next) ? (HEX_WIDTHS[next] ?? 0) : 0;
+  const hex = width === 0 ? "" : digitRun(value, offset + 2, /^[0-9A-Fa-f]$/u, width);
+  if (hex !== "")
+    return { text: String.fromCodePoint(Number.parseInt(hex, 16)), length: 2 + hex.length };
+  return { text: `\\${next}`, length: 2 };
+}
+
 function decodeEscapes(value: string): string {
   let output = "";
   for (let offset = 0; offset < value.length; offset += 1) {
-    const character = value[offset];
-    if (character !== "\\") {
-      output += character;
+    if (value[offset] !== "\\") {
+      output += value[offset];
       continue;
     }
-    const next = value[++offset];
-    if (next === "n") output += "\n";
-    else if (next === "t") output += "\t";
-    else if (next === "r") output += "\r";
-    else if (next === "\\") output += "\\";
-    else output += next === undefined ? "\\" : `\\${next}`;
+    const decoded = escapeAt(value, offset, true);
+    output += decoded.text;
+    offset += decoded.length - 1;
   }
   return output;
 }
@@ -347,8 +394,9 @@ function formatOnce(
   for (let offset = 0; offset < format.length; offset += 1) {
     const character = format[offset];
     if (character === "\\") {
-      output.append(decodeEscapes(format.slice(offset, offset + 2)));
-      offset += 1;
+      const decoded = escapeAt(format, offset, false);
+      output.append(decoded.text);
+      offset += decoded.length - 1;
     } else if (character !== "%") {
       output.append(character ?? "");
     } else {

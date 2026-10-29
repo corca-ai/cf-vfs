@@ -1,13 +1,23 @@
 import { VfsError } from "../../core/errors.js";
 import { normalizeFileSystemPath } from "../../core/path.js";
-import { type AppletSpec, appletUsageError, defineApplet } from "./applet.js";
+import {
+  type AppletSpec,
+  type AppletSpecWithOptions,
+  appletUsageError,
+  defineApplet,
+  parseAppletOptions,
+} from "./applet.js";
 import { commandPath, writeText } from "./helpers.js";
 
 const BASENAME = {
   name: "basename",
-  usage: "PATH",
+  usage: "PATH [SUFFIX] | -a [-s SUFFIX] PATH...",
   summary: "prints the final component of a path",
-} as const satisfies AppletSpec;
+  options: {
+    short: { a: { name: "multiple" }, s: { name: "suffix", argument: true } },
+    long: { multiple: { name: "multiple" }, suffix: { name: "suffix", argument: true } },
+  },
+} as const satisfies AppletSpecWithOptions<"multiple" | "suffix">;
 
 const DIRNAME = {
   name: "dirname",
@@ -43,11 +53,30 @@ function lexicalDirname(path: string): string {
   return parent === "" ? "/" : parent;
 }
 
+/** GNU removes a suffix only when something would remain. */
+function withoutSuffix(name: string, suffix: string | undefined): string {
+  return suffix !== undefined && suffix !== "" && name !== suffix && name.endsWith(suffix)
+    ? name.slice(0, -suffix.length)
+    : name;
+}
+
 export const basenameCommand = /* @__PURE__ */ defineApplet(
   BASENAME,
   async (_context, argv, fds) => {
-    if (argv.length !== 1) throw appletUsageError(BASENAME, "requires one path");
-    await writeText(fds[1], `${lexicalBasename(argv[0] ?? "")}\n`);
+    const parsed = parseAppletOptions(BASENAME, argv);
+    const suffixOption = parsed.options.filter((option) => option.name === "suffix").at(-1);
+    const optionSuffix =
+      suffixOption !== undefined && "argument" in suffixOption ? suffixOption.argument : undefined;
+    const multiple =
+      optionSuffix !== undefined || parsed.options.some((option) => option.name === "multiple");
+    const names = parsed.operands;
+    if (names.length === 0) throw appletUsageError(BASENAME, "missing operand");
+    if (!multiple && names.length > 2) throw appletUsageError(BASENAME, "extra operand");
+    const suffix = multiple ? optionSuffix : names[1];
+    const paths = multiple ? names : names.slice(0, 1);
+    for (const path of paths) {
+      await writeText(fds[1], `${withoutSuffix(lexicalBasename(path), suffix)}\n`);
+    }
     return 0;
   },
 );

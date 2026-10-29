@@ -1,3 +1,4 @@
+import { VfsError } from "../../core/errors.js";
 import type { ShellBudget, ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import { appletUsageError, defineApplet, parseAppletOptions } from "./applet.js";
 import {
@@ -13,6 +14,7 @@ import {
   parseSedScript,
   SED,
   type SedCommand,
+  type SedSubstitute,
   type SedSelector as Selector,
 } from "./sed-parser.js";
 
@@ -22,25 +24,14 @@ import { SedText } from "./sed-text.js";
 /** Mutable per-record state for a range selector. */
 interface RangeState {
   active: boolean;
+  /** Whether the range ended on the record that was just selected, for `c`. */
+  ended: boolean;
 }
 
 function matchesAddress(address: Address, record: string, line: number, last: boolean): boolean {
   if (address.kind === "line") return line === address.line;
   if (address.kind === "last") return last;
   return address.pattern.test(record);
-}
-
-function selects(
-  command: SedCommand,
-  state: RangeState,
-  record: string,
-  line: number,
-  last: boolean,
-): boolean {
-  const selector = command.selector;
-  const value =
-    selector === undefined ? true : selectsWithSelector(selector, state, record, line, last);
-  return command.negated ? !value : value;
 }
 
 function selectsWithSelector(
@@ -50,12 +41,14 @@ function selectsWithSelector(
   line: number,
   last: boolean,
 ): boolean {
+  state.ended = false;
   if (selector.end === undefined) return matchesAddress(selector.start, record, line, last);
   if (state.active) return continueRange(selector.end, state, record, line, last);
   if (!matchesAddress(selector.start, record, line, last)) return false;
   // The end address is looked for from the next record, so `1,/a/` spans to
   // the second `a` and `2,1` selects one record.
   state.active = selector.end.kind !== "line" || selector.end.line > line;
+  state.ended = !state.active;
   return true;
 }
 
@@ -69,67 +62,115 @@ function continueRange(
   // A numeric end that is already behind closes the range immediately.
   if (matchesAddress(end, record, line, last) || (end.kind === "line" && line >= end.line)) {
     state.active = false;
+    state.ended = true;
   }
   return true;
 }
 
-interface RecordResult {
-  readonly output: string;
-  readonly quit: boolean;
+interface SedRecord {
+  readonly value: string;
+  readonly terminated: boolean;
 }
 
-interface PatternSpace {
-  value: string;
-  printed: SedText;
+/** Input records with one record of lookahead, which `$` needs. */
+interface RecordSource {
+  next(): Promise<SedRecord | undefined>;
+  isLast(): Promise<boolean>;
 }
 
-function applySelectedCommand(
-  command: SedCommand,
-  space: PatternSpace,
-  quiet: boolean,
-  budget: ShellBudget,
-): RecordResult | undefined {
-  if (command.kind === "d") return { output: space.printed.result(), quit: false };
-  if (command.kind === "p") {
-    space.printed.append(`${space.value}\n`);
-    return undefined;
+class PeekingSource implements RecordSource {
+  private peeked: SedRecord | undefined | null = null;
+
+  constructor(private readonly records: AsyncIterator<SedRecord>) {}
+
+  async next(): Promise<SedRecord | undefined> {
+    if (this.peeked !== null) {
+      const record = this.peeked;
+      this.peeked = null;
+      return record;
+    }
+    return (await this.records.next()).value ?? undefined;
   }
-  if (command.kind === "q") {
-    if (!quiet) space.printed.append(`${space.value}\n`);
-    return { output: space.printed.result(), quit: true };
+
+  async isLast(): Promise<boolean> {
+    if (this.peeked === null) this.peeked = (await this.records.next()).value ?? undefined;
+    return this.peeked === undefined;
   }
-  const result = substitute(command, space.value, budget);
-  space.value = result.value;
-  if (command.print && result.changed) space.printed.append(`${space.value}\n`);
-  return undefined;
+
+  /** Stops reading, so `q` cancels its input rather than draining it. */
+  async close(): Promise<void> {
+    await this.records.return?.(undefined);
+  }
 }
 
-function applyRecord(
-  commands: readonly SedCommand[],
-  states: RangeState[],
-  record: string,
-  line: number,
-  last: boolean,
-  quiet: boolean,
-  budget: ShellBudget,
-): RecordResult {
-  const space: PatternSpace = { value: record, printed: new SedText(budget) };
-  for (const [index, command] of commands.entries()) {
-    budget.step();
-    const state = states[index] ?? { active: false };
-    if (!selects(command, state, space.value, line, last)) continue;
-    const completed = applySelectedCommand(command, space, quiet, budget);
-    if (completed !== undefined) return completed;
-  }
-  if (!quiet) space.printed.append(`${space.value}\n`);
-  return { output: space.printed.result(), quit: false };
+function toRecord(line: string): SedRecord {
+  const terminated = line.endsWith("\n");
+  return { value: terminated ? line.slice(0, -1) : line, terminated };
 }
 
-function needsLastRecord(commands: readonly SedCommand[]): boolean {
-  return commands.some(
-    (command) => command.selector?.start.kind === "last" || command.selector?.end?.kind === "last",
-  );
+async function* streamedRecords(
+  context: ShellCommandContext,
+  operands: readonly string[],
+  stdin: ShellFileDescriptors[0],
+): AsyncGenerator<SedRecord> {
+  // Numbering and `$` span the operands as one stream, the way `sed` reads
+  // them: `$` is the last record of the last file, not of each file.
+  for await (const input of inputStreams(context, operands, stdin)) {
+    for await (const line of readTextLines(context, input.stream, input.name)) {
+      yield toRecord(line);
+    }
+  }
 }
+
+async function* textRecords(text: string): AsyncGenerator<SedRecord> {
+  const lines = text.split("\n");
+  // A trailing newline produces a final empty element that is not a record.
+  const trailing = lines.at(-1) === "";
+  if (trailing) lines.pop();
+  for (const [index, value] of lines.entries()) {
+    yield { value, terminated: index < lines.length - 1 || trailing };
+  }
+}
+
+/**
+ * Output that holds back its final newline, so an unterminated last input
+ * record stays unterminated while every earlier line keeps its newline.
+ */
+class SedOutput {
+  private held = false;
+  /** Whether the held newline ended a pattern space printed in the current cycle. */
+  private heldPatternSpace = false;
+
+  constructor(private readonly write: (text: string) => void | Promise<void>) {}
+
+  beginCycle(): void {
+    this.heldPatternSpace = false;
+  }
+
+  async emit(text: string, patternSpace: boolean): Promise<void> {
+    if (text === "") return;
+    const body = this.held ? `\n${text}` : text;
+    this.held = body.endsWith("\n");
+    this.heldPatternSpace = this.held && patternSpace;
+    await this.write(this.held ? body.slice(0, -1) : body);
+  }
+
+  /**
+   * Only the last record's pattern space loses its newline when that record
+   * had none: `$d` keeps the line before, and `a` text is always terminated.
+   */
+  async finish(lastTerminated: boolean): Promise<void> {
+    if (this.held && (lastTerminated || !this.heldPatternSpace)) await this.write("\n");
+    this.held = false;
+  }
+}
+
+/** How an instruction changes control: continue, jump, end the cycle, or quit. */
+type SedAction =
+  | undefined
+  | { readonly jump: number }
+  | { readonly end: "print" | "delete" | "restart" }
+  | { readonly quit: "print" | "silent" };
 
 interface SedInvocation {
   readonly commands: readonly SedCommand[];
@@ -137,6 +178,236 @@ interface SedInvocation {
   readonly quiet: boolean;
   readonly inPlace: boolean;
   readonly budget: ShellBudget;
+}
+
+/**
+ * Runs a compiled script over a record source: one cycle per input record,
+ * with the pattern space, the hold space, the `t` flag and the queue of
+ * appended text that GNU sed keeps.
+ */
+class SedRunner {
+  private readonly states: RangeState[];
+  private space = "";
+  private hold = "";
+  private line = 0;
+  private substituted = false;
+  private appended: string[] = [];
+  private lastTerminated = true;
+
+  constructor(
+    private readonly commands: readonly SedCommand[],
+    private readonly quiet: boolean,
+    private readonly budget: ShellBudget,
+    private readonly source: RecordSource,
+    private readonly output: SedOutput,
+  ) {
+    this.states = commands.map(() => ({ active: false, ended: false }));
+  }
+
+  /** Returns whether `q` or `Q` ended the run. */
+  async run(): Promise<boolean> {
+    let record = await this.read();
+    while (record !== undefined) {
+      this.space = record.value;
+      this.substituted = false;
+      this.output.beginCycle();
+      let outcome = await this.cycle();
+      while (outcome === "restart") outcome = await this.cycle();
+      await this.flushAppended();
+      if (outcome === "quit") {
+        await this.output.finish(true);
+        return true;
+      }
+      record = await this.read();
+    }
+    // An unterminated final record stays unterminated.
+    await this.output.finish(this.lastTerminated);
+    return false;
+  }
+
+  private async read(): Promise<SedRecord | undefined> {
+    const record = await this.source.next();
+    if (record === undefined) return undefined;
+    this.line += 1;
+    this.lastTerminated = record.terminated;
+    return record;
+  }
+
+  private async cycle(): Promise<"next" | "restart" | "quit"> {
+    let pc = 0;
+    while (pc < this.commands.length) {
+      this.budget.step();
+      const command = this.commands[pc];
+      if (command === undefined) break;
+      const action = await this.step(command, pc);
+      if (action === undefined) pc += 1;
+      else if ("jump" in action) pc = action.jump;
+      else return this.finishCycle(action);
+    }
+    await this.autoprint();
+    return "next";
+  }
+
+  /** A `{` that is not selected skips its block. */
+  private async step(command: SedCommand, pc: number): Promise<SedAction> {
+    if (await this.selects(command, pc)) return this.execute(command);
+    return command.kind === "{" ? { jump: command.end + 1 } : undefined;
+  }
+
+  private async finishCycle(
+    action: Exclude<SedAction, undefined | { readonly jump: number }>,
+  ): Promise<"next" | "restart" | "quit"> {
+    if ("end" in action) {
+      if (action.end === "print") await this.autoprint();
+      return action.end === "restart" ? "restart" : "next";
+    }
+    if (action.quit === "print") await this.autoprint();
+    return "quit";
+  }
+
+  private async selects(command: SedCommand, pc: number): Promise<boolean> {
+    const selector = command.selector;
+    if (selector === undefined) return !command.negated;
+    const wantsLast = selector.start.kind === "last" || selector.end?.kind === "last";
+    const last = wantsLast ? await this.source.isLast() : false;
+    const state = this.states[pc] ?? { active: false, ended: false };
+    const value = selectsWithSelector(selector, state, this.space, this.line, last);
+    return command.negated ? !value : value;
+  }
+
+  private async autoprint(): Promise<void> {
+    if (!this.quiet) await this.emit(`${this.space}\n`, true);
+  }
+
+  private async emit(text: string, patternSpace = false): Promise<void> {
+    if (text === "") return;
+    this.budget.expansionWork(text.length);
+    await this.output.emit(text, patternSpace);
+  }
+
+  private async flushAppended(): Promise<void> {
+    for (const text of this.appended) await this.emit(text);
+    this.appended = [];
+  }
+
+  private async execute(command: SedCommand): Promise<SedAction> {
+    switch (command.kind) {
+      case "s":
+        return this.substitute(command);
+      case "b":
+        return { jump: command.target };
+      case "t":
+      case "T": {
+        const taken = command.kind === "t" ? this.substituted : !this.substituted;
+        this.substituted = false;
+        return taken ? { jump: command.target } : undefined;
+      }
+      case "{":
+      case "}":
+        return undefined;
+      case "n":
+      case "N":
+        return this.nextLine(command.kind === "N");
+      default:
+        return this.text(command, () => this.spaces(command));
+    }
+  }
+
+  private async substitute(command: SedSubstitute): Promise<SedAction> {
+    const result = substitute(command, this.space, this.budget);
+    this.space = result.value;
+    if (result.changed) {
+      this.substituted = true;
+      if (command.print) await this.emit(`${this.space}\n`, true);
+    }
+    return undefined;
+  }
+
+  /** `n` prints and replaces the pattern space; `N` appends the next record to it. */
+  private async nextLine(append: boolean): Promise<SedAction> {
+    if (!append) await this.autoprint();
+    await this.flushAppended();
+    const record = await this.read();
+    // With no next record GNU sed ends: `N` still prints, `n` already did.
+    if (record === undefined) return { quit: append ? "print" : "silent" };
+    this.space = append ? `${this.space}\n${record.value}` : record.value;
+    this.substituted = false;
+    this.checkSpaces();
+    return undefined;
+  }
+
+  /** Commands that write text or end the cycle; anything else edits the spaces. */
+  private text(command: SedCommand, otherwise: () => SedAction): Promise<SedAction> | SedAction {
+    switch (command.kind) {
+      case "p":
+        return this.emit(`${this.space}\n`, true).then(() => undefined);
+      case "P": {
+        const newline = this.space.indexOf("\n");
+        return this.emit(`${newline < 0 ? this.space : this.space.slice(0, newline)}\n`).then(
+          () => undefined,
+        );
+      }
+      case "=":
+        return this.emit(`${this.line}\n`).then(() => undefined);
+      case "i":
+        return this.emit(`${command.text}\n`).then(() => undefined);
+      case "a":
+        this.appended.push(`${command.text}\n`);
+        return undefined;
+      case "c":
+        return this.change(command);
+      case "d":
+        return { end: "delete" };
+      case "D":
+        return this.deleteFirstLine();
+      case "q":
+        return { quit: "print" };
+      case "Q":
+        return { quit: "silent" };
+      default:
+        return otherwise();
+    }
+  }
+
+  /** `c` replaces each selected record, and a whole range only at its end. */
+  private async change(command: SedCommand & { readonly text: string }): Promise<SedAction> {
+    const range = command.selector?.end !== undefined && !command.negated;
+    const index = this.commands.indexOf(command);
+    if (!range || this.states[index]?.ended === true) await this.emit(`${command.text}\n`);
+    return { end: "delete" };
+  }
+
+  private deleteFirstLine(): SedAction {
+    const newline = this.space.indexOf("\n");
+    if (newline < 0) return { end: "delete" };
+    this.space = this.space.slice(newline + 1);
+    return { end: "restart" };
+  }
+
+  private spaces(command: SedCommand): SedAction {
+    if (command.kind === "g") this.space = this.hold;
+    else if (command.kind === "G") this.space = `${this.space}\n${this.hold}`;
+    else if (command.kind === "h") this.hold = this.space;
+    else if (command.kind === "H") this.hold = `${this.hold}\n${this.space}`;
+    else if (command.kind === "x") [this.space, this.hold] = [this.hold, this.space];
+    else if (command.kind === "z") this.space = "";
+    else if (command.kind === "y") {
+      this.space = [...this.space]
+        .map((character) => command.map.get(character) ?? character)
+        .join("");
+    }
+    this.checkSpaces();
+    return undefined;
+  }
+
+  /** Both spaces can grow across records (`N`, `H`, `G`), so both are bounded. */
+  private checkSpaces(): void {
+    this.budget.expansionWork(this.space.length);
+    const limit = this.budget.limits.maxExpansionChars;
+    if (this.space.length > limit || this.hold.length > limit) {
+      throw new VfsError("E2BIG", "sed: text expansion limit exceeded");
+    }
+  }
 }
 
 function parseInvocation(argv: readonly string[], budget: ShellBudget): SedInvocation {
@@ -173,7 +444,7 @@ async function editOperands(
   let failed = false;
   for (const path of invocation.operands) {
     try {
-      if (await editInPlace(context, invocation.commands, path, invocation.quiet)) break;
+      if (await editInPlace(context, invocation, path)) break;
     } catch (error) {
       // One bad operand is that operand's failure. Remaining files are still
       // edited, each under its own mutation token.
@@ -187,133 +458,35 @@ async function editOperands(
   return failed ? 2 : 0;
 }
 
-async function streamRecords(
-  context: ShellCommandContext,
-  invocation: SedInvocation,
-  fds: ShellFileDescriptors,
-  output: BufferedTextWriter,
-): Promise<void> {
-  const states: RangeState[] = invocation.commands.map(() => ({ active: false }));
-  const inputCount = Math.max(1, invocation.operands.length);
-  let inputIndex = 0;
-  let line = 0;
-  inputLoop: for await (const input of inputStreams(context, invocation.operands, fds[0])) {
-    inputIndex += 1;
-    const lastInput = inputIndex === inputCount;
-    for await (const record of readTextLines(context, input.stream, input.name)) {
-      const terminated = record.endsWith("\n");
-      const value = terminated ? record.slice(0, -1) : record;
-      line += 1;
-      const result = applyRecord(
-        invocation.commands,
-        states,
-        value,
-        line,
-        false,
-        invocation.quiet,
-        invocation.budget,
-      );
-      // `q` terminates the pattern space even when the input did not. Ordinary
-      // end-of-input retains the source's missing newline.
-      const preserveEnding = terminated || result.quit || !lastInput;
-      await output.write(preserveEnding ? result.output : result.output.replace(/\n$/u, ""));
-      if (result.quit) break inputLoop;
-    }
-  }
-}
-
-async function streamRecordsWithLast(
-  context: ShellCommandContext,
-  invocation: SedInvocation,
-  fds: ShellFileDescriptors,
-  output: BufferedTextWriter,
-): Promise<void> {
-  const states: RangeState[] = invocation.commands.map(() => ({ active: false }));
-  let pending: string | undefined;
-  let pendingEndedWithNewline = true;
-  let line = 0;
-  inputLoop: for await (const input of inputStreams(context, invocation.operands, fds[0])) {
-    for await (const record of readTextLines(context, input.stream, input.name)) {
-      const terminated = record.endsWith("\n");
-      const value = terminated ? record.slice(0, -1) : record;
-      if (pending !== undefined) {
-        line += 1;
-        if (await writePendingRecord(invocation, states, pending, line, output)) {
-          pending = undefined;
-          break inputLoop;
-        }
-      }
-      pending = value;
-      pendingEndedWithNewline = terminated;
-    }
-  }
-  await writeFinalRecord(invocation, states, pending, line + 1, pendingEndedWithNewline, output);
-}
-
-async function writePendingRecord(
-  invocation: SedInvocation,
-  states: RangeState[],
-  pending: string,
-  line: number,
-  output: BufferedTextWriter,
-): Promise<boolean> {
-  const result = applyRecord(
-    invocation.commands,
-    states,
-    pending,
-    line,
-    false,
-    invocation.quiet,
-    invocation.budget,
-  );
-  await output.write(result.output);
-  return result.quit;
-}
-
-async function writeFinalRecord(
-  invocation: SedInvocation,
-  states: RangeState[],
-  pending: string | undefined,
-  line: number,
-  terminated: boolean,
-  output: BufferedTextWriter,
-): Promise<void> {
-  if (pending === undefined) return;
-  const result = applyRecord(
-    invocation.commands,
-    states,
-    pending,
-    line,
-    true,
-    invocation.quiet,
-    invocation.budget,
-  );
-  // An unterminated final record stays unterminated.
-  await output.write(terminated ? result.output : result.output.replace(/\n$/u, ""));
-}
-
 /**
  * Edits records with a bounded subset of the sed language.
  *
- * Every command in the profile reads only the current record, so ordinary
- * operation streams: nothing is materialized but one record and, for `$`, one
- * record of lookahead. `-i` is the exception by necessity — it publishes one
- * guarded whole-file write rather than a visible temporary file, so a
- * concurrent change loses rather than interleaves.
+ * Ordinary operation streams: nothing is materialized but the pattern and hold
+ * spaces and, for `$`, one record of lookahead. `-i` is the exception by
+ * necessity — it publishes one guarded whole-file write rather than a visible
+ * temporary file, so a concurrent change loses rather than interleaves.
  */
 export const sedCommand = /* @__PURE__ */ defineApplet(SED, async (context, argv, fds) => {
   const invocation = parseInvocation(argv, context.budget);
   if (invocation.inPlace) return editOperands(context, invocation, fds);
-  const output = new BufferedTextWriter(context, fds[1]);
+  const writer = new BufferedTextWriter(context, fds[1]);
   try {
-    // Numbering and `$` span the operands as one stream, the way `sed` reads
-    // them: `$` is the last record of the last file, not of each file.
-    if (needsLastRecord(invocation.commands)) {
-      await streamRecordsWithLast(context, invocation, fds, output);
-    } else await streamRecords(context, invocation, fds, output);
-    await output.flush();
+    const source = new PeekingSource(streamedRecords(context, invocation.operands, fds[0]));
+    const output = new SedOutput((text) => writer.write(text));
+    try {
+      await new SedRunner(
+        invocation.commands,
+        invocation.quiet,
+        context.budget,
+        source,
+        output,
+      ).run();
+    } finally {
+      await source.close();
+    }
+    await writer.flush();
   } finally {
-    output.abort();
+    writer.abort();
   }
   return 0;
 });
@@ -321,9 +494,8 @@ export const sedCommand = /* @__PURE__ */ defineApplet(SED, async (context, argv
 /** Rewrites one file in place, as a single guarded publication. */
 async function editInPlace(
   context: ShellCommandContext,
-  commands: readonly SedCommand[],
+  invocation: SedInvocation,
   path: string,
-  quiet: boolean,
 ): Promise<boolean> {
   const normalized = commandPath(context, path);
   const current = context.fileSystem.readFile(normalized);
@@ -332,49 +504,28 @@ async function editInPlace(
       ? current.stat.mutationToken
       : context.fileSystem.getMutationToken(normalized);
   const source = await collectText(context, current.stream, normalized);
-  let edited: { output: string; quit: boolean };
+  // `-i` numbers each file on its own, as GNU's implied `-s` does.
+  const edited = new SedText(context.budget, context.budget.limits.maxBufferedBytes);
+  let quit: boolean;
   try {
-    edited = applyToText(commands, source.value, quiet, context.budget);
+    const records = new PeekingSource(textRecords(source.value));
+    const output = new SedOutput((text) => edited.append(text));
+    quit = await new SedRunner(
+      invocation.commands,
+      invocation.quiet,
+      context.budget,
+      records,
+      output,
+    ).run();
   } finally {
     source.release();
   }
   // The edit is either the whole new file or nothing, and a concurrent write
   // to the same path loses.
-  await context.fileSystem.writeFile(normalized, edited.output, {
+  await context.fileSystem.writeFile(normalized, edited.result(), {
     ifMutationToken: token,
     disposition: "replace",
     mode: current.stat.mode,
   });
-  return edited.quit;
-}
-
-/** Applies the script to a whole buffered text, for `-i`. */
-function applyToText(
-  commands: readonly SedCommand[],
-  text: string,
-  quiet: boolean,
-  budget: ShellBudget,
-): { output: string; quit: boolean } {
-  const states: RangeState[] = commands.map(() => ({ active: false }));
-  const records = text.split("\n");
-  // A trailing newline produces a final empty element that is not a record.
-  const trailing = records.at(-1) === "";
-  if (trailing) records.pop();
-  const output = new SedText(budget, budget.limits.maxBufferedBytes);
-  let quit = false;
-  for (const [index, record] of records.entries()) {
-    const last = index === records.length - 1;
-    const result = applyRecord(commands, states, record, index + 1, last, quiet, budget);
-    // An unterminated final record stays unterminated, and only that record's
-    // own output loses a newline: a `d` on the last line must not strip the
-    // newline that belonged to the line before it.
-    output.append(
-      last && !trailing && !result.quit ? result.output.replace(/\n$/u, "") : result.output,
-    );
-    if (result.quit) {
-      quit = true;
-      break;
-    }
-  }
-  return { output: output.result(), quit };
+  return quit;
 }

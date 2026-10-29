@@ -80,6 +80,7 @@ const DEFAULT_REGISTRY = [
   "mktemp",
   "mv",
   "nl",
+  "od",
   "paste",
   "patch",
   "printenv",

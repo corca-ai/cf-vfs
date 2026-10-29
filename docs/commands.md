@@ -655,13 +655,13 @@ decides which directory is provisioned; pass the same path as the execution
 
 | Registry group | Available commands and principal options |
 | --- | --- |
-| shell | `:`, `true`, `false`, `echo -n`, `printf` (`%b`, `%c`, `%d`, `%i`, `%o`, `%s`, `%u`, `%x`, `%X`), `pwd`, `cd -`, `export`, `env`, `unset`, `read [-r]`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (clustered `-eu/+eu`, `-o/+o errexit`, `-o/+o nounset`, `-o/+o pipefail`, `--` positional replacement), `test`/`[` (`-e -f -d -s -r -w -x`, string and integer comparison), `id -u -g -G -n`, `groups` |
+| shell | `:`, `true`, `false`, `echo -n`, `printf` (Bash's format escapes, including `\NNN`, `\xHH`, and `\uHHHH`; `%b`, `%c`, `%d`, `%i`, `%o`, `%s`, `%u`, `%x`, `%X`), `pwd`, `cd -`, `export`, `env`, `unset`, `read [-r]`, `shift`, `getopts`, `source`, `.`, `local`, `return`, `break`, `continue`, `exit`, `set` (clustered `-eu/+eu`, `-o/+o errexit`, `-o/+o nounset`, `-o/+o pipefail`, `--` positional replacement), `test`/`[` (`-e -f -d -s -r -w -x`, string and integer comparison), `id -u -g -G -n`, `groups` |
 | discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
 | help | `help -s`, from the dedicated `/shell/commands/help` subpath |
 | shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
-| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p -P` (a `SRC/.` operand and an existing destination directory merge, as in GNU), `ls -l -n -d -a -A -h -1 -R`, `find` expressions (`-name -iname -path -ipath -type -empty -mindepth -maxdepth -prune -print -print0 -exec`, `! -not -a -o ( )`), `stat -L -c` (`%i` identity, `%u/%g/%U/%G` ownership), `chmod`, `chown`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
+| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p -P` (a `SRC/.` operand and an existing destination directory merge, as in GNU), `ls -l -n -d -a -A -h -1 -R`, `find` expressions (`-name -iname -path -ipath -type -empty -mindepth -maxdepth -prune -print -print0 -exec`, `! -not -a -o ( )`), `stat -L -c` (`%i` identity, `%u/%g/%U/%G` ownership), `chmod`, `chown`, `du`, `tree`, `basename` (with `SUFFIX`, `-s`, and `-a`), `dirname`, `realpath`, `mktemp`, `file` |
 | links | `ln -s -f`, `readlink -f`, from the dedicated `/shell/commands/link` subpath |
-| streaming text/bytes | `cat`, `grep -i -v -n -x -F -E -c -l -L -q -r -R -h`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c -s`, `tr -c -d -s` (escapes, ranges, `[:class:]`), `nl`, `fold -w`, `sed -E -n -e -i`, `seq -s -w` |
+| streaming text/bytes | `cat`, `grep -i -v -n -x -F -E -c -l -L -q -r -R -h`, `head -n -c`, `wc -l -w -c`, `uniq -c -d -u -i -f -s -w`, `od -A -t -c -b -d -o -x -v -j -N -w` (GNU element widths, aligned formats, `*` for repeated lines, and the `z` column), `cut -d -f -c -s`, `tr -c -d -s` (escapes, ranges, `[:class:]`), `nl`, `fold -w`, `sed -E -r -n -e -i` (see the sed profile), `seq -s -w` |
 | deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, from the dedicated `/shell/commands/system` subpath |
 | bounded barriers | `sort -b -f -n -r -s -u -t SEP -k POS1[,POS2]` (GNU keys: fields keep their leading blanks without `-t`, a key with options of its own inherits none of the global ones, and equal keys fall back to the whole line unless `-s` or `-u`), `tail -n -c`, `tee -a`, `paste`, `cmp -s`, `diff -r -q -u` (unified output with three lines of context, as GNU writes it), `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
 | argument dispatch | `xargs -n -0 -r -t`, from the dedicated `/shell/commands/xargs` subpath |
@@ -1074,19 +1074,25 @@ The whole input is read before the first output, so an opaque R2 body is
 
 ### The sed profile
 
-`sed` implements `s`, `p`, and `d`, each optionally selected by a line number,
-`$`, a `/regex/`, or a two-address range, and optionally negated with `!`. The
-`q` command accepts at most one such address, as POSIX requires.
-`-E` selects extended regular expressions, `-n` suppresses the automatic print,
+`sed` implements GNU's command set apart from the commands that reach outside
+the stream: `{ }` blocks, `!`, `:label`, `b`, `t`, `T`, `s`, `y`, `p`, `P`,
+`d`, `D`, `n`, `N`, `g`, `G`, `h`, `H`, `x`, `z`, `=`, `a`, `i`, `c`, `q`, and
+`Q`, each optionally selected by a line number, `$`, a `/regex/`, or a
+two-address range. `q`, `Q`, and `=` accept at most one address. `a`, `i`, and
+`c` take GNU's one-line `a text` or POSIX's `a\` with the text on the next
+line; a range's `c` prints its text once, at the range's end. A pattern reads
+`\n` and `\t` as newline and tab, which a multi-line pattern space needs.
+`-E` or `-r` selects extended regular expressions, `-n` suppresses the automatic print,
 `-e` repeats, and the `s` flags are `g`, `p`, `i`, and an occurrence number,
 which combine as `2g` does in GNU sed. A
 replacement expands `&` and `\1`…`\9` and writes everything else literally.
 
-Hold space, branching, labels, and `a`, `i`, `c`, `y`, `r`, and `w` are outside
-the profile and are usage errors: they are a programming language rather than a
-utility, and several need state across records that a streaming profile cannot
-bound. Every command in the subset reads only the current record, so ordinary
-operation streams. A selected `q` stops immediately, cancels the current input,
+`l`, `r`, `R`, `w`, `W`, `e`, and `F` are usage errors: they read or write
+other files, run commands, or print an escaped dump. The pattern space and the
+hold space are each bounded by `maxExpansionChars`, so `N`, `H`, and `G` cannot
+grow either without limit, and every executed command charges a step, so a
+branch loop such as `:a;ba` ends at the step limit. Ordinary operation still
+streams one record at a time. A selected `q` stops immediately, cancels the current input,
 and never opens later operands. A script containing a `$` address necessarily
 keeps one record of lookahead; scripts without one emit their first record as
 soon as it arrives.

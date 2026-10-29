@@ -16,6 +16,15 @@ included.
 
 ## [Unreleased]
 
+- `sed` runs GNU scripts with blocks, branches and labels (`{}`, `b`, `t`, `T`,
+  `:`), the hold space (`h`, `H`, `g`, `G`, `x`), multi-line `n`, `N`, `P`,
+  `D`, text commands `a`, `i`, `c`, `=`, and `y`, `z`, `Q` and `-r`, with both
+  spaces bounded by the expansion limit. Patterns read `\n` and `\t`.
+- Add `od` with GNU's formats, alignment and repeated-line folding; a missing
+  `od` let an agent conclude from empty output that files lacked a newline.
+- `basename` removes a suffix (`NAME SUFFIX`, `-s`, `-a`); `uniq` adds `-d`,
+  `-u`, `-i`, `-f`, `-s` and `-w`; `printf` formats decode `\NNN`, `\xHH` and
+  `\uHHHH` as Bash does.
 - Raise the default `maxCommands` and `maxLoopIterations` from 10,000 to
   20,000: an ordinary loop over a wiki's pages reached them in about 80 ms.
 - Split fields on the active `IFS` with POSIX rules, in expansion and in

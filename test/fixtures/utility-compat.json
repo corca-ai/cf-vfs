@@ -121,8 +121,8 @@
       "id": "sed-language-is-a-bounded-subset",
       "command": "sed",
       "oracle": "coreutils",
-      "summary": "sed implements s, p, d, and q with addresses; the rest of the language is refused",
-      "reason": "Hold space, branching, labels, and `a`, `i`, `c`, `y`, `r`, and `w` are a programming language rather than a utility, and several of them need state across records that a streaming profile cannot bound. Every command in the subset reads only the current record, so ordinary operation streams; `q` cancels the current input and does not open later operands, while `-i` publishes one guarded whole-file write. An unsupported command is status 2."
+      "summary": "sed implements the GNU command set apart from l, r, R, w, W, e, and F; those are refused",
+      "reason": "The refused commands read or write other files, run commands, or print an escaped dump, which reach outside the stream an applet owns. Everything else, including blocks, branches, labels, the hold space, and multi-line N/D/P, runs over a pattern space and a hold space that are each bounded by maxExpansionChars, so ordinary operation still streams one record at a time with one record of lookahead for $; q cancels the current input and does not open later operands, while -i publishes one guarded whole-file write. An unsupported command is status 2."
     },
     {
       "id": "regexp-alternation-is-leftmost-first",

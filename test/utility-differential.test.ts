@@ -143,7 +143,7 @@ const DEMONSTRATIONS: Readonly<Record<string, () => Promise<void>>> = {
   },
   "sed-language-is-a-bounded-subset": async () => {
     const harness = createBashHarness();
-    for (const script of ["y/a/b/", "1h", ":top", "a\\text"]) {
+    for (const script of ["l", "w /out", "r /in", "e date"]) {
       const result = await harness.run(`printf 'x\\n' | sed '${script}'`);
       expect(result.exitCode, script).toBe(2);
       expect(result.stderr, script).toContain("sed:");

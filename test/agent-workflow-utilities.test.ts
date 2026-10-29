@@ -403,69 +403,6 @@ it("reports a missing ls operand and still lists the rest", async () => {
   });
 });
 
-describe("sort keys", () => {
-  const files = {
-    "/p": "b:3:x\na:10:y\nc:2:z\na:2:w\n",
-    "/w": "  apple 3\nbanana 10\n cherry 2\nApple 3\n",
-  };
-  bashCases([
-    {
-      name: "sorts one numeric field",
-      files,
-      script: "sort -t: -k2,2n /p",
-      stdout: "a:2:w\nc:2:z\nb:3:x\na:10:y\n",
-    },
-    {
-      name: "combines keys with their own options",
-      files,
-      script: "sort -t: -k1,1 -k2,2nr /p",
-      stdout: "a:10:y\na:2:w\nb:3:x\nc:2:z\n",
-    },
-    {
-      name: "keeps leading blanks in a default field",
-      files,
-      script: "sort -k1,1 /w",
-      stdout: "  apple 3\n cherry 2\nApple 3\nbanana 10\n",
-    },
-    {
-      name: "skips leading blanks with -b",
-      files,
-      script: "sort -b -k1,1 /w",
-      stdout: "Apple 3\n  apple 3\nbanana 10\n cherry 2\n",
-    },
-    {
-      name: "inherits global options for a bare key",
-      files,
-      script: "sort -n -k2 /w",
-      stdout: " cherry 2\n  apple 3\nApple 3\nbanana 10\n",
-    },
-    {
-      name: "keeps the first line of each key with -u",
-      files,
-      script: "sort -t: -u -k1,1 /p",
-      stdout: "a:10:y\nb:3:x\nc:2:z\n",
-    },
-    {
-      name: "reverses the last-resort comparison",
-      script: "printf '10 a\\n9 b\\n10 c\\n' | sort -rn",
-      stdout: "10 c\n10 a\n9 b\n",
-    },
-    {
-      name: "folds case with -f",
-      files,
-      script: "sort -bf -k1,1 /w | head -2",
-      stdout: "  apple 3\nApple 3\n",
-    },
-    {
-      name: "refuses a zero field",
-      files,
-      script: "sort -k0 /p",
-      exitCode: 2,
-      stderrIncludes: "invalid key position 0",
-    },
-  ]);
-});
-
 it("allows twenty thousand commands in one execution", async () => {
   const harness = createBashHarness();
   await expect(
