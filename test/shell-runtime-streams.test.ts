@@ -5,7 +5,7 @@ import { createBytePipe } from "../src/shell/pipe.js";
 import { Shell } from "../src/shell/shell.js";
 import { readAllBytes, streamFromChunks } from "../src/vfs/streams.js";
 import { defineTestApplet } from "./helpers/applet.js";
-import { createBashHarness } from "./helpers/bash.js";
+import { createBashHarness, withoutListingTimes } from "./helpers/bash.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 
 it("snapshots bytes once before a pipeline or redirection accepts them", async () => {
@@ -188,10 +188,10 @@ it("combines supported flag options consistently across filesystem and text util
     ].join("; "),
   });
 
-  expect(result).toEqual({
+  expect({ ...result, stdout: withoutListingTimes(result.stdout) }).toEqual({
     exitCode: 0,
     // `ls -d` names the operand as it was written, as GNU does.
-    stdout: ["drwx------ 0 0        0 /copy/sub\n", "10\n2\n", "1:Alpha\n", "1 2 4\n", "b\n"].join(
+    stdout: ["drwx------ 2 0 0 0 TIME /copy/sub\n", "10\n2\n", "1:Alpha\n", "1 2 4\n", "b\n"].join(
       "",
     ),
     stderr: "",

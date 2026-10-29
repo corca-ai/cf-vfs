@@ -33,6 +33,8 @@ import {
 } from "./parser-support.js";
 import { validateScriptDepth } from "./parser-validation.js";
 
+const RESERVED_ARGUMENTS: ReadonlySet<string> = new Set(["!", "{", "}"]);
+
 export const BASH_COMPATIBILITY_VERSION = 5 as const;
 
 class Parser extends ConditionalParser {
@@ -325,6 +327,16 @@ class Parser extends ConditionalParser {
       }
       if (token?.type === "operator" && REDIRECTIONS.has(token.value)) {
         redirections.push(this.redirection());
+        continue;
+      }
+      // `!`, `{` and `}` are reserved only where a command starts; after the
+      // command word they are ordinary arguments, as in `[ ! -e f ]`.
+      if (token?.type === "operator" && words.length > 0 && RESERVED_ARGUMENTS.has(token.value)) {
+        words.push({
+          parts: [{ kind: "literal", value: token.value, quoted: false }],
+          sourceOffset: token.offset,
+        });
+        this.take();
         continue;
       }
       return;

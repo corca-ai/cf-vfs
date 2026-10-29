@@ -10,7 +10,6 @@ const rejectedSyntax: ReadonlyArray<readonly [name: string, syntax: string, diag
   ["select loop", "select X in a; do :; done", "reserved syntax select"],
   ["function keyword", "function f { :; }", "reserved syntax function"],
   ["C-style for loop", "for ((N=0; N<1; N++)); do :; done", "unexpected character"],
-  ["ANSI-C quoting", "printf $'x'", "ANSI-C quotes"],
   ["unsupported $$", "printf $$", "special parameter"],
 ];
 
@@ -128,15 +127,6 @@ describe("Bash v5 scalar ergonomics and redirection", () => {
     },
   ]);
 
-  bashCases([
-    {
-      name: "continues to reject locale-translated quotes",
-      script: 'printf $"translated"',
-      exitCode: 2,
-      stderrIncludes: "locale and ANSI-C quotes are not supported",
-    },
-  ]);
-
   it("bounds a continued logical read across individually bounded physical lines", async () => {
     const harness = createBashHarness({ limits: { maxLineBytes: 3 } });
     await expect(harness.run("read VALUE", { stdin: "a\\\nb\\\ncd\n" })).resolves.toMatchObject({
@@ -163,7 +153,7 @@ const malformedCompoundSyntax: ReadonlyArray<
   ["empty while condition", "while do break; done", "non-empty command list"],
   ["empty while body", "while false; do done", "non-empty command list"],
   ["empty for body", "for item in value; do done", "non-empty command list"],
-  ["unterminated brace list", "{ printf ok }", "separator"],
+  ["unterminated brace list", "{ printf ok }", "expected }"],
   ["unterminated if condition", "if true then printf yes; fi", "reserved syntax fi"],
   ["unterminated if body", "if true; then true fi", "expected fi"],
   ["unterminated final case body", "case x in x) printf ok esac", "expected esac"],
@@ -246,6 +236,42 @@ bashSuite("Bash v2 deterministic rejection of unterminated syntax", [
     missingFiles: ["/side"],
   },
 ]);
+
+describe("ANSI-C and locale-translated quotes", () => {
+  bashCases([
+    {
+      name: "decodes ANSI-C quotes",
+      script: "printf '%s|' $'a\\tb' $'it\\'s' $'\\x41\\101\\u00e9' $'\\e[0m' $'a\\\\b'",
+      stdout: "a\tb|it's|AAé|\x1b[0m|a\\b|",
+    },
+    {
+      name: "keeps an unknown ANSI-C escape and ends the word at NUL",
+      script: "printf '%s|' $'x\\qy' $'a\\0b' $'\\cA' $'\\x'",
+      stdout: "x\\qy|a|\x01|\\x|",
+    },
+    {
+      name: "uses ANSI-C quotes as delimiters and patterns",
+      script: "cut -d$'\\t' -f2 <<< $'a\\tb\\tc'; grep -c $'\\t' <<< $'x\\ty'",
+      stdout: "b\n1\n",
+    },
+    {
+      name: "leaves $' literal inside double quotes",
+      script: `printf '%s' "$'x'"`,
+      stdout: "$'x'",
+    },
+    {
+      name: "reads a locale-translated quote as itself in the C locale",
+      script: "X=v; printf '%s' $\"translated $X\"",
+      stdout: "translated v",
+    },
+    {
+      name: "reports an unterminated ANSI-C quote",
+      script: "printf $'x",
+      exitCode: 2,
+      stderrIncludes: "unterminated single quote",
+    },
+  ]);
+});
 
 describe("Bash v2 deterministic rejection diagnostics", () => {
   it("reports syntax offsets in UTF-8 bytes", async () => {

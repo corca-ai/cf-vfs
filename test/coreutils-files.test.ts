@@ -200,11 +200,10 @@ describe("find actions", () => {
       stderrIncludes: "find: -exec ... + requires {} as the last argument",
     },
     {
-      name: "refuses -exec beside a print action",
+      name: "runs actions in order for each entry",
       files: TREE,
-      script: "find /t -print -exec cat {} ';'",
-      exitCode: 2,
-      stderrIncludes: "find: specify either -exec or a print action",
+      script: "find /t -name a.txt -print -exec cat {} ';'",
+      stdout: "/t/a.txt\nalpha\nbeta\n",
     },
   ]);
 

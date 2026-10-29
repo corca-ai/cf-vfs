@@ -1,8 +1,14 @@
-import { matchesGlob } from "../../core/glob.js";
-import { depthFrom } from "../../core/path.js";
-import type { EntryKind, FindOptions, VfsStat } from "../../vfs/types.js";
+import { depthFrom, dirname } from "../../core/path.js";
+import type { FindOptions, VfsStat } from "../../vfs/types.js";
 import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
-import { type AppletSpec, appletUsageError, defineApplet } from "./applet.js";
+import { type AppletSpec, defineApplet } from "./applet.js";
+import {
+  type FindEntry,
+  type FindExec,
+  type FindExpression,
+  FindExpressionParser,
+  type FindNode,
+} from "./fs-find-expression.js";
 import { BufferedTextWriter, commandPath, displayPath, writeText } from "./helpers.js";
 
 /** Paths one `-exec ... +` invocation may carry. */
@@ -10,8 +16,8 @@ const FIND_EXEC_BATCH = 256;
 
 const FIND = {
   name: "find",
-  usage: "[PATH...] [-name PATTERN] [-type f|d|l] [-maxdepth N] [-print|-print0|-exec ... ;|+]",
-  summary: "walks a subtree and prints or runs a command on matching paths",
+  usage: "[PATH...] [EXPRESSION]",
+  summary: "walks subtrees and evaluates tests, operators and actions for each entry",
 } as const satisfies AppletSpec;
 
 const DU = {
@@ -41,160 +47,103 @@ function boundedFind(
   return entries;
 }
 
-interface FindExec {
-  readonly argv: readonly string[];
-  readonly batch: boolean;
-}
+class FindEvaluator {
+  private readonly output: BufferedTextWriter;
+  private readonly batches = new Map<FindExec, string[]>();
+  private readonly pruned = new Set<string>();
+  private failed = false;
 
-interface FindInvocation {
-  readonly roots: readonly string[];
-  readonly name?: string;
-  readonly type?: EntryKind;
-  readonly maxDepth?: number;
-  readonly separator?: string;
-  readonly exec?: FindExec;
-}
+  constructor(
+    private readonly context: ShellCommandContext,
+    private readonly fds: ShellFileDescriptors,
+  ) {
+    this.output = new BufferedTextWriter(context, fds[1]);
+  }
 
-class FindArgumentParser {
-  private index = 0;
-  private readonly roots: string[] = [];
-  private name: string | undefined;
-  private type: EntryKind | undefined;
-  private maxDepth: number | undefined;
-  private separator: string | undefined;
-  private exec: FindExec | undefined;
-
-  constructor(private readonly argv: readonly string[]) {}
-
-  parse(): FindInvocation {
-    this.parseRoots();
-    while (this.index < this.argv.length) this.parseExpression();
-    if (this.exec !== undefined && this.separator !== undefined) {
-      throw appletUsageError(FIND, "specify either -exec or a print action");
+  /** Whether a `-prune`d directory contains `path`; entries arrive after their ancestors. */
+  isPruned(path: string): boolean {
+    if (this.pruned.size === 0) return false;
+    for (let ancestor = dirname(path); ; ancestor = dirname(ancestor)) {
+      if (this.pruned.has(ancestor)) return true;
+      if (ancestor === "/") return false;
     }
-    return {
-      roots: this.roots,
-      ...(this.name === undefined ? {} : { name: this.name }),
-      ...(this.type === undefined ? {} : { type: this.type }),
-      ...(this.maxDepth === undefined ? {} : { maxDepth: this.maxDepth }),
-      ...(this.separator === undefined ? {} : { separator: this.separator }),
-      ...(this.exec === undefined ? {} : { exec: this.exec }),
-    };
   }
 
-  private parseRoots(): void {
-    while (this.index < this.argv.length && !(this.argv[this.index] ?? "").startsWith("-")) {
-      this.roots.push(this.argv[this.index++] ?? ".");
+  async evaluate(node: FindNode, entry: FindEntry): Promise<boolean> {
+    switch (node.kind) {
+      case "and":
+        return (await this.evaluate(node.left, entry)) && this.evaluate(node.right, entry);
+      case "or":
+        return (await this.evaluate(node.left, entry)) || this.evaluate(node.right, entry);
+      case "not":
+        return !(await this.evaluate(node.operand, entry));
+      case "test":
+        return node.test(entry, this.context);
+      case "prune":
+        if (entry.stat.kind === "directory") this.pruned.add(entry.stat.path);
+        return true;
+      case "print":
+        await this.output.write(`${entry.display}${node.separator}`);
+        return true;
+      case "exec":
+        return this.exec(node.exec, entry.display);
     }
-    if (this.roots.length === 0) this.roots.push(".");
   }
 
-  private parseExpression(): void {
-    const option = this.argv[this.index++];
-    if (option === "-name") this.name = this.requiredValue("-name requires a pattern");
-    else if (option === "-type") this.type = this.parseType();
-    else if (option === "-maxdepth") this.maxDepth = this.parseMaxDepth();
-    else if (option === "-print") this.separator = "\n";
-    else if (option === "-print0") this.separator = "\0";
-    else if (option === "-exec") this.exec = this.parseExec();
-    else throw appletUsageError(FIND, `unsupported expression ${option ?? ""}`);
+  async finish(): Promise<number> {
+    for (const exec of this.batches.keys()) await this.flushBatch(exec);
+    await this.output.flush();
+    return this.failed ? 1 : 0;
   }
 
-  private requiredValue(message: string): string {
-    const value = this.argv[this.index++];
-    if (value === undefined) throw appletUsageError(FIND, message);
-    return value;
+  abort(): void {
+    this.output.abort();
   }
 
-  private parseType(): EntryKind {
-    const value = this.requiredValue("-type must be f, d, or l");
-    if (value === "f") return "file";
-    if (value === "d") return "directory";
-    if (value === "l") return "symlink";
-    throw appletUsageError(FIND, "-type must be f, d, or l");
-  }
-
-  private parseMaxDepth(): number {
-    const value = this.requiredValue("-maxdepth requires a non-negative integer");
-    if (!/^[0-9]+$/u.test(value)) {
-      throw appletUsageError(FIND, "-maxdepth requires a non-negative integer");
+  private async exec(exec: FindExec, path: string): Promise<boolean> {
+    if (exec.batch) {
+      const pending = this.batches.get(exec) ?? [];
+      pending.push(path);
+      this.batches.set(exec, pending);
+      if (pending.length >= FIND_EXEC_BATCH) await this.flushBatch(exec);
+      return true;
     }
-    return Number(value);
+    // Output printed so far reaches the descriptor before the command's own.
+    await this.output.flush();
+    return (await this.context.executeCommand(findExecArgv(exec, [path]), this.fds)) === 0;
   }
 
-  private parseExec(): FindExec {
-    const command: string[] = [];
-    let terminator: string | undefined;
-    while (this.index < this.argv.length) {
-      const word = this.argv[this.index++];
-      if (word === ";" || word === "+") {
-        terminator = word;
-        break;
-      }
-      command.push(word ?? "");
+  private async flushBatch(exec: FindExec): Promise<void> {
+    const paths = this.batches.get(exec) ?? [];
+    if (paths.length === 0) return;
+    this.batches.set(exec, []);
+    await this.output.flush();
+    if ((await this.context.executeCommand(findExecArgv(exec, paths), this.fds)) !== 0) {
+      this.failed = true;
     }
-    if (terminator === undefined) throw appletUsageError(FIND, "-exec requires ; or +");
-    if (command.length === 0) throw appletUsageError(FIND, "-exec requires a command");
-    const batch = terminator === "+";
-    if (batch && command.at(-1) !== "{}") {
-      throw appletUsageError(FIND, "-exec ... + requires {} as the last argument");
-    }
-    return { argv: command, batch };
   }
 }
 
-function selectedFindEntry(
-  entry: VfsStat,
-  invocation: FindInvocation,
-  traversalRoot: string,
-): boolean {
-  if (invocation.type !== undefined && entry.kind !== invocation.type) return false;
-  if (invocation.name !== undefined && !matchesGlob(entry.name, invocation.name)) return false;
-  return (
-    invocation.maxDepth === undefined || depthFrom(traversalRoot, entry.path) <= invocation.maxDepth
-  );
-}
-
-function collectFindRoot(
+function findRootEntries(
   context: ShellCommandContext,
   root: string,
-  invocation: FindInvocation,
-): string[] {
+  expression: FindExpression,
+): FindEntry[] {
   const normalized = commandPath(context, root);
   // A link named on the command line is reported but never descended into.
   const operand = context.fileSystem.lstat(normalized);
   if (operand.kind === "symlink") {
     context.budget.glob(1);
-    const selected =
-      (invocation.type === undefined || invocation.type === "symlink") &&
-      (invocation.name === undefined || matchesGlob(operand.name, invocation.name));
-    return selected ? [displayPath(root, normalized, normalized)] : [];
+    return [{ stat: operand, display: displayPath(root, normalized, normalized), depth: 0 }];
   }
   const traversalRoot = context.fileSystem.realpath(normalized);
-  const entries = boundedFind(context, { path: normalized, includeRoot: true });
-  return entries
-    .filter((entry) => selectedFindEntry(entry, invocation, traversalRoot))
-    .map((entry) => displayPath(root, traversalRoot, entry.path));
-}
-
-function collectFindMatches(context: ShellCommandContext, invocation: FindInvocation): string[] {
-  return invocation.roots.flatMap((root) => collectFindRoot(context, root, invocation));
-}
-
-async function printFindMatches(
-  context: ShellCommandContext,
-  paths: readonly string[],
-  separator: string,
-  fds: ShellFileDescriptors,
-): Promise<number> {
-  const output = new BufferedTextWriter(context, fds[1]);
-  try {
-    for (const path of paths) await output.write(`${path}${separator}`);
-    await output.flush();
-  } finally {
-    output.abort();
+  const entries: FindEntry[] = [];
+  for (const stat of boundedFind(context, { path: normalized, includeRoot: true })) {
+    const depth = depthFrom(traversalRoot, stat.path);
+    if (expression.maxDepth !== undefined && depth > expression.maxDepth) continue;
+    entries.push({ stat, display: displayPath(root, traversalRoot, stat.path), depth });
   }
-  return 0;
+  return entries;
 }
 
 function findExecArgv(exec: FindExec, paths: readonly string[]): readonly string[] {
@@ -202,33 +151,21 @@ function findExecArgv(exec: FindExec, paths: readonly string[]): readonly string
   return exec.argv.map((word) => word.split("{}").join(paths[0] ?? ""));
 }
 
-async function runFindExec(
-  context: ShellCommandContext,
-  paths: readonly string[],
-  exec: FindExec,
-  fds: ShellFileDescriptors,
-): Promise<number> {
-  let failed = false;
-  const run = async (batch: readonly string[]): Promise<void> => {
-    const status = await context.executeCommand(findExecArgv(exec, batch), fds);
-    if (status !== 0 && exec.batch) failed = true;
-  };
-  if (exec.batch) {
-    for (let start = 0; start < paths.length; start += FIND_EXEC_BATCH) {
-      await run(paths.slice(start, start + FIND_EXEC_BATCH));
-    }
-  } else {
-    for (const path of paths) await run([path]);
-  }
-  return failed ? 1 : 0;
-}
-
-/** Walks subtrees and prints matches or invokes a command over them. */
+/** Walks subtrees and evaluates a GNU-style expression for each entry. */
 export const findCommand = /* @__PURE__ */ defineApplet(FIND, async (context, argv, fds) => {
-  const invocation = new FindArgumentParser(argv).parse();
-  const matched = collectFindMatches(context, invocation);
-  if (invocation.exec !== undefined) return runFindExec(context, matched, invocation.exec, fds);
-  return printFindMatches(context, matched, invocation.separator ?? "\n", fds);
+  const expression = new FindExpressionParser(FIND, argv).parse();
+  const evaluator = new FindEvaluator(context, fds);
+  try {
+    for (const root of expression.roots) {
+      for (const entry of findRootEntries(context, root, expression)) {
+        if (entry.depth < expression.minDepth || evaluator.isPruned(entry.stat.path)) continue;
+        if (expression.node !== undefined) await evaluator.evaluate(expression.node, entry);
+      }
+    }
+    return await evaluator.finish();
+  } finally {
+    evaluator.abort();
+  }
 });
 
 export const duCommand = /* @__PURE__ */ defineApplet(DU, async (context, argv, fds) => {

@@ -105,7 +105,7 @@ bashCases([
     stdout:
       "e not-f r w not-d c\ncharacter special file 0\n  Type: character special file\n" +
       "/dev/null: character special file\n" +
-      "/dev/null\ncrw-rw-rw- 0 0        0 /dev/null\n",
+      "/dev/null\ncrw-rw-rw- 1 0 0 0 Jan  1  1970 /dev/null\n",
   },
   {
     name: "refuses a device this profile does not have",

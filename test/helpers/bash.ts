@@ -51,6 +51,11 @@ function sourceText(source: BashSource): string {
   return typeof source === "string" ? source : commandList(...source);
 }
 
+/** Replaces the `ls -l` time column, which follows the clock, with `TIME`. */
+export function withoutListingTimes(text: string): string {
+  return text.replace(/ [A-Z][a-z]{2} [ \d]\d (?:\d\d:\d\d| \d{4}) /gu, " TIME ");
+}
+
 export function createBashHarness(options: BashHarnessOptions = {}): BashHarness {
   const {
     fileSystem = createTestFileSystem(),

@@ -8,6 +8,34 @@ import {
 } from "./parser-support.js";
 
 const DEFAULT_OPERATORS = [":-", ":=", ":+", ":?", "-", "=", "+", "?"] as const;
+
+const ANSI_C_ESCAPES: Readonly<Record<string, string>> = {
+  a: "\x07",
+  b: "\b",
+  e: "\x1b",
+  E: "\x1b",
+  f: "\f",
+  n: "\n",
+  r: "\r",
+  t: "\t",
+  v: "\v",
+  "\\": "\\",
+  "'": "'",
+  '"': '"',
+  "?": "?",
+};
+
+const HEX_ESCAPE_WIDTHS: Readonly<Record<string, number>> = { x: 2, u: 4, U: 8 };
+
+/** Reads up to `limit` digits of `radix` at `offset`, as Bash's `$'...'` does. */
+function digitsAt(source: string, offset: number, radix: 8 | 16, limit: number): string {
+  const digit = radix === 8 ? /^[0-7]$/u : /^[0-9A-Fa-f]$/u;
+  let digits = "";
+  while (digits.length < limit && digit.test(source[offset + digits.length] ?? "")) {
+    digits += source[offset + digits.length];
+  }
+  return digits;
+}
 const REMOVAL_OPERATORS = ["##", "%%", "#", "%"] as const;
 
 export abstract class ShellWordLexer extends ShellLexerBase {
@@ -43,13 +71,80 @@ export abstract class ShellWordLexer extends ShellLexerBase {
     this.append(parts, { kind: "literal", value, quoted: true });
   }
 
+  /**
+   * Decodes one escape inside `$'...'` starting at the backslash, returning
+   * the text and how many source characters it used. An unknown escape keeps
+   * its backslash, as in Bash.
+   */
+  private ansiCEscape(at: number): { text: string; length: number } {
+    const next = this.source[at + 1] ?? "";
+    const simple = Object.hasOwn(ANSI_C_ESCAPES, next) ? ANSI_C_ESCAPES[next] : undefined;
+    if (simple !== undefined) return { text: simple, length: 2 };
+    const octal = digitsAt(this.source, at + 1, 8, 3);
+    if (octal !== "") {
+      return {
+        text: String.fromCharCode(Number.parseInt(octal, 8) & 0xff),
+        length: 1 + octal.length,
+      };
+    }
+    return this.ansiCCodeEscape(at, next) ?? { text: `\\${next}`, length: next === "" ? 1 : 2 };
+  }
+
+  /** `\xHH`, `\uHHHH`, `\UHHHHHHHH` and `\cX`, or nothing when the digits are missing. */
+  private ansiCCodeEscape(at: number, next: string): { text: string; length: number } | undefined {
+    const width = Object.hasOwn(HEX_ESCAPE_WIDTHS, next) ? (HEX_ESCAPE_WIDTHS[next] ?? 0) : 0;
+    if (width > 0) {
+      const hex = digitsAt(this.source, at + 2, 16, width);
+      const code = hex === "" ? undefined : Number.parseInt(hex, 16);
+      return code === undefined || code > 0x10ffff
+        ? undefined
+        : { text: String.fromCodePoint(code), length: 2 + hex.length };
+    }
+    const control = next === "c" ? this.source[at + 2] : undefined;
+    if (control === undefined) return undefined;
+    const value = control === "?" ? 0x7f : (control.codePointAt(0) ?? 0) & 0x1f;
+    return { text: String.fromCharCode(value), length: 3 };
+  }
+
+  /** `$'...'`: a single-quoted word whose backslash escapes are decoded; NUL ends it. */
+  private readAnsiCQuoted(parts: WordPart[]): void {
+    const quote = this.offset;
+    this.offset += 2;
+    let value = "";
+    let truncated = false;
+    while (this.offset < this.source.length && this.source[this.offset] !== "'") {
+      this.checkOffset(this.offset);
+      let text = this.source[this.offset] ?? "";
+      let length = 1;
+      if (text === "\\") ({ text, length } = this.ansiCEscape(this.offset));
+      this.offset += length;
+      if (text === "\0") truncated = true;
+      if (!truncated) value += text;
+    }
+    if (this.source[this.offset] !== "'") {
+      throw this.incompleteError("unterminated single quote", quote);
+    }
+    this.offset += 1;
+    this.append(parts, { kind: "literal", value, quoted: true });
+  }
+
   private readDollar(parts: WordPart[], inheritedQuoted: boolean): boolean {
     const next = this.source[this.offset + 1];
-    if (next === "'" || next === '"') {
+    if ((next === "'" || next === '"') && inheritedQuoted) {
       throw this.error(
-        "locale and ANSI-C quotes are not supported by this language version",
+        "locale and ANSI-C quotes are not supported inside another quoted word",
         this.offset,
       );
+    }
+    if (next === "'") {
+      this.readAnsiCQuoted(parts);
+      return true;
+    }
+    // The runtime declares the C locale, where `$"..."` translates to itself.
+    if (next === '"') {
+      this.offset += 1;
+      this.readDoubleQuoted(parts, false);
+      return true;
     }
     const expansion = this.readExpansion(inheritedQuoted);
     if (expansion === undefined) return false;

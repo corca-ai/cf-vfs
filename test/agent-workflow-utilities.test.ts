@@ -269,3 +269,126 @@ for f in $(find . -type f -name '*.md' | sort); do
 done | sort -u | wc -l`);
   expect(result).toMatchObject({ exitCode: 0, stdout: "20\n", stderr: "" });
 });
+
+const SITE = {
+  "/s/.git/config": "x",
+  "/s/README.md": "hi",
+  "/s/a/b.md": "hi there",
+  "/s/a/c.txt": "",
+  "/s/d/e.md": "no",
+};
+
+describe("find expressions", () => {
+  bashCases([
+    {
+      name: "negates a path test",
+      files: SITE,
+      script: "cd /s && find . -not -path './.git/*' -type f | sort",
+      stdout: "./README.md\n./a/b.md\n./a/c.txt\n./d/e.md\n",
+    },
+    {
+      name: "prunes a directory and prints the rest",
+      files: SITE,
+      script: "cd /s && find . -path ./.git -prune -o -type f -print | sort",
+      stdout: "./README.md\n./a/b.md\n./a/c.txt\n./d/e.md\n",
+    },
+    {
+      name: "groups alternatives and negates with !",
+      files: SITE,
+      script:
+        "cd /s && find . \\( -name '*.md' -o -name '*.txt' \\) -type f | sort; find . ! -name '*.md' -type f | sort",
+      stdout: "./README.md\n./a/b.md\n./a/c.txt\n./d/e.md\n./.git/config\n./a/c.txt\n",
+    },
+    {
+      name: "bounds depth from both ends",
+      files: SITE,
+      script: "cd /s && find . -mindepth 1 -maxdepth 1 | sort",
+      stdout: "./.git\n./README.md\n./a\n./d\n",
+    },
+    {
+      name: "matches case-insensitively, empty entries, and type lists",
+      files: SITE,
+      script:
+        "mkdir /s/none && cd /s && find . -iname 'readme*'; find . -empty | sort; find . -type f,d -name a",
+      stdout: "./README.md\n./a/c.txt\n./none\n./a\n",
+    },
+    {
+      name: "matches the starting point's own name",
+      files: SITE,
+      script: "cd /s && find . -maxdepth 1 -name '.*' | sort",
+      stdout: ".\n./.git\n",
+    },
+    {
+      name: "batches -exec + after a test",
+      files: SITE,
+      script: "cd /s && find . -name '*.md' -exec grep -l hi {} +",
+      stdout: "./README.md\n./a/b.md\n",
+    },
+    {
+      name: "refuses an expression that ends at an operator",
+      files: SITE,
+      script: "find /s -name x -o",
+      exitCode: 2,
+      stderrIncludes: "expected an expression",
+    },
+  ]);
+});
+
+describe("reserved words as arguments", () => {
+  bashCases([
+    { name: "negates a test operand", script: "[ ! -e /missing ] && echo none", stdout: "none\n" },
+    { name: "passes braces and ! as words", script: "echo a } { ! b", stdout: "a } { ! b\n" },
+    { name: "keeps ! a pipeline prefix", script: "! false && echo negated", stdout: "negated\n" },
+    { name: "keeps a brace group", script: "{ echo in; } && echo out", stdout: "in\nout\n" },
+  ]);
+});
+
+describe("ls listings", () => {
+  const files = {
+    "/l/a.txt": "hello\n",
+    "/l/big": "x".repeat(5000),
+    "/l/.hid/f": "",
+    "/l/sub/g": "",
+  };
+
+  bashCases([
+    {
+      name: "hides dot entries unless asked",
+      files,
+      script: "cd /l && ls; echo -; ls -A",
+      stdout: "a.txt\nbig\nsub\n-\n.hid\na.txt\nbig\nsub\n",
+    },
+    {
+      name: "sorts file operands before directories",
+      files,
+      script: "cd /l && ls sub big a.txt",
+      stdout: "a.txt\nbig\n\nsub:\ng\n",
+    },
+  ]);
+
+  it("prints GNU long rows with a total, link counts, times and aligned columns", async () => {
+    const harness = createBashHarness();
+    for (const [path, body] of Object.entries(files)) {
+      await harness.fileSystem.writeFile(path, body, { createParents: true });
+    }
+    harness.fileSystem.setMetadata("/l/a.txt", { modifiedAtMs: Date.UTC(2024, 0, 2, 3, 4) });
+    const result = await harness.run("cd /l && ls -la; ls -lh big a.txt");
+    expect(result.stderr).toBe("");
+    expect(
+      result.stdout
+        .split("\n")
+        .map((line) => line.replace(/ [A-Z][a-z]{2} [ \d]\d \d\d:\d\d /u, " RECENT ")),
+    ).toEqual([
+      "total 6",
+      "drwxr-xr-x 4 0 0    0 RECENT .",
+      "drwxr-xr-x 3 0 0    0 RECENT ..",
+      "drwxr-xr-x 2 0 0    0 RECENT .hid",
+      "-rw-r--r-- 1 0 0    6 Jan  2  2024 a.txt",
+      "-rw-r--r-- 1 0 0 5000 RECENT big",
+      "drwxr-xr-x 2 0 0    0 RECENT sub",
+      "-rw-r--r-- 1 0 0    6 Jan  2  2024 a.txt",
+      "-rw-r--r-- 1 0 0 4.9K RECENT big",
+      "",
+    ]);
+  });
+});

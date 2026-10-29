@@ -16,6 +16,16 @@ included.
 
 ## [Unreleased]
 
+- Decode ANSI-C `$'...'` quotes with Bash's escapes and read `$"..."` as
+  itself in the C locale; both were parse errors that failed a whole script.
+- Treat `!`, `{` and `}` after a command word as ordinary arguments, so a
+  negated bracket test and `find . ! -name x` parse as in Bash.
+- `find` evaluates GNU expressions: `!`/`-not`, `-a`, `-o`, parentheses,
+  `-path`, `-iname`, `-ipath`, `-empty`, `-mindepth`, `-prune`, comma `-type`
+  lists, and actions in order, including `-print` beside `-exec`.
+- `ls -l` prints GNU long rows with a `total`, link counts, modification times
+  and aligned columns; `ls` hides dot entries unless `-A` or `-a`, which adds
+  `.` and `..`; `-h` prints human sizes; file operands list before directories.
 - Bound expansion characters and fields per expansion instead of per execution,
   charging the running total to expansion work. A nested `while read` loop over
   a small wiki was refused for the sum of short words it held one at a time.

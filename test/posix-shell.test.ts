@@ -3,6 +3,7 @@ import { defaultShellCommands } from "../src/shell/commands/default.js";
 import type { IdentityIds, IdentityNames, ShellIdentityResolver } from "../src/shell/identity.js";
 import { Shell } from "../src/shell/shell.js";
 import type { PosixCredentials, PosixVirtualFileSystem } from "../src/vfs/types.js";
+import { withoutListingTimes } from "./helpers/bash.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 
 const USER: PosixCredentials = { uid: 1_000, gid: 10, supplementaryGids: [20] };
@@ -81,12 +82,13 @@ it("keeps the numeric long-listing contract exact for files, directories, and li
   fileSystem.setOwnership("/file", { uid: USER.uid, gid: 20 });
   const shell = new Shell({ fileSystem, commands: defaultShellCommands });
 
-  await expect(shell.executeText({ script: "ls -n -d /dir /file /link" })).resolves.toEqual({
+  const listed = await shell.executeText({ script: "ls -n -d /dir /file /link" });
+  expect({ ...listed, stdout: withoutListingTimes(listed.stdout) }).toEqual({
     exitCode: 0,
     stdout:
-      "drwxrws--- 1000 20        0 /dir\n" +
-      "-rwsr-xr-- 1000 20        1 /file\n" +
-      "lrwxrwxrwx 0 0        5 /link -> /file\n",
+      "drwxrws--- 2 1000 20 0 TIME /dir\n" +
+      "-rwsr-xr-- 1 1000 20 1 TIME /file\n" +
+      "lrwxrwxrwx 1 0    0  5 TIME /link -> /file\n",
     stderr: "",
   });
 });
@@ -154,11 +156,11 @@ it("uses host account names for display and named chown while keeping numeric fo
       "stat -c '%u:%g:%U:%G' /home/file",
     ].join("\n"),
   });
-  expect(result).toEqual({
+  expect({ ...result, stdout: withoutListingTimes(result.stdout) }).toEqual({
     exitCode: 0,
     stdout: [
-      "-rw-r--r-- alice staff        4 /home/file",
-      "-rw-r--r-- 1000 10        4 /home/file",
+      "-rw-r--r-- 1 alice staff 4 TIME /home/file",
+      "-rw-r--r-- 1 1000 10 4 TIME /home/file",
       "1000:10:alice:staff",
       " Owner: 1000 (alice)",
       " Group: 10 (staff)",

@@ -142,7 +142,10 @@ Durable Object, or dev server restarts.
 Supported syntax:
 
 - simple commands, assignment-only commands, and command-prefix assignments;
-- single quotes, double quotes, and backslash escapes;
+- single quotes, double quotes, and backslash escapes; ANSI-C `$'...'` quotes
+  with Bash's escapes (`\n`, `\t`, `\e`, `\\`, `\'`, octal `\nnn`, `\xHH`,
+  `\uHHHH`, `\UHHHHHHHH`, `\cX`; an unknown escape keeps its backslash and NUL
+  ends the word); and `$"..."`, which the C locale translates to itself;
 - `$VAR`, `${VAR}`, `$?`, `$0`, `$1...`, `$@`, `$*`, and `$#`;
 - newlines, `;`, `&&`, `||`, and prefix `!`;
 - concurrent pipelines;
@@ -164,8 +167,8 @@ Supported syntax:
 - comments beginning with `#` at a word boundary.
 
 The complete submitted script is parsed before any command runs. Unsupported
-ANSI-C and locale-translated quotes, process substitution, C-style `for`,
-arrays, extended-test operators outside the documented `[[ ... ]]` profile,
+`$'...'` or `$"..."` inside another quoted word, process substitution,
+C-style `for`, arrays, extended-test operators outside the documented `[[ ... ]]` profile,
 arbitrary descriptors, background jobs, `select`, the `function` keyword,
 `time`, `coproc`, and malformed syntax produce status 2 before a partial
 mutation. `eval`, traps, job control, shell options outside the documented
@@ -457,16 +460,20 @@ accepts names when the resolver supplies the reverse mapping; the filesystem
 still enforces root-only owner changes and limits an ordinary owner to its own
 groups.
 
-Plain `ls` remains one name per line. Its human-oriented long form is
-`MODE OWNER GROUP SIZE NAME`; `ls -l` resolves owner and group names when the
+Plain `ls` remains one name per line and hides dot-prefixed names; `-A` shows
+them and `-a` adds `.` and `..`. The long form is GNU's: a `total` line of
+kibibyte blocks for a directory, then `MODE LINKS OWNER GROUP SIZE TIME NAME`
+with each listing's columns aligned, the time as `Mon DD HH:MM` in UTC or
+`Mon DD  YYYY` when older than six months, and sizes rounded up in powers of
+1024 under `-h`. File operands print first, sorted and aligned together, then
+each directory. `ls -l` resolves owner and group names when the
 host capability is present, while `ls -n` implies the long form and always
 uses numbers. `stat -c %u/%g` is likewise always numeric, and `%U/%G` selects
 resolved names with numeric fallback. `stat -c %i` reports the entry identity,
 which is stable across a move and never reused after a removal. A device or an
-applet path reports zero, because it has no entry behind it. The VFS has no
-link count or change-time guarantee, so the long form does not invent those
-Linux columns — a constant `1` for links would read as a fact rather than as
-the absence of one.
+applet path reports zero, because it has no entry behind it. The link count is
+the entry's own, which for a directory counts its subdirectories as on Linux;
+an entry answered above the namespace, such as a device, reports one.
 
 `help` lists the registered commands with their summaries, `help NAME...`
 describes named ones and exits 1 for an unknown one, and `help -s` prints only
@@ -649,7 +656,7 @@ decides which directory is provisioned; pass the same path as the execution
 | discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
 | help | `help -s`, from the dedicated `/shell/commands/help` subpath |
 | shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
-| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p -P` (a `SRC/.` operand and an existing destination directory merge, as in GNU), `ls -l -n -d -a -A -1 -R`, `find -name -type -maxdepth -print -print0 -exec`, `stat -L -c` (`%i` identity, `%u/%g/%U/%G` ownership), `chmod`, `chown`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
+| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p -P` (a `SRC/.` operand and an existing destination directory merge, as in GNU), `ls -l -n -d -a -A -h -1 -R`, `find` expressions (`-name -iname -path -ipath -type -empty -mindepth -maxdepth -prune -print -print0 -exec`, `! -not -a -o ( )`), `stat -L -c` (`%i` identity, `%u/%g/%U/%G` ownership), `chmod`, `chown`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | links | `ln -s -f`, `readlink -f`, from the dedicated `/shell/commands/link` subpath |
 | streaming text/bytes | `cat`, `grep -i -v -n -x -F -E -c -l -L -q -r -R -h`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c -s`, `tr -c -d -s` (escapes, ranges, `[:class:]`), `nl`, `fold -w`, `sed -E -n -e -i`, `seq -s -w` |
 | deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, from the dedicated `/shell/commands/system` subpath |
@@ -943,6 +950,15 @@ one unreadable entry does not discard the matches already found; the status is
 then 2 rather than 0 or 1. With `-r` the filename is prefixed only when more
 than one file can be searched, so `grep -r x one.txt` prints bare lines.
 
+`find` evaluates a GNU expression for every entry, in path order: tests
+`-name`, `-iname`, `-path`/`-wholename`, `-ipath` (where `*` also matches `/`),
+`-type` (with a comma list), `-empty`, `-true`, `-false`; operators `!`/`-not`,
+`-a`/`-and` or juxtaposition, `-o`/`-or`, and parentheses; actions `-print`,
+`-print0`, `-exec`, and `-prune`; and the global `-mindepth` and `-maxdepth`.
+An expression without an action prints what it selects. `-name` sees the
+starting point under the name it was given, so `find . -name '.*'` reports `.`
+as GNU does.
+
 `find -print0` separates with NUL so a path containing a newline survives the
 hand-off to `xargs -0`. `find -exec` dispatches an already-expanded argv through
 the same registry, policy, and budget as any other command, so a matched path
@@ -1111,9 +1127,7 @@ the historical `-10` line-count form.
 
 This syntax does not add options beyond the table. An unsupported member of a
 cluster is a usage error naming that member; for example, `ls -als` reports
-unsupported `-s` and then prints the `ls` synopsis. `ls -a` and `ls -A` are accepted compatibility no-ops because
-directory listings already include stored dot-prefixed names and never
-synthesize `.` or `..`. `find` expressions and the `set` and `getopts` built-ins
+unsupported `-s` and then prints the `ls` synopsis. `find` expressions and the `set` and `getopts` built-ins
 keep their separately documented grammars.
 
 Text utilities use fatal incremental UTF-8 decoding unless the operation is
