@@ -1,27 +1,47 @@
-import { compilePosixRegex } from "../../core/posix-regex.js";
 import {
-  ADDITIVE_OPERATORS,
-  ASSIGNMENT_OPERATORS,
   AWK_BUILTINS,
+  type AwkFunction,
+  type AwkProgram,
   type AwkRule,
-  COMPARISON_OPERATORS,
   type Expression,
   LOOP_CONTROL_KINDS,
-  MULTIPLICATIVE_OPERATORS,
   PRINT_KINDS,
+  type PrintDestination,
   type Statement,
-  UNARY_OPERATORS,
 } from "./awk-ast.js";
-import { AwkSyntaxError, type AwkToken, awkRegexSource } from "./awk-lexer.js";
-import { AwkParserCursor } from "./awk-parser-cursor.js";
+import { AwkSyntaxError, type AwkToken } from "./awk-lexer.js";
+import { AwkExpressionParser } from "./awk-parser-expressions.js";
 
-class Parser extends AwkParserCursor {
+/** Names declared with `function` or `func`, so a call may precede its definition. */
+function functionNames(tokens: readonly AwkToken[]): Set<string> {
+  const names = new Set<string>();
+  tokens.forEach((token, index) => {
+    const next = tokens[index + 1];
+    if (
+      token.kind === "identifier" &&
+      (token.value === "function" || token.value === "func") &&
+      next?.kind === "identifier"
+    ) {
+      names.add(next.value);
+    }
+  });
+  return names;
+}
+
+class Parser extends AwkExpressionParser {
   private loopDepth = 0;
+  private inFunction = false;
+  readonly functions = new Map<string, AwkFunction>();
 
   parse(): AwkRule[] {
     const rules: AwkRule[] = [];
     this.separators();
     while (!this.at("eof")) {
+      if (this.atIdentifier("function") || this.atIdentifier("func")) {
+        this.functionDefinition();
+        this.separators();
+        continue;
+      }
       const rule = this.rule();
       rules.push(rule);
       if (
@@ -35,6 +55,33 @@ class Parser extends AwkParserCursor {
       this.separators();
     }
     return rules;
+  }
+
+  private functionDefinition(): void {
+    this.take();
+    const name = this.take();
+    if (name.kind !== "identifier") this.fail("expected a function name", name);
+    if (AWK_BUILTINS.has(name.value) || this.functions.has(name.value)) {
+      this.fail(`function ${name.value} is already defined`, name);
+    }
+    this.expectOperator("(");
+    const parameters: string[] = [];
+    while (!this.atOperator(")")) {
+      const parameter = this.take();
+      if (parameter.kind !== "identifier") this.fail("expected a parameter name", parameter);
+      parameters.push(parameter.value);
+      if (!this.atOperator(",")) break;
+      this.take();
+      this.consumeNewlines();
+    }
+    this.expectOperator(")");
+    this.consumeNewlines();
+    this.inFunction = true;
+    try {
+      this.functions.set(name.value, { name: name.value, parameters, body: this.block() });
+    } finally {
+      this.inFunction = false;
+    }
   }
 
   private separators(): void {
@@ -113,7 +160,9 @@ class Parser extends AwkParserCursor {
     const parenthesized = this.atOperator("(");
     if (parenthesized) this.take();
     const values: Expression[] = [];
-    while (!(parenthesized ? this.atOperator(")") : this.statementEnded())) {
+    while (
+      !(parenthesized ? this.atOperator(")") : this.statementEnded() || this.atRedirection())
+    ) {
       values.push(this.expression());
       if (!this.atOperator(",")) break;
       this.take();
@@ -126,13 +175,31 @@ class Parser extends AwkParserCursor {
       }
     }
     if (kind === "printf" && values.length === 0) this.fail("printf requires a format");
-    if (
-      !parenthesized &&
-      values.some((value) => value.kind === "binary" && value.operator === ">")
-    ) {
-      this.fail("output redirection inside AWK is not supported");
+    const destination = this.printDestination(values, parenthesized);
+    return this.node({ kind, values, ...(destination === undefined ? {} : { destination }) });
+  }
+
+  private atRedirection(): boolean {
+    return this.atOperator(">") || this.atOperator(">>");
+  }
+
+  /**
+   * An unparenthesized `print a > f` parses as a comparison, which is the
+   * redirection to split off; `>>` and a `>` after a parenthesized list are
+   * read directly.
+   */
+  private printDestination(
+    values: Expression[],
+    parenthesized: boolean,
+  ): PrintDestination | undefined {
+    const last = values.at(-1);
+    if (!parenthesized && last?.kind === "binary" && last.operator === ">") {
+      values[values.length - 1] = last.left;
+      return { append: false, target: last.right };
     }
-    return this.node({ kind, values });
+    if (!this.atRedirection()) return undefined;
+    const append = this.take().value === ">>";
+    return { append, target: this.expression() };
   }
 
   private ifStatement(): Statement {
@@ -230,8 +297,18 @@ class Parser extends AwkParserCursor {
     });
   }
 
+  private returnStatement(): Statement {
+    const token = this.take();
+    if (!this.inFunction) this.fail("return is only valid inside a function", token);
+    return this.node({
+      kind: "return",
+      ...(this.statementEnded() ? {} : { value: this.expression() }),
+    });
+  }
+
   private statement(): Statement {
     if (this.atIdentifier("print") || this.atIdentifier("printf")) return this.printStatement();
+    if (this.atIdentifier("return")) return this.returnStatement();
     if (this.atIdentifier("if")) return this.ifStatement();
     if (this.atIdentifier("while")) return this.whileStatement();
     if (this.atIdentifier("do")) return this.doStatement();
@@ -245,254 +322,6 @@ class Parser extends AwkParserCursor {
     }
     if (this.atIdentifier("exit")) return this.exitStatement();
     return this.node({ kind: "expression", expression: this.expression() });
-  }
-
-  private expression(): Expression {
-    return this.assignment();
-  }
-
-  private assignment(): Expression {
-    const left = this.conditional();
-    if (!this.atOneOf("operator", ASSIGNMENT_OPERATORS)) return left;
-    if (left.kind !== "variable" && left.kind !== "field" && left.kind !== "array") {
-      this.fail("assignment target is not writable");
-    }
-    const operator = this.takeOneOf("operator", ASSIGNMENT_OPERATORS);
-    return this.node({
-      kind: "assign",
-      target: left,
-      operator,
-      value: this.nested(() => this.assignment()),
-    });
-  }
-
-  private conditional(): Expression {
-    const condition = this.logicalOr();
-    if (!this.atOperator("?")) return condition;
-    this.take();
-    const consequent = this.nested(() => this.assignment());
-    this.expectOperator(":");
-    return this.node({
-      kind: "conditional",
-      condition,
-      consequent,
-      alternate: this.nested(() => this.assignment()),
-    });
-  }
-
-  private logicalOr(): Expression {
-    let expression = this.logicalAnd();
-    while (this.atOperator("||")) {
-      this.take();
-      expression = this.node({
-        kind: "binary",
-        operator: "||",
-        left: expression,
-        right: this.logicalAnd(),
-      });
-    }
-    return expression;
-  }
-
-  private logicalAnd(): Expression {
-    let expression = this.comparison();
-    while (this.atOperator("&&")) {
-      this.take();
-      expression = this.node({
-        kind: "binary",
-        operator: "&&",
-        left: expression,
-        right: this.comparison(),
-      });
-    }
-    return expression;
-  }
-
-  private comparison(): Expression {
-    let expression = this.concatenation();
-    while (this.atOneOf("operator", COMPARISON_OPERATORS)) {
-      const operator = this.takeOneOf("operator", COMPARISON_OPERATORS);
-      expression = this.node({
-        kind: "binary",
-        operator,
-        left: expression,
-        right: this.concatenation(),
-      });
-    }
-    if (this.atIdentifier("in")) {
-      this.take();
-      if (!this.at("identifier")) this.fail("in requires an array name");
-      expression = this.node({ kind: "in", key: expression, array: this.take().value });
-    }
-    return expression;
-  }
-
-  private startsPrimary(): boolean {
-    return (
-      (this.at("number") ||
-        this.at("string") ||
-        this.at("identifier") ||
-        this.at("regex") ||
-        this.atOperator("(") ||
-        this.atOperator("$")) &&
-      !this.atIdentifier("in")
-    );
-  }
-
-  private concatenation(): Expression {
-    let expression = this.additive();
-    while (this.startsPrimary()) {
-      expression = this.node({
-        kind: "binary",
-        operator: "concat",
-        left: expression,
-        right: this.additive(),
-      });
-    }
-    return expression;
-  }
-
-  private additive(): Expression {
-    let expression = this.multiplicative();
-    while (this.atOneOf("operator", ADDITIVE_OPERATORS)) {
-      const operator = this.takeOneOf("operator", ADDITIVE_OPERATORS);
-      expression = this.node({
-        kind: "binary",
-        operator,
-        left: expression,
-        right: this.multiplicative(),
-      });
-    }
-    return expression;
-  }
-
-  private multiplicative(): Expression {
-    let expression = this.unary();
-    while (this.atOneOf("operator", MULTIPLICATIVE_OPERATORS)) {
-      const operator = this.takeOneOf("operator", MULTIPLICATIVE_OPERATORS);
-      expression = this.node({
-        kind: "binary",
-        operator,
-        left: expression,
-        right: this.nested(() => this.unary()),
-      });
-    }
-    return expression;
-  }
-
-  private unary(): Expression {
-    if (this.atOneOf("operator", UNARY_OPERATORS)) {
-      const operator = this.takeOneOf("operator", UNARY_OPERATORS);
-      return this.node({ kind: "unary", operator, operand: this.nested(() => this.unary()) });
-    }
-    if (this.atOperator("++") || this.atOperator("--")) {
-      const delta = this.take().value === "++" ? 1 : -1;
-      const target = this.nested(() => this.unary());
-      if (target.kind !== "variable" && target.kind !== "field" && target.kind !== "array") {
-        this.fail("update target is not writable");
-      }
-      return this.node({ kind: "update", target, delta, prefix: true });
-    }
-    return this.power();
-  }
-
-  private power(): Expression {
-    const expression = this.postfix();
-    if (!this.atOperator("^")) return expression;
-    this.take();
-    return this.node({
-      kind: "binary",
-      operator: "^",
-      left: expression,
-      right: this.nested(() => this.unary()),
-    });
-  }
-
-  private postfix(): Expression {
-    const expression = this.primary();
-    if (!this.atOperator("++") && !this.atOperator("--")) return expression;
-    if (
-      expression.kind !== "variable" &&
-      expression.kind !== "field" &&
-      expression.kind !== "array"
-    ) {
-      this.fail("update target is not writable");
-    }
-    const delta = this.take().value === "++" ? 1 : -1;
-    return this.node({ kind: "update", target: expression, delta, prefix: false });
-  }
-
-  private callExpression(name: string, token: AwkToken): Expression {
-    if (!AWK_BUILTINS.has(name)) this.fail(`unsupported function ${name}`, token);
-    this.take();
-    const arguments_: Expression[] = [];
-    while (!this.atOperator(")")) {
-      arguments_.push(this.expression());
-      if (!this.atOperator(",")) break;
-      this.take();
-    }
-    this.expectOperator(")");
-    return this.node({ kind: "call", name, arguments: arguments_ });
-  }
-
-  private arrayExpression(name: string): Expression {
-    this.take();
-    const indices: Expression[] = [];
-    do {
-      indices.push(this.expression());
-      if (!this.atOperator(",")) break;
-      this.take();
-    } while (!this.atOperator("]"));
-    this.expectOperator("]");
-    return this.node({ kind: "array", name, indices });
-  }
-
-  private identifierExpression(token: AwkToken): Expression {
-    if (["function", "getline", "return"].includes(token.value)) {
-      this.fail(`unsupported construct ${token.value}`, token);
-    }
-    // A built-in may be followed by blanks before its `(`; any other name
-    // followed by blanks and `(` is a variable concatenated with a group, as
-    // in `out = out (sep) x`, because a user function call has no blank.
-    const adjacent = this.current().offset === token.offset + token.value.length;
-    if (this.atOperator("(") && (adjacent || AWK_BUILTINS.has(token.value))) {
-      return this.nested(() => this.callExpression(token.value, token));
-    }
-    if (token.value === "length") return this.node({ kind: "call", name: "length", arguments: [] });
-    if (this.atOperator("[")) return this.nested(() => this.arrayExpression(token.value));
-    return this.node({ kind: "variable", name: token.value });
-  }
-
-  private parenthesizedExpression(): Expression {
-    const values = [this.expression()];
-    while (this.atOperator(",")) {
-      this.take();
-      values.push(this.expression());
-    }
-    this.expectOperator(")");
-    const only = values[0];
-    if (values.length === 1 && only !== undefined) return only;
-    if (!this.atIdentifier("in")) this.fail("a parenthesized expression list requires in");
-    return this.node({ kind: "tuple", values });
-  }
-
-  private primary(): Expression {
-    const token = this.take();
-    if (token.kind === "number") return this.node({ kind: "number", value: Number(token.value) });
-    if (token.kind === "string") return this.node({ kind: "string", value: token.value });
-    if (token.kind === "regex") {
-      return this.node({
-        kind: "regex",
-        pattern: compilePosixRegex(awkRegexSource(token.value), "extended", "awk"),
-      });
-    }
-    if (token.kind === "identifier") return this.identifierExpression(token);
-    if (token.kind === "operator" && token.value === "(")
-      return this.nested(() => this.parenthesizedExpression());
-    if (token.kind === "operator" && token.value === "$") {
-      return this.node({ kind: "field", index: this.nested(() => this.unary()) });
-    }
-    this.fail("expected an expression", token);
   }
 }
 
@@ -511,8 +340,15 @@ export function parseAwkProgram(
   tokens: readonly AwkToken[],
   maximumNodes: number,
   maximumDepth: number,
-): AwkRule[] {
-  const rules = new Parser(tokens, maximumNodes, maximumDepth).parse();
+): AwkProgram {
+  const parser = new Parser(tokens, maximumNodes, maximumDepth);
+  parser.userFunctions = functionNames(tokens);
+  const rules = parser.parse();
   validateTreeDepth(rules, 0, maximumDepth);
-  return rules;
+  validateTreeDepth(
+    [...parser.functions.values()].map((definition) => definition.body),
+    0,
+    maximumDepth,
+  );
+  return { rules, functions: parser.functions };
 }

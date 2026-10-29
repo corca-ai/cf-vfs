@@ -3,7 +3,7 @@ import { compareUtf8 } from "../../core/path.js";
 import { compilePosixRegex, type PosixRegex } from "../../core/posix-regex.js";
 import { utf8ByteLength } from "../../core/unicode.js";
 import type { ShellCommandContext } from "../types.js";
-import type { AwkRule } from "./awk-ast.js";
+import type { AwkFunction, AwkRule, Expression } from "./awk-ast.js";
 import { awkRegexSource } from "./awk-lexer.js";
 import { joinAwkStrings, retainAwkVariable } from "./awk-strings.js";
 
@@ -16,8 +16,25 @@ export interface AwkString {
 
 export type AwkValue = number | AwkString;
 
+/**
+ * One parameter of a running user function. An array argument is passed by
+ * reference; an argument naming an unset variable stays an alias until the
+ * function uses it, so `split(s, arr)` inside can create the caller's array.
+ */
+export type AwkFrameEntry =
+  | { readonly kind: "scalar"; readonly value: AwkValue; readonly assigned: boolean }
+  | { readonly kind: "array"; readonly map: Map<string, AwkValue> }
+  | { readonly kind: "alias"; readonly name: string; readonly depth: number };
+
 export interface AwkRuntimeState {
   readonly context: ShellCommandContext;
+  readonly functions: ReadonlyMap<string, AwkFunction>;
+  /** Parameter scopes of the user functions being run, innermost last. */
+  readonly frames: Map<string, AwkFrameEntry>[];
+  /** Calls a user function; set by the executor, which owns statements. */
+  callFunction: (call: Extract<Expression, { kind: "user-call" }>) => AwkValue;
+  /** `close(name)`: the next `>` to that name starts the file again. */
+  closeOutput: (name: string) => number;
   readonly variables: Map<string, AwkValue>;
   readonly arrays: Map<string, Map<string, AwkValue>>;
   readonly regexCache: Map<string, PosixRegex>;
@@ -94,7 +111,31 @@ export function compareAwkValues(left: AwkValue, right: AwkValue): number {
   return compareUtf8(asString(left), asString(right));
 }
 
+const SPECIAL_VARIABLES = new Set(["NR", "FNR", "NF", "FILENAME"]);
+
+function localEntry(state: AwkRuntimeState, name: string): AwkFrameEntry | undefined {
+  return state.frames.at(-1)?.get(name);
+}
+
+/** Whether a bare name passed to a function should be bound by reference. */
+export function bindsByReference(state: AwkRuntimeState, name: string): boolean {
+  const entry = localEntry(state, name);
+  if (entry !== undefined) return entry.kind !== "scalar" || !entry.assigned;
+  if (SPECIAL_VARIABLES.has(name)) return false;
+  return state.arrays.has(name) || !state.variables.has(name);
+}
+
+export function isArrayName(state: AwkRuntimeState, name: string): boolean {
+  const entry = localEntry(state, name);
+  return entry === undefined ? state.arrays.has(name) : entry.kind === "array";
+}
+
 export function getVariable(state: AwkRuntimeState, name: string): AwkValue {
+  const entry = localEntry(state, name);
+  if (entry !== undefined) {
+    if (entry.kind === "array") throw new VfsError("EINVAL", `awk: ${name} is an array`);
+    return entry.kind === "scalar" ? entry.value : inputValue("");
+  }
   if (name === "NR") return state.nr;
   if (name === "FNR") return state.fnr;
   if (name === "NF") {
@@ -107,6 +148,13 @@ export function getVariable(state: AwkRuntimeState, name: string): AwkValue {
 }
 
 export function setVariable(state: AwkRuntimeState, name: string, value: AwkValue): void {
+  const frame = state.frames.at(-1);
+  const entry = frame?.get(name);
+  if (frame !== undefined && entry !== undefined) {
+    if (entry.kind === "array") throw new VfsError("EINVAL", `awk: ${name} is an array`);
+    frame.set(name, { kind: "scalar", value, assigned: true });
+    return;
+  }
   if (state.arrays.has(name)) throw new VfsError("EINVAL", `awk: ${name} is an array`);
   if (name === "NF" || name === "FILENAME") {
     throw new VfsError("EINVAL", `awk: cannot assign to ${name}`);
@@ -127,14 +175,30 @@ export function setVariable(state: AwkRuntimeState, name: string, value: AwkValu
   state.variables.set(name, value);
 }
 
-export function getArray(state: AwkRuntimeState, name: string): Map<string, AwkValue> {
-  if (state.variables.has(name)) throw new VfsError("EINVAL", `awk: ${name} is not an array`);
-  let array = state.arrays.get(name);
-  if (array === undefined) {
-    array = new Map();
-    state.arrays.set(name, array);
+/** The array a name means at a frame depth, where depth 0 is the global scope. */
+function arrayAt(state: AwkRuntimeState, name: string, depth: number): Map<string, AwkValue> {
+  const frame = depth === 0 ? undefined : state.frames[depth - 1];
+  const entry = frame?.get(name);
+  if (frame === undefined || entry === undefined) {
+    if (state.variables.has(name)) throw new VfsError("EINVAL", `awk: ${name} is not an array`);
+    let array = state.arrays.get(name);
+    if (array === undefined) {
+      array = new Map();
+      state.arrays.set(name, array);
+    }
+    return array;
   }
-  return array;
+  if (entry.kind === "array") return entry.map;
+  if (entry.kind === "scalar" && entry.assigned) {
+    throw new VfsError("EINVAL", `awk: ${name} is not an array`);
+  }
+  const map = entry.kind === "alias" ? arrayAt(state, entry.name, entry.depth) : new Map();
+  frame.set(name, { kind: "array", map });
+  return map;
+}
+
+export function getArray(state: AwkRuntimeState, name: string): Map<string, AwkValue> {
+  return arrayAt(state, name, state.frames.length);
 }
 
 function arrayEntryBytes(key: string, value: AwkValue): number {

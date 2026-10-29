@@ -60,7 +60,6 @@ export class ExecutionBudget implements ShellBudget {
   private ioBytes = 0;
   private diagnostics = false;
   private mutations = 0;
-  private globMatches = 0;
   private expansionWorkUnits = 0;
   private bufferedBytes = 0;
 
@@ -166,17 +165,17 @@ export class ExecutionBudget implements ShellBudget {
     }
   }
 
+  /**
+   * Bounds the entries one pathname expansion or one `find` traversal holds
+   * at once. The limit is per result, like the expansion limits, because what
+   * it protects is memory; the running total is charged to expansion work.
+   */
   glob(count = 1): void {
     this.checkDeadline();
-    this.globMatches += count;
-    if (this.globMatches > this.limits.maxGlobMatches) {
-      this.exceeded(
-        "maxGlobMatches",
-        this.globMatches,
-        "E2BIG",
-        "pathname expansion match limit exceeded",
-      );
+    if (count > this.limits.maxGlobMatches) {
+      this.exceeded("maxGlobMatches", count, "E2BIG", "pathname expansion match limit exceeded");
     }
+    this.expansionWork(count);
   }
 
   expansionWork(count = 1): void {

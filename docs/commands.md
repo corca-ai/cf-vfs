@@ -666,7 +666,7 @@ decides which directory is provisioned; pass the same path as the execution
 | shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
 | namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f -n`, `cp -r -f -n -p -P` (several sources into a directory; an existing destination is overwritten unless `-n`, as in GNU; a `SRC/.` operand and an existing destination directory merge), `ls -l -n -d -a -A -h -1 -R`, `find` expressions (`-name -iname -path -ipath -type -empty -mindepth -maxdepth -prune -print -print0 -exec`, `! -not -a -o ( )`), `stat -L -c` (`%i` identity, `%u/%g/%U/%G` ownership), `chmod`, `chown`, `du`, `tree`, `basename` (with `SUFFIX`, `-s`, and `-a`), `dirname`, `realpath`, `mktemp`, `file` |
 | links | `ln -s -f`, `readlink -f`, from the dedicated `/shell/commands/link` subpath |
-| streaming text/bytes | `cat`, `grep -i -v -n -x -F -E -c -l -L -q -r -R -h`, `head -n -c -q -v` (a `==> name <==` header per file when there are several), `wc -l -w -c`, `uniq -c -d -u -i -f -s -w`, `od -A -t -c -b -d -o -x -v -j -N -w` (GNU element widths, aligned formats, `*` for repeated lines, and the `z` column), `cut -d -f -c -s`, `tr -c -d -s` (escapes, ranges, `[:class:]`), `nl`, `fold -w`, `sed -E -r -n -e -i` (see the sed profile), `seq -s -w` |
+| streaming text/bytes | `cat -A -b -e -E -n -s -t -T -u -v`, `grep -i -v -n -x -w -F -E -c -l -L -q -r -R -h -H -s -o -e -f -A -B -C -m --include --exclude --exclude-dir` (several patterns select a line when any matches; context lines use `-` and groups are separated by `--`; an unreadable operand is reported and the rest are searched, with status 2), `head -n -c -q -v` (a `==> name <==` header per file when there are several), `wc -l -w -c`, `uniq -c -d -u -i -f -s -w`, `od -A -t -c -b -d -o -x -v -j -N -w` (GNU element widths, aligned formats, `*` for repeated lines, and the `z` column), `cut -d -f -c -s`, `tr -c -d -s` (escapes, ranges, `[:class:]`), `nl`, `fold -w`, `sed -E -r -n -e -i` (see the sed profile), `seq -s -w` |
 | deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, from the dedicated `/shell/commands/system` subpath |
 | bounded barriers | `sort -b -f -n -r -s -u -t SEP -k POS1[,POS2]` (GNU keys: fields keep their leading blanks without `-t`, a key with options of its own inherits none of the global ones, and equal keys fall back to the whole line unless `-s` or `-u`), `tail -n -c -q -v` (`+N` starts from a record or byte), `tee -a`, `paste`, `cmp -s`, `diff -r -q -u` (unified output with three lines of context, as GNU writes it), `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
 | argument dispatch | `xargs -n -0 -r -t`, from the dedicated `/shell/commands/xargs` subpath |
@@ -1027,9 +1027,17 @@ including results that are never printed. The complete
 program, including every `-f` source, is compiled before stdin or a data-file
 operand is opened.
 
-User functions, `getline`, `system`, whole-array `delete`, AWK-internal output
-redirection, assignments after the program, and locale-dependent behavior are
-outside the profile and fail explicitly instead of being approximated. The
+User functions are supported: `function name(params) { ... }` (or `func`),
+defined before or after use, with `return`, scalars passed by value, arrays and
+not-yet-used names passed by reference, and extra parameters as locals. Calls
+are bounded by `maxFunctionDepth`. `print` and `printf` redirect with `> file`,
+which replaces the file once per run, and `>> file`, which appends; the files
+are published when the program ends, `close(file)` lets a later `>` start the
+file again, and `/dev/stdout` and `/dev/stderr` name the streams. Loops charge
+expansion work rather than the shell's loop-iteration limit. `getline`,
+`system`, output pipes, whole-array `delete`, assignments after the program,
+and locale-dependent behavior are outside the profile and fail explicitly
+instead of being approximated. The
 third capture-array argument to `match` is also outside the profile. Records
 are newline-delimited; changing `RS`, `OFMT`, or `CONVFMT` is refused, as are
 empty or empty-matching `FS` values. The C locale is fixed: string ordering is

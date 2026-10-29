@@ -16,6 +16,17 @@ included.
 
 ## [Unreleased]
 
+- Bound glob matches per pathname expansion or `find` instead of per
+  execution, charging the total to expansion work; `grep -r` charges its walk
+  to expansion work only. `awk` loops charge expansion work rather than the
+  shell's loop-iteration limit. Repeated `find` and nested `awk` loops over a
+  2,000-page wiki hit both cumulative limits.
+- `grep` adds `-e`, `-f`, `-w`, `-A`, `-B`, `-C`, `-m`, `-H`, `-s`, and
+  `--include`, `--exclude` and `--exclude-dir` for `-r`, and reports an
+  unreadable operand while searching the rest. `cat` adds `-n`, `-b`, `-s`,
+  `-E`, `-T`, `-v`, `-A`, `-e` and `-t`.
+- `awk` runs user-defined functions and redirects `print` and `printf` to files
+  with `>` and `>>`, honoring `close`.
 - `awk` keeps a `;` before `else` in a simple `if`; it silently dropped every
   record the condition rejected. A basic regular expression anchors `^` and `$`
   in every alternative and group, as GNU does, so `^a\|^b` matches both.

@@ -16,6 +16,7 @@ import {
   getField,
   getVariable,
   inputValue,
+  isArrayName,
   putArray,
   type AwkRuntimeState as RuntimeState,
   setField,
@@ -156,7 +157,9 @@ function arrayLengthCall(
   state: RuntimeState,
 ): number | undefined {
   const argument = arguments_[0];
-  return arguments_.length === 1 && argument?.kind === "variable" && state.arrays.has(argument.name)
+  return arguments_.length === 1 &&
+    argument?.kind === "variable" &&
+    isArrayName(state, argument.name)
     ? getArray(state, argument.name).size
     : undefined;
 }
@@ -347,6 +350,10 @@ function callBuiltin(name: string, arguments_: readonly AwkValue[], state: Runti
     return Math.trunc(asNumber(arguments_[0] ?? inputValue("")));
   }
   if (name === "sprintf") return builtinSprintf(arguments_, state);
+  if (name === "close") {
+    expectArgumentCount(name, arguments_, 1, 1, "expects one argument");
+    return state.closeOutput(asString(arguments_[0] ?? inputValue("")));
+  }
   throw new VfsError("EINVAL", `awk: unsupported function ${name}`);
 }
 
@@ -501,6 +508,8 @@ function evaluateNode(expression: Expression, state: RuntimeState): AwkValue {
       throw new VfsError("EINVAL", "awk: expression list is only valid with in");
     case "call":
       return evaluateCall(expression, state);
+    case "user-call":
+      return state.callFunction(expression);
     case "unary":
       return evaluateUnary(expression, state);
     case "conditional":

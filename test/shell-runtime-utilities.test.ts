@@ -198,7 +198,7 @@ it("holds materialized input leases until a multi-file command finishes", async 
   ).resolves.toMatchObject({ exitCode: 1, stdout: "" });
 });
 
-it("charges glob matches cumulatively across words", async () => {
+it("bounds glob matches per expansion and charges their total as work", async () => {
   const fileSystem = createTestFileSystem();
   await fileSystem.writeFile("/g/a", "a", { createParents: true });
   await fileSystem.writeFile("/g/b", "b");
@@ -208,8 +208,12 @@ it("charges glob matches cumulatively across words", async () => {
     limits: { maxGlobMatches: 1 },
   });
   await expect(shell.executeText({ script: "printf '%s\\n' /g/a* /g/b*" })).resolves.toMatchObject({
+    exitCode: 0,
+    stdout: "/g/a\n/g/b\n",
+  });
+  await expect(shell.executeText({ script: "printf '%s\\n' /g/*" })).resolves.toMatchObject({
     exitCode: 1,
-    stdout: "",
+    stderr: expect.stringContaining("pathname expansion match limit exceeded"),
   });
 });
 
@@ -237,7 +241,8 @@ it("rejects opaque bodies consistently across body-dependent utilities", async (
     "comm /opaque /inline",
   ]) {
     const result = await shell.executeText({ script });
-    expect(result.exitCode, script).toBe(1);
+    // grep reports an unreadable file and still searches the rest, with status 2 as GNU does.
+    expect(result.exitCode, script).toBe(script.startsWith("grep") ? 2 : 1);
     expect(result.stderr, script).toContain("opaque R2 content");
   }
   const digest = await shell.executeText({ script: "sha256sum /opaque" });

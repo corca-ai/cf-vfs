@@ -47,6 +47,7 @@ const TWO_CHARACTER_OPERATORS = new Set([
   "&&",
   "||",
   "!~",
+  ">>",
   "+=",
   "-=",
   "*=",

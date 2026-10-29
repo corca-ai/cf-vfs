@@ -96,7 +96,7 @@ it("validates a regular-expression FS before consuming records", async () => {
   expect(result.stderr).toContain("awk: unmatched (");
 });
 
-it("allows parenthesized comparison output but rejects AWK output redirection", async () => {
+it("separates a parenthesized comparison from output redirection", async () => {
   const comparison = await awkHarness().run(`/bin/awk '{ print ($1 > 1) }'`, {
     stdin: "2\n",
   });
@@ -106,11 +106,16 @@ it("allows parenthesized comparison output but rejects AWK output redirection", 
     stderr: "",
   });
 
-  const redirection = await awkHarness().run(`/bin/awk '{ print $1 > "out" }'`, {
+  const harness = awkHarness();
+  const redirection = await harness.run(`/bin/awk '{ print $1 > "/out" }'`, {
     stdin: "value\n",
   });
-  expect(redirection.exitCode).toBe(2);
-  expect(redirection.stderr).toContain("output redirection inside AWK is not supported");
+  expect(redirection).toMatchObject({ exitCode: 0, stdout: "", stderr: "" });
+  expect(await harness.readText("/out")).toBe("value\n");
+
+  const pipe = await awkHarness().run(`/bin/awk '{ print $1 | "sort" }'`, { stdin: "x\n" });
+  expect(pipe.exitCode).toBe(2);
+  expect(pipe.stderr).toContain("unexpected character |");
 });
 
 it("bounds printf fields before allocating their padding", async () => {
@@ -324,15 +329,15 @@ it("bounds array growth and non-terminating loops", async () => {
   expect(substitution.exitCode).toBe(1);
   expect(substitution.stderr).toContain("substitution exceeds the expansion limit");
 
-  const loop = await awkHarness({ limits: { maxLoopIterations: 3 } }).run(
+  const loop = await awkHarness({ limits: { maxExpansionWork: 3 } }).run(
     `/bin/awk 'BEGIN { while (1) { } }'`,
   );
   expect(loop.exitCode).toBe(1);
-  expect(loop.stderr).toContain("shell loop iteration limit exceeded");
+  expect(loop.stderr).toContain("shell expansion work limit exceeded");
 });
 
 it.each([
-  ["user functions", `function f(x) { return x }`, "unsupported construct function"],
+  ["undefined functions", `{ f(1) }`, "calling undefined function f"],
   ["getline", `{ getline value }`, "unsupported construct getline"],
   ["out-of-loop break", `{ break }`, "break is not inside a loop"],
 ])("rejects unsupported %s before consuming input", async (_name, program, diagnostic) => {
@@ -345,16 +350,22 @@ it.each([
   expect(result.stderr).toContain(diagnostic);
 });
 
-it("bounds loops by the shared iteration limit rather than charging records steps", async () => {
+it("bounds loops by expansion work rather than charging records steps", async () => {
   const records = await awkHarness({ limits: { maxSteps: 8 } }).run(
     `/bin/awk '{ total += $1 } END { print total }'`,
     { stdin: "1\n2\n3\n" },
   );
   expect(records).toMatchObject({ exitCode: 0, stdout: "6\n" });
 
-  const loop = await awkHarness({ limits: { maxLoopIterations: 8 } }).run(
+  // An awk loop does not spend the shell's loop-iteration allowance.
+  const nested = await awkHarness({ limits: { maxLoopIterations: 8 } }).run(
+    `/bin/awk 'BEGIN { for (i = 0; i < 50; i++) for (j = 0; j < 50; j++) n++; print n }'`,
+  );
+  expect(nested).toMatchObject({ exitCode: 0, stdout: "2500\n" });
+
+  const loop = await awkHarness({ limits: { maxExpansionWork: 100 } }).run(
     `/bin/awk 'BEGIN { while (1) x++ }'`,
   );
   expect(loop.exitCode).toBe(1);
-  expect(loop.stderr).toContain("loop iteration limit exceeded");
+  expect(loop.stderr).toContain("expansion work limit exceeded");
 });

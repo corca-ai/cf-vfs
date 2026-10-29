@@ -7,27 +7,21 @@ import {
   defineApplet,
   parseAppletOptions,
 } from "./applet.js";
-import type { AwkRule as Rule, Statement } from "./awk-ast.js";
-import { arrayKey, evaluate } from "./awk-evaluate.js";
-import { formatAwk } from "./awk-format.js";
+import type { AwkFunction, AwkRule as Rule } from "./awk-ast.js";
 import { decodeAwkEscapes, tokenizeAwk } from "./awk-lexer.js";
 import { parseAwkProgram } from "./awk-parser.js";
+import { AwkOutput, bindExecutor, executeRules } from "./awk-program.js";
 import {
   type AwkValue,
-  asNumber,
   asString,
-  getArray,
   getVariable,
   inputValue,
   type AwkRuntimeState as RuntimeState,
-  removeArrayEntry,
   setField,
-  setVariable,
   stringValue,
-  truth,
   validateFieldSeparator,
 } from "./awk-runtime.js";
-import { joinAwkStrings, retainAwkVariable } from "./awk-strings.js";
+import { retainAwkVariable } from "./awk-strings.js";
 import { BufferedTextWriter, inputStreams, readFileText, readTextLines } from "./helpers.js";
 
 const AWK = {
@@ -43,196 +37,6 @@ const AWK = {
     stopAtFirstOperand: true,
   },
 } as const satisfies AppletSpecWithOptions<"field-separator" | "assign" | "program-file">;
-
-type Control =
-  | { readonly kind: "none" }
-  | { readonly kind: "break" }
-  | { readonly kind: "continue" }
-  | { readonly kind: "next" }
-  | { readonly kind: "exit" };
-const NO_CONTROL: Control = { kind: "none" };
-
-async function executePrint(
-  statement: Extract<Statement, { kind: "print" | "printf" }>,
-  state: RuntimeState,
-  output: BufferedTextWriter,
-): Promise<void> {
-  if (statement.kind === "print") {
-    const values =
-      statement.values.length === 0
-        ? [inputValue(state.record)]
-        : statement.values.map((value) => evaluate(value, state));
-    const separator = asString(getVariable(state, "OFS"));
-    await output.write(
-      joinAwkStrings(state, [
-        joinAwkStrings(state, values.map(asString), separator),
-        asString(getVariable(state, "ORS")),
-      ]),
-    );
-    return;
-  }
-  const values = statement.values.map((value) => evaluate(value, state));
-  await output.write(
-    formatAwk(
-      asString(values[0] ?? inputValue("")),
-      values.slice(1),
-      state.context.budget.limits.maxStdoutBytes,
-    ),
-  );
-}
-
-function propagatesFromLoop(control: Control): boolean {
-  return control.kind !== "none" && control.kind !== "continue" && control.kind !== "break";
-}
-
-async function executeConditional(
-  statement: Extract<Statement, { kind: "if" }>,
-  state: RuntimeState,
-  output: BufferedTextWriter,
-): Promise<Control> {
-  const branch = truth(evaluate(statement.condition, state))
-    ? statement.consequent
-    : statement.alternate;
-  return executeStatements(branch, state, output);
-}
-
-async function executeWhile(
-  statement: Extract<Statement, { kind: "while" | "do" }>,
-  state: RuntimeState,
-  output: BufferedTextWriter,
-): Promise<Control> {
-  let first = true;
-  while (
-    statement.kind === "do"
-      ? first || truth(evaluate(statement.condition, state))
-      : truth(evaluate(statement.condition, state))
-  ) {
-    first = false;
-    state.context.budget.loop();
-    const control = await executeStatements(statement.body, state, output);
-    if (control.kind === "break") return NO_CONTROL;
-    if (propagatesFromLoop(control)) return control;
-  }
-  return NO_CONTROL;
-}
-
-async function executeFor(
-  statement: Extract<Statement, { kind: "for" }>,
-  state: RuntimeState,
-  output: BufferedTextWriter,
-): Promise<Control> {
-  if (statement.initialize !== undefined) evaluate(statement.initialize, state);
-  while (statement.condition === undefined || truth(evaluate(statement.condition, state))) {
-    state.context.budget.loop();
-    const control = await executeStatements(statement.body, state, output);
-    if (control.kind === "break") return NO_CONTROL;
-    if (propagatesFromLoop(control)) return control;
-    if (statement.update !== undefined) evaluate(statement.update, state);
-  }
-  return NO_CONTROL;
-}
-
-async function executeForIn(
-  statement: Extract<Statement, { kind: "for-in" }>,
-  state: RuntimeState,
-  output: BufferedTextWriter,
-): Promise<Control> {
-  for (const key of [...getArray(state, statement.array).keys()]) {
-    state.context.budget.loop();
-    setVariable(state, statement.variable, inputValue(key));
-    const control = await executeStatements(statement.body, state, output);
-    if (control.kind === "break") return NO_CONTROL;
-    if (propagatesFromLoop(control)) return control;
-  }
-  return NO_CONTROL;
-}
-
-async function executeStatement(
-  statement: Statement,
-  state: RuntimeState,
-  output: BufferedTextWriter,
-): Promise<Control> {
-  if (statement.kind === "print" || statement.kind === "printf") {
-    await executePrint(statement, state, output);
-    return NO_CONTROL;
-  }
-  if (statement.kind === "expression") {
-    evaluate(statement.expression, state);
-    return NO_CONTROL;
-  }
-  if (statement.kind === "if") return executeConditional(statement, state, output);
-  if (statement.kind === "while" || statement.kind === "do")
-    return executeWhile(statement, state, output);
-  if (statement.kind === "for") return executeFor(statement, state, output);
-  if (statement.kind === "for-in") return executeForIn(statement, state, output);
-  if (statement.kind === "delete") {
-    const array = getArray(state, statement.target.name);
-    removeArrayEntry(state, array, arrayKey(statement.target.indices, state));
-    return NO_CONTROL;
-  }
-  if (statement.kind === "break" || statement.kind === "continue" || statement.kind === "next") {
-    return { kind: statement.kind };
-  }
-  if (statement.status !== undefined) {
-    state.exitStatus = Math.trunc(asNumber(evaluate(statement.status, state))) & 0xff;
-  }
-  return { kind: "exit" };
-}
-
-async function executeStatements(
-  statements: readonly Statement[],
-  state: RuntimeState,
-  output: BufferedTextWriter,
-): Promise<Control> {
-  // Statements run once per record or per loop iteration, which the I/O and
-  // loop-iteration limits bound, so they charge no step of their own.
-  for (const statement of statements) {
-    const control = await executeStatement(statement, state, output);
-    if (control.kind !== "none") return control;
-  }
-  return NO_CONTROL;
-}
-
-function ruleMatches(rule: Rule, state: RuntimeState): boolean {
-  if (rule.rangeEnd === undefined) {
-    return rule.pattern === undefined || truth(evaluate(rule.pattern, state));
-  }
-  const active = state.activeRanges.has(rule);
-  if (!active && rule.pattern !== undefined && !truth(evaluate(rule.pattern, state))) return false;
-  if (!active) state.activeRanges.add(rule);
-  if (truth(evaluate(rule.rangeEnd, state))) state.activeRanges.delete(rule);
-  return true;
-}
-
-async function executeRule(
-  rule: Rule,
-  state: RuntimeState,
-  output: BufferedTextWriter,
-): Promise<Control> {
-  if (rule.action === undefined) {
-    await output.write(`${state.record}${asString(getVariable(state, "ORS"))}`);
-    return NO_CONTROL;
-  }
-  const control = await executeStatements(rule.action, state, output);
-  if (control.kind === "break" || control.kind === "continue") {
-    throw new VfsError("EINVAL", `awk: ${control.kind} is not inside a loop`);
-  }
-  return control;
-}
-
-async function executeRules(
-  rules: readonly Rule[],
-  phase: Rule["phase"],
-  state: RuntimeState,
-  output: BufferedTextWriter,
-): Promise<Control> {
-  for (const rule of rules) {
-    if (rule.phase !== phase || !ruleMatches(rule, state)) continue;
-    const control = await executeRule(rule, state, output);
-    if (control.kind !== "none") return control;
-  }
-  return NO_CONTROL;
-}
 
 function assignment(value: string): readonly [string, AwkValue] {
   const parsed = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/su.exec(value);
@@ -331,9 +135,16 @@ function initialVariables(options: readonly AwkOptionValue[]): Map<string, AwkVa
 function runtimeState(
   context: ShellCommandContext,
   variables: Map<string, AwkValue>,
+  functions: ReadonlyMap<string, AwkFunction>,
 ): RuntimeState {
   return {
     context,
+    functions,
+    frames: [],
+    callFunction: () => {
+      throw new VfsError("EIO", "awk: no executor is bound");
+    },
+    closeOutput: () => -1,
     variables,
     arrays: new Map(),
     regexCache: new Map(),
@@ -372,9 +183,11 @@ async function executeInput(
   rules: readonly Rule[],
   paths: readonly string[],
   state: RuntimeState,
-  input: ShellFileDescriptors[0],
-  output: BufferedTextWriter,
+  fds: ShellFileDescriptors,
+  output: AwkOutput,
+  writer: BufferedTextWriter,
 ): Promise<boolean> {
+  const input = fds[0];
   for await (const source of inputStreams(state.context, paths, input)) {
     state.filename = source.name;
     state.fnr = 0;
@@ -385,7 +198,8 @@ async function executeInput(
       state.fieldSeparator = asString(getVariable(state, "FS"));
       state.nr += 1;
       state.fnr += 1;
-      if ((await executeRules(rules, "record", state, output)).kind === "exit") return true;
+      const control = await executeRules(rules, "record", state, output, writer, fds[2]);
+      if (control.kind === "exit") return true;
     }
   }
   return false;
@@ -407,27 +221,31 @@ export const awkCommand = /* @__PURE__ */ defineApplet(AWK, async (context, argv
   const operands = [...parsed.operands];
   const source = await programSource(context, programFiles, operands);
   validateProgram(source, operands, context);
-  const rules = parseAwkProgram(
+  const program = parseAwkProgram(
     tokenizeAwk(source),
     context.budget.limits.maxAstNodes,
     context.budget.limits.maxNestingDepth,
   );
-  const state = runtimeState(context, initialVariables(parsed.options));
+  const { rules } = program;
+  const state = runtimeState(context, initialVariables(parsed.options), program.functions);
   validateRuntime(state);
-  const output = new BufferedTextWriter(context, fds[1]);
+  const writer = new BufferedTextWriter(context, fds[1]);
+  const output = new AwkOutput(context);
+  bindExecutor(state, output);
   const needsInput = rules.some((rule) => rule.phase !== "begin");
   try {
     for (const [name, value] of state.variables) retainAwkVariable(state, name, value);
-    const begin = await executeRules(rules, "begin", state, output);
+    const begin = await executeRules(rules, "begin", state, output, writer, fds[2]);
     if (begin.kind === "next") throw new VfsError("EINVAL", "awk: next is not valid in BEGIN");
     if (begin.kind !== "exit" && needsInput)
-      await executeInput(rules, operands, state, fds[0], output);
-    const end = await executeRules(rules, "end", state, output);
+      await executeInput(rules, operands, state, fds, output, writer);
+    const end = await executeRules(rules, "end", state, output, writer, fds[2]);
     if (end.kind === "next") throw new VfsError("EINVAL", "awk: next is not valid in END");
-    await output.flush();
+    await writer.flush();
+    await output.writeFiles();
     return state.exitStatus;
   } finally {
-    output.abort();
+    writer.abort();
     state.arrayRelease();
     state.scalarRelease();
   }

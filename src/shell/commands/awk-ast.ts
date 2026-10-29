@@ -12,6 +12,11 @@ export type Expression =
   | { readonly kind: "array"; readonly name: string; readonly indices: readonly Expression[] }
   | { readonly kind: "in"; readonly key: Expression; readonly array: string }
   | { readonly kind: "call"; readonly name: string; readonly arguments: readonly Expression[] }
+  | {
+      readonly kind: "user-call";
+      readonly name: string;
+      readonly arguments: readonly Expression[];
+    }
   | { readonly kind: "unary"; readonly operator: "!" | "+" | "-"; readonly operand: Expression }
   | {
       readonly kind: "binary";
@@ -57,9 +62,23 @@ export type Expression =
 
 export type LValue = Extract<Expression, { kind: "variable" | "field" | "array" }>;
 
+/** `print ... > target` replaces the file once per run; `>>` appends. */
+export interface PrintDestination {
+  readonly append: boolean;
+  readonly target: Expression;
+}
+
 export type Statement =
-  | { readonly kind: "print"; readonly values: readonly Expression[] }
-  | { readonly kind: "printf"; readonly values: readonly Expression[] }
+  | {
+      readonly kind: "print";
+      readonly values: readonly Expression[];
+      readonly destination?: PrintDestination;
+    }
+  | {
+      readonly kind: "printf";
+      readonly values: readonly Expression[];
+      readonly destination?: PrintDestination;
+    }
   | { readonly kind: "expression"; readonly expression: Expression }
   | {
       readonly kind: "if";
@@ -86,7 +105,19 @@ export type Statement =
   | { readonly kind: "break" }
   | { readonly kind: "continue" }
   | { readonly kind: "next" }
-  | { readonly kind: "exit"; readonly status?: Expression };
+  | { readonly kind: "exit"; readonly status?: Expression }
+  | { readonly kind: "return"; readonly value?: Expression };
+
+export interface AwkFunction {
+  readonly name: string;
+  readonly parameters: readonly string[];
+  readonly body: readonly Statement[];
+}
+
+export interface AwkProgram {
+  readonly rules: readonly AwkRule[];
+  readonly functions: ReadonlyMap<string, AwkFunction>;
+}
 
 export interface AwkRule {
   readonly phase: "begin" | "record" | "end";
@@ -121,6 +152,7 @@ export const ADDITIVE_OPERATORS = ["+", "-"] as const;
 export const MULTIPLICATIVE_OPERATORS = ["*", "/", "%"] as const;
 export const UNARY_OPERATORS = ["!", "+", "-"] as const;
 export const AWK_BUILTINS = new Set([
+  "close",
   "gsub",
   "index",
   "int",

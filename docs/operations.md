@@ -145,7 +145,7 @@ Every execution owns one shared budget across all pipeline stages. Defaults:
 | total I/O | 64 MiB |
 | simultaneously buffered semantic data | 16 MiB |
 | one decoded line / buffered records | 1 MiB / 100,000 |
-| glob matches / mutations | 10,000 / 10,000 |
+| glob matches of one expansion or `find` / mutations | 10,000 / 10,000 |
 | deadline / no-output-consumer timeout | 30 s / 5 s |
 
 Lower these per workload. A policy mutation limit can only tighten the runtime

@@ -161,10 +161,14 @@ export type CommandInput =
     }
   | { readonly name: string; readonly stream?: undefined; readonly error: VfsError };
 
+/** Decides from a walked file's displayed path whether to open it. */
+export type RecursiveFilter = (name: string) => boolean;
+
 async function* recursiveDirectoryInputs(
   context: ShellCommandContext,
   operand: string,
   root: string,
+  accept: RecursiveFilter,
 ): AsyncGenerator<CommandInput> {
   let cursor: string | null = null;
   do {
@@ -174,9 +178,12 @@ async function* recursiveDirectoryInputs(
       type: "file",
       ...(cursor === null ? {} : { cursor }),
     });
-    context.budget.glob(page.scanned);
+    // The walk streams pages rather than holding matches, so it charges
+    // expansion work instead of the per-result match limit.
+    context.budget.expansionWork(page.scanned);
     for (const entry of page.entries) {
       const name = displayPath(operand, root, entry.path);
+      if (!accept(name)) continue;
       try {
         yield { name, stream: await openInput(context, entry.path) };
       } catch (error) {
@@ -193,6 +200,7 @@ async function* recursiveDirectoryInputs(
 export async function* recursiveInputs(
   context: ShellCommandContext,
   paths: readonly string[],
+  accept: RecursiveFilter = () => true,
 ): AsyncGenerator<CommandInput> {
   // With no operand the walk starts at the working directory but reports bare
   // relative paths, as `grep -r` does — an explicit `.` is what prints `./`.
@@ -204,7 +212,7 @@ export async function* recursiveInputs(
       continue;
     }
     const root = context.fileSystem.realpath(normalized);
-    yield* recursiveDirectoryInputs(context, path, root);
+    yield* recursiveDirectoryInputs(context, path, root, accept);
   }
 }
 
