@@ -143,6 +143,9 @@ class Parser extends AwkParserCursor {
     this.consumeNewlines();
     const consequent = this.statementBody();
     const beforeElse = this.index;
+    // A simple consequent may end with `;` before `else`, as in
+    // `if (x) print "a"; else print "b"`.
+    if (this.atOperator(";")) this.take();
     this.consumeNewlines();
     if (!this.atIdentifier("else")) {
       this.index = beforeElse;

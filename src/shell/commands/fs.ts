@@ -1,4 +1,5 @@
 import { VfsError } from "../../core/errors.js";
+import { dirname, hasDotSegments } from "../../core/path.js";
 import type { VfsStat } from "../../vfs/types.js";
 import {
   identityLabel,
@@ -8,6 +9,7 @@ import {
   resolveIdentityNames,
   type ShellIdentitySource,
 } from "../identity.js";
+import type { ShellCommandContext } from "../types.js";
 import {
   type AppletSpec,
   type AppletSpecWithOptions,
@@ -175,10 +177,36 @@ export const mkdirCommand = /* @__PURE__ */ defineApplet(MKDIR, async (context, 
   }
   if (parsed.operands.length === 0) throw appletUsageError(MKDIR, "missing operand");
   for (const path of parsed.operands) {
-    context.fileSystem.mkdir(commandPath(context, path), recursive, mode);
+    if (recursive && hasDotSegments(path)) mkdirThroughDots(context, path, mode);
+    else context.fileSystem.mkdir(commandPath(context, path), recursive, mode);
   }
   return 0;
 });
+
+/**
+ * `mkdir -p a/./b/../c` creates each component in turn, as POSIX does: `.`
+ * names the directory just reached and `..` the parent of where it resolves.
+ * The filesystem resolves dot components only through entries that exist, so
+ * the walk happens here.
+ */
+function mkdirThroughDots(
+  context: ShellCommandContext,
+  path: string,
+  mode: number | undefined,
+): void {
+  let current = path.startsWith("/") ? "/" : context.session.cwd;
+  for (const component of path.split("/")) {
+    if (component === "" || component === ".") continue;
+    if (component === "..") {
+      current = dirname(context.fileSystem.realpath(current));
+      continue;
+    }
+    current = current === "/" ? `/${component}` : `${current}/${component}`;
+    if (context.fileSystem.inspectWriteTarget(current, true)?.kind !== "directory") {
+      context.fileSystem.mkdir(current, false, mode);
+    }
+  }
+}
 
 export const touchCommand = /* @__PURE__ */ defineApplet(TOUCH, async (context, argv) => {
   const parsed = parseAppletOptions(TOUCH, argv);

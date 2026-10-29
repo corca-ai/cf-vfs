@@ -6,6 +6,7 @@ import { ShellNounsetError } from "./errors.js";
 import { escapeGlob, expandGlob, hasGlob } from "./expand-glob.js";
 import {
   assignParameter,
+  changeCase,
   expansionInteger,
   indirectParameterValue,
   missingParameter,
@@ -285,6 +286,7 @@ async function parameterValue(
       budget,
     );
   }
+  if (expansion.kind === "case") return changeCase(state.value, expansion.upper, expansion.all);
   if (expansion.kind === "replace") {
     const pattern = await patternParts(expansion.pattern, session, fileSystem, budget, runtime);
     const replacement = await scalarParts(

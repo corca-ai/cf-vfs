@@ -16,6 +16,13 @@ included.
 
 ## [Unreleased]
 
+- `awk` keeps a `;` before `else` in a simple `if`; it silently dropped every
+  record the condition rejected. A basic regular expression anchors `^` and `$`
+  in every alternative and group, as GNU does, so `^a\|^b` matches both.
+- Raise the default `maxTotalIoBytes` from 32 to 64 MiB: three passes over a
+  10 MB wiki exhausted it, and reading now bounds per-record work.
+- `mkdir -p` creates paths through `.` and `..` components, and `${name^}`,
+  `${name^^}`, `${name,}` and `${name,,}` change case.
 - Report a spent total I/O budget on stderr. The diagnostic was itself charged
   to the exhausted budget and dropped, so an agent saw exit 1 with no output.
 - **Breaking:** `cp` and `mv` overwrite an existing destination as GNU does,

@@ -44,6 +44,12 @@ export type ParameterExpansion =
     })
   | (AdvancedParameterExpansionBase & {
       kind: "indirect";
+    })
+  | (AdvancedParameterExpansionBase & {
+      /** `${x^}`, `${x^^}`, `${x,}`, `${x,,}`: change the case of the first or every character. */
+      kind: "case";
+      upper: boolean;
+      all: boolean;
     });
 
 export interface ParameterWordPart {

@@ -270,3 +270,23 @@ describe("awk spellings agents use", () => {
     awk,
   );
 });
+
+describe("silent-result bugs found by agents", () => {
+  bashCases(
+    [
+      {
+        name: "keeps every record when a simple awk if ends with ; before else",
+        script:
+          "printf 'a\\nb\\nc\\n' | awk '{ if ($0 == \"b\") print \"B\"; else print $0 }'; printf 'a\\nb\\n' | awk '{ if ($0 == \"a\") x = 1; else if ($0 == \"b\") x = 2; else x = 3; print x }'",
+        stdout: "a\nB\nc\n1\n2\n",
+      },
+      {
+        name: "anchors every alternative of a basic expression",
+        script:
+          "printf 'tags: x\\nstatus: y\\nz\\n' | grep -c '^tags:\\|^status:'; printf 'xa\\nb\\n' | grep 'a$\\|^b'; printf 'a^b\\na$b\\n' | grep -c 'a^b\\|a$b'",
+        stdout: "2\nxa\nb\n2\n",
+      },
+    ],
+    { extraCommands: [awkCommand] },
+  );
+});

@@ -142,7 +142,7 @@ Every execution owns one shared budget across all pipeline stages. Defaults:
 | pipeline bytes | 8 MiB |
 | stdout / stderr | 8 MiB each |
 | materialized stdout + stderr | 8 MiB |
-| total I/O | 32 MiB |
+| total I/O | 64 MiB |
 | simultaneously buffered semantic data | 16 MiB |
 | one decoded line / buffered records | 1 MiB / 100,000 |
 | glob matches / mutations | 10,000 / 10,000 |

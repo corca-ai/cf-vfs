@@ -200,11 +200,14 @@ class Parser {
   }
 
   private anchorAtom(character: "^" | "$", first: boolean): { node: Node; repeatable: boolean } {
-    const anchor =
-      character === "^"
-        ? this.extended || (first && this.index === 0)
-        : this.extended || this.index === this.points.length - 1;
+    // GNU reads a basic `^` as an anchor at the start of any alternative or
+    // group, and `$` at the end of one, so `^a\|^b` anchors both branches.
     this.index += 1;
+    const anchor =
+      this.extended ||
+      (character === "^"
+        ? first
+        : this.index >= this.points.length || this.atAlternation() || this.atGroupClose());
     return anchor
       ? { node: { kind: character === "^" ? "bol" : "eol" }, repeatable: false }
       : { node: this.literal(character), repeatable: true };

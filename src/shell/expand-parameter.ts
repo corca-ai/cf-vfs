@@ -102,3 +102,12 @@ export function indirectParameterValue(session: ShellSession, value: string): st
   if (!referenced.set && session.nounset) throw new ShellNounsetError(value);
   return referenced.value;
 }
+
+/** Case modification in the C locale the runtime declares: the ASCII letters only. */
+export function changeCase(value: string, upper: boolean, all: boolean): string {
+  const convert = (text: string): string =>
+    upper
+      ? text.replace(/[a-z]/gu, (letter) => letter.toUpperCase())
+      : text.replace(/[A-Z]/gu, (letter) => letter.toLowerCase());
+  return all ? convert(value) : convert(value.slice(0, 1)) + value.slice(1);
+}

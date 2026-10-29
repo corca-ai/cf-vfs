@@ -273,7 +273,10 @@ negative offset counts from the end and clamps to zero; a non-negative offset
 past the end produces an empty value. Length must be non-negative. Negative
 lengths, arrays, nested or prefix-name indirect expansion, extglob,
 locale-dependent ranges, anchored replacement forms such as `${name/#p/r}`,
-and special `&` replacement interpolation are unsupported. Unquoted results
+and special `&` replacement interpolation are unsupported. `${name^}`,
+`${name^^}`, `${name,}`, and `${name,,}` change the case of the first or every
+ASCII letter, as the C locale does; a case pattern after the operator is
+unsupported. Unquoted results
 then undergo the ordinary field-splitting and pathname-expansion phases.
 
 Deterministic nounset handling is available through `set -u`, `set +u`,
@@ -698,7 +701,8 @@ between them; `-c` still counts lines, and `-v` prints nothing because a line
 reported for what it lacks has no matched part to show.
 
 The declared subset is literals, `.`, `*`, bracket expressions with ranges and
-POSIX character classes, the anchors `^` and `$`, grouping, alternation, `+`,
+POSIX character classes, the anchors `^` and `$` (in a basic expression, as in
+GNU, at the start or end of any alternative or group), grouping, alternation, `+`,
 `?`, and the intervals `{n}`, `{n,}`, and `{n,m}` — spelled bare in an extended
 expression and backslashed in a basic one. Back-references, the GNU extensions
 `\w`, `\b`, `\<`, and `\>`, equivalence classes, and collating symbols are usage

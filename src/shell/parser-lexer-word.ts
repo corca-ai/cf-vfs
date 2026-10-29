@@ -438,6 +438,17 @@ export abstract class ShellWordLexer extends ShellLexerBase {
     if (removal !== undefined) return this.readRemovalParameter(name, removal);
     if (this.source[this.offset] === "/") return this.readReplacementParameter(name);
     if (this.source[this.offset] === ":") return this.readSubstringParameter(name);
+    const caseOperator = /^(\^\^|\^|,,|,)\}/u.exec(this.source.slice(this.offset))?.[1];
+    if (caseOperator !== undefined) {
+      this.offset += caseOperator.length + 1;
+      return {
+        kind: "case",
+        name,
+        length: false,
+        upper: caseOperator.startsWith("^"),
+        all: caseOperator.length === 2,
+      };
+    }
     throw this.error("unsupported parameter expansion operator", this.offset);
   }
 

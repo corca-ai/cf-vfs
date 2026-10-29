@@ -20,7 +20,7 @@ export const DEFAULT_SHELL_LIMITS: ShellLimits = {
   maxStdoutBytes: 8 * 1024 * 1024,
   maxStderrBytes: 8 * 1024 * 1024,
   maxMaterializedOutputBytes: 8 * 1024 * 1024,
-  maxTotalIoBytes: 32 * 1024 * 1024,
+  maxTotalIoBytes: 64 * 1024 * 1024,
   maxBufferedBytes: 16 * 1024 * 1024,
   maxLineBytes: 1024 * 1024,
   maxBufferedRecords: 100_000,
