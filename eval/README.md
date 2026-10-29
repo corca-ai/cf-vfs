@@ -82,6 +82,35 @@ Each log entry contains:
 The log supports replaying each execution against a real shell and analysing
 failures and cost.
 
+## Replaying sessions instead of rerunning agents
+
+An agent run takes tens of minutes and varies from run to run, so it is a slow
+and noisy check of a shell change. Check a change by replaying recorded
+sessions instead, and rerun agents only after several changes or before a
+release, with the scenario the changes touch.
+
+```sh
+npm run eval:replay -- session.json... [--json report.json]
+```
+
+A session file is the fixture an instance was seeded with and its log, before
+the instance expires:
+
+```json
+{ "name": "wiki-audit", "files": { "wiki/index.md": "..." }, "entries": [] }
+```
+
+`entries` is every page of `GET /api/instances/:id/log`. The replay runs them
+in order on a fresh local workspace with the same machine model
+(`eval/profile.ts`, shared with the Durable Object) and the clock pinned to
+each logged time, in seconds. Each execution is `same`, `fixed` (the status
+turned to 0, or diagnostics went away), `broke` (the reverse) or `changed`,
+which needs a look and is often a corrected output; `--json` keeps the current
+output for that comparison. Once an execution that wrote files ends
+differently, later ones may see a different tree and are marked as after the
+divergence. The command exits 1 when anything before a divergence broke or
+changed.
+
 ## Lifecycle
 
 `EvalRegistry` (one Durable Object) holds the instance list. It is not on the

@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import type { SeedFile } from "./workspace.js";
+import type { SeedFile } from "./profile.js";
 
 type InstanceState = "creating" | "ready" | "deleting";
 

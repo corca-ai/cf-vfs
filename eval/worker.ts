@@ -1,4 +1,4 @@
-import type { SeedFile } from "./workspace.js";
+import type { SeedFile } from "./profile.js";
 
 export { EvalRegistry } from "./registry.js";
 export { EvalWorkspace } from "./workspace.js";

@@ -1,44 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
 import { meterSqlStorage, type SqlMeter } from "../bench/metered-sql.js";
 import { VfsError } from "../src/core/errors.js";
-import { awkCommand } from "../src/shell/commands/awk.js";
-import { defaultShellCommands } from "../src/shell/commands/default.js";
-import { gitCommand } from "../src/shell/commands/git.js";
 import type { ShellEvent } from "../src/shell/events.js";
-import type {
-  IdentityIds,
-  IdentityNames,
-  ResolvedIdentityIds,
-  ResolvedIdentityNames,
-  ShellIdentityResolver,
-} from "../src/shell/identity.js";
-import { InteractiveShell } from "../src/shell/interactive.js";
-import {
-  LINUX_SHELL_OPTIONS,
-  LINUX_WORKSPACE,
-  linuxShellEnvironment,
-  provisionLinuxFilesystem,
-} from "../src/shell/linux.js";
+import { LINUX_WORKSPACE } from "../src/shell/linux.js";
 import type { ExecuteTextResult } from "../src/shell/types.js";
 import { DurableObjectFileSystem } from "../src/vfs/do-sql.js";
 import type { VfsEvent } from "../src/vfs/events.js";
-import type { PosixCredentials, VirtualFileSystem } from "../src/vfs/types.js";
-
-/**
- * The account an agent runs as. Ordinary names on purpose: nothing an agent
- * can observe should announce an evaluation harness.
- */
-const EVAL_USER = "user";
-const EVAL_UID = 1_000;
-const EVAL_GID = 1_000;
-const EVAL_HOME = `/home/${EVAL_USER}`;
-const EVAL_CREDENTIALS = Object.freeze({
-  uid: EVAL_UID,
-  gid: EVAL_GID,
-  supplementaryGids: Object.freeze([]),
-}) satisfies PosixCredentials;
-const EVAL_UMASK = 0o022;
-const EVAL_COMMANDS = [...defaultShellCommands, awkCommand, gitCommand];
+import { evalShell, provisionEvalWorkspace, type SeedFile, seedEvalWorkspace } from "./profile.js";
 
 const META_KEY = "eval:meta";
 const CWD_KEY = "eval:cwd";
@@ -46,38 +14,6 @@ const CWD_KEY = "eval:cwd";
 const LOGGED_OUTPUT_BYTES = 64 * 1024;
 const MAX_RECORDED_COMMANDS = 500;
 const MAX_LOG_PAGE = 500;
-
-const USERS_BY_ID = new Map([
-  [0, "root"],
-  [EVAL_UID, EVAL_USER],
-]);
-const GROUPS_BY_ID = new Map([
-  [0, "root"],
-  [EVAL_GID, EVAL_USER],
-]);
-const USERS_BY_NAME = new Map([...USERS_BY_ID].map(([id, name]) => [name, id]));
-const GROUPS_BY_NAME = new Map([...GROUPS_BY_ID].map(([id, name]) => [name, id]));
-
-function select<Key, Value>(
-  requested: readonly Key[],
-  directory: ReadonlyMap<Key, Value>,
-): Map<Key, Value> {
-  const resolved = new Map<Key, Value>();
-  for (const key of requested) {
-    const value = directory.get(key);
-    if (value !== undefined) resolved.set(key, value);
-  }
-  return resolved;
-}
-
-const EVAL_IDENTITY_RESOLVER: ShellIdentityResolver = Object.freeze({
-  resolveIds({ uids, gids }: IdentityIds): ResolvedIdentityNames {
-    return { users: select(uids, USERS_BY_ID), groups: select(gids, GROUPS_BY_ID) };
-  },
-  resolveNames({ users, groups }: IdentityNames): ResolvedIdentityIds {
-    return { users: select(users, USERS_BY_NAME), groups: select(groups, GROUPS_BY_NAME) };
-  },
-});
 
 interface WorkspaceMeta {
   readonly id: string;
@@ -114,11 +50,6 @@ interface LimitRecord {
   readonly limit: string;
   readonly used: number;
   readonly max: number;
-}
-
-export interface SeedFile {
-  readonly path: string;
-  readonly content: string;
 }
 
 export interface WorkspaceInfo {
@@ -243,13 +174,7 @@ export class EvalWorkspace extends DurableObject<AgentEvalEnv> {
     return this.serialize(async () => {
       if (this.destroyed) throw new Error("workspace was destroyed");
       if (this.meta !== null) return this.meta;
-      const profile = provisionLinuxFilesystem(this.fileSystem, { user: EVAL_USER });
-      for (const entry of profile) {
-        if (entry.path === EVAL_HOME || entry.path === LINUX_WORKSPACE) {
-          this.fileSystem.setOwnership(entry.path, { uid: EVAL_UID, gid: EVAL_GID });
-        }
-      }
-      for (const path of ["/tmp", "/var/tmp"]) this.fileSystem.setMetadata(path, { mode: 0o1777 });
+      provisionEvalWorkspace(this.fileSystem);
       await this.ctx.storage.put({ [META_KEY]: meta, [CWD_KEY]: LINUX_WORKSPACE });
       this.meta = meta;
       this.cwd = LINUX_WORKSPACE;
@@ -264,15 +189,7 @@ export class EvalWorkspace extends DurableObject<AgentEvalEnv> {
       const cwdBefore = this.cwd;
       const cwdReset = !this.isDirectory(cwdBefore);
       const startCwd = cwdReset ? LINUX_WORKSPACE : cwdBefore;
-      const shell = new InteractiveShell({
-        fileSystem: this.fileSystem,
-        commands: EVAL_COMMANDS,
-        ...LINUX_SHELL_OPTIONS,
-        cwd: startCwd,
-        env: linuxShellEnvironment({ user: EVAL_USER }),
-        credentials: EVAL_CREDENTIALS,
-        umask: EVAL_UMASK,
-        identityResolver: EVAL_IDENTITY_RESOLVER,
+      const shell = evalShell(this.fileSystem, startCwd, {
         onEvent: (event) => this.observe(event),
       });
 
@@ -360,18 +277,9 @@ export class EvalWorkspace extends DurableObject<AgentEvalEnv> {
     return this.serialize(async () => {
       const unavailable = this.unavailable();
       if (unavailable !== null) return unavailable;
-      const view: VirtualFileSystem = this.fileSystem.forCredentials(EVAL_CREDENTIALS, {
-        umask: EVAL_UMASK,
-      });
       this.meter.reset();
       try {
-        await view.writeFiles(
-          files.map((file) => ({
-            path: file.path.startsWith("/") ? file.path : `${LINUX_WORKSPACE}/${file.path}`,
-            body: file.content,
-          })),
-          { createParents: true },
-        );
+        await seedEvalWorkspace(this.fileSystem, files);
       } catch (caught) {
         if (caught instanceof VfsError) return failure(400, `${caught.code}: ${caught.message}`);
         throw caught;
