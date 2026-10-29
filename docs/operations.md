@@ -135,7 +135,7 @@ Every execution owns one shared budget across all pipeline stages. Defaults:
 | --- | ---: |
 | one submitted or sourced unit / cumulative source bytes | 1 MiB / 4 MiB |
 | AST nodes / nesting depth | 10,000 / 64 |
-| commands / steps / loop iterations | 10,000 / 100,000 / 10,000 |
+| commands / steps / loop iterations | 20,000 / 100,000 / 20,000 |
 | function depth / source depth / script depth | 64 / 16 / 8 |
 | one command-substitution output | 1 MiB |
 | expansion work / characters / fields of one expansion | 10,000,000 / 1 MiB / 10,000 |

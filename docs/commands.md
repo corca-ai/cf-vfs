@@ -224,7 +224,9 @@ The default registry also includes the deliberately non-interactive
 
 - `read [-r] [--] [name ...]`, which consumes one bounded UTF-8 logical record
   from fd 0, assigns `REPLY` without splitting when no name is supplied, and
-  otherwise uses the fixed whitespace `IFS` profile. Without `-r`, a backslash
+  otherwise splits on the active `IFS`: leading and trailing `IFS` whitespace
+  is removed, each name but the last takes one field, and the last takes the
+  rest, so `IFS= read -r line` keeps a line exactly. Without `-r`, a backslash
   quotes the next character and a backslash-newline continues the logical
   record; `-r` preserves backslashes. A final unterminated record is assigned
   with status 1; empty EOF assigns empty values with status 1. Other `read`
@@ -392,8 +394,9 @@ for parser selection.
 ### Version 5 scalar and descriptor ergonomics
 
 `set -- argument ...` replaces the current positional parameters atomically;
-`set --` clears them. Quoted `$*` joins them with the fixed profile's space
-separator, unquoted `$*` then undergoes ordinary fixed-IFS splitting, and
+`set --` clears them. Quoted `$*` joins them with the first character of
+`IFS` (a space when it is unset, nothing when it is empty), unquoted `$*` splits
+each parameter as unquoted `$@` does, and
 `${#*}` reports the argument count. An empty `$*`, like an empty `$@`, remains
 safe under nounset.
 
@@ -660,7 +663,7 @@ decides which directory is provisioned; pass the same path as the execution
 | links | `ln -s -f`, `readlink -f`, from the dedicated `/shell/commands/link` subpath |
 | streaming text/bytes | `cat`, `grep -i -v -n -x -F -E -c -l -L -q -r -R -h`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c -s`, `tr -c -d -s` (escapes, ranges, `[:class:]`), `nl`, `fold -w`, `sed -E -n -e -i`, `seq -s -w` |
 | deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, from the dedicated `/shell/commands/system` subpath |
-| bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp -s`, `diff -r -q -u`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
+| bounded barriers | `sort -b -f -n -r -s -u -t SEP -k POS1[,POS2]` (GNU keys: fields keep their leading blanks without `-t`, a key with options of its own inherits none of the global ones, and equal keys fall back to the whole line unless `-s` or `-u`), `tail -n -c`, `tee -a`, `paste`, `cmp -s`, `diff -r -q -u` (unified output with three lines of context, as GNU writes it), `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
 | argument dispatch | `xargs -n -0 -r -t`, from the dedicated `/shell/commands/xargs` subpath |
 | opt-in record language | `awk -F -v -f`, from the dedicated `/shell/commands/awk` subpath; not part of `defaultShellCommands` |
 

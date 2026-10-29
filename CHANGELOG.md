@@ -16,6 +16,16 @@ included.
 
 ## [Unreleased]
 
+- Raise the default `maxCommands` and `maxLoopIterations` from 10,000 to
+  20,000: an ordinary loop over a wiki's pages reached them in about 80 ms.
+- Split fields on the active `IFS` with POSIX rules, in expansion and in
+  `read`. It was fixed to whitespace, so `while IFS= read -r line` silently
+  stripped indentation; a separator at either end of an expansion now also
+  divides it from adjacent text, as in Bash.
+- `sort` takes GNU keys and field separators (`-k`, `-t`) with `-b`, `-f` and
+  `-s`.
+- `diff` and `git diff` hunks carry three lines of context and GNU's ranges,
+  which omit a count of one.
 - Decode ANSI-C `$'...'` quotes with Bash's escapes and read `$"..."` as
   itself in the C locale; both were parse errors that failed a whole script.
 - Treat `!`, `{` and `}` after a command word as ordinary arguments, so a

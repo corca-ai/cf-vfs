@@ -1,6 +1,7 @@
 import { VfsError } from "../core/errors.js";
 import { codePointLength } from "../core/unicode.js";
 import { ShellNounsetError } from "./errors.js";
+import { joiningSeparator } from "./ifs.js";
 import type { ShellBudget, ShellSession } from "./types.js";
 
 function shellOptionFlags(session: ShellSession): string {
@@ -15,7 +16,12 @@ export function variableState(
   if (name === "-") return { set: true, value: shellOptionFlags(session) };
   if (name === "#") return { set: true, value: String(session.args.length) };
   if (name === "@") return { set: session.args.length > 0, value: session.args.join(" ") };
-  if (name === "*") return { set: session.args.length > 0, value: session.args.join(" ") };
+  if (name === "*") {
+    return {
+      set: session.args.length > 0,
+      value: session.args.join(joiningSeparator(session.env.get("IFS"))),
+    };
+  }
   if (name === "0") return { set: true, value: session.env.get("0") ?? "cf-vfs" };
   if (/^[1-9][0-9]*$/u.test(name)) {
     const value = session.args[Number(name) - 1];

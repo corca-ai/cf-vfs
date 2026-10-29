@@ -10,7 +10,7 @@ describe("line diff", () => {
     expect(renderLineDiff("/before", "/after", diff)).toBe(
       "--- /before\n" +
         "+++ /after\n" +
-        "@@ -1,1 +1,1 @@\n" +
+        "@@ -1 +1 @@\n" +
         "-old\n" +
         "\\ No newline at end of file\n" +
         "+new\n" +
@@ -25,19 +25,35 @@ describe("line diff", () => {
     expect(renderLineDiff("/before", "/after", diff)).toBe("");
   });
 
-  it("renders separated changes as independently positioned hunks", () => {
+  it("merges changes whose context overlaps into one hunk", () => {
     const diff = createLineDiff("alpha\nkeep\nomega\n", "ALPHA\nkeep\nOMEGA\n");
 
     expect(diff.changes).toBe(4);
     expect(renderLineDiff("/before", "/after", diff)).toBe(
       "--- /before\n" +
         "+++ /after\n" +
-        "@@ -1,1 +1,1 @@\n" +
+        "@@ -1,3 +1,3 @@\n" +
         "-alpha\n" +
         "+ALPHA\n" +
-        "@@ -3,1 +3,1 @@\n" +
+        " keep\n" +
         "-omega\n" +
         "+OMEGA\n",
+    );
+  });
+
+  it("shows three lines of context and separates distant changes", () => {
+    const lines = (change: (line: number) => string): string =>
+      Array.from({ length: 20 }, (_, index) => `${change(index + 1)}\n`).join("");
+    const diff = createLineDiff(
+      lines((line) => `l${line}`),
+      lines((line) => (line === 2 || line === 18 ? `L${line}` : `l${line}`)),
+    );
+
+    expect(renderLineDiff("/before", "/after", diff)).toBe(
+      "--- /before\n" +
+        "+++ /after\n" +
+        "@@ -1,5 +1,5 @@\n l1\n-l2\n+L2\n l3\n l4\n l5\n" +
+        "@@ -15,6 +15,6 @@\n l15\n l16\n l17\n-l18\n+L18\n l19\n l20\n",
     );
   });
 

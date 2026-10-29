@@ -3,14 +3,18 @@ import { createLineDiff, renderLineDiff } from "../src/core/line-diff.js";
 import { applyUnifiedPatch } from "../src/core/unified-patch.js";
 
 it.each([
-  ["a\n", "a\nb\n", "@@ -1,0 +2,1 @@\n+b\n"],
-  ["a\nb\n", "a\n", "@@ -2,1 +1,0 @@\n-b\n"],
-  ["", "a\n", "@@ -0,0 +1,1 @@\n+a\n"],
-  ["a\n", "", "@@ -1,1 +0,0 @@\n-a\n"],
+  ["a\n", "a\nb\n", "@@ -1 +1,2 @@\n a\n+b\n"],
+  ["a\nb\n", "a\n", "@@ -1,2 +1 @@\n a\n-b\n"],
+  ["", "a\n", "@@ -0,0 +1 @@\n+a\n"],
+  ["a\n", "", "@@ -1 +0,0 @@\n-a\n"],
 ])("uses unified-diff positions for empty ranges: %j to %j", (before, after, hunk) => {
   const patch = `--- a\n+++ b\n${hunk}`;
   expect(applyUnifiedPatch(before, patch).text).toBe(after);
   expect(renderLineDiff("a", "b", createLineDiff(before, after))).toBe(patch);
+});
+
+it("applies an empty range written without context", () => {
+  expect(applyUnifiedPatch("a\n", "--- a\n+++ b\n@@ -1,0 +2 @@\n+b\n").text).toBe("a\nb\n");
 });
 
 it("diffs and renders large insertions within the comparison-cell limit", () => {

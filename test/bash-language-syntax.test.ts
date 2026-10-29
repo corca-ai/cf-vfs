@@ -100,7 +100,7 @@ describe("Bash v5 scalar ergonomics and redirection", () => {
       stdout: "match:set:unset",
     },
     {
-      name: "plain read removes escapes before fixed-IFS field assignment",
+      name: "plain read removes escapes before IFS field assignment",
       script: 'read left right; printf \'%s:<%s>\' "$left" "$right"',
       stdin: "a\\ b c\n",
       stdout: "a b:<c>",

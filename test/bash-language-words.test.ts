@@ -15,7 +15,7 @@ bashSuite("Bash v2 words, assignments, and statuses", [
     stdout: "<$HOME>",
   },
   {
-    name: "splits an unquoted variable on fixed whitespace IFS",
+    name: "splits an unquoted variable on the default IFS",
     script: `printf '<%s>\n' $FIELDS`,
     env: { FIELDS: "left right\nthird" },
     stdout: "<left>\n<right>\n<third>\n",
@@ -445,3 +445,48 @@ describe("Bash v2 parameter expansion", () => {
     },
   ]);
 });
+
+bashSuite("IFS field splitting and read", [
+  {
+    name: "keeps boundaries at the ends of an expansion",
+    script: `a="x "; b=pre; c=" y"; printf '<%s>' $a"z" $b$c; echo`,
+    stdout: "<x><z><pre><y>\n",
+  },
+  {
+    name: "delimits empty fields with non-whitespace separators",
+    script: `IFS=,; a="a,,b, c,"; printf '<%s>' $a; echo; IFS=', '; a=" ,b , c"; printf '<%s>' $a; echo`,
+    stdout: "<a><><b>< c>\n<><b><c>\n",
+  },
+  {
+    name: "does not split when IFS is empty and splits each $* parameter",
+    script: `IFS=; a="a b"; set -- "p q" r; printf '<%s>' $a $*; echo`,
+    stdout: "<a b><p q><r>\n",
+  },
+  {
+    name: "splits command substitution on a newline IFS",
+    script: `IFS=$'\\n'; for l in $(printf 'a b\\nc d\\n'); do printf '<%s>' "$l"; done; echo`,
+    stdout: "<a b><c d>\n",
+  },
+  {
+    name: "joins quoted $* with the first IFS character",
+    script: `set -- a "b c" ""; IFS=-; echo "$*"; IFS=; echo "$*"; unset IFS; echo "$*"`,
+    stdout: "a-b c-\nab c\na b c \n",
+  },
+  {
+    name: "restores IFS after a function's local assignment",
+    script: `f() { local IFS=:; set -- $1; echo $#; }; f a:b:c; v="p q"; printf '<%s>' $v; echo`,
+    stdout: "3\n<p><q>\n",
+  },
+  {
+    name: "keeps leading blanks with IFS= read",
+    script: `while IFS= read -r l; do printf '<%s>' "$l"; done; echo`,
+    stdin: "  lead\ttab  \n\tx\n",
+    stdout: "<  lead\ttab  ><\tx>\n",
+  },
+  {
+    name: "trims and splits read on the active IFS",
+    script: `read -r l; printf '<%s>' "$l"; IFS=: read -r a b c; printf '<%s>' "$a" "$b" "$c"; IFS=, read -r d e; printf '<%s>' "$d" "$e"; echo`,
+    stdin: "  lead  \nx:y:z:w\n,x\n",
+    stdout: "<lead><x><y><z:w><><x>\n",
+  },
+]);

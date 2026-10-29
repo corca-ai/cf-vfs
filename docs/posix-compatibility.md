@@ -76,8 +76,8 @@ executing it, and share all relevant budgets with the caller. Opaque files
 remain unavailable.
 `read -r`, `shift`, and short-option `getopts` provide the non-interactive input
 and positional primitives used by reusable VFS scripts. `read` has no prompt,
-timeout, terminal, or readline behavior; it uses bounded virtual fd 0 and the
-fixed whitespace `IFS` profile.
+timeout, terminal, or readline behavior; it uses bounded virtual fd 0 and
+splits on the active `IFS`.
 Scalar parameter expansion additionally supports shortest/longest shell-pattern
 prefix and suffix removal, first/global pattern replacement, and bounded
 Unicode-code-point substrings. Patterns use the declared glob syntax without
@@ -114,8 +114,12 @@ Deliberate deterministic choices include:
 - `find -exec` and `xargs` dispatch an already-expanded argv through the command
   registry, so a matched path cannot become shell syntax;
 
-- fixed `LC_ALL=C`, `TZ=UTC`, and whitespace `IFS` defaults, which reassignment
-  cannot change because collation and timestamps do not read them;
+- fixed `LC_ALL=C` and `TZ=UTC` defaults, which reassignment cannot change
+  because collation and timestamps do not read them. `IFS` starts as space,
+  tab and newline and follows POSIX field splitting when reassigned: whitespace
+  separators collapse and are ignored at either end, any other separator
+  delimits exactly one field, an empty `IFS` turns splitting off, and an unset
+  one restores the default;
 - tilde expansion covers `~` and `~/path` from `HOME`. `~user`, `~+`, `~-`, and
   `~N` stay literal: there is no user database and no directory stack, so a name
   after the tilde identifies nothing. The substituted value is treated as

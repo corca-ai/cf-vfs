@@ -106,31 +106,33 @@ function lineOperations(
   return operations;
 }
 
-function prefixedLine(prefix: "-" | "+", text: string): string {
+function prefixedLine(prefix: "-" | "+" | " ", text: string): string {
   return text.endsWith("\n")
     ? `${prefix}${text}`
     : `${prefix}${text}\n\\ No newline at end of file\n`;
 }
 
-function changedHunk(
-  operations: readonly LineDiffOperation[],
-  start: number,
-): { readonly lines: string[]; readonly next: number } {
-  let next = start;
-  while (operations[next] !== undefined && operations[next]?.kind !== "equal") next += 1;
-  const changed = operations.slice(start, next);
-  const first = changed.at(0);
-  if (!first) throw new Error("diff hunk cannot be empty");
-  const deleted = changed.filter((operation) => operation.kind === "delete").length;
-  const inserted = changed.filter((operation) => operation.kind === "insert").length;
-  const oldStart = first.oldLine - (deleted === 0 ? 1 : 0);
-  const newStart = first.newLine - (inserted === 0 ? 1 : 0);
-  const lines = [`@@ -${oldStart},${deleted} +${newStart},${inserted} @@\n`];
-  for (const operation of changed) {
-    if (operation.kind === "delete") lines.push(prefixedLine("-", operation.text));
-    if (operation.kind === "insert") lines.push(prefixedLine("+", operation.text));
-  }
-  return { lines, next };
+/** Unchanged lines shown around each change, as `diff -u` and `git diff` default to. */
+const CONTEXT_LINES = 3;
+
+/** GNU's range: the count is omitted when it is one, and an empty range names the line before. */
+function hunkRange(before: number, count: number): string {
+  if (count === 1) return String(before + 1);
+  return `${count === 0 ? before : before + 1},${count}`;
+}
+
+/** Index ranges of operations to show: each change widened by context, overlapping ones merged. */
+function hunkSpans(operations: readonly LineDiffOperation[]): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  operations.forEach((operation, index) => {
+    if (operation.kind === "equal") return;
+    const start = Math.max(0, index - CONTEXT_LINES);
+    const end = Math.min(operations.length, index + CONTEXT_LINES + 1);
+    const last = spans.at(-1);
+    if (last !== undefined && start <= last[1]) last[1] = end;
+    else spans.push([start, end]);
+  });
+  return spans;
 }
 
 export function createLineDiff(before: string, after: string): LineDiff {
@@ -173,16 +175,36 @@ export function createLineDiff(before: string, after: string): LineDiff {
   };
 }
 
+function renderHunk(
+  shown: readonly LineDiffOperation[],
+  oldBefore: number,
+  newBefore: number,
+): string[] {
+  const oldCount = shown.filter((operation) => operation.kind !== "insert").length;
+  const newCount = shown.filter((operation) => operation.kind !== "delete").length;
+  const lines = [`@@ -${hunkRange(oldBefore, oldCount)} +${hunkRange(newBefore, newCount)} @@\n`];
+  for (const operation of shown) {
+    const prefix = operation.kind === "delete" ? "-" : operation.kind === "insert" ? "+" : " ";
+    lines.push(prefixedLine(prefix, operation.text));
+  }
+  return lines;
+}
+
 export function renderLineDiff(from: string, to: string, diff: LineDiff): string {
   if (diff.changes === 0) return "";
   const output = [`--- ${from}\n`, `+++ ${to}\n`];
-  let index = 0;
-  while (index < diff.operations.length) {
-    while (diff.operations[index]?.kind === "equal") index += 1;
-    if (index >= diff.operations.length) break;
-    const hunk = changedHunk(diff.operations, index);
-    for (const line of hunk.lines) output.push(line);
-    index = hunk.next;
+  const { operations } = diff;
+  let oldBefore = 0;
+  let newBefore = 0;
+  let cursor = 0;
+  for (const [start, end] of hunkSpans(operations)) {
+    for (; cursor < start; cursor += 1) {
+      if (operations[cursor]?.kind !== "insert") oldBefore += 1;
+      if (operations[cursor]?.kind !== "delete") newBefore += 1;
+    }
+    for (const line of renderHunk(operations.slice(start, end), oldBefore, newBefore)) {
+      output.push(line);
+    }
   }
   return output.join("");
 }

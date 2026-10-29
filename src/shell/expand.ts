@@ -13,6 +13,7 @@ import {
   variableState,
 } from "./expand-parameter.js";
 import { withTildePrefix } from "./expand-tilde.js";
+import { type FieldSeparators, fieldSeparators, type SplitToken, splitFields } from "./ifs.js";
 import type { BasicParameterExpansion, ParameterExpansion, ShellWord, WordPart } from "./parser.js";
 import { matchesShellPattern, removeShellPattern, replaceShellPattern } from "./pattern.js";
 import type { ShellBudget, ShellFileSystem, ShellSession } from "./types.js";
@@ -23,10 +24,12 @@ interface Field {
   value: string;
   pattern: string;
   characters: number;
+  /** Whether anything, even an empty quoted string, has made this a field. */
+  started: boolean;
 }
 
 interface ExpandedValues {
-  values: string[];
+  tokens: SplitToken[];
   characters: number;
 }
 
@@ -38,55 +41,74 @@ export interface ExpansionRuntime {
   lastSubstitutionStatus(): number | undefined;
 }
 
-function append(fields: Field[], value: string, activeGlob: boolean): void {
+function append(fields: Field[], value: string, activeGlob: boolean, starts: boolean): void {
   const field = fields.at(-1);
   if (field === undefined) return;
   field.value += value;
   field.pattern += activeGlob ? value : escapeGlob(value);
   field.characters += codePointLength(value);
+  if (starts) field.started = true;
 }
 
-function alternatives(fields: Field[], expanded: ExpandedValues, activeGlob: boolean): void {
-  const { values } = expanded;
-  if (values.length === 0) return;
-  append(fields, values[0] ?? "", activeGlob);
-  for (const value of values.slice(1)) {
-    fields.push({
-      value,
-      pattern: activeGlob ? value : escapeGlob(value),
-      characters: codePointLength(value),
-    });
+function emptyField(): Field {
+  return { value: "", pattern: "", characters: 0, started: false };
+}
+
+/** A boundary ends a started field; a hard one also keeps an empty field it ends. */
+function applyTokens(fields: Field[], expanded: ExpandedValues, quoted: boolean): void {
+  for (const token of expanded.tokens) {
+    if (token.kind === "text") {
+      append(fields, token.value, !quoted, token.value !== "" || quoted);
+      continue;
+    }
+    const current = fields.at(-1);
+    if (current?.started === true || token.hard) {
+      if (current !== undefined) current.started = true;
+      fields.push(emptyField());
+    }
   }
 }
 
+/**
+ * Tokens for expansion results. Quoted results are single fields, apart from
+ * `"$@"`, whose arguments stay separate; unquoted results are split on `IFS`.
+ */
 function splitValues(
   inputs: readonly string[],
   quoted: boolean,
+  separators: FieldSeparators | undefined,
   budget: ShellBudget,
   existingCharacters: number,
   existingFields: number,
 ): ExpandedValues {
-  const values: string[] = [];
+  const tokens: SplitToken[] = [];
   let characters = 0;
-  const add = (value: string): void => {
+  let fields = 0;
+  const text = (value: string): void => {
     const added = codePointLength(value);
-    const nextCount = values.length + 1;
-    budget.checkExpansionOutput(
-      existingCharacters + characters + added,
-      existingFields + Math.max(0, nextCount - 1),
-    );
-    values.push(value);
+    budget.checkExpansionOutput(existingCharacters + characters + added, existingFields + fields);
+    tokens.push({ kind: "text", value });
     characters += added;
   };
-  for (const input of inputs) {
+  const boundary = (hard: boolean): void => {
+    fields += 1;
+    budget.checkExpansionOutput(existingCharacters + characters, existingFields + fields);
+    tokens.push({ kind: "break", hard });
+  };
+  inputs.forEach((input, index) => {
     budget.expansionWork(input.length);
-    if (quoted) {
-      add(input);
-      continue;
+    // Each positional parameter is its own field, empty ones included when quoted.
+    if (index > 0) boundary(quoted);
+    if (quoted || separators === undefined) {
+      text(input);
+      return;
     }
-    for (const match of input.matchAll(/[^ \t\n]+/gu)) add(match[0]);
-  }
-  return { values, characters };
+    for (const token of splitFields(input, separators)) {
+      if (token.kind === "text") text(token.value);
+      else boundary(token.hard);
+    }
+  });
+  return { tokens, characters };
 }
 
 function assertNoNul(value: string): string {
@@ -312,7 +334,11 @@ async function partValues(
   existingCharacters: number,
   existingFields: number,
 ): Promise<ExpandedValues> {
-  if (part.kind === "parameter" && part.expansion.name === "@" && !("kind" in part.expansion)) {
+  // Unquoted, `$*` splits each positional parameter separately, as `$@` does.
+  const positional =
+    part.kind === "parameter" &&
+    (part.expansion.name === "@" || (part.expansion.name === "*" && !part.quoted));
+  if (positional && part.kind === "parameter" && !("kind" in part.expansion)) {
     const expansion = part.expansion;
     if (!expansion.length) {
       const operator = expansion.operator;
@@ -321,12 +347,26 @@ async function partValues(
         session.args.length === 0 || (checkNull && session.args.join(" ").length === 0);
       const preservesArguments = operator === undefined || (!absent && !operator.endsWith("+"));
       if (preservesArguments) {
-        return splitValues(session.args, part.quoted, budget, existingCharacters, existingFields);
+        return splitValues(
+          session.args,
+          part.quoted,
+          fieldSeparators(session.env.get("IFS")),
+          budget,
+          existingCharacters,
+          existingFields,
+        );
       }
     }
   }
   const value = await partValue(part, session, fileSystem, budget, runtime);
-  return splitValues([value], part.quoted, budget, existingCharacters, existingFields);
+  return splitValues(
+    [value],
+    part.quoted,
+    fieldSeparators(session.env.get("IFS")),
+    budget,
+    existingCharacters,
+    existingFields,
+  );
 }
 
 /**
@@ -388,18 +428,15 @@ async function expandOneWord(
   budget: ShellBudget,
   runtime: ExpansionRuntime,
 ): Promise<string[]> {
-  const fields: Field[] = [{ value: "", pattern: "", characters: 0 }];
+  const fields: Field[] = [emptyField()];
   let materializedCharacters = 0;
-  let preservesEmptyField = false;
-  let removedByExpansion = false;
   for (const part of withTildePrefix(word.parts, session, budget)) {
     if (part.kind === "literal") {
       const value = assertNoNul(part.value);
-      preservesEmptyField ||= part.quoted;
       budget.expansionWork(value.length);
       const characters = codePointLength(value);
       budget.checkExpansionOutput(materializedCharacters + characters, fields.length);
-      append(fields, value, !part.quoted);
+      append(fields, value, !part.quoted, value !== "" || part.quoted);
       materializedCharacters += characters;
       continue;
     }
@@ -412,17 +449,13 @@ async function expandOneWord(
       materializedCharacters,
       fields.length,
     );
-    if (expanded.values.length === 0) removedByExpansion = true;
-    else preservesEmptyField ||= part.quoted;
-    alternatives(fields, expanded, !part.quoted);
+    applyTokens(fields, expanded, part.quoted);
     materializedCharacters += expanded.characters;
   }
-  if (
-    fields.length === 1 &&
-    fields[0]?.value === "" &&
-    removedByExpansion &&
-    !preservesEmptyField
-  ) {
+  // A boundary at the end, or an expansion that produced nothing, leaves an
+  // unstarted last field, which is not a word.
+  if (fields.at(-1)?.started !== true) fields.pop();
+  if (fields.length === 0) {
     budget.expansionOutput(0, 0);
     return [];
   }

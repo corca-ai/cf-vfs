@@ -1,6 +1,7 @@
 import { VfsError } from "../../core/errors.js";
 import { utf8ByteLength } from "../../core/unicode.js";
 import { optindGeneration, setOptindFromGetopts } from "../environment.js";
+import { fieldSeparators } from "../ifs.js";
 import { readInputRecord } from "../input.js";
 import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import { type AppletSpec, appletUsageError, defineApplet } from "./applet.js";
@@ -28,7 +29,6 @@ const GETOPTS = {
 } as const satisfies AppletSpec;
 
 const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/u;
-const READ_IFS = /[ \t\n]/u;
 
 interface ReadOptions {
   names: string[];
@@ -38,13 +38,14 @@ interface ReadOptions {
 
 interface EscapedReadValue {
   value: string;
-  escapedIfs: ReadonlySet<number>;
+  /** Offsets of backslash-escaped characters, which never separate fields. */
+  escaped: ReadonlySet<number>;
   continued: boolean;
 }
 
 interface ReadRecord {
   value: string;
-  escapedIfs: ReadonlySet<number>;
+  escaped: ReadonlySet<number>;
   terminated: boolean;
 }
 
@@ -70,35 +71,35 @@ function readOptions(argv: readonly string[]): ReadOptions {
 
 function decodeReadRecord(value: string): EscapedReadValue {
   let output = "";
-  const escapedIfs = new Set<number>();
+  const escaped = new Set<number>();
   for (let index = 0; index < value.length; index += 1) {
     const character = value[index] ?? "";
     if (character !== "\\") {
       output += character;
       continue;
     }
-    const escaped = value[++index];
-    if (escaped === undefined) return { value: output, escapedIfs, continued: true };
-    if (READ_IFS.test(escaped)) escapedIfs.add(output.length);
-    output += escaped;
+    const next = value[++index];
+    if (next === undefined) return { value: output, escaped, continued: true };
+    escaped.add(output.length);
+    output += next;
   }
-  return { value: output, escapedIfs, continued: false };
+  return { value: output, escaped, continued: false };
 }
 
 function appendReadPart(
-  target: { value: string; escapedIfs: Set<number> },
+  target: { value: string; escaped: Set<number> },
   decoded: EscapedReadValue,
 ): void {
   const base = target.value.length;
   target.value += decoded.value;
-  for (const offset of decoded.escapedIfs) target.escapedIfs.add(base + offset);
+  for (const offset of decoded.escaped) target.escaped.add(base + offset);
 }
 
 async function readEscapedRecord(
   fds: ShellFileDescriptors,
   context: ShellCommandContext,
 ): Promise<ReadRecord> {
-  const result = { value: "", escapedIfs: new Set<number>() };
+  const result = { value: "", escaped: new Set<number>() };
   let retainedBytes = 0;
   let release: () => void = () => undefined;
   try {
@@ -121,35 +122,55 @@ async function readEscapedRecord(
   }
 }
 
-function skipDelimiters(
+/** Classifies one offset of a record as `IFS` whitespace, another separator, or text. */
+type ReadSeparator = (offset: number) => "whitespace" | "other" | undefined;
+
+function readSeparator(
   value: string,
-  offset: number,
-  delimiter: (offset: number) => boolean,
-): number {
-  while (offset < value.length && delimiter(offset)) offset += 1;
-  return offset;
+  ifs: string | undefined,
+  escaped: ReadonlySet<number>,
+): ReadSeparator {
+  const separators = fieldSeparators(ifs);
+  return (offset) => {
+    const character = value[offset];
+    if (separators === undefined || character === undefined || escaped.has(offset)) {
+      return undefined;
+    }
+    if (separators.whitespace.includes(character)) return "whitespace";
+    return separators.other.includes(character) ? "other" : undefined;
+  };
 }
 
+/**
+ * Splits a record as `read` does: leading and trailing `IFS` whitespace go,
+ * each name but the last takes one field, and the last takes the rest.
+ */
 function readAssignments(
   value: string,
   names: readonly string[],
   reply: boolean,
-  delimiter: (offset: number) => boolean,
+  separator: ReadSeparator,
 ): Assignment[] {
   if (reply) return [{ name: "REPLY", value }];
   const assignments: Assignment[] = [];
-  let offset = skipDelimiters(value, 0, delimiter);
+  const skipWhitespace = (from: number): number => {
+    let offset = from;
+    while (separator(offset) === "whitespace") offset += 1;
+    return offset;
+  };
+  let offset = skipWhitespace(0);
   for (const [index, name] of names.entries()) {
     if (index === names.length - 1) {
       let end = value.length;
-      while (end > offset && delimiter(end - 1)) end -= 1;
-      assignments.push({ name, value: value.slice(offset, end) });
+      while (end > offset && separator(end - 1) === "whitespace") end -= 1;
+      assignments.push({ name, value: value.slice(offset, Math.max(offset, end)) });
       break;
     }
     let end = offset;
-    while (end < value.length && !delimiter(end)) end += 1;
+    while (end < value.length && separator(end) === undefined) end += 1;
     assignments.push({ name, value: value.slice(offset, end) });
-    offset = skipDelimiters(value, end, delimiter);
+    offset = skipWhitespace(end);
+    if (separator(offset) === "other") offset = skipWhitespace(offset + 1);
   }
   return assignments;
 }
@@ -159,19 +180,19 @@ async function readValues(
   fds: ShellFileDescriptors,
   options: ReadOptions,
 ): Promise<{ assignments: Assignment[]; terminated: boolean }> {
+  const ifs = context.session.env.get("IFS");
   if (options.raw) {
     const record = await readInputRecord(fds[0], context.budget, context.signal);
-    const delimiter = (offset: number): boolean => READ_IFS.test(record.value[offset] ?? "");
+    const separator = readSeparator(record.value, ifs, new Set());
     return {
-      assignments: readAssignments(record.value, options.names, options.reply, delimiter),
+      assignments: readAssignments(record.value, options.names, options.reply, separator),
       terminated: record.terminated,
     };
   }
   const record = await readEscapedRecord(fds, context);
-  const delimiter = (offset: number): boolean =>
-    !record.escapedIfs.has(offset) && READ_IFS.test(record.value[offset] ?? "");
+  const separator = readSeparator(record.value, ifs, record.escaped);
   return {
-    assignments: readAssignments(record.value, options.names, options.reply, delimiter),
+    assignments: readAssignments(record.value, options.names, options.reply, separator),
     terminated: record.terminated,
   };
 }
