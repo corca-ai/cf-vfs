@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { lstat, readdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 
 async function files(root) {
   const entries = await readdir(root, { withFileTypes: true });
@@ -53,11 +53,23 @@ await writeFile(
 );
 console.log(`Implementation: ${id}`);
 const secretIndex = process.argv.indexOf("--secrets-file");
-const secrets = secretIndex < 0 ? [] : ["--secrets-file", process.argv[secretIndex + 1]];
-if (secrets.some((value) => !value)) throw new Error("--secrets-file needs a path");
-const child = spawn("npx", ["wrangler", "deploy", "--config", config, ...secrets], {
-  stdio: "inherit",
-});
+const secretsFile = secretIndex < 0 ? undefined : process.argv[secretIndex + 1];
+if (secretIndex >= 0 && !secretsFile) throw new Error("--secrets-file needs a path");
+// Deploy with the `cf` CLI, never `wrangler deploy`: the Worker's Durable Objects
+// are declared as `exports` in eval/benchmark-deploy/cloudflare.config.ts, and a
+// Worker deployed that way cannot go back to wrangler's `migrations` array.
+if (config !== "wrangler.benchmark.jsonc") {
+  throw new Error("Only the public benchmark Worker deploys from here, with cf.");
+}
+const cf = resolve("eval/node_modules/.bin/cf");
+// `cf` looks for its tooling in the project's own node_modules; share eval's.
+const linked = resolve("eval/benchmark-deploy/node_modules");
+if (!(await lstat(linked).catch(() => undefined))) await symlink("../node_modules", linked, "dir");
+const child = spawn(
+  cf,
+  ["deploy", ...(secretsFile === undefined ? [] : ["--secrets-file", resolve(secretsFile)])],
+  { cwd: resolve("eval/benchmark-deploy"), stdio: "inherit" },
+);
 const code = await new Promise((resolve, reject) => {
   child.once("error", reject);
   child.once("exit", resolve);

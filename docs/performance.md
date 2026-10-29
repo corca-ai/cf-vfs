@@ -331,9 +331,13 @@ network measurement, not a regression signal.
 Keep the secret outside version control:
 
 ```sh
-npx wrangler secret put BENCHMARK_TOKEN --config wrangler.benchmark.jsonc
-CF_VFS_BENCHMARK_TOKEN=... npm run bench:remote
+eval/node_modules/.bin/cf workers secrets update BENCHMARK_TOKEN \
+  --worker cf-vfs-benchmark --type secret_text --text "$CF_VFS_BENCHMARK_TOKEN"
+npm run bench:remote  # reads CF_VFS_BENCHMARK_TOKEN
 ```
+
+Deploy and manage this Worker with the `cf` CLI only, as AGENTS.md requires;
+`npm run deploy:public` runs `cf deploy` from `eval/benchmark-deploy/`.
 
 For repeated local runs, `.dev.vars.benchmark` may contain
 `BENCHMARK_TOKEN=...`; `.dev.vars*` is ignored. `npm run bench:remote:check`
@@ -457,7 +461,7 @@ The public chart now uses the paired protocol described below. One point represe
 one commit, with raw observations from up to twelve complete runs; the latest ten
 distinct commits are retained. Old unpaired records remain archived separately.
 Opening the page never runs a benchmark. Deploy committed source with
-`npm run deploy:public`; use `npm run bench:public -- --out cf.json` for an
+`npm run deploy:public`, which uses `cf deploy`, never `wrangler deploy`; use `npm run bench:public -- --out cf.json` for an
 authenticated fresh run. Public requests retain the ten-minute VFS mtime cache.
 
 The [ten-round production evaluation](../bench/cf-optimization-2026-10-08/report.md)

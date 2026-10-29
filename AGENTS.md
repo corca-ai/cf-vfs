@@ -8,6 +8,25 @@ documentation entry point.
 
 `CLAUDE.md` is a symlink to this file (`AGENTS.md`).
 
+## Deploying to Cloudflare
+
+Use the `cf` CLI for every Cloudflare deployment and account operation, never
+`wrangler deploy`, `wrangler secret` or other Wrangler account commands.
+
+- Public benchmark Worker (`vfs.borca.ai`): `npm run deploy:public`, which runs
+  `cf deploy` from `eval/benchmark-deploy/`. Its Durable Objects are declared
+  there as `exports`; once deployed that way the Worker cannot return to the
+  `migrations` array in `wrangler.benchmark.jsonc`, so a Wrangler deploy of
+  that file must not be attempted.
+- Agent evaluation Worker (`eval.vfs.borca.ai`): `npm run deploy:eval`.
+- Secrets: `cf workers secrets update`, or `--secrets-file` on deploy; never
+  print a secret's value.
+
+Wrangler remains only as a local tool: `wrangler types`, the Workers Vitest
+pool, and the tree-shaking bundle checks. `wrangler.benchmark.jsonc` stays
+because the benchmark fingerprint and local tooling read it; change it together
+with `eval/benchmark-deploy/cloudflare.config.ts`.
+
 ## Performance changes
 
 For every performance change, follow [the comprehensive performance protocol](docs/performance.md#comprehensive-regression-protocol).

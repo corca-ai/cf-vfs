@@ -14,6 +14,7 @@ src/testing/          Node in-memory SQLite and deterministic R2 adapters
 test/                 Node SQLite, workerd, package, docs, and bundle checks
 bench/                executable scenarios and checked-in local baseline
 eval/                 separately deployed agent evaluation Worker (see eval/README.md)
+eval/benchmark-deploy/ cf deployment of the public benchmark Worker (npm run deploy:public)
 scripts/              fixture regeneration and hook installation
 docs/                 documentation, starting at index.md
 ```
