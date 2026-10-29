@@ -418,3 +418,13 @@ it("allows twenty thousand commands in one execution", async () => {
     stderr: "shell command limit exceeded\n",
   });
 });
+
+it("reports a spent I/O budget instead of failing silently", async () => {
+  const harness = createBashHarness({ limits: { maxTotalIoBytes: 1000 } });
+  await harness.fileSystem.writeFile("/big", `${"x".repeat(600)}\n`);
+  await expect(harness.run("echo start; cat /big /big | wc -c")).resolves.toEqual({
+    exitCode: 1,
+    stdout: "start\n",
+    stderr: "shell total I/O byte limit exceeded\n",
+  });
+});

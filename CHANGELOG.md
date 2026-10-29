@@ -16,6 +16,8 @@ included.
 
 ## [Unreleased]
 
+- Report a spent total I/O budget on stderr. The diagnostic was itself charged
+  to the exhausted budget and dropped, so an agent saw exit 1 with no output.
 - **Breaking:** `cp` and `mv` overwrite an existing destination as GNU does,
   and `-n` keeps it; both take several sources into a directory. Requiring
   `-f` broke `sed ... > tmp && mv tmp file` in two of three agent scenarios.

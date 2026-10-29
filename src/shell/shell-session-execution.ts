@@ -161,6 +161,7 @@ async function handleExecutionError(
   fds: ShellFileDescriptors,
   controller: AbortController,
   outcome: ExecutionOutcomeState,
+  budget: ExecutionBudget,
 ): Promise<{ exitCode: number }> {
   if (!isVfsError(error)) {
     await Promise.allSettled([fds[1].abort(error), fds[2].abort(error)]);
@@ -170,6 +171,8 @@ async function handleExecutionError(
   session.lastExitCode = exitCode;
   outcome.failureCode = error.code;
   if (!controller.signal.aborted || error.code === "ETIMEDOUT") {
+    // A spent I/O budget must not swallow the message that reports it.
+    budget.releaseForDiagnostics();
     try {
       await fds[2].write(encodeUtf8(`${formatError(error)}\n`));
     } catch {
@@ -214,7 +217,7 @@ async function completeExecution(
       services,
     );
   } catch (error) {
-    return await handleExecutionError(error, session, fds, controller, outcome);
+    return await handleExecutionError(error, session, fds, controller, outcome, budget);
   } finally {
     const reason =
       controller.signal.reason ?? new VfsError("EPIPE", "shell execution stopped reading input");

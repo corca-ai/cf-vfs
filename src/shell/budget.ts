@@ -58,6 +58,7 @@ export class ExecutionBudget implements ShellBudget {
   private commands = 0;
   private loopIterations = 0;
   private ioBytes = 0;
+  private diagnostics = false;
   private mutations = 0;
   private globMatches = 0;
   private expansionWorkUnits = 0;
@@ -130,7 +131,16 @@ export class ExecutionBudget implements ShellBudget {
     }
   }
 
+  /**
+   * Stops charging I/O once the unit has failed, so the diagnostic that says
+   * why can still be written; it is bounded by the stderr limit instead.
+   */
+  releaseForDiagnostics(): void {
+    this.diagnostics = true;
+  }
+
   io(bytes: number): void {
+    if (this.diagnostics) return;
     this.checkDeadline();
     this.ioBytes += bytes;
     if (this.ioBytes > this.limits.maxTotalIoBytes) {
