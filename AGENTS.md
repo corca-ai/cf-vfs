@@ -30,13 +30,19 @@ with `eval/benchmark-deploy/cloudflare.config.ts`.
 ## Performance changes
 
 For every performance change, follow [the comprehensive performance protocol](docs/performance.md#comprehensive-regression-protocol).
-Capture baseline and candidate **full** local and actual Cloudflare suites with
-matching workloads, engines and measurement protocols; a targeted benchmark
-alone cannot approve adoption. Report per-workload regressions, equal-weight
+Capture baseline and candidate **full** local suites with matching workloads,
+engines and measurement protocols; a targeted benchmark alone cannot approve
+adoption. Scale the Cloudflare evidence to the change, as
+[scoping](docs/performance.md#scope-the-cloudflare-evidence-to-the-change)
+describes: a change the full plan executes (VFS, SQL, storage, Git) needs at
+least three complete CF full-suite runs per version; a change off that path
+needs three runs per version of the series that exercises it (the agent task
+for shell utilities) and one candidate full-suite control run, escalating to
+the full protocol on any >5% slowdown or SQL-cost change. Report per-workload regressions, equal-weight
 geometric means (overall and families), and SQL statements/rows read/rows written
 separately. Use `bench:public:local`, `bench:public`, and `bench:assess` for the
 shared full plan and legacy descriptive screening. Use `bench:assess:paired` for
-new paired production results, with at least three complete runs per version.
+new paired production results.
 For paired local adoption evidence, use `bench:local:paired` with immutable
 compiled baseline/candidate graphs. Its `local-group-v1` protocol creates fresh
 fixtures per arm/group and completes a group before switching arms, matching CF.

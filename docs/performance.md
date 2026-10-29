@@ -529,6 +529,28 @@ the final deadline/abort check. No filesystem API or schema is added.
 Performance adoption requires full-suite evidence, not only a faster target.
 The repository instructions in AGENTS.md require this for future work.
 
+### Scope the Cloudflare evidence to the change
+
+The full local plan is always required. How much Cloudflare evidence a change
+needs depends on whether the deployed workloads execute its code; three full
+CF runs take close to an hour per version, which measures only noise for code
+the plan never reaches.
+
+- **On the full plan's path** — the VFS, SQL, storage, Git, or anything else
+  the 190 workloads execute: at least three complete full-suite runs per
+  version, as the steps below describe.
+- **Off that path** — for example the shell's text utilities and regular
+  expression engine, which only the agent task runs: at least three runs per
+  version of the series that exercises the code (`bench:public -- --task` for
+  shell utilities), and one complete full-suite run of the candidate as a
+  regression control against the retained baseline runs. Record how the path
+  was established, such as the workloads' scripts or a coverage trace.
+- **Escalate** to the full three-run protocol, and the ten-pair investigation,
+  when a control run shows a workload slowdown above 5% or any SQL-cost change.
+- **Batch** off-path changes: several may share one baseline cohort, and a full
+  three-run cohort is repeated before a release that includes performance
+  changes.
+
 1. Save the baseline commit/build, runtime, workload plan, warmups, raw samples,
    validation results and SQL counters, including UID/GID/groups and fixture
    permissions. Run the entire local and actual CF
@@ -547,7 +569,8 @@ The repository instructions in AGENTS.md require this for future work.
    `--baseline` option remain descriptive tools for legacy results, not an
    adoption gate. Missing SQL counters are not evidence of unchanged costs;
    separately meter statements, rows read and rows written.
-4. Collect at least three complete runs per version (eighteen pairs per workload)
+4. For a change on the full plan's path, collect at least three complete runs
+   per version (eighteen pairs per workload)
    and repeat across sessions when environment drift is suspected. Preselect the
    comparison cohort and overall metric; do not stop/retry only until a favorable
    result appears. Investigate every >5% slowdown with additional matched evidence.
