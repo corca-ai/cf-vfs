@@ -1,0 +1,271 @@
+import { describe, expect, it } from "vitest";
+import { bashCases, createBashHarness } from "./helpers/bash.js";
+
+// Behaviors an agent reached for while maintaining a Markdown wiki, each
+// pinned to what GNU coreutils, diffutils and grep do.
+
+describe("cp into existing directories", () => {
+  bashCases([
+    {
+      name: "copies a directory's contents with a trailing /.",
+      files: { "/src/a": "a\n", "/src/sub/b": "b\n" },
+      script: "mkdir /dst && cp -r /src/. /dst/ && find /dst | sort",
+      stdout: "/dst\n/dst/a\n/dst/sub\n/dst/sub/b\n",
+    },
+    {
+      name: "copies . from the working directory",
+      files: { "/q/r/z": "z\n" },
+      script: "mkdir /t && cd /q && cp -r . ../t && find /t | sort",
+      stdout: "/t\n/t/r\n/t/r/z\n",
+    },
+    {
+      name: "creates a missing destination from a contents operand",
+      files: { "/src/sub/b": "b\n" },
+      script: "cp -r /src/. /new && find /new | sort",
+      stdout: "/new\n/new/sub\n/new/sub/b\n",
+    },
+    {
+      name: "merges into a destination subdirectory that already exists",
+      files: { "/s/x/f": "1\n", "/d/s/y/g": "2\n" },
+      script: "cp -r /s /d && find /d | sort",
+      stdout: "/d\n/d/s\n/d/s/x\n/d/s/x/f\n/d/s/y\n/d/s/y/g\n",
+    },
+    {
+      name: "refuses to merge a directory into itself",
+      files: { "/a/b/f": "f\n" },
+      script: "cp -r /a/. /a/b",
+      exitCode: 2,
+      stderrIncludes: "cannot copy a directory into itself",
+    },
+  ]);
+});
+
+describe("tr", () => {
+  bashCases([
+    {
+      name: "translates escaped newlines and tabs",
+      script: "printf 'a b, c\\td\\n' | tr ', \\t' '\\n\\n_'",
+      stdout: "a\nb\n\nc_d\n",
+    },
+    {
+      name: "reads octal escapes",
+      script: "printf 'a-b\\n' | tr '\\055' '+'",
+      stdout: "a+b\n",
+    },
+    {
+      name: "expands several ranges in one set",
+      script: "printf 'Hello World\\n' | tr 'a-zA-Z' 'n-za-mN-ZA-M'",
+      stdout: "Uryyb Jbeyq\n",
+    },
+    {
+      name: "pairs upper and lower classes",
+      script: "printf 'Hello World\\n' | tr '[:upper:]' '[:lower:]'",
+      stdout: "hello world\n",
+    },
+    {
+      name: "pads a short SET2 with its last character",
+      script: "printf 'abc\\n' | tr abc xy",
+      stdout: "xyy\n",
+    },
+    { name: "deletes with -d", script: "printf 'x\\r\\ny\\r\\n' | tr -d '\\r'", stdout: "x\ny\n" },
+    { name: "squeezes with -s", script: "printf 'a  b   c\\n' | tr -s ' '", stdout: "a b c\n" },
+    {
+      name: "squeezes the translated set with two operands",
+      script: "printf 'aabbcc\\n' | tr -s 'a-c' 'x'",
+      stdout: "x\n",
+    },
+    {
+      name: "deletes the complement with -cd",
+      script: "printf 'a1b2c3\\n' | tr -cd '0-9\\n'",
+      stdout: "123\n",
+    },
+    {
+      name: "translates the complement",
+      script: "printf 'hello, world!\\n' | tr -c 'a-z\\n' '_'",
+      stdout: "hello__world_\n",
+    },
+    {
+      name: "deletes and then squeezes with -ds",
+      script: "printf 'aaa bbb\\n' | tr -ds 'b' 'a'",
+      stdout: "a \n",
+    },
+    {
+      name: "names a set that looks like an option after the first set",
+      script: "printf 'a-b\\n' | tr - _",
+      stdout: "a_b\n",
+    },
+    {
+      name: "refuses a reversed range",
+      script: "printf 'a\\n' | tr z-a q",
+      exitCode: 2,
+      stderrIncludes: "reverse order",
+    },
+    {
+      name: "refuses an unknown class",
+      script: "printf 'a\\n' | tr '[:nope:]' q",
+      exitCode: 2,
+      stderrIncludes: "invalid character class",
+    },
+  ]);
+});
+
+describe("cmp", () => {
+  bashCases([
+    {
+      name: "reports only by status with -s",
+      files: { "/p": "x\n", "/q": "x\n", "/r": "y\n" },
+      script: "cmp -s /p /q; echo $?; cmp -s /p /r; echo $?",
+      stdout: "0\n1\n",
+    },
+    {
+      name: "names the differing byte and line",
+      files: { "/p": "a\nbc\n", "/q": "a\nbd\n" },
+      script: "cmp /p /q",
+      exitCode: 1,
+      stdout: "/p /q differ: byte 4, line 2\n",
+    },
+    {
+      name: "reports end of file after a complete line",
+      files: { "/p": "a\n", "/q": "a\nb" },
+      script: "cmp /p /q",
+      exitCode: 1,
+      stderr: "cmp: EOF on /p after byte 2, line 1\n",
+    },
+    {
+      name: "reports end of file inside a line",
+      files: { "/p": "a\nbc", "/q": "a\nbcd" },
+      script: "cmp /p /q",
+      exitCode: 1,
+      stderr: "cmp: EOF on /p after byte 4, in line 2\n",
+    },
+    {
+      name: "reports an empty file",
+      files: { "/p": "", "/q": "a\n" },
+      script: "cmp /p /q",
+      exitCode: 1,
+      stderr: "cmp: EOF on /p which is empty\n",
+    },
+  ]);
+});
+
+describe("diff on directories", () => {
+  bashCases([
+    {
+      name: "compares trees recursively with -r",
+      files: {
+        "/d1/f": "a\n",
+        "/d2/f": "b\n",
+        "/d1/s/g": "same\n",
+        "/d2/s/g": "diff\n",
+        "/d2/new": "x\n",
+        "/d1/only/h": "h\n",
+        "/d1/k/i": "i\n",
+        "/d2/k": "",
+      },
+      script: "diff -r /d1 /d2",
+      exitCode: 1,
+      stdout: [
+        "diff -r /d1/f /d2/f",
+        "--- /d1/f",
+        "+++ /d2/f",
+        "@@ -1,1 +1,1 @@",
+        "-a",
+        "+b",
+        "File /d1/k is a directory while file /d2/k is a regular empty file",
+        "Only in /d2: new",
+        "Only in /d1: only",
+        "diff -r /d1/s/g /d2/s/g",
+        "--- /d1/s/g",
+        "+++ /d2/s/g",
+        "@@ -1,1 +1,1 @@",
+        "-same",
+        "+diff",
+        "",
+      ].join("\n"),
+    },
+    {
+      name: "reports identical trees by status",
+      files: { "/e1/f": "a\n", "/e2/f": "a\n", "/e1/s/g": "g\n", "/e2/s/g": "g\n" },
+      script: "diff -r /e1 /e2; echo $?",
+      stdout: "0\n",
+    },
+    {
+      name: "names common subdirectories without -r",
+      files: { "/e1/f": "a\n", "/e2/f": "a\n", "/e1/s/g": "g\n", "/e2/s/h": "h\n" },
+      script: "diff /e1 /e2",
+      stdout: "Common subdirectories: /e1/s and /e2/s\n",
+    },
+    {
+      name: "summarizes with -q and trims trailing slashes",
+      files: { "/e1/f": "a\n", "/e2/f": "b\n", "/e2/z": "z\n" },
+      script: "diff -rq /e1/ /e2/",
+      exitCode: 1,
+      stdout: "Files /e1/f and /e2/f differ\nOnly in /e2/: z\n",
+    },
+    {
+      name: "compares a file with its namesake inside a directory",
+      files: { "/f": "a\n", "/d/f": "a\n" },
+      script: "diff /f /d; echo $?",
+      stdout: "0\n",
+    },
+  ]);
+});
+
+describe("grep line and file selection", () => {
+  bashCases([
+    {
+      name: "selects whole lines with -x",
+      script: "printf 'ab\\nabc\\nb\\n' | grep -x ab",
+      stdout: "ab\n",
+    },
+    {
+      name: "applies -x to every branch of an alternation",
+      script:
+        "printf 'ab\\nabc\\nb\\n' | grep -x 'a\\|b'; printf 'ab\\nabc\\n' | grep -xE 'ab|abc'",
+      stdout: "b\nab\nabc\n",
+    },
+    {
+      name: "keeps explicit anchors meaningful under -x",
+      script: "printf '^a\\na\\nab\\n' | grep -x '^a'; printf 'a$\\na\\n' | grep -x 'a\\$'",
+      stdout: "a\na$\n",
+    },
+    {
+      name: "compares whole lines with -xF",
+      script: "printf 'AB\\nABC\\n' | grep -xiF ab",
+      stdout: "AB\n",
+    },
+    {
+      name: "lists files without a match with -L",
+      files: { "/g1": "x\n", "/g2": "y\n", "/gd/a/1": "x\n", "/gd/2": "y\n" },
+      script: "grep -L x /g1 /g2; echo $?; grep -L z /g1 /g2; echo $?; grep -rL x /gd",
+      stdout: "/g2\n0\n/g1\n/g2\n1\n/gd/2\n",
+    },
+  ]);
+});
+
+it("bounds expansion per result, so ordinary nested loops finish", async () => {
+  // Twenty files of five links, each checked against a thirty-name list: about
+  // twenty thousand fields in total, but never more than a few at once.
+  const harness = createBashHarness();
+  const names = Array.from({ length: 30 }, (_, index) => `page-${index}`);
+  const pages = names.slice(0, 20);
+  await harness.fileSystem.writeFile("/names.txt", `${names.join("\n")}\n`, {
+    createParents: true,
+  });
+  for (const name of pages) {
+    await harness.fileSystem.writeFile(
+      `/wiki/${name}.md`,
+      "[[page-1]] [[page-2]] [[missing]] [[page-3]] [[page-4]]\n",
+      { createParents: true },
+    );
+  }
+  const result = await harness.run(`
+cd /wiki
+for f in $(find . -type f -name '*.md' | sort); do
+  grep -o '\\[\\[[^]]*\\]\\]' "$f" | sed 's/^\\[\\[//; s/\\]\\]$//' | while read -r t; do
+    found=0; while read -r n; do [ "$n" = "$t" ] && found=1; done < /names.txt
+    [ $found = 0 ] && echo "$f: $t"
+  done
+done | sort -u | wc -l`);
+  expect(result).toMatchObject({ exitCode: 0, stdout: "20\n", stderr: "" });
+});

@@ -20,7 +20,7 @@ import {
 
 const GREP = {
   name: "grep",
-  usage: "[-cinvoFElqrRh] PATTERN [PATH...]",
+  usage: "[-cinvoxFElLqrRh] PATTERN [PATH...]",
   summary: "prints records matching a pattern",
   options: {
     short: {
@@ -31,6 +31,8 @@ const GREP = {
       E: { name: "extended" },
       c: { name: "count" },
       l: { name: "files-with-matches" },
+      L: { name: "files-without-match" },
+      x: { name: "line-regexp" },
       q: { name: "quiet" },
       r: { name: "recursive" },
       R: { name: "recursive" },
@@ -46,6 +48,8 @@ const GREP = {
   | "extended"
   | "count"
   | "files-with-matches"
+  | "files-without-match"
+  | "line-regexp"
   | "quiet"
   | "recursive"
   | "no-filename"
@@ -101,6 +105,8 @@ interface GrepInvocation {
   readonly lineNumbers: boolean;
   readonly count: boolean;
   readonly filesWithMatches: boolean;
+  readonly filesWithoutMatch: boolean;
+  readonly lineRegexp: boolean;
   readonly quiet: boolean;
   readonly recursive: boolean;
   readonly showName: boolean;
@@ -113,6 +119,20 @@ function grepExpandsPath(context: ShellCommandContext, path: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * `-x` anchors the whole pattern as one group, so an alternation must cover
+ * the line rather than only its first branch. A basic expression's own `^` and
+ * `$` would read as literals inside the group, so they are removed first: at
+ * the ends of the pattern they are anchors that the group already supplies.
+ */
+function wholeLinePattern(pattern: string, extended: boolean): string {
+  if (extended) return `^(${pattern})$`;
+  let body = pattern.startsWith("^") ? pattern.slice(1) : pattern;
+  const trailingBackslashes = /\\*(?=\$$)/u.exec(body)?.[0].length ?? 0;
+  if (body.endsWith("$") && trailingBackslashes % 2 === 0) body = body.slice(0, -1);
+  return `^\\(${body}\\)$`;
 }
 
 function parseGrepInvocation(
@@ -131,9 +151,11 @@ function parseGrepInvocation(
   const ignoreCase = options.has("ignore-case");
   const recursive = options.has("recursive");
   const noFilename = options.has("no-filename");
+  const lineRegexp = options.has("line-regexp");
+  const anchored = lineRegexp ? wholeLinePattern(pattern, extended) : pattern;
   const regular = fixed
     ? undefined
-    : compilePosixRegex(pattern, extended ? "extended" : "basic", GREP.name, {
+    : compilePosixRegex(anchored, extended ? "extended" : "basic", GREP.name, {
         ...(ignoreCase ? { ignoreCase: true } : {}),
       });
   const showName =
@@ -149,6 +171,8 @@ function parseGrepInvocation(
     lineNumbers: options.has("line-numbers"),
     count: options.has("count"),
     filesWithMatches: options.has("files-with-matches"),
+    filesWithoutMatch: options.has("files-without-match"),
+    lineRegexp,
     quiet: options.has("quiet"),
     recursive,
     showName,
@@ -190,7 +214,13 @@ class GrepRunner {
       if (!this.selected(candidate)) continue;
       this.matches += 1;
       inputMatches += 1;
-      if (this.invocation.quiet || this.invocation.filesWithMatches) break;
+      if (
+        this.invocation.quiet ||
+        this.invocation.filesWithMatches ||
+        this.invocation.filesWithoutMatch
+      ) {
+        break;
+      }
       if (!this.invocation.count) await this.writeSelected(input.name, lineNumber, line, candidate);
     }
     await this.finishInput(input.name, inputMatches);
@@ -198,12 +228,15 @@ class GrepRunner {
   }
 
   private selected(candidate: string): boolean {
-    const found =
-      this.invocation.regular === undefined
-        ? (this.invocation.ignoreCase ? asciiLower(candidate) : candidate).includes(
-            this.invocation.needle,
-          )
-        : this.invocation.regular.test(candidate);
+    let found: boolean;
+    if (this.invocation.regular === undefined) {
+      const text = this.invocation.ignoreCase ? asciiLower(candidate) : candidate;
+      found = this.invocation.lineRegexp
+        ? text === this.invocation.needle
+        : text.includes(this.invocation.needle);
+    } else {
+      found = this.invocation.regular.test(candidate);
+    }
     return found !== this.invocation.invert;
   }
 
@@ -234,6 +267,9 @@ class GrepRunner {
   private async finishInput(name: string, matches: number): Promise<void> {
     if (this.invocation.filesWithMatches && matches > 0) {
       await this.output.write(`${name}\n`);
+    } else if (this.invocation.filesWithoutMatch) {
+      // Status still follows selected lines, as GNU grep 3.5 and later restored.
+      if (matches === 0) await this.output.write(`${name}\n`);
     } else if (this.invocation.count) {
       const prefix = this.invocation.showName ? `${name}:` : "";
       await this.output.write(`${prefix}${matches}\n`);

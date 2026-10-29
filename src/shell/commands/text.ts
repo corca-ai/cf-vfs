@@ -1,6 +1,3 @@
-import { VfsError } from "../../core/errors.js";
-import { createLineDiff, renderLineDiff } from "../../core/line-diff.js";
-import type { ShellCommandContext } from "../types.js";
 import {
   type AppletSpec,
   type AppletSpecWithOptions,
@@ -10,15 +7,12 @@ import {
 } from "./applet.js";
 import {
   BufferedTextWriter,
-  type BufferLease,
   collectStream,
   commandPath,
   inputStreams,
   inputTexts,
   parseInteger,
-  readFileBytes,
   readTextLines,
-  readWithAbort,
   splitLines,
   writeBytes,
   writeText,
@@ -26,10 +20,12 @@ import {
 import type { ParsedUtilityOption } from "./options.js";
 
 export { commCommand, joinCommand } from "./text-compare.js";
+export { cmpCommand, diffCommand } from "./text-diff.js";
 export { base64Command, patchCommand, seqCommand } from "./text-extra.js";
 export { grepCommand } from "./text-search.js";
 export { headCommand, tailCommand } from "./text-slice.js";
 export { sortCommand } from "./text-sort.js";
+export { trCommand } from "./text-tr.js";
 export { wcCommand } from "./text-wc.js";
 
 const TEE = {
@@ -63,12 +59,6 @@ const CUT = {
   },
 } as const satisfies AppletSpecWithOptions<"delimiter" | "fields" | "characters" | "suppress">;
 
-const TR = {
-  name: "tr",
-  usage: "SET1 SET2",
-  summary: "translates characters between two equal-length sets",
-} as const satisfies AppletSpec;
-
 const NL = {
   name: "nl",
   usage: "[FILE...]",
@@ -86,18 +76,6 @@ const PASTE = {
   name: "paste",
   usage: "[FILE...]",
   summary: "merges corresponding records of files into tab-separated rows",
-} as const satisfies AppletSpec;
-
-const CMP = {
-  name: "cmp",
-  usage: "FILE1 FILE2",
-  summary: "reports the first differing byte of two files",
-} as const satisfies AppletSpec;
-
-const DIFF = {
-  name: "diff",
-  usage: "FILE1 FILE2",
-  summary: "prints a unified difference between two files",
 } as const satisfies AppletSpec;
 
 const SHA256SUM = {
@@ -303,84 +281,6 @@ export const cutCommand = /* @__PURE__ */ defineApplet(CUT, async (context, argv
   return 0;
 });
 
-function characterSet(value: string, context: ShellCommandContext): string[] {
-  const characters = [...value];
-  const range = characterRange(characters);
-  const count = range?.count ?? characters.length;
-  if (count > context.budget.limits.maxExpansionChars) {
-    throw new VfsError("E2BIG", "tr: character set exceeds the expansion limit");
-  }
-  context.budget.expansionWork(count);
-  return range === undefined
-    ? characters
-    : Array.from({ length: count }, (_unused, index) => String.fromCodePoint(range.start + index));
-}
-
-function characterRange(
-  characters: readonly string[],
-): { start: number; count: number } | undefined {
-  if (characters.length !== 3 || characters[1] !== "-") return undefined;
-  const start = characters[0]?.codePointAt(0);
-  const end = characters[2]?.codePointAt(0);
-  if (start === undefined || end === undefined) return undefined;
-  return { start, count: Math.max(0, end - start + 1) };
-}
-
-function translateCharacters(
-  input: string,
-  from: readonly string[],
-  to: readonly string[],
-): string {
-  return [...input]
-    .map((character) => {
-      const index = from.indexOf(character);
-      return index < 0 ? character : (to[Math.min(index, to.length - 1)] ?? "");
-    })
-    .join("");
-}
-
-function decodeTranslated(
-  decoder: TextDecoder,
-  from: readonly string[],
-  to: readonly string[],
-  chunk?: Uint8Array,
-): string {
-  try {
-    const decoded =
-      chunk === undefined ? decoder.decode() : decoder.decode(chunk, { stream: true });
-    return translateCharacters(decoded, from, to);
-  } catch (error) {
-    if (error instanceof TypeError) throw new VfsError("EIO", "input is not valid UTF-8");
-    throw error;
-  }
-}
-
-export const trCommand = /* @__PURE__ */ defineApplet(TR, async (context, argv, fds) => {
-  if (argv.length !== 2) throw appletUsageError(TR, "requires SET1 and SET2");
-  const from = characterSet(argv[0] ?? "", context);
-  const to = characterSet(argv[1] ?? "", context);
-  const reader = fds[0].getReader();
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  const output = new BufferedTextWriter(context, fds[1]);
-  try {
-    while (true) {
-      const read = await readWithAbort(reader, context.signal);
-      if (read.done) break;
-      context.budget.io(read.value.byteLength);
-      await output.write(decodeTranslated(decoder, from, to, read.value));
-    }
-    await output.write(decodeTranslated(decoder, from, to));
-    await output.flush();
-  } catch (error) {
-    await reader.cancel(error).catch(() => undefined);
-    throw error;
-  } finally {
-    reader.releaseLock();
-    output.abort();
-  }
-  return 0;
-});
-
 export const nlCommand = /* @__PURE__ */ defineApplet(NL, async (context, argv, fds) => {
   for (const value of argv) {
     if (value.startsWith("-") && value !== "-") {
@@ -458,48 +358,6 @@ export const pasteCommand = /* @__PURE__ */ defineApplet(PASTE, async (context, 
     }
     await writeText(fds[1], output);
     return 0;
-  } finally {
-    inputs.release();
-  }
-});
-
-export const cmpCommand = /* @__PURE__ */ defineApplet(CMP, async (context, argv, fds) => {
-  if (argv.length !== 2) throw appletUsageError(CMP, "requires two files");
-  const left = await readFileBytes(context, argv[0] ?? "");
-  let right: BufferLease<Uint8Array>;
-  try {
-    right = await readFileBytes(context, argv[1] ?? "");
-  } catch (error) {
-    left.release();
-    throw error;
-  }
-  try {
-    const length = Math.min(left.value.byteLength, right.value.byteLength);
-    for (let index = 0; index < length; index += 1) {
-      if (left.value[index] !== right.value[index]) {
-        await writeText(fds[1], `${argv[0]} ${argv[1]} differ: byte ${index + 1}\n`);
-        return 1;
-      }
-    }
-    if (left.value.byteLength !== right.value.byteLength) {
-      await writeText(fds[1], `${argv[0]} ${argv[1]} differ: byte ${length + 1}\n`);
-      return 1;
-    }
-    return 0;
-  } finally {
-    left.release();
-    right.release();
-  }
-});
-
-export const diffCommand = /* @__PURE__ */ defineApplet(DIFF, async (context, argv, fds) => {
-  if (argv.length !== 2) throw appletUsageError(DIFF, "requires two files");
-  const inputs = await inputTexts(context, argv, fds[0]);
-  try {
-    const diff = createLineDiff(inputs.value[0]?.text ?? "", inputs.value[1]?.text ?? "");
-    if (diff.changes === 0) return 0;
-    await writeText(fds[1], renderLineDiff(argv[0] ?? "", argv[1] ?? "", diff));
-    return 1;
   } finally {
     inputs.release();
   }

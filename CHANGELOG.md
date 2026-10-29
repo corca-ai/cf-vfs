@@ -16,6 +16,17 @@ included.
 
 ## [Unreleased]
 
+- Bound expansion characters and fields per expansion instead of per execution,
+  charging the running total to expansion work. A nested `while read` loop over
+  a small wiki was refused for the sum of short words it held one at a time.
+- `cp -r SRC/. DST` copies the directory's contents, and a recursive copy merges
+  into an existing destination directory, as GNU does; previously the first
+  nested the source and the second failed.
+- `tr` reads backslash and octal escapes, ranges anywhere in a set, and
+  character classes, pads a short SET2, and adds `-d`, `-s` and `-c`. Before,
+  `tr '\n'` meant the letter `n` and `tr -d X` silently translated `-d`.
+- Add `cmp -s` and GNU's `differ: byte N, line M` and `EOF on` reports, `diff -r`
+  and `-q` for directories, and `grep -x` and `-L`.
 - Batch Git commit tree and commit-object publication through the existing
   bounded writer before updating refs. Reservations are lazy and released before
   reads or individual writes; publication failure leaves the branch unchanged.

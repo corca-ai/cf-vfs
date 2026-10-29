@@ -649,11 +649,11 @@ decides which directory is provisioned; pass the same path as the execution
 | discovery | `command -v`, `type`, `which`, `printenv`, from the dedicated `/shell/commands/discovery` subpath |
 | help | `help -s`, from the dedicated `/shell/commands/help` subpath |
 | shell profile | `sh -c`, `sh FILE`, and the `bash` alias, from the dedicated `/shell/commands/sh` subpath |
-| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p -P`, `ls -l -n -d -a -A -1 -R`, `find -name -type -maxdepth -print -print0 -exec`, `stat -L -c` (`%i` identity, `%u/%g/%U/%G` ownership), `chmod`, `chown`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
+| namespace | `mkdir -p -m`, `touch -c`, `rm -r -f`, `rmdir`, `mv -f`, `cp -r -f -p -P` (a `SRC/.` operand and an existing destination directory merge, as in GNU), `ls -l -n -d -a -A -1 -R`, `find -name -type -maxdepth -print -print0 -exec`, `stat -L -c` (`%i` identity, `%u/%g/%U/%G` ownership), `chmod`, `chown`, `du`, `tree`, `basename`, `dirname`, `realpath`, `mktemp`, `file` |
 | links | `ln -s -f`, `readlink -f`, from the dedicated `/shell/commands/link` subpath |
-| streaming text/bytes | `cat`, `grep -i -v -n -F -E -c -l -q -r -R -h`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c -s`, `tr`, `nl`, `fold -w`, `sed -E -n -e -i`, `seq -s -w` |
+| streaming text/bytes | `cat`, `grep -i -v -n -x -F -E -c -l -L -q -r -R -h`, `head -n -c`, `wc -l -w -c`, `uniq -c`, `cut -d -f -c -s`, `tr -c -d -s` (escapes, ranges, `[:class:]`), `nl`, `fold -w`, `sed -E -n -e -i`, `seq -s -w` |
 | deterministic utilities | `date -u +FORMAT`, `sleep`, `expr`, from the dedicated `/shell/commands/system` subpath |
-| bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp`, `diff`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
+| bounded barriers | `sort -r -u -n`, `tail -n -c`, `tee -a`, `paste`, `cmp -s`, `diff -r -q -u`, `sha256sum`, `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
 | argument dispatch | `xargs -n -0 -r -t`, from the dedicated `/shell/commands/xargs` subpath |
 | opt-in record language | `awk -F -v -f`, from the dedicated `/shell/commands/awk` subpath; not part of `defaultShellCommands` |
 

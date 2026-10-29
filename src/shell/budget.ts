@@ -60,8 +60,6 @@ export class ExecutionBudget implements ShellBudget {
   private ioBytes = 0;
   private mutations = 0;
   private globMatches = 0;
-  private expansionCharacters = 0;
-  private expansionFields = 0;
   private expansionWorkUnits = 0;
   private bufferedBytes = 0;
 
@@ -184,30 +182,32 @@ export class ExecutionBudget implements ShellBudget {
     }
   }
 
+  /**
+   * Bounds one expansion's result: the characters and fields a single word
+   * list, substitution, or utility value materializes at once. The limits
+   * are per result rather than per execution, because what they protect is
+   * memory held at one time; a loop that expands a short word ten thousand
+   * times holds one word at a time. The running total is charged to
+   * `maxExpansionWork` by `expansionOutput`, which bounds the whole unit.
+   */
   checkExpansionOutput(characters: number, fields = 1): void {
     this.checkDeadline();
-    if (this.expansionCharacters + characters > this.limits.maxExpansionChars) {
+    if (characters > this.limits.maxExpansionChars) {
       this.exceeded(
         "maxExpansionChars",
-        this.expansionCharacters + characters,
+        characters,
         "E2BIG",
         "shell expansion character limit exceeded",
       );
     }
-    if (this.expansionFields + fields > this.limits.maxExpansionFields) {
-      this.exceeded(
-        "maxExpansionFields",
-        this.expansionFields + fields,
-        "E2BIG",
-        "shell expansion field limit exceeded",
-      );
+    if (fields > this.limits.maxExpansionFields) {
+      this.exceeded("maxExpansionFields", fields, "E2BIG", "shell expansion field limit exceeded");
     }
   }
 
   expansionOutput(characters: number, fields = 1): void {
     this.checkExpansionOutput(characters, fields);
-    this.expansionCharacters += characters;
-    this.expansionFields += fields;
+    this.expansionWork(characters + fields);
   }
 
   remainingBufferedBytes(): number {

@@ -20,6 +20,7 @@ import { describeKind } from "./fs-content.js";
 import { commandPath, destinationPath, writeText } from "./helpers.js";
 
 export { catCommand, fileCommand } from "./fs-content.js";
+export { cpCommand } from "./fs-copy.js";
 export { duCommand, findCommand, treeCommand } from "./fs-find.js";
 export { basenameCommand, dirnameCommand, mktempCommand, realpathCommand } from "./fs-path.js";
 
@@ -81,27 +82,6 @@ const MV = {
     long: { force: { name: "force" } },
   },
 } as const satisfies AppletSpecWithOptions<"force">;
-
-const CP = {
-  name: "cp",
-  usage: "[-rRfpP] SOURCE DESTINATION",
-  summary: "copies a file or, with -r, a directory subtree",
-  options: {
-    short: {
-      f: { name: "force" },
-      r: { name: "recursive" },
-      R: { name: "recursive" },
-      p: { name: "preserve" },
-      P: { name: "no-dereference" },
-    },
-    long: {
-      force: { name: "force" },
-      recursive: { name: "recursive" },
-      preserve: { name: "preserve" },
-      "no-dereference": { name: "no-dereference" },
-    },
-  },
-} as const satisfies AppletSpecWithOptions<"force" | "recursive" | "preserve" | "no-dereference">;
 
 const STAT = {
   name: "stat",
@@ -247,44 +227,6 @@ export const mvCommand = /* @__PURE__ */ defineApplet(MV, async (context, argv) 
   const source = commandPath(context, values[0]);
   const target = destinationPath(context, source, values[1] ?? "");
   await context.fileSystem.move(source, target, { replace });
-  return 0;
-});
-
-export const cpCommand = /* @__PURE__ */ defineApplet(CP, async (context, argv) => {
-  const parsed = parseAppletOptions(CP, argv);
-  const replace = parsed.options.some((option) => option.name === "force");
-  const recursive = parsed.options.some((option) => option.name === "recursive");
-  const preserve = parsed.options.some((option) => option.name === "preserve");
-  const noDereference = parsed.options.some((option) => option.name === "no-dereference");
-  const values = parsed.operands;
-  if (values.length !== 2) throw appletUsageError(CP, "requires source and destination");
-  const source = commandPath(context, values[0]);
-  const target = destinationPath(context, source, values[1] ?? "");
-  // A named link is copied through, as GNU does; `-r` and `-P` copy the link
-  // itself, because a subtree full of dereferenced links is a different tree.
-  const dereference = !recursive && !noDereference;
-  // The metadata of what was copied, which is the target when the copy
-  // followed the link and the link itself when it did not.
-  const preserved = preserve
-    ? dereference
-      ? context.fileSystem.stat(source)
-      : context.fileSystem.lstat(source)
-    : undefined;
-  await context.fileSystem.copy(source, target, { replace, recursive, dereference });
-  // Mode bits and the modification time are the metadata `-p` preserves in
-  // this profile. A credential-bound copy deliberately creates actor-owned
-  // entries rather than attempting privileged ownership preservation. A copy
-  // carries each entry's own bits already but stamps every entry with the
-  // current time, so the named target is restated here. Descendants of a
-  // recursive copy keep the copy's time, which is a declared divergence.
-  // A copied link is skipped: its mode is fixed, and `setMetadata` follows, so
-  // restating it would stamp whatever it points at instead.
-  if (preserved !== undefined && preserved.kind !== "symlink") {
-    context.fileSystem.setMetadata(target, {
-      mode: preserved.mode,
-      modifiedAtMs: preserved.modifiedAtMs,
-    });
-  }
   return 0;
 });
 

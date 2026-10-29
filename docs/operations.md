@@ -138,7 +138,7 @@ Every execution owns one shared budget across all pipeline stages. Defaults:
 | commands / steps / loop iterations | 10,000 / 100,000 / 10,000 |
 | function depth / source depth / script depth | 64 / 16 / 8 |
 | one command-substitution output | 1 MiB |
-| expansion work / produced characters / produced fields | 10,000,000 / 1 MiB / 10,000 |
+| expansion work / characters / fields of one expansion | 10,000,000 / 1 MiB / 10,000 |
 | pipeline bytes | 8 MiB |
 | stdout / stderr | 8 MiB each |
 | materialized stdout + stderr | 8 MiB |
@@ -161,12 +161,15 @@ creates a fresh allowance.
 
 Parameter-pattern expansion uses a dynamic-programming matcher rather than a
 regular expression. Candidate matching, removal, and replacement charge the
-shared expansion-work counter. Every completed word expansion charges its
-materialized character and field counts, including values later subject to
-field splitting or pathname expansion. The limits are cumulative across child
-shell scopes and fail before returning a truncated expansion. A scalar pattern
-operand is also capped by the absolute character limit before it is copied into
-the matcher's code-point representation.
+shared expansion-work counter. Every completed word expansion checks its
+materialized character and field counts against the per-expansion limits,
+including values later subject to field splitting or pathname expansion, and
+then charges both counts to expansion work. The per-expansion limits bound
+memory held at once, so a loop that expands short words many times is not
+refused for their sum; expansion work is cumulative across child shell scopes
+and bounds the total. Both fail before returning a truncated expansion. A
+scalar pattern operand is also capped by the absolute character limit before
+it is copied into the matcher's code-point representation.
 
 Nounset performs constant-time environment membership checks at expansion
 sites and does not create a separate allowance. Arithmetic recursion and lazy

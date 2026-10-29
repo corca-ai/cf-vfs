@@ -103,13 +103,15 @@ it("bounds pattern work, produced characters, and produced fields", async () => 
   });
 
   const characters = createBashHarness({ limits: { maxExpansionChars: 20 } });
-  await expect(characters.run("X=aaaa; printf '%s' \"${X//a/xxx}\"")).resolves.toMatchObject({
+  await expect(characters.run("X=aaaaaaa; printf '%s' \"${X//a/xxx}\"")).resolves.toMatchObject({
     exitCode: 1,
     stderr: expect.stringContaining("shell expansion character limit exceeded"),
   });
 
   const fields = createBashHarness({ limits: { maxExpansionFields: 4 } });
-  await expect(fields.run("printf '%s' \"$@\"", { args: ["a", "b", "c"] })).resolves.toMatchObject({
+  await expect(
+    fields.run("printf '%s' \"$@\"", { args: ["a", "b", "c", "d", "e"] }),
+  ).resolves.toMatchObject({
     exitCode: 1,
     stderr: expect.stringContaining("shell expansion field limit exceeded"),
   });
@@ -122,6 +124,25 @@ it("bounds pattern work, produced characters, and produced fields", async () => 
   ).resolves.toMatchObject({
     exitCode: 1,
     stderr: expect.stringContaining("shell expansion field limit exceeded"),
+  });
+
+  // The character and field limits bound one result, not a unit's running
+  // total: a loop expanding short words holds one at a time.
+  const repeated = createBashHarness({ limits: { maxExpansionChars: 20, maxExpansionFields: 4 } });
+  await expect(
+    repeated.run(
+      "n=0; for i in 1 2 3; do for j in 1 2 3; do X=$i$j; n=$((n+1)); done; done; echo $n",
+    ),
+  ).resolves.toMatchObject({ exitCode: 0, stdout: "9\n", stderr: "" });
+  // The running total is still bounded, as expansion work.
+  const total = createBashHarness({ limits: { maxExpansionWork: 200 } });
+  await expect(
+    total.run(
+      "for i in 1 2 3 4 5 6 7 8 9 10; do for j in 1 2 3 4 5 6 7 8 9 10; do : $i $j; done; done",
+    ),
+  ).resolves.toMatchObject({
+    exitCode: 1,
+    stderr: expect.stringContaining("shell expansion work limit exceeded"),
   });
 
   const bracketWork = createBashHarness({ limits: { maxExpansionWork: 500 } });
