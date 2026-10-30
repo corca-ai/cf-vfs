@@ -42,9 +42,13 @@ and a generated 160-page wiki for sampling.
 The native tool reads and parses every page on every run. Here a page is
 parsed once per entry identity and mutation token:
 
-- Each run lists the wiki's directories and asks each page for its current
-  token with an empty read at the end of the file. The read is also the read
-  permission check, and it moves no body.
+- Each run lists the wiki's directories; the listing carries every page's
+  identity and token. Where no collaborative overlay can stand between a
+  listing and a read (the filesystem's `copy-source` bulk hint), those tokens
+  validate the cache, and the execution's credentials are checked against
+  the page's and its directories' modes. Anything uncertain reads the page.
+- Under an overlay, each page is asked for its current token with an empty
+  read at the end of the file instead, which is also the permission check.
 - A page whose token is unchanged reuses its parsed form: front matter, links,
   link-only lines, preview line and length statistics. Only changed pages are
   read and parsed again. Names, link resolution and the graph are rebuilt from
@@ -56,10 +60,9 @@ parsed once per entry identity and mutation token:
 
 The cache lives in memory per filesystem owner, holds up to 16,384 pages, and
 is empty after the object restarts; the first run after that parses every
-page. Change detection costs one point read per page per run. A host already
-recording changes could narrow that to the changed paths, as [incremental Git
-staging](git.md#incremental-staging-for-change-recorded-workspaces) does; that
-is not implemented.
+page. Change detection costs the directory listing: 37 SQL statements for
+10,000 pages in eleven directories, against 10,037 when each page was read for
+its token.
 
 `suggest`'s near-duplicate section holds fingerprints within the
 buffered-bytes budget instead of all at once: kept winnowed fingerprints, kept

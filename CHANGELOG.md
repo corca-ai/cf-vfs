@@ -16,6 +16,15 @@ included.
 
 ## [Unreleased]
 
+- `jq` takes string interpolation, `"\(.name): \(.count)"`, and the formats
+  `@text`, `@json`, `@csv`, `@tsv`, `@html`, `@uri`, `@sh` and `@base64`;
+  they were refused, and agents reach for them first. Outputs match jq.
+- `awiki` checks its cached pages against the directory listing instead of
+  reading each page for its token, wherever no collaborative overlay can
+  intervene: a warm run over 10,000 pages issues 37 SQL statements instead
+  of 10,037, and a cold run no longer asks a page for its token before
+  reading it (20,038 statements instead of 30,038).
+
 ## [0.5.0] — 2026-10-30
 
 - **Breaking:** reading a file body counts against a new `maxReadBytes` limit

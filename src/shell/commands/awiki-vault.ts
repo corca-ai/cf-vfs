@@ -1,5 +1,6 @@
 import { isVfsError, VfsError } from "../../core/errors.js";
 import type { VfsStat } from "../../vfs/types.js";
+import { shellModeAllows } from "../access.js";
 import { openContent } from "../content.js";
 import { fileSystemOrigin } from "../fs-origin.js";
 import type { ShellCommandContext } from "../types.js";
@@ -103,7 +104,48 @@ export async function readContent(
   }
 }
 
-async function readPage(context: ShellCommandContext, path: string): Promise<CachedPage> {
+/** Reads and parses a page, caching what an inline body yields. */
+async function parseFresh(context: ShellCommandContext, path: string): Promise<CachedPage> {
+  const cache = cacheFor(context);
+  const { stat, content } = await readContent(context, path);
+  const read: CachedPage = {
+    ino: stat.ino,
+    token: stat.mutationToken,
+    sizeBytes: stat.sizeBytes,
+    page: parsePage(content),
+  };
+  if (stat.contentClass === "inline" && (cache.size < CACHE_CAPACITY || cache.has(path))) {
+    cache.set(path, read);
+  }
+  return read;
+}
+
+/**
+ * A page through the cache, trusting the listing's identity and token.
+ *
+ * Only where no collaborative overlay can stand between the listing and a
+ * read, and only when the execution's credentials could read the page: any
+ * doubt reads it, so a miss reports exactly what a cold run would.
+ */
+async function listedPage(context: ShellCommandContext, file: Found): Promise<CachedPage> {
+  const cached = cacheFor(context).get(file.path);
+  const { stat } = file;
+  if (
+    cached?.ino === stat.ino &&
+    cached.token === stat.mutationToken &&
+    stat.contentClass === "inline" &&
+    file.searchable &&
+    shellModeAllows(stat, context.session.credentials, READ)
+  ) {
+    // Charge what a cold read would, so limits never depend on the cache.
+    context.budget.read(stat.sizeBytes);
+    return cached;
+  }
+  return await parseFresh(context, file.path);
+}
+
+/** A page through the cache, asking the page itself for its current token. */
+async function probedPage(context: ShellCommandContext, path: string): Promise<CachedPage> {
   let probe: VfsStat | undefined;
   try {
     // A read at EOF authorizes access and reports current overlay metadata
@@ -114,25 +156,12 @@ async function readPage(context: ShellCommandContext, path: string): Promise<Cac
   } catch (error) {
     if (!isVfsError(error) || error.code !== "ENOTSUP") throw osError(error);
   }
-  const cache = cacheFor(context);
-  const cached = cache.get(path);
+  const cached = cacheFor(context).get(path);
   if (probe !== undefined && cached?.ino === probe.ino && cached.token === probe.mutationToken) {
-    // Charge what a cold read would, so limits never depend on the cache.
     context.budget.read(probe.sizeBytes);
     return cached;
   }
-  const { stat, content } = await readContent(context, path);
-  const page = parsePage(content);
-  const read: CachedPage = {
-    ino: stat.ino,
-    token: stat.mutationToken,
-    sizeBytes: stat.sizeBytes,
-    page,
-  };
-  if (stat.contentClass === "inline" && (cache.size < CACHE_CAPACITY || cache.has(path))) {
-    cache.set(path, read);
-  }
-  return read;
+  return await parseFresh(context, path);
 }
 
 // --- discovery --------------------------------------------------------------
@@ -163,24 +192,39 @@ function listAll(context: ShellCommandContext, directory: string): VfsStat[] {
   return entries;
 }
 
+const READ = 4;
+const SEARCH = 1;
+
 interface Found {
   readonly path: string;
   readonly relFile: string;
+  /** The page's metadata as the listing reported it. */
+  readonly stat: VfsStat;
+  /** Whether every directory from the root down to the page may be searched. */
+  readonly searchable: boolean;
 }
 
-function discover(context: ShellCommandContext, root: string, recursive: boolean): Found[] {
+function discover(context: ShellCommandContext, root: VfsStat, recursive: boolean): Found[] {
   const found: Found[] = [];
-  const stack = [root];
-  while (stack.length > 0) {
-    const directory = stack.pop() ?? root;
-    const entries = listAll(context, directory);
-    const prefix = root === "/" ? 1 : root.length + 1;
-    for (const entry of entries) {
+  const credentials = context.session.credentials;
+  const stack = [{ stat: root, searchable: shellModeAllows(root, credentials, SEARCH) }];
+  const prefix = root.path === "/" ? 1 : root.path.length + 1;
+  for (let directory = stack.pop(); directory !== undefined; directory = stack.pop()) {
+    const { searchable } = directory;
+    for (const entry of listAll(context, directory.stat.path)) {
       if (entry.kind === "file" && isMarkdown(entry.name)) {
-        found.push({ path: entry.path, relFile: entry.path.slice(prefix) });
+        found.push({
+          path: entry.path,
+          relFile: entry.path.slice(prefix),
+          stat: entry,
+          searchable,
+        });
       }
       if (recursive && entry.kind === "directory" && !isIgnoredDirectory(entry.name)) {
-        stack.push(entry.path);
+        stack.push({
+          stat: entry,
+          searchable: searchable && shellModeAllows(entry, credentials, SEARCH),
+        });
       }
     }
   }
@@ -236,23 +280,30 @@ export class Vault {
     root: string,
     recursive: boolean,
   ): Promise<Vault> {
-    let resolvedRoot: string;
+    let rootStat: VfsStat;
     try {
-      resolvedRoot = context.fileSystem.realpath(root);
-      if (context.fileSystem.stat(resolvedRoot).kind !== "directory") {
-        throw new VfsError("ENOTDIR", "not a directory", resolvedRoot);
+      rootStat = context.fileSystem.stat(context.fileSystem.realpath(root));
+      if (rootStat.kind !== "directory") {
+        throw new VfsError("ENOTDIR", "not a directory", rootStat.path);
       }
     } catch (error) {
       throw osError(error);
     }
-    const files = discover(context, resolvedRoot, recursive).sort((a, b) =>
+    const resolvedRoot = rootStat.path;
+    // Without a collaborative overlay below the root, a listing reports what a
+    // read would, and its tokens can validate the cache without a read per page.
+    const trustListing =
+      context.fileSystem.canUseBulkOperation?.("copy-source", resolvedRoot) === true;
+    const files = discover(context, rootStat, recursive).sort((a, b) =>
       compareLower(a.relFile, b.relFile),
     );
     const documents: Document[] = [];
     for (const file of files) {
       context.budget.checkDeadline();
       const relPath = trimMdExtension(file.relFile);
-      const { page, ino, token, sizeBytes } = await readPage(context, file.path);
+      const { page, ino, token, sizeBytes } = trustListing
+        ? await listedPage(context, file)
+        : await probedPage(context, file.path);
       documents.push({
         ino,
         token,

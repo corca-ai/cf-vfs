@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { awikiCommand } from "../src/shell/commands/awiki.js";
 import { createBashHarness } from "./helpers/bash.js";
+import { createTestFileSystem } from "./helpers/node-sql.js";
 
 // The parsed-page cache must be invisible: edits show up at once, and a warm
 // run charges the same reads as a cold one, so limits never depend on it.
@@ -80,5 +81,45 @@ describe("awiki page cache", () => {
       "// rename old=Target.md new=Goal.md\n// links_updated=3 files_touched=3 title_updated=false\n",
     );
     expect(await harness.readText("/w/p1.md")).toBe("Links [[Goal]] from 1.\n");
+  });
+});
+
+describe("awiki cache validation", () => {
+  it("validates a warm cache from the listing, not with a read per page", async () => {
+    let statements = 0;
+    const fileSystem = createTestFileSystem({ onStatement: () => (statements += 1) });
+    const harness = createBashHarness({ fileSystem, extraCommands: [awikiCommand] });
+    for (let index = 0; index < 60; index += 1) {
+      await fileSystem.writeFile(
+        `/w/sub/p${index}.md`,
+        `Page ${index} [[p${(index + 1) % 60}]].\n`,
+        {
+          createParents: true,
+        },
+      );
+    }
+    const counted = async (script: string) => {
+      const before = statements;
+      const result = await harness.run(script, { credentials: { uid: 1000, gid: 1000 } });
+      expect(result.stderr).toBe("");
+      return statements - before;
+    };
+    const cold = await counted("awiki lint -r -root /w");
+    const warm = await counted("awiki lint -r -root /w");
+    expect(cold).toBeGreaterThan(60);
+    expect(warm).toBeLessThan(20);
+  });
+
+  it("refuses a cached page the credentials can no longer read, as a cold run does", async () => {
+    const harness = await harnessWith(WIKI);
+    const user = { credentials: { uid: 1000, gid: 1000 } };
+    expect((await harness.run("awiki lint -root /w", user)).stderr).toBe("");
+    await harness.run("chmod 600 /w/B.md");
+    const warm = await harness.run("awiki lint -root /w", user);
+    expect(warm.exitCode).toBe(1);
+    expect(warm.stderr).toBe("awiki: Permission denied (os error 13)\n");
+    await harness.run("chmod 644 /w/B.md; chmod 600 /w");
+    const directory = await harness.run("awiki lint -root /w", user);
+    expect(directory.stderr).toBe("awiki: Permission denied (os error 13)\n");
   });
 });
