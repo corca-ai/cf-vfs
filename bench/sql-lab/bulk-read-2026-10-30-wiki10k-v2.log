@@ -1,0 +1,38 @@
+read stream                            5854 ms  49742343 bytes
+read many-stream                       3655 ms  49742343 bytes
+read many                              2268 ms  49742343 bytes
+grep -rlF link per-file                9336 ms  exit 0 "28" 
+grep -rlF link bulk                    4352 ms  exit 0 "28" 
+grep -rc owner per-file               15171 ms  exit 0 "/wiki/sales/topic-9754.md:1" 
+grep -rc owner bulk                   10251 ms  exit 0 "/wiki/sales/topic-9754.md:1" 
+awiki lint cold per-file              14632 ms  exit 0 "1" 
+awiki lint cold bulk                   7210 ms  exit 0 "1" 
+read many                              3015 ms  49742343 bytes
+read many-stream                       4008 ms  49742343 bytes
+read stream                            5037 ms  49742343 bytes
+grep -rlF link bulk                    4580 ms  exit 0 "28" 
+grep -rlF link per-file                9021 ms  exit 0 "28" 
+grep -rc owner bulk                    8193 ms  exit 0 "/wiki/sales/topic-9754.md:1" 
+grep -rc owner per-file               14279 ms  exit 0 "/wiki/sales/topic-9754.md:1" 
+awiki lint cold bulk                   6572 ms  exit 0 "1" 
+awiki lint cold per-file              10949 ms  exit 0 "1" 
+read stream                            4725 ms  49742343 bytes
+read many-stream                       2965 ms  49742343 bytes
+read many                              1953 ms  49742343 bytes
+grep -rlF link per-file                8702 ms  exit 0 "28" 
+grep -rlF link bulk                    3653 ms  exit 0 "28" 
+grep -rc owner per-file               14002 ms  exit 0 "/wiki/sales/topic-9754.md:1" 
+grep -rc owner bulk                    8274 ms  exit 0 "/wiki/sales/topic-9754.md:1" 
+awiki lint cold per-file              12988 ms  exit 0 "1" 
+awiki lint cold bulk                   6197 ms  exit 0 "1" 
+
+medians
+read stream                            5037 ms  [5854, 5037, 4725]
+read many-stream                       3655 ms  [3655, 4008, 2965]
+read many                              2268 ms  [2268, 3015, 1953]
+grep -rlF link per-file                9021 ms  [9336, 9021, 8702]
+grep -rlF link bulk                    4352 ms  [4352, 4580, 3653]
+grep -rc owner per-file               14279 ms  [15171, 14279, 14002]
+grep -rc owner bulk                    8274 ms  [10251, 8193, 8274]
+awiki lint cold per-file              12988 ms  [14632, 10949, 12988]
+awiki lint cold bulk                   6572 ms  [7210, 6572, 6197]

@@ -9,15 +9,15 @@ import {
 } from "./applet.js";
 import {
   BufferedTextWriter,
-  type CommandInput,
   commandPath,
   inputStreams,
   parseInteger,
   readFileText,
   readTextLines,
-  recursiveInputs,
+  skipTextLines,
   writeText,
 } from "./helpers.js";
+import { type CommandInput, recursiveInputs } from "./recursive-inputs.js";
 import { GrepMatcher } from "./text-search-match.js";
 
 type GrepOption =
@@ -337,6 +337,7 @@ class GrepRunner {
   private matches = 0;
   private failed = false;
   private readonly lines: GrepContext;
+  private readonly candidates: ((text: string) => boolean) | undefined;
 
   constructor(
     private readonly context: ShellCommandContext,
@@ -345,6 +346,7 @@ class GrepRunner {
     private readonly output: BufferedTextWriter,
   ) {
     this.lines = new GrepContext(invocation, output);
+    this.candidates = invocation.matcher.candidates();
   }
 
   async run(sources: AsyncIterable<CommandInput>): Promise<number> {
@@ -368,7 +370,7 @@ class GrepRunner {
   }
 
   private async runInput(input: CommandInput): Promise<boolean> {
-    if (input.stream === undefined) {
+    if (input.error !== undefined) {
       if (!this.invocation.noMessages) {
         await writeText(this.fds[2], `grep: ${input.name}: ${input.error.message}\n`);
       }
@@ -376,17 +378,21 @@ class GrepRunner {
       return false;
     }
     this.lines.startInput();
-    const matches = await this.scan(input.name, input.stream);
+    const matches = await this.scan(input.name, input.stream ?? input.chunks);
     await this.finishInput(input.name, matches);
     return this.invocation.quiet && this.matches > 0;
   }
 
   /** Reads one input, returning how many of its lines were selected. */
-  private async scan(name: string, stream: ReadableStream<Uint8Array>): Promise<number> {
+  private async scan(
+    name: string,
+    source: ReadableStream<Uint8Array> | readonly Uint8Array[],
+  ): Promise<number> {
     let inputMatches = 0;
     let lineNumber = 0;
     const limit = this.invocation.maxCount ?? Number.POSITIVE_INFINITY;
-    for await (const line of readTextLines(this.context, stream, name)) {
+    if (Array.isArray(source) && this.cannotSelect(name, source)) return 0;
+    for await (const line of readTextLines(this.context, source, name)) {
       lineNumber += 1;
       // After `-m` matches only trailing context is still printed.
       const exhausted = inputMatches >= limit;
@@ -397,6 +403,24 @@ class GrepRunner {
       if (this.listsFiles) break;
     }
     return inputMatches;
+  }
+
+  /**
+   * Whether a bulk-read body has no line this invocation could select, in
+   * which case it is consumed without splitting its lines one by one.
+   */
+  private cannotSelect(name: string, chunks: readonly Uint8Array[]): boolean {
+    const { invert, maxCount } = this.invocation;
+    if (this.candidates === undefined || invert || maxCount === 0) return false;
+    let text: string;
+    try {
+      text = decodeText(chunks);
+    } catch {
+      return false;
+    }
+    if (this.candidates(text)) return false;
+    skipTextLines(this.context, chunks, true, name);
+    return true;
   }
 
   /** Prints one line as a match or as context, returning whether it was selected. */
@@ -472,6 +496,14 @@ async function* operandInputs(
       yield { name: path, error };
     }
   }
+}
+
+/** A body's whole text, as decoding its chunks in turn would give it. */
+function decodeText(chunks: readonly Uint8Array[]): string {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let text = "";
+  for (const chunk of chunks) text += decoder.decode(chunk, { stream: true });
+  return text + decoder.decode();
 }
 
 /** Prints records matching fixed strings or bounded POSIX expressions. */

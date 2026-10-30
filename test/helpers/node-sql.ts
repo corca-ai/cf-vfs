@@ -25,3 +25,25 @@ export function withoutPosixCredentials(fileSystem: NodeSqlFileSystem): VirtualF
     },
   });
 }
+
+/** A real filesystem whose credential views withhold `readMany`, so reads go one call each. */
+export function withoutBulkReads(fileSystem: NodeSqlFileSystem): NodeSqlFileSystem {
+  const withoutReadMany = <T extends object>(target: T): T =>
+    new Proxy(target, {
+      get(inner, property) {
+        if (property === "readMany") return undefined;
+        const value: unknown = Reflect.get(inner, property);
+        return typeof value === "function" ? value.bind(inner) : value;
+      },
+    });
+  return new Proxy(fileSystem, {
+    get(target, property) {
+      if (property === "readMany") return undefined;
+      if (property === "forCredentials")
+        return (...args: Parameters<NodeSqlFileSystem["forCredentials"]>) =>
+          withoutReadMany(target.forCredentials(...args));
+      const value: unknown = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}

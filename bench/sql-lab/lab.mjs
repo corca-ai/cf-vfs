@@ -53,6 +53,13 @@ export function lab(name) {
     read(paths, mode = "stream") {
       return call("POST", `/${name}/read`, { paths, mode });
     },
+    micro(kind, n) {
+      return call("POST", `/${name}/micro`, { kind, n });
+    },
+    /** Runs a script in a fresh evaluation shell; `bulk: false` withholds readMany. */
+    shell(script, { bulk = true } = {}) {
+      return call("POST", `/${name}/shell`, { script, bulk });
+    },
     destroy() {
       return call("DELETE", `/${name}`);
     },

@@ -20,6 +20,7 @@ import type {
   OwnershipUpdateOptions,
   PageOptions,
   ReadFileOptions,
+  ReadManyOptions,
   RemoveOptions,
   RemoveResult,
   StatBase,
@@ -32,7 +33,7 @@ import type {
   WriteResult,
 } from "../vfs/types.js";
 import { NO_ENTRY_IDENTITY } from "../vfs/types.js";
-import { readStatBatch } from "./batch-stats.js";
+import { ordinaryPath, readBodiesWhere, readStatBatch } from "./batch-stats.js";
 import { writeCheckedBatch } from "./batch-writes.js";
 import { aliasSink, nullSink } from "./device-sinks.js";
 import type { ShellFileDescriptors, ShellFileSystem, ShellSink } from "./types.js";
@@ -346,6 +347,10 @@ export class ReservedPathFileSystem implements ShellFileSystem {
     return readStatBatch(this.#inner, paths, options, this.#rootNames, (path) =>
       options.follow === false ? this.lstat(path) : this.stat(path),
     );
+  }
+
+  readMany(paths: readonly string[], options?: ReadManyOptions) {
+    return readBodiesWhere(this.#inner, paths, options, (p) => ordinaryPath(p, this.#rootNames));
   }
 
   canUseBulkOperation(operation: BulkOperation, path: string): boolean {

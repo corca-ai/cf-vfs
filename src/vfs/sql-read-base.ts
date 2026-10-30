@@ -13,14 +13,24 @@ import {
   parseEntry,
   rowToStat,
   type SqlRow,
+  stringColumn,
 } from "./sql-model.js";
 import { type PosixAccessContext, READ_PERMISSION } from "./sql-posix.js";
 import { SqlQuery } from "./sql-query-base.js";
-import { ENTRY_COLUMNS } from "./sql-schema.js";
+import { ENTRY_COLUMNS, ENTRY_JSON } from "./sql-schema.js";
+import { canonicalStatPaths, validateStatPaths } from "./stat-many.js";
 import { streamFromOwnedChunks } from "./streams.js";
-import type { InlineReadResult, ReadFileOptions } from "./types.js";
+import type {
+  InlineFileBody,
+  InlineReadResult,
+  ReadFileOptions,
+  ReadManyOptions,
+} from "./types.js";
 
 const MIN_INLINE_SQL_RANGE_BYTES = 16 * 1024;
+const READ_MANY_BYTES = 1024 * 1024;
+// Durable Object SQLite binds at most 100 parameters.
+const READ_MANY_BATCH = 64;
 
 function sliceChunkSequence<Buffer extends ArrayBufferLike>(
   chunks: readonly Uint8Array<Buffer>[],
@@ -187,6 +197,110 @@ export abstract class SqlRead extends SqlQuery {
         this.inFlightBytes.release(materializedBytes);
       }),
     };
+  }
+
+  /**
+   * Reads whole inline bodies in batches of 64 paths. See
+   * {@link VirtualFileSystem.readMany}.
+   *
+   * A batch costs two statements instead of a call per path: one for the
+   * entries, then one for the bodies of those admitted. Permission and the
+   * byte allowance are decided from the metadata, so a refused or oversized
+   * body is never materialized.
+   */
+  readMany(
+    paths: readonly string[],
+    options: ReadManyOptions = {},
+    posix?: PosixAccessContext,
+  ): (InlineFileBody | undefined)[] {
+    validateStatPaths(paths, "readMany");
+    const canonical = canonicalStatPaths(paths);
+    if (canonical === undefined || this.links() !== 0) return paths.map(() => undefined);
+    let allowance = Math.min(
+      options.maxBytes ?? READ_MANY_BYTES,
+      READ_MANY_BYTES,
+      this.inFlightBytes.remainingBytes,
+    );
+    const unique = [...new Set(canonical)];
+    const read = new Map<string, InlineFileBody>();
+    for (let at = 0; at < unique.length && allowance > 0; at += READ_MANY_BATCH) {
+      const admitted: InlineEntryRow[] = [];
+      for (const entry of this.entryBatch(unique.slice(at, at + READ_MANY_BATCH))) {
+        if (entry.sizeBytes > allowance || !this.mayReadInBulk(entry, posix)) continue;
+        admitted.push(entry);
+        allowance -= entry.sizeBytes;
+      }
+      for (const [entry, chunks] of this.bodyBatch(admitted)) {
+        read.set(entry.path, { stat: rowToStat(entry), chunks });
+      }
+    }
+    return canonical.map((path) => read.get(path));
+  }
+
+  private entryBatch(batch: readonly string[]): EntryRow[] {
+    return this.sql
+      .exec<SqlRow>(
+        `WITH requested(path) AS (VALUES ${batch.map(() => "(?)").join(",")})
+         SELECT ${ENTRY_JSON} AS entry
+         FROM requested CROSS JOIN vfs_entries e INDEXED BY vfs_entries_path
+           ON e.path = requested.path`,
+        ...batch,
+      )
+      .toArray()
+      .map((row) =>
+        parseEntry(JSON.parse(stringColumn(row, "entry")) as SqlRow, this.mutationEpoch),
+      );
+  }
+
+  private mayReadInBulk(
+    entry: EntryRow,
+    posix: PosixAccessContext | undefined,
+  ): entry is InlineEntryRow {
+    if (entry.kind !== "file" || entry.contentClass !== "inline") return false;
+    try {
+      this.assertTraverse(entry.path, [], posix);
+      this.assertPermission(entry, posix, READ_PERMISSION, entry.path);
+    } catch (error) {
+      if (error instanceof VfsError) return false;
+      throw error;
+    }
+    return true;
+  }
+
+  /**
+   * Whole bodies of admitted entries, in the same synchronous turn as their
+   * metadata, as their stored chunks in order. A body whose chunks do not add
+   * up is left to readFile, which reports it.
+   */
+  private bodyBatch(
+    entries: readonly InlineEntryRow[],
+  ): [InlineEntryRow, Uint8Array<ArrayBuffer>[]][] {
+    const reading = entries.filter((entry) => entry.sizeBytes > 0);
+    const chunks = new Map<number, { index: number; body: Uint8Array<ArrayBuffer> }[]>();
+    if (reading.length > 0) {
+      const rows = this.sql
+        .exec<SqlRow>(
+          `WITH wanted(id) AS (VALUES ${reading.map(() => "(?)").join(",")})
+           SELECT c.entry_id, c.chunk_index, c.body
+           FROM wanted CROSS JOIN vfs_inline_chunks c ON c.entry_id = wanted.id`,
+          ...reading.map((entry) => entry.id),
+        )
+        .toArray();
+      for (const row of rows) {
+        const id = integerColumn(row, "entry_id");
+        const list = chunks.get(id) ?? [];
+        const body = new Uint8Array(blobColumn(row, "body"));
+        list.push({ index: integerColumn(row, "chunk_index"), body });
+        chunks.set(id, list);
+      }
+    }
+    const read: [InlineEntryRow, Uint8Array<ArrayBuffer>[]][] = [];
+    for (const entry of entries) {
+      const stored = (chunks.get(entry.id) ?? []).sort((left, right) => left.index - right.index);
+      const bytes = stored.reduce((total, chunk) => total + chunk.body.byteLength, 0);
+      if (bytes === entry.sizeBytes) read.push([entry, stored.map((chunk) => chunk.body)]);
+    }
+    return read;
   }
 
   /** One snapshot statement for metadata and a small whole inline body. */

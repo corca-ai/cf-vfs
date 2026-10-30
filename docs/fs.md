@@ -229,3 +229,23 @@ require additional reads; this is not a fewer-reads guarantee for every path
 class. The
 optional Git applet coalesces overlapping metadata reads; shell roots, reserved
 paths, execution budgets, and fatal permission refusals still apply.
+
+### Optional bulk body read
+
+`fileSystem.readMany?.(paths, { maxBytes })` reads whole inline file bodies for
+a caller that reads many files in a row, such as a recursive walk. It accepts at
+most 1,000 paths, preserves input order and duplicates, and returns one
+`{ stat, chunks }` per path it read in bulk, where `chunks` are the stored
+chunks `readFile`'s stream would yield, in order, and owned by the caller. Every
+other path is `undefined`: missing, refused, a directory, opaque, behind a
+symbolic link anywhere in the workspace, or past `maxBytes` (default and cap
+1 MiB). The caller reads those with `readFile`, which reports the authoritative
+result, so the capability changes cost and never an answer. Existing filesystem
+implementations, including the collaborative overlay, can omit it.
+
+The SQL backend applies `readFile`'s traversal and read-permission checks to
+each entry and spends two statements per 64 paths: the entries, then the bodies
+of those it admits, so a refused or oversized body is never materialized.
+`grep -r` and `awiki` use it. On Workers a stream per file costs about 0.15 ms
+and dominates a walk over many small files; bulk bodies are consumed without
+one ([measurements](../bench/sql-lab/report-2026-10-30.md)).

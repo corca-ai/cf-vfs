@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { awikiCommand } from "../src/shell/commands/awiki.js";
 import { createBashHarness } from "./helpers/bash.js";
-import { createTestFileSystem } from "./helpers/node-sql.js";
+import { createTestFileSystem, withoutBulkReads } from "./helpers/node-sql.js";
 
 // The parsed-page cache must be invisible: edits show up at once, and a warm
 // run charges the same reads as a cold one, so limits never depend on it.
@@ -85,28 +85,39 @@ describe("awiki page cache", () => {
 });
 
 describe("awiki cache validation", () => {
-  it("validates a warm cache from the listing, not with a read per page", async () => {
+  async function coldAndWarm(bulk: boolean) {
     let statements = 0;
-    const fileSystem = createTestFileSystem({ onStatement: () => (statements += 1) });
-    const harness = createBashHarness({ fileSystem, extraCommands: [awikiCommand] });
+    const raw = createTestFileSystem({ onStatement: () => (statements += 1) });
+    const harness = createBashHarness({
+      fileSystem: bulk ? raw : withoutBulkReads(raw),
+      extraCommands: [awikiCommand],
+    });
     for (let index = 0; index < 60; index += 1) {
-      await fileSystem.writeFile(
-        `/w/sub/p${index}.md`,
-        `Page ${index} [[p${(index + 1) % 60}]].\n`,
-        {
-          createParents: true,
-        },
-      );
+      await raw.writeFile(`/w/sub/p${index}.md`, `Page ${index} [[p${(index + 1) % 60}]].\n`, {
+        createParents: true,
+      });
     }
     const counted = async (script: string) => {
       const before = statements;
       const result = await harness.run(script, { credentials: { uid: 1000, gid: 1000 } });
       expect(result.stderr).toBe("");
-      return statements - before;
+      return { statements: statements - before, stdout: result.stdout };
     };
     const cold = await counted("awiki lint -r -root /w");
     const warm = await counted("awiki lint -r -root /w");
+    expect(warm.stdout).toBe(cold.stdout);
+    return { cold: cold.statements, warm: warm.statements };
+  }
+
+  it("validates a warm cache from the listing, not with a read per page", async () => {
+    const { cold, warm } = await coldAndWarm(false);
     expect(cold).toBeGreaterThan(60);
+    expect(warm).toBeLessThan(20);
+  });
+
+  it("reads a cold load's misses in bulk where the filesystem offers it", async () => {
+    const { cold, warm } = await coldAndWarm(true);
+    expect(cold).toBeLessThan(20);
     expect(warm).toBeLessThan(20);
   });
 

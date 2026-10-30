@@ -34,6 +34,7 @@ import type {
   PosixViewOptions,
   PosixVirtualFileSystem,
   ReadFileOptions,
+  ReadManyOptions,
   RemoveOptions,
   RemoveResult,
   StatManyOptions,
@@ -183,6 +184,10 @@ class PosixFileSystemView implements VirtualFileSystem {
 
   statMany(paths: readonly string[], options?: StatManyOptions) {
     return this.inner.statMany(paths, options, this.access);
+  }
+
+  readMany(paths: readonly string[], options?: ReadManyOptions) {
+    return this.inner.readMany(paths, options, this.access);
   }
 
   lstat(path: string): VfsStat {
