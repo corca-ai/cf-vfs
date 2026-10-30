@@ -16,6 +16,8 @@ included.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-10-30
+
 - **Breaking:** reading a file body counts against a new `maxReadBytes` limit
   (1 GiB) instead of `maxTotalIoBytes`, which keeps bounding pipes, standard
   input and command substitutions at 64 MiB; `ShellBudget` gains `read`.
@@ -624,7 +626,8 @@ to the release, so the package can be installed by a consumer that pins
 [`a335bd1`]: https://github.com/corca-ai/cf-vfs/commit/a335bd1
 [`1a4447d`]: https://github.com/corca-ai/cf-vfs/commit/1a4447d
 [`32a2c15`]: https://github.com/corca-ai/cf-vfs/commit/32a2c15
-[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/corca-ai/cf-vfs/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/corca-ai/cf-vfs/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/corca-ai/cf-vfs/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/corca-ai/cf-vfs/compare/v0.3.0...v0.4.0
