@@ -36,3 +36,31 @@ SQL cost from the execution log. One run per wiki (`run.log`, `results.json`).
 
 The shell time column of the log read 0 throughout; Worker time is the
 reliable measure here.
+
+## After the cache and parsing changes
+
+Three later runs without the idle step (`run.mjs ... --no-idle`), one per
+change, on fresh instances: the listing validates the cache
+(`run-listing.log`, `results-listing.json`), parsing is faster
+(`run-parse.log`, `results-parse.json`), and jq charges expansion work
+(`run-final.log`, `results-final.json`). Single runs; Cloudflare timings moved
+by up to 2x between runs here, as the grep rows show, so only large changes
+are read from them.
+
+| 10,000 pages | before | listing | + parsing | + jq fix |
+| --- | ---: | ---: | ---: | ---: |
+| first run, Worker ms | 23,437 | 27,479 | 13,168 | 12,968 |
+| first run, statements | 30,038 | 20,038 | 20,038 | 20,038 |
+| warm, Worker ms | 4,247–4,630 | 1,140–1,779 | 691–981 | 785–1,290 |
+| warm, statements | 10,037 | 37 | 37 | 37 |
+| grep, backlinks of one page | 10,250 | 13,238 | 9,846 | 9,359 |
+
+At 2,000 pages a warm run is 181–247 ms with 23 statements (was 499–553 ms
+with 2,023), and `awiki graph -r -json | jq '... sort_by(-.inbound) ...'`
+now answers (`eng/note-1743 1011`). At 10,000 pages the same jq filter stops
+at the buffered-byte limit: the JSON is 7.6 MB, and jq holds it parsed; the
+text form, `awiki graph | sort`, answers instead.
+
+Locally, a first run over 10,000 pages spends 1.7 s parsing and 0.12 s in
+SQL reads, so the remaining first-run cost is CPU rather than statements; a
+batched read API in the VFS would save little of it.

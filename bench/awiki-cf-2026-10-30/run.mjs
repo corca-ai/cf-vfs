@@ -8,7 +8,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 // bearer token comes from eval/.secrets.json and is never printed.
 
 const BASE = "https://eval.vfs.borca.ai/api/instances";
-const [fixtures, ...names] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const idle = !args.includes("--no-idle");
+const [fixtures, ...names] = args.filter((arg) => arg !== "--no-idle");
 const token = JSON.parse(
   readFileSync(new URL("../../eval/.secrets.json", import.meta.url), "utf8"),
 ).AGENT_EVAL_TOKEN;
@@ -58,7 +60,7 @@ const STEPS = [
     "awiki graph -r -root wiki -json | jq -r '.documents | sort_by(-.inbound) | .[0] | \"\\(.name) \\(.inbound)\"'",
   ],
   ["awiki links, one page", "awiki links -r -root wiki note-0001 | wc -l"],
-  ["edit one page", "echo 'One more line.' >> \"$(find wiki -name '*.md' | sort | head -1)\""],
+  ["edit one page", "echo 'One more line.' >> wiki/FIRST_PAGE"],
   ["awiki lint after one edit", "awiki lint -r -root wiki > /dev/null; echo $?"],
   ["grep: backlinks of one page", "grep -rlE '\\[\\[note-0001[]|#]' wiki | wc -l"],
   [
@@ -92,11 +94,14 @@ for (const name of names) {
         stderr: response.stderr.trim().slice(0, 200),
       });
     };
-    for (const [label, script] of STEPS) await run(label, script);
-    // Idle long enough for the object to be evicted, then run again.
-    await new Promise((resolve) => setTimeout(resolve, 240_000));
-    await run("awiki lint after 4 minutes idle", STEPS[0][1]);
-    await run("awiki lint, warm again", STEPS[0][1]);
+    const firstPage = Object.keys(files).sort()[0] ?? "";
+    for (const [label, script] of STEPS) await run(label, script.replace("FIRST_PAGE", firstPage));
+    if (idle) {
+      // Idle long enough for the object to be evicted, then run again.
+      await new Promise((resolve) => setTimeout(resolve, 240_000));
+      await run("awiki lint after 4 minutes idle", STEPS[0][1]);
+      await run("awiki lint, warm again", STEPS[0][1]);
+    }
     const { entries } = await call("GET", `/${id}/log?after=0&limit=100`);
     for (const [index, step] of steps.entries()) {
       const entry = entries[index];
@@ -127,4 +132,7 @@ for (const name of names) {
     await call("DELETE", `/${id}`).catch((error) => console.error(String(error)));
   }
 }
-writeFileSync(new URL("./results.json", import.meta.url), `${JSON.stringify(results, null, 1)}\n`);
+writeFileSync(
+  new URL(`./results${idle ? "" : "-no-idle"}.json`, import.meta.url),
+  `${JSON.stringify(results, null, 1)}\n`,
+);

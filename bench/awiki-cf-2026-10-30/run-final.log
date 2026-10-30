@@ -1,0 +1,26 @@
+
+s3: 2000 pages, seeded in 7263 ms
+awiki lint, first run                    worker   3353 ms shell      0 ms stmts    4024 rows     8037 exit 0 out "0"
+awiki lint, warm 1                       worker    185 ms shell      0 ms stmts      23 rows     2032 exit 0 out "0"
+awiki lint, warm 2                       worker    181 ms shell      0 ms stmts      23 rows     2032 exit 0 out "0"
+awiki lint, warm 3                       worker    247 ms shell      0 ms stmts      23 rows     2032 exit 0 out "0"
+awiki graph: pages nothing links to      worker    210 ms shell      0 ms stmts      23 rows     2032 exit 0 out "139"
+awiki graph -json: top inbound           worker    723 ms shell      0 ms stmts      23 rows     2032 exit 0 out "eng/note-1743 1011"
+awiki links, one page                    worker    206 ms shell      0 ms stmts      23 rows     2032 exit 0 out "18"
+edit one page                            worker     48 ms shell      0 ms stmts       8 rows        8 exit 0 out ""
+awiki lint after one edit                worker    277 ms shell      0 ms stmts      25 rows     2035 exit 0 out "0"
+grep: backlinks of one page              worker   2254 ms shell      0 ms stmts    4011 rows    14075 exit 0 out "1"
+grep pipeline: inbound counts            worker   6863 ms shell      0 ms stmts    4011 rows    14075 exit 0 out "1912"
+
+s3-10k: 10000 pages, seeded in 44632 ms
+awiki lint, first run                    worker  12968 ms shell      0 ms stmts   20038 rows    40051 exit 0 out "1"
+awiki lint, warm 1                       worker   1290 ms shell      0 ms stmts      37 rows    10046 exit 0 out "1"
+awiki lint, warm 2                       worker    785 ms shell      0 ms stmts      37 rows    10046 exit 0 out "1"
+awiki lint, warm 3                       worker    894 ms shell      0 ms stmts      37 rows    10046 exit 0 out "1"
+awiki graph: pages nothing links to      worker    736 ms shell      0 ms stmts      37 rows    10046 exit 0 out "739"
+awiki graph -json: top inbound           worker   1785 ms shell      0 ms stmts      37 rows    10046 exit 5 out "" err "shell buffered-byte limit exceeded"
+awiki links, one page                    worker    913 ms shell      0 ms stmts      37 rows    10046 exit 0 out "40"
+edit one page                            worker     58 ms shell      0 ms stmts       8 rows        8 exit 0 out ""
+awiki lint after one edit                worker    830 ms shell      0 ms stmts      39 rows    10049 exit 0 out "1"
+grep: backlinks of one page              worker   9359 ms shell      0 ms stmts   20035 rows   150251 exit 0 out "28"
+grep pipeline: inbound counts            worker  14775 ms shell      0 ms stmts   15742 rows   111750 exit 1 out "0" err "shell expansion work limit exceeded"

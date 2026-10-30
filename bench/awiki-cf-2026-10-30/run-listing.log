@@ -1,0 +1,26 @@
+
+s3: 2000 pages, seeded in 8359 ms
+awiki lint, first run                    worker   2200 ms shell      0 ms stmts    4024 rows     8037 exit 0 out "0"
+awiki lint, warm 1                       worker    147 ms shell      0 ms stmts      23 rows     2032 exit 0 out "0"
+awiki lint, warm 2                       worker    144 ms shell      0 ms stmts      23 rows     2032 exit 0 out "0"
+awiki lint, warm 3                       worker    132 ms shell      0 ms stmts      23 rows     2032 exit 0 out "0"
+awiki graph: pages nothing links to      worker    195 ms shell      0 ms stmts      23 rows     2032 exit 0 out "139"
+awiki graph -json: top inbound           worker    291 ms shell      0 ms stmts      23 rows     2032 exit 5 out "" err "shell execution step limit exceeded"
+awiki links, one page                    worker    143 ms shell      0 ms stmts      23 rows     2032 exit 0 out "18"
+edit one page                            worker     59 ms shell      0 ms stmts       8 rows        8 exit 0 out ""
+awiki lint after one edit                worker    180 ms shell      0 ms stmts      25 rows     2035 exit 0 out "0"
+grep: backlinks of one page              worker    960 ms shell      0 ms stmts    4011 rows    14075 exit 0 out "1"
+grep pipeline: inbound counts            worker   2553 ms shell      0 ms stmts    4011 rows    14075 exit 0 out "1912"
+
+s3-10k: 10000 pages, seeded in 51587 ms
+awiki lint, first run                    worker  27479 ms shell      0 ms stmts   20038 rows    40051 exit 0 out "1"
+awiki lint, warm 1                       worker   1140 ms shell      0 ms stmts      37 rows    10046 exit 0 out "1"
+awiki lint, warm 2                       worker   1779 ms shell      0 ms stmts      37 rows    10046 exit 0 out "1"
+awiki lint, warm 3                       worker   1157 ms shell      0 ms stmts      37 rows    10046 exit 0 out "1"
+awiki graph: pages nothing links to      worker   1819 ms shell      0 ms stmts      37 rows    10046 exit 0 out "739"
+awiki graph -json: top inbound           worker   2413 ms shell      0 ms stmts      37 rows    10046 exit 5 out "" err "shell execution step limit exceeded"
+awiki links, one page                    worker   1683 ms shell      0 ms stmts      37 rows    10046 exit 0 out "40"
+edit one page                            worker     41 ms shell      0 ms stmts       8 rows        8 exit 0 out ""
+awiki lint after one edit                worker   1208 ms shell      0 ms stmts      39 rows    10049 exit 0 out "1"
+grep: backlinks of one page              worker  13238 ms shell      0 ms stmts   20035 rows   150251 exit 0 out "28"
+grep pipeline: inbound counts            worker  17852 ms shell      0 ms stmts   15742 rows   111750 exit 1 out "0" err "shell expansion work limit exceeded"
