@@ -57,5 +57,27 @@ product decision:
 - `awiki graph -json | jq` over 10,000 pages parses 7.6 MB, past the 16 MiB
   buffered-byte limit once held as values.
 
-Not covered: Cloudflare's fixed per-request costs, and how long an agent waits
-in absolute terms, which a scaled environment does not reproduce.
+## On Cloudflare
+
+`cf-check.mjs` ran nine of the probes on the evaluation Worker (version
+c84753cd, after the fixes) against a 10,000-page instance with default limits
+and a 2,000-page instance at scale 0.2 (`cf-check.log`, `cf-check.json`). One
+run each.
+
+- Every outcome matched: eight probes succeeded on both, and `cat` of every
+  page stopped at the pipeline edge limit on both.
+- Heavy probes took 4.6–6.1 times as long at 10,000 pages (`grep -rl` 6.5 s
+  vs 1.1 s, the inbound pipeline 19.4 s vs 3.7 s, `awk` over every page 16.7 s
+  vs 3.7 s, a first `awiki lint` 10.9 s vs 2.0 s), so the scaled 6 s deadline
+  sits where the 30 s one does.
+- Light probes took only 2.6–4.1 times as long (`find` 530 ms vs 203 ms):
+  about 150 ms per execution does not shrink with the wiki. A scaled
+  environment therefore understates how fast cheap commands feel at full size,
+  and nothing near the deadline is cheap.
+
+At full size two ordinary whole-wiki pipelines take 17–19 s of the 30 s
+deadline on Cloudflare; an agent that chains two of them in one execution
+would be stopped.
+
+Not covered: how long an agent waits in absolute terms, which a scaled
+environment does not reproduce.
