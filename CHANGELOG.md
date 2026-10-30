@@ -16,6 +16,14 @@ included.
 
 ## [Unreleased]
 
+- `find` evaluates its walk page by page and holds no matches, so it charges
+  expansion work for each entry scanned instead of stopping at 10,000 matches,
+  as `grep -r` already did. Listing a 10,000-page wiki with `find` failed.
+- `awk` no longer charges the text `print` writes to expansion work; output
+  already counts against the output and I/O limits. A `grep | sed | awk`
+  pipeline over the links of a 10,000-page wiki stopped at the expansion work
+  limit because each printed byte was charged twice.
+
 - `jq` takes string interpolation, `"\(.name): \(.count)"`, and the formats
   `@text`, `@json`, `@csv`, `@tsv`, `@html`, `@uri`, `@sh` and `@base64`;
   they were refused, and agents reach for them first. Outputs match jq.

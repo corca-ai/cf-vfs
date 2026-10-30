@@ -16,6 +16,11 @@ export function joinAwkStrings(
   state: AwkRuntimeState,
   values: readonly string[],
   separator = "",
+  /**
+   * Whether building the string is work. Text `print` writes is charged to
+   * the output and I/O limits on its way out, so it is not charged twice.
+   */
+  work = true,
 ): string {
   let length = Math.max(0, values.length - 1) * separator.length;
   for (const value of values) length += value.length;
@@ -24,7 +29,7 @@ export function joinAwkStrings(
     length > state.context.budget.limits.maxBufferedBytes
   )
     throw new VfsError("E2BIG", "awk: string expansion limit exceeded");
-  state.context.budget.expansionWork(length);
+  if (work) state.context.budget.expansionWork(length);
   const result = values.join(separator);
   checkAwkString(state, { kind: "string", value: result, numeric: false });
   return result;

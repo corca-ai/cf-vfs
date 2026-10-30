@@ -136,10 +136,15 @@ function executePrint(
         : statement.values.map((value) => evaluate(value, state));
     const separator = asString(getVariable(state, "OFS"));
     output.emit(
-      joinAwkStrings(state, [
-        joinAwkStrings(state, values.map(asString), separator),
-        asString(getVariable(state, "ORS")),
-      ]),
+      joinAwkStrings(
+        state,
+        [
+          joinAwkStrings(state, values.map(asString), separator, false),
+          asString(getVariable(state, "ORS")),
+        ],
+        "",
+        false,
+      ),
       destination,
     );
     return;
