@@ -1,0 +1,18 @@
+cold: lint -r                                   440.1 ms [420.9-468.7]   4023 stmts    6022 rows
+warm: lint -r                                    31.6 ms [31.2-418.4]   2023 stmts    4022 rows
+warm: links -r (one page)                        28.6 ms [28.0-30.3]   2023 stmts    4022 rows
+warm: wanted -r                                  33.8 ms [30.8-37.5]   2023 stmts    4022 rows
+warm: path -r                                    35.9 ms [34.0-40.8]   2023 stmts    4022 rows
+warm: suggest -r (no near-duplicates)            73.1 ms [64.4-84.2]   2023 stmts    4022 rows
+warm: suggest -r --filter near-duplicates      2318.1 ms [2310.1-2481.3]   7074 stmts    9073 rows
+warm: format -r (already formatted check)        29.3 ms [28.5-31.1]   2023 stmts    4022 rows
+pipeline: backlinks of one page (grep -rl)       75.2 ms [72.5-85.1]   2008 stmts    4017 rows
+pipeline: link targets ranked (grep|sort|uniq)    133.5 ms [131.6-145.1]   2008 stmts    4017 rows
+warm: rename -r (and links rewritten)            29.4 ms [28.9-32.2]   2063 stmts    4045 rows
+after editing 1 page(s): lint -r                 30.7 ms [30.1-31.3]   2024 stmts    4023 rows
+after editing 100 page(s): lint -r               50.1 ms [49.4-54.1]   2123 stmts    4122 rows
+native: lint -r                                  38.0 ms
+native: links -r (one page)                      36.9 ms
+native: wanted -r                                38.4 ms
+native: suggest -r (no near-duplicates)          63.1 ms
+native: suggest -r --filter near-duplicates     291.4 ms

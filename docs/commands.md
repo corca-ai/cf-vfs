@@ -671,6 +671,7 @@ decides which directory is provisioned; pass the same path as the execution
 | bounded barriers | `sort -b -f -n -r -s -u -c -C -t SEP -k POS1[,POS2]` (`-c` reports the first disorder; GNU keys: fields keep their leading blanks without `-t`, a key with options of its own inherits none of the global ones, and equal keys fall back to the whole line unless `-s` or `-u`), `tail -n -c -q -v` (`+N` starts from a record or byte), `tee -a`, `paste -s -d LIST`, `cmp -s` (`-` reads standard input), `diff -r -q -u` (unified output with three lines of context, as GNU writes it), `sha256sum` (`-` or no operand reads standard input), `md5sum` (streamed, so an opaque body is read when the session may stream it), `comm -1 -2 -3`, `join -t -1 -2 -a`, `patch`, `base64 -d -w` |
 | argument dispatch | `xargs -n -0 -r -t`, from the dedicated `/shell/commands/xargs` subpath |
 | opt-in record language | `awk -F -v -f`, from the dedicated `/shell/commands/awk` subpath; not part of `defaultShellCommands` |
+| opt-in wiki maintenance | `awiki lint format links path wanted avg-shortest-path suggest rename`, following awiki 0.5.1, from the dedicated `/shell/commands/awiki` subpath; not part of `defaultShellCommands` (see [Optional awiki command](awiki.md)) |
 
 `cut -f` and `cut -c` selection lists accept POSIX single positions, closed
 ranges (`2-4`), prefix ranges (`-4`), and suffix ranges (`2-`). Commas or
@@ -1370,6 +1371,12 @@ link is one zero-byte entry and is not followed.
 Glob patterns are capped at 16,384 UTF-16 code units. Non-final stars commit to
 their earliest following fixed fragment, preventing exponential backtracking
 across successive stars while preserving Unicode bracket matching.
+
+## Optional awiki command
+
+The separately imported [`awiki` applet](awiki.md) runs the Markdown wiki
+maintenance CLI with awiki 0.5.1's commands and output, parsing each page once
+per mutation token. It is excluded from the default registry.
 
 ## Optional Git command
 

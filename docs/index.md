@@ -57,6 +57,8 @@ second and offers the first from a subpath.
   immutable large-body access without changing the VFS core.
 - [Optional Git command](git.md) — local repositories/remotes without adding Git
   to the default shell bundle.
+- [Optional awiki command](awiki.md) — the Markdown wiki maintenance CLI,
+  with pages parsed once per mutation token.
 - [Collaborative documents](collaboration.md) — document guards, authorization,
   deferred quotas, publication, and reconciliation.
 - [POSIX and Bash compatibility](posix-compatibility.md) — supported behavior,

@@ -21,6 +21,11 @@ included.
   input and command substitutions at 64 MiB; `ShellBudget` gains `read`.
   Rereading a 10 MB wiki eleven times in one execution exhausted the shared
   limit, though a rereading pass holds nothing and the deadline bounds it.
+- Add the opt-in `awiki` command (`@corca-ai/cf-vfs/shell/commands/awiki`),
+  the Markdown wiki maintenance CLI with awiki 0.5.1's commands, output and
+  seeded sampling, pinned against the native binary. Pages are parsed once
+  per mutation token, so after the first run `lint`, `links`, `wanted`,
+  `path` and `rename` over a 2,000-page wiki take about 30 ms locally.
 - Add `uname`, which reports a `Linux` kernel name and names this shell for the
   rest, and `sh --version`; agents run both first to learn the environment.
 - `grep -P` takes the part of PCRE that means the same in the extended dialect

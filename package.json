@@ -179,6 +179,10 @@
     "./shell/commands/git-tracked": {
       "types": "./dist/shell/commands/git-tracked.d.ts",
       "import": "./dist/shell/commands/git-tracked.js"
+    },
+    "./shell/commands/awiki": {
+      "types": "./dist/shell/commands/awiki.d.ts",
+      "import": "./dist/shell/commands/awiki.js"
     }
   },
   "publishConfig": {
@@ -225,6 +229,7 @@
     "repl:sqlite": "npm run build && node scripts/repl-sqlite.mjs",
     "test:bash-fixtures:regenerate": "node scripts/regenerate-bash-fixtures.mjs",
     "test:awk-fixtures:regenerate": "node scripts/regenerate-awk-fixtures.mjs",
+    "test:awiki-fixtures:regenerate": "node scripts/regenerate-awiki-fixtures.mjs",
     "test:utility-fixtures:regenerate": "node scripts/regenerate-utility-fixtures.mjs",
     "test:bundle-budgets:record": "npm run build && node test/check-tree-shaking.mjs --record",
     "check": "npm run typegen && npm run build && npm run typecheck && npm run lint && npm run knip && npm test && npm run test:posix && npm run test:benchmark-reference && npm run test:bench-protocol && npm run test:limits && npm run test:quality && npm run test:docs && npm run test:package && npm run test:tree-shaking",

@@ -22,6 +22,7 @@ const M = {
   applet: "shell/commands/applet",
   git: "shell/commands/git",
   trackedGit: "shell/commands/git-tracked",
+  awiki: "shell/commands/awiki",
   awk: "shell/commands/awk",
   options: "shell/commands/options",
   helpers: "shell/commands/helpers",
@@ -108,6 +109,32 @@ const PRESETS = [
     describe: "the opt-in Git applet and engine, with no shell or SQL owner",
     include: [M.git, M.applet],
     exclude: [M.shell, M.registry, M.sql, M.doSql, M.r2, M.interactive, M.trackedGit],
+  },
+  {
+    name: "awiki",
+    config: "wrangler.awiki-tree-shake.jsonc",
+    describe: "the opt-in awiki applet, with no shell, SQL owner or other utility",
+    include: [M.awiki, M.applet, M.helpers, M.content],
+    exclude: [
+      M.shell,
+      M.registry,
+      M.parser,
+      M.sql,
+      M.doSql,
+      M.r2,
+      M.interactive,
+      M.linux,
+      M.awk,
+      M.fs,
+      M.text,
+      M.ls,
+      M.core,
+      M.sed,
+      M.jq,
+      M.jqCore,
+      M.posixRegex,
+      M.network,
+    ],
   },
   {
     name: "ls",
@@ -478,12 +505,19 @@ for (const preset of PRESETS) {
   }
   const optionalFs = preset.name.startsWith("fs-") ? [] : [M.fsPromises, M.fsMetadata, M.fsContent];
   const optionalGit = preset.name === "git" ? [] : [M.git];
+  const optionalAwiki = preset.name === "awiki" ? [] : [M.awiki];
   assert.equal(
     sources.some((path) => path.includes("/isomorphic-git/")),
     preset.name === "git",
     `${preset.name}: Git engine reachability differs from its opt-in contract`,
   );
-  for (const family of [...preset.exclude, ...NEVER_BUNDLED, ...optionalFs, ...optionalGit]) {
+  for (const family of [
+    ...preset.exclude,
+    ...NEVER_BUNDLED,
+    ...optionalFs,
+    ...optionalGit,
+    ...optionalAwiki,
+  ]) {
     const reached = familyMembers(modules, family);
     assert(reached.length === 0, `${preset.name} bundle reaches ${reached.join(", ")}`);
   }
