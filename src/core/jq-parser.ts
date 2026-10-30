@@ -40,7 +40,15 @@ export type JqNode =
   | { readonly kind: "array"; readonly body: JqNode | undefined }
   | { readonly kind: "object"; readonly entries: readonly JqObjectEntry[] }
   | { readonly kind: "call"; readonly name: string; readonly args: readonly JqNode[] }
-  | { readonly kind: "variable"; readonly name: string };
+  | { readonly kind: "variable"; readonly name: string }
+  /** A string with interpolations, each rendered by `format` (`text` when absent). */
+  | {
+      readonly kind: "template";
+      readonly parts: readonly (string | JqNode)[];
+      readonly format: string | undefined;
+    }
+  /** `@name` applied to the input. */
+  | { readonly kind: "format"; readonly name: string };
 
 export interface JqObjectEntry {
   readonly key: JqNode;
@@ -116,11 +124,20 @@ const BUILTIN_NAMES = new Set([
 /** `jq` matches these with Oniguruma; this repository has a POSIX engine, so they are refused. */
 const REGEX_BUILTINS = new Set(["test", "match", "capture", "scan", "splits", "sub", "gsub"]);
 
+/** Formats this profile leaves out; any other unknown name fails when it runs, as in `jq`. */
+const REFUSED_FORMATS = new Set(["base64d", "urid"]);
+
+type TemplateToken = Extract<JqToken, { type: "string" | "template" }>;
+
 class Parser {
   private offset = 0;
   private nodes = 0;
 
-  constructor(private readonly tokens: readonly JqToken[]) {}
+  constructor(
+    private readonly tokens: readonly JqToken[],
+    /** The parser whose node count an interpolation shares. */
+    private readonly root?: Parser,
+  ) {}
 
   private peek(): JqToken {
     return this.tokens[this.offset] ?? { type: "end" };
@@ -148,8 +165,35 @@ class Parser {
   }
 
   private count(): void {
-    this.nodes += 1;
-    if (this.nodes > MAX_NODES) throw new JqSyntaxError("jq: filter is too large");
+    const owner = this.root ?? this;
+    owner.nodes += 1;
+    if (owner.nodes > MAX_NODES) throw new JqSyntaxError("jq: filter is too large");
+  }
+
+  /** A string, plain or interpolated, rendered with `format`. */
+  private template(token: TemplateToken, format: string | undefined): JqNode {
+    if (token.type === "string" && format === undefined) {
+      return { kind: "literal", value: token.value };
+    }
+    const parts =
+      token.type === "string"
+        ? [token.value]
+        : token.parts.map((part) =>
+            typeof part === "string" ? part : new Parser(part, this.root ?? this).parse(),
+          );
+    return { kind: "template", parts, format };
+  }
+
+  private formatPrimary(name: string): JqNode {
+    if (REFUSED_FORMATS.has(name)) {
+      throw new JqSyntaxError(`jq: @${name} is not supported by this profile`);
+    }
+    const next = this.peek();
+    if (next.type === "string" || next.type === "template") {
+      this.take();
+      return this.template(next, name);
+    }
+    return { kind: "format", name };
   }
 
   parse(): JqNode {
@@ -305,9 +349,15 @@ class Parser {
     const token = this.peek();
     switch (token.type) {
       case "number":
-      case "string":
         this.take();
         return { kind: "literal", value: token.value };
+      case "string":
+      case "template":
+        this.take();
+        return this.template(token, undefined);
+      case "format":
+        this.take();
+        return this.formatPrimary(token.value);
       case "variable":
         this.take();
         return { kind: "variable", name: token.value };
@@ -338,12 +388,12 @@ class Parser {
       this.take();
       return { kind: "field", name: next.value, optional: false, of: { kind: "identity" } };
     }
-    if (next.type === "string") {
+    if (next.type === "string" || next.type === "template") {
       this.take();
       return {
         kind: "index",
         of: { kind: "identity" },
-        index: { kind: "literal", value: next.value },
+        index: this.template(next, undefined),
         optional: false,
       };
     }
@@ -393,38 +443,45 @@ class Parser {
     return { kind: "call", name, args };
   }
 
+  /** One object key and the value its shorthand implies, if it has one. */
+  private objectKey(): { key: JqNode; value: JqNode | undefined } {
+    const token = this.take();
+    if (token.type === "ident") {
+      // `{a}` is shorthand for `{a: .a}`, which is the common spelling.
+      return {
+        key: { kind: "literal", value: token.value },
+        value: { kind: "field", name: token.value, optional: false, of: { kind: "identity" } },
+      };
+    }
+    if (token.type === "string" || token.type === "template") {
+      const key = this.template(token, undefined);
+      return {
+        key,
+        value: { kind: "index", of: { kind: "identity" }, index: key, optional: false },
+      };
+    }
+    if (token.type === "variable") {
+      return {
+        key: { kind: "literal", value: token.value },
+        value: { kind: "variable", name: token.value },
+      };
+    }
+    if (token.type === "punct" && token.value === "(") {
+      const key = this.pipe();
+      this.expect(")");
+      return { key, value: undefined };
+    }
+    throw new JqSyntaxError("jq: expected an object key");
+  }
+
   private objectConstruction(): JqNode {
     const entries: JqObjectEntry[] = [];
     if (this.eat("}")) return { kind: "object", entries };
     for (;;) {
-      const token = this.take();
-      let key: JqNode;
-      let value: JqNode | undefined;
-      if (token.type === "ident") {
-        key = { kind: "literal", value: token.value };
-        // `{a}` is shorthand for `{a: .a}`, which is the common spelling.
-        value = { kind: "field", name: token.value, optional: false, of: { kind: "identity" } };
-      } else if (token.type === "string") {
-        key = { kind: "literal", value: token.value };
-        value = {
-          kind: "index",
-          of: { kind: "identity" },
-          index: { kind: "literal", value: token.value },
-          optional: false,
-        };
-      } else if (token.type === "variable") {
-        key = { kind: "literal", value: token.value };
-        value = { kind: "variable", name: token.value };
-      } else if (token.type === "punct" && token.value === "(") {
-        key = this.pipe();
-        this.expect(")");
-        value = undefined;
-      } else {
-        throw new JqSyntaxError("jq: expected an object key");
-      }
-      if (this.eat(":")) value = this.alternative();
+      const entry = this.objectKey();
+      const value = this.eat(":") ? this.alternative() : entry.value;
       if (value === undefined) throw new JqSyntaxError("jq: expected a value for the object key");
-      entries.push({ key, value });
+      entries.push({ key: entry.key, value });
       if (this.eat(",")) continue;
       this.expect("}");
       return { kind: "object", entries };
@@ -451,14 +508,25 @@ function withOptional(node: JqNode): JqNode {
   }
 }
 
-export function parseJqNode(source: string): JqNode {
-  const tokens = tokenizeJq(source);
-  let depth = 0;
+/** Bounds nesting, counting each interpolation as one more level inside its string. */
+function nestingChange(token: JqToken): number {
+  if (token.type !== "punct") return 0;
+  if (["(", "[", "{"].includes(token.value)) return 1;
+  return [")", "]", "}"].includes(token.value) ? -1 : 0;
+}
+
+function checkNesting(tokens: readonly JqToken[], outer: number): void {
+  let depth = outer;
   for (const token of tokens) {
-    if (token.type !== "punct") continue;
-    if (["(", "[", "{"].includes(token.value)) depth += 1;
-    if ([")", "]", "}"].includes(token.value)) depth -= 1;
+    const parts = token.type === "template" ? token.parts : [];
+    for (const part of parts) if (typeof part !== "string") checkNesting(part, depth + 1);
+    depth += nestingChange(token);
     if (depth > 64) throw new JqSyntaxError("jq: syntax nesting limit exceeded");
   }
+}
+
+export function parseJqNode(source: string): JqNode {
+  const tokens = tokenizeJq(source);
+  checkNesting(tokens, 0);
   return new Parser(tokens).parse();
 }

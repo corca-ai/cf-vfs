@@ -74,8 +74,7 @@ describe("deliberate divergences", () => {
         "reduce .[] as $x (0; .+$x)",
         "try . catch .",
         ".. | numbers",
-        '"\\(.a)"',
-        "@base64",
+        "@base64d",
         'test("a+")',
       ]) {
         const result = await harness.run(`printf '{}' | jq '${filter}'`);

@@ -6,6 +6,9 @@ export type JqToken =
   | { readonly type: "variable"; readonly value: string }
   | { readonly type: "number"; readonly value: number }
   | { readonly type: "string"; readonly value: string }
+  /** A string with `\(…)` interpolations: literal text and each embedded filter's tokens. */
+  | { readonly type: "template"; readonly parts: readonly (string | readonly JqToken[])[] }
+  | { readonly type: "format"; readonly value: string }
   | { readonly type: "end" };
 
 const PUNCTUATION = [
@@ -79,6 +82,7 @@ class Lexer {
     const character = this.source[this.offset] ?? "";
     if (character === '"') return this.string();
     if (character === "$") return this.variable();
+    if (character === "@") return this.format();
     const identifier = IDENT.exec(this.source.slice(this.offset));
     if (identifier !== null) {
       return this.advance({ type: "ident", value: identifier[0] }, identifier[0].length);
@@ -109,14 +113,29 @@ class Lexer {
     return { type: "variable", value: name[0] };
   }
 
+  private format(): JqToken {
+    const name = IDENT.exec(this.source.slice(this.offset + 1));
+    if (name === null) throw new JqSyntaxError("jq: @ must name a format");
+    this.offset += 1 + name[0].length;
+    return { type: "format", value: name[0] };
+  }
+
   private string(): JqToken {
     this.offset += 1;
+    const parts: (string | readonly JqToken[])[] = [];
     let value = "";
     while (this.offset < this.source.length) {
       const character = this.source[this.offset] ?? "";
       if (character === '"') {
         this.offset += 1;
-        return { type: "string", value };
+        if (parts.length === 0) return { type: "string", value };
+        parts.push(value);
+        return { type: "template", parts };
+      }
+      if (character === "\\" && this.source[this.offset + 1] === "(") {
+        parts.push(value, this.interpolation());
+        value = "";
+        continue;
       }
       value += character === "\\" ? this.escape() : character;
       this.offset += character === "\\" ? 0 : 1;
@@ -124,11 +143,28 @@ class Lexer {
     throw new JqSyntaxError("jq: unterminated string");
   }
 
+  /** The tokens of one `\(…)`, up to its closing parenthesis. */
+  private interpolation(): JqToken[] {
+    this.offset += 2;
+    const tokens: JqToken[] = [];
+    let depth = 0;
+    for (;;) {
+      this.skipIgnored();
+      if (this.offset >= this.source.length) throw new JqSyntaxError("jq: unterminated string");
+      if (this.source[this.offset] === ")" && depth === 0) {
+        this.offset += 1;
+        tokens.push({ type: "end" });
+        return tokens;
+      }
+      const token = this.token();
+      if (token.type === "punct" && token.value === "(") depth += 1;
+      if (token.type === "punct" && token.value === ")") depth -= 1;
+      tokens.push(token);
+    }
+  }
+
   private escape(): string {
     const marker = this.source[this.offset + 1];
-    if (marker === "(") {
-      throw new JqSyntaxError("jq: string interpolation is not supported by this profile");
-    }
     if (marker === "u") return this.unicodeEscape();
     const replacement = marker === undefined ? undefined : ESCAPES[marker];
     if (replacement === undefined) throw new JqSyntaxError("jq: invalid escape in string");

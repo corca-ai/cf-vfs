@@ -1,5 +1,6 @@
 import { type JqBudget, JqEvaluationBudget } from "./jq-budget.js";
 import { JqRuntimeError, JqSyntaxError } from "./jq-errors.js";
+import { formatValue } from "./jq-format.js";
 import {
   type JqNode as Node,
   type JqObjectEntry as ObjectEntry,
@@ -43,8 +44,8 @@ export { JqRuntimeError, JqSyntaxError } from "./jq-errors.js";
  * a usage error before any input is read.
  *
  * Notably absent, and refused: `def`, `reduce`, `foreach`, `try`/`catch`,
- * `label`, `as` bindings, recursive descent `..`, string interpolation, format
- * strings such as `@base64`, and the regular-expression builtins. The last is
+ * `label`, `as` bindings, recursive descent `..`, `@base64d`, and the
+ * regular-expression builtins. The last is
  * deliberate rather than pending — `jq` matches with Oniguruma and this
  * repository has a POSIX engine, so `test("a+")` would mean two different
  * things under one name.
@@ -138,8 +139,40 @@ export class JqFilter {
       case "binary":
         yield* this.binary(node, input);
         return;
+      case "template":
+        yield* this.template(node, input, node.parts.length - 1, "");
+        return;
+      case "format":
+        yield formatValue(node.name, input, this.budget);
+        return;
       default:
         yield* this.call(node, input);
+    }
+  }
+
+  /**
+   * Interpolated strings, last part outermost: `"\(1,2)-\(3,4)"` yields
+   * `1-3`, `2-3`, `1-4`, `2-4`, as `jq` does.
+   */
+  private *template(
+    node: Extract<Node, { kind: "template" }>,
+    input: JsonValue,
+    index: number,
+    suffix: string,
+  ): Generator<JsonValue> {
+    const part = node.parts[index];
+    if (part === undefined) {
+      yield suffix;
+      return;
+    }
+    if (typeof part === "string") {
+      yield* this.template(node, input, index - 1, part + suffix);
+      return;
+    }
+    for (const value of this.evaluate(part, input)) {
+      const rendered = formatValue(node.format ?? "text", value, this.budget);
+      this.budget.reserve(rendered.length * 2);
+      yield* this.template(node, input, index - 1, rendered + suffix);
     }
   }
 

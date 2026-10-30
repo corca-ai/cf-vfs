@@ -1077,13 +1077,16 @@ Builtins: `add`, `all`, `any`, `empty`, `first`, `flatten`, `from_entries`,
 `not`, `range`, `reverse`, `select`, `sort`, `sort_by`, `split`, `to_entries`,
 `tonumber`, `tostring`, `type`, `unique`, `values`. String builtins:
 `ascii_downcase`, `ascii_upcase`, `startswith`, `endswith`, `ltrimstr`,
-`rtrimstr`. Options: `-c`, `-e`, `-f FILE` (the filter from a file; every
+`rtrimstr`. String interpolation, `"\(.name): \(.count)"`, including
+several outputs (`"\(1,2)-\(3,4)"` yields four strings, the last
+interpolation outermost) and interpolated object keys. Formats `@text`,
+`@json`, `@csv`, `@tsv`, `@html`, `@uri`, `@sh` and `@base64`, applied to the
+input or, written before a string, to each interpolated value. Options: `-c`, `-e`, `-f FILE` (the filter from a file; every
 operand is then input), `-j`, `-n`, `-r`, `-R` (each line is a string; with
 `-s`, the whole input is one), `-s`, `-S`, `--tab`, `--arg`, `--argjson`.
 
 **Refused.** `def`, `reduce`, `foreach`, `try`/`catch`, `label`, `as` bindings,
-recursive descent `..`, string interpolation, format strings such as
-`@base64`, and the regular-expression builtins. The last is deliberate rather
+recursive descent `..`, `@base64d`, and the regular-expression builtins. The last is deliberate rather
 than pending: `jq` matches with Oniguruma and this repository has a POSIX
 engine, so `test("a+")` would mean two different things under one name.
 
