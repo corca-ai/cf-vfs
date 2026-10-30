@@ -1,3 +1,4 @@
+import { awikiCommand } from "../src/shell/commands/awiki.js";
 import { awkCommand } from "../src/shell/commands/awk.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { gitCommand } from "../src/shell/commands/git.js";
@@ -38,7 +39,7 @@ const EVAL_CREDENTIALS = Object.freeze({
   supplementaryGids: Object.freeze([]),
 }) satisfies PosixCredentials;
 const EVAL_UMASK = 0o022;
-const EVAL_COMMANDS = [...defaultShellCommands, awkCommand, gitCommand];
+const EVAL_COMMANDS = [...defaultShellCommands, awkCommand, gitCommand, awikiCommand];
 
 const USERS_BY_ID = new Map([
   [0, "root"],

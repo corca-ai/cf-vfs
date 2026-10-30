@@ -81,14 +81,14 @@ def s1():
     return files, expected
 
 
-def s3():
+def s3(count=2000):
     rng = random.Random(20261031)
 
     def sentence(n):
         return " ".join(rng.choice(WORDS) for _ in range(n)).capitalize() + "."
 
     folders = ["eng", "eng/api", "eng/infra", "product", "people", "ops", "sales", "legal", "design", "data"]
-    stems = [f"{rng.choice(['topic', 'note', 'spec', 'howto', 'guide', 'log'])}-{index:04d}" for index in range(2000)]
+    stems = [f"{rng.choice(['topic', 'note', 'spec', 'howto', 'guide', 'log'])}-{index:04d}" for index in range(count)]
     paths = {stem: f"{rng.choice(folders)}/{stem}.md" for stem in stems}
     weights = [1 / (rank + 1) ** 0.9 for rank in range(len(stems))]
     popular = stems[:]
@@ -133,7 +133,8 @@ def s3():
 
 if __name__ == "__main__":
     out = sys.argv[1]
-    for name, build in (("s1", s1), ("s3", s3)):
+    builds = (("s1", s1), ("s3", s3), ("s3-10k", lambda: s3(10_000)))
+    for name, build in builds if len(sys.argv) < 3 else [b for b in builds if b[0] in sys.argv[2:]]:
         files, expected = build()
         json.dump({"files": files, "expected": expected}, open(f"{out}/{name}.json", "w"))
         print(name, len(files), "pages", sum(len(t) for t in files.values()), "bytes")
