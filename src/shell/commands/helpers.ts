@@ -2,7 +2,7 @@ import { VfsError } from "../../core/errors.js";
 import { splitLinesPreservingEndings } from "../../core/lines.js";
 import { basename, normalizeFileSystemPath } from "../../core/path.js";
 import { encodeUtf8, utf8ByteLength } from "../../core/unicode.js";
-import type { ByteRange, EntryPage, InlineReadResult } from "../../vfs/types.js";
+import type { ByteRange, InlineReadResult } from "../../vfs/types.js";
 import { chargeConsumed, fileBody, openContent } from "../content.js";
 import type { ShellCommandContext, ShellSink } from "../types.js";
 
@@ -23,18 +23,20 @@ export async function writeText(sink: ShellSink, value: string): Promise<void> {
   await writeBytes(sink, encodeUtf8(value));
 }
 
+function cancellation(signal: AbortSignal): VfsError {
+  return signal.reason instanceof VfsError
+    ? signal.reason
+    : new VfsError("ECANCELED", "execution was cancelled");
+}
+
 export async function readWithAbort(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   signal: AbortSignal,
 ): Promise<ReadableStreamReadResult<Uint8Array>> {
-  const cancellation = (): VfsError =>
-    signal.reason instanceof VfsError
-      ? signal.reason
-      : new VfsError("ECANCELED", "execution was cancelled");
-  if (signal.aborted) throw cancellation();
+  if (signal.aborted) throw cancellation(signal);
   return await new Promise<ReadableStreamReadResult<Uint8Array>>((resolve, reject) => {
     const abort = (): void => {
-      const error = cancellation();
+      const error = cancellation(signal);
       void reader.cancel(error).catch(() => undefined);
       reject(error);
     };
@@ -123,7 +125,7 @@ export async function* inputStreams(
  * The retention lease behind an opaque read is a deadline in the row and
  * lapses on its own; there is nothing to release.
  */
-async function openInput(
+export async function openInput(
   context: ShellCommandContext,
   path: string,
   range?: ByteRange,
@@ -135,85 +137,6 @@ async function openInput(
     ...(range === undefined ? {} : { range }),
   });
   return body.stream;
-}
-
-/**
- * Walks the file operands of a recursive command.
- *
- * A directory expands through `findPage`, so a large subtree costs a bounded
- * number of indexed queries and never materializes the whole namespace. Each
- * page charges the shared glob budget, which is what bounds the walk, and a
- * non-directory operand is yielded as itself so `grep -r file` still works.
- */
-/**
- * One entry of a recursive walk: an openable stream, or the reason it is not.
- *
- * Only the walk produces the failing member. A named operand that cannot be
- * opened is the caller's own error and still throws; an unreadable file found
- * partway through a subtree is not, and stopping the walk there would throw
- * away every match already reported.
- */
-export type CommandInput =
-  | {
-      readonly name: string;
-      readonly stream: ReadableStream<Uint8Array>;
-      readonly error?: undefined;
-    }
-  | { readonly name: string; readonly stream?: undefined; readonly error: VfsError };
-
-/** Decides from a walked file's displayed path whether to open it. */
-export type RecursiveFilter = (name: string) => boolean;
-
-async function* recursiveDirectoryInputs(
-  context: ShellCommandContext,
-  operand: string,
-  root: string,
-  accept: RecursiveFilter,
-): AsyncGenerator<CommandInput> {
-  let cursor: string | null = null;
-  do {
-    context.budget.step();
-    const page: EntryPage = context.fileSystem.findPage({
-      path: root,
-      type: "file",
-      ...(cursor === null ? {} : { cursor }),
-    });
-    // The walk streams pages rather than holding matches, so it charges
-    // expansion work instead of the per-result match limit.
-    context.budget.expansionWork(page.scanned);
-    for (const entry of page.entries) {
-      const name = displayPath(operand, root, entry.path);
-      if (!accept(name)) continue;
-      try {
-        yield { name, stream: await openInput(context, entry.path) };
-      } catch (error) {
-        yield {
-          name,
-          error: error instanceof VfsError ? error : new VfsError("EIO", "read failed", entry.path),
-        };
-      }
-    }
-    cursor = page.nextCursor;
-  } while (cursor !== null);
-}
-
-export async function* recursiveInputs(
-  context: ShellCommandContext,
-  paths: readonly string[],
-  accept: RecursiveFilter = () => true,
-): AsyncGenerator<CommandInput> {
-  // With no operand the walk starts at the working directory but reports bare
-  // relative paths, as `grep -r` does — an explicit `.` is what prints `./`.
-  for (const path of paths.length === 0 ? [""] : paths) {
-    const normalized = commandPath(context, path === "" ? "." : path);
-    const stat = context.fileSystem.stat(normalized);
-    if (stat.kind !== "directory") {
-      yield { name: path, stream: await openInput(context, normalized) };
-      continue;
-    }
-    const root = context.fileSystem.realpath(normalized);
-    yield* recursiveDirectoryInputs(context, path, root, accept);
-  }
 }
 
 /**
@@ -273,6 +196,13 @@ function accountRecord(state: TextLineState, context: ShellCommandContext, path?
   }
 }
 
+const NON_ASCII = /[\u0080-\u{10ffff}]/u;
+
+/** A line's UTF-8 length. On Workers testing for ASCII is far cheaper than encoding. */
+function lineByteLength(line: string): number {
+  return NON_ASCII.test(line) ? utf8ByteLength(line) : line.length;
+}
+
 function takeTextLine(
   state: TextLineState,
   context: ShellCommandContext,
@@ -282,18 +212,78 @@ function takeTextLine(
   if (newline < 0) return undefined;
   const line = state.pending.slice(0, newline + 1);
   state.pending = state.pending.slice(newline + 1);
-  if (utf8ByteLength(line) > context.budget.limits.maxLineBytes) {
+  if (lineByteLength(line) > context.budget.limits.maxLineBytes) {
     throw new VfsError("E2BIG", "line byte limit exceeded", path);
   }
   accountRecord(state, context, path);
   return line;
 }
 
+/**
+ * Splits bulk-read chunks into lines exactly as {@link readTextLines} splits
+ * the stream that would have yielded them, charging each chunk as a file read.
+ */
+function* chunkTextLines(
+  context: ShellCommandContext,
+  chunks: readonly Uint8Array[],
+  path?: string,
+): Generator<string> {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const state: TextLineState = { pending: "", records: 0 };
+  for (const chunk of chunks) {
+    if (context.signal.aborted) throw cancellation(context.signal);
+    context.budget.read(chunk.byteLength);
+    state.pending += decodeUtf8(decoder, chunk, path);
+    for (;;) {
+      const line = takeTextLine(state, context, path);
+      if (line === undefined) break;
+      yield line;
+    }
+    if (lineByteLength(state.pending) > context.budget.limits.maxLineBytes) {
+      throw new VfsError("E2BIG", "line byte limit exceeded", path);
+    }
+  }
+  state.pending += decodeUtf8(decoder, undefined, path);
+  if (state.pending.length > 0) {
+    accountRecord(state, context, path);
+    yield state.pending;
+  }
+}
+
+/**
+ * Consumes bulk-read chunks whose lines a caller will not use, with the charges
+ * and failures splitting them would have had. A valid UTF-8 body no larger than
+ * the line and record limits can exceed neither, so only its reads are charged.
+ */
+export function skipTextLines(
+  context: ShellCommandContext,
+  chunks: readonly Uint8Array[],
+  validText: boolean,
+  path?: string,
+): void {
+  const { limits } = context.budget;
+  const bytes = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+  if (!validText || bytes > Math.min(limits.maxLineBytes, limits.maxBufferedRecords)) {
+    const lines = chunkTextLines(context, chunks, path);
+    while (lines.next().done !== true);
+    return;
+  }
+  for (const chunk of chunks) {
+    if (context.signal.aborted) throw cancellation(context.signal);
+    context.budget.read(chunk.byteLength);
+  }
+}
+
 export async function* readTextLines(
   context: ShellCommandContext,
-  stream: ReadableStream<Uint8Array>,
+  source: ReadableStream<Uint8Array> | readonly Uint8Array[],
   path?: string,
 ): AsyncGenerator<string> {
+  if (Array.isArray(source)) {
+    yield* chunkTextLines(context, source, path);
+    return;
+  }
+  const stream = source as ReadableStream<Uint8Array>;
   const reader = stream.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const state: TextLineState = { pending: "", records: 0 };

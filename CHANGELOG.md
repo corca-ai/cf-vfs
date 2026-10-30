@@ -16,6 +16,15 @@ included.
 
 ## [Unreleased]
 
+- Add the optional `readMany` to filesystems: whole inline bodies for many
+  paths in two SQL statements per 64 paths, leaving anything it cannot read
+  in bulk to `readFile`. `grep -r` and a cold `awiki` load read through it and
+  consume the bodies without a stream per file, which on Workers cost more
+  than reading them. Over a 10,000-page wiki on Cloudflare, `grep -rlF` went
+  from 8.5 s to 1.7 s and a cold `awiki lint` from 13.1 s to 6.9 s.
+- `grep` skips the lines of a bulk-read body that cannot contain a literal
+  every pattern requires, with the same read charges, UTF-8 and line-limit
+  failures, so its answers do not change.
 - `find` evaluates its walk page by page and holds no matches, so it charges
   expansion work for each entry scanned instead of stopping at 10,000 matches,
   as `grep -r` already did. Listing a 10,000-page wiki with `find` failed.

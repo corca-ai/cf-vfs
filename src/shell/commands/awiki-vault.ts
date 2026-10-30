@@ -1,5 +1,5 @@
 import { isVfsError, VfsError } from "../../core/errors.js";
-import type { VfsStat } from "../../vfs/types.js";
+import type { InlineFileBody, VfsStat } from "../../vfs/types.js";
 import { shellModeAllows } from "../access.js";
 import { openContent } from "../content.js";
 import { fileSystemOrigin } from "../fs-origin.js";
@@ -104,10 +104,9 @@ export async function readContent(
   }
 }
 
-/** Reads and parses a page, caching what an inline body yields. */
-async function parseFresh(context: ShellCommandContext, path: string): Promise<CachedPage> {
+/** Parses a page's text and caches what an inline body yields. */
+function remember(context: ShellCommandContext, path: string, stat: VfsStat, content: string) {
   const cache = cacheFor(context);
-  const { stat, content } = await readContent(context, path);
   const read: CachedPage = {
     ino: stat.ino,
     token: stat.mutationToken,
@@ -120,28 +119,126 @@ async function parseFresh(context: ShellCommandContext, path: string): Promise<C
   return read;
 }
 
+/** Reads and parses a page, caching what an inline body yields. */
+async function parseFresh(context: ShellCommandContext, path: string): Promise<CachedPage> {
+  const { stat, content } = await readContent(context, path);
+  return remember(context, path, stat, content);
+}
+
 /**
- * A page through the cache, trusting the listing's identity and token.
+ * The cached page the listing validates, if any.
  *
  * Only where no collaborative overlay can stand between the listing and a
  * read, and only when the execution's credentials could read the page: any
  * doubt reads it, so a miss reports exactly what a cold run would.
  */
-async function listedPage(context: ShellCommandContext, file: Found): Promise<CachedPage> {
+function listedHit(context: ShellCommandContext, file: Found): CachedPage | undefined {
   const cached = cacheFor(context).get(file.path);
   const { stat } = file;
-  if (
-    cached?.ino === stat.ino &&
+  return cached?.ino === stat.ino &&
     cached.token === stat.mutationToken &&
     stat.contentClass === "inline" &&
     file.searchable &&
     shellModeAllows(stat, context.session.credentials, READ)
-  ) {
-    // Charge what a cold read would, so limits never depend on the cache.
-    context.budget.read(stat.sizeBytes);
-    return cached;
+    ? cached
+    : undefined;
+}
+
+const READ_AHEAD_BYTES = 1024 * 1024;
+
+function joined(chunks: readonly Uint8Array[], bytes: number): Uint8Array {
+  if (chunks.length === 1) return chunks[0] as Uint8Array;
+  const body = new Uint8Array(bytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
   }
-  return await parseFresh(context, file.path);
+  return body;
+}
+
+/**
+ * Pages the listing validates, with the misses read in bulk.
+ *
+ * A miss reads the next run of misses in one call where the filesystem
+ * offers it, rather than one call each, which is what a cold load over a
+ * large wiki spends its time on. Pages are still taken in order and charged
+ * as they are taken, and anything not read in bulk takes the ordinary path,
+ * so limits and errors are those of reading each page in turn.
+ */
+class ListedPages {
+  readonly #context: ShellCommandContext;
+  readonly #files: readonly Found[];
+  readonly #ahead = new Map<string, InlineFileBody>();
+  #scanned = 0;
+  #release: () => void = () => undefined;
+
+  constructor(context: ShellCommandContext, files: readonly Found[]) {
+    this.#context = context;
+    this.#files = files;
+  }
+
+  async page(index: number): Promise<CachedPage> {
+    const file = this.#files[index] as Found;
+    const cached = listedHit(this.#context, file);
+    if (cached !== undefined) {
+      // Charge what a cold read would, so limits never depend on the cache.
+      this.#context.budget.read(file.stat.sizeBytes);
+      return cached;
+    }
+    if (index >= this.#scanned) this.#readAhead(index);
+    const read = this.#ahead.get(file.path);
+    if (read === undefined) return await parseFresh(this.#context, file.path);
+    this.#ahead.delete(file.path);
+    if (this.#ahead.size === 0) this.release();
+    this.#context.budget.read(read.stat.sizeBytes);
+    let content: string;
+    try {
+      content = DECODER.decode(joined(read.chunks, read.stat.sizeBytes));
+    } catch {
+      throw new AwikiError(`${file.path}: stream did not contain valid UTF-8`);
+    }
+    return remember(this.#context, file.path, read.stat, content);
+  }
+
+  /** Returns the shell buffer held by bodies read ahead and not yet taken. */
+  release(): void {
+    this.#ahead.clear();
+    this.#release();
+    this.#release = () => undefined;
+  }
+
+  #readAhead(from: number): void {
+    this.release();
+    const { budget, fileSystem } = this.#context;
+    // Bodies read ahead count against the shell's buffer while they are held.
+    const allowance = Math.min(
+      READ_AHEAD_BYTES,
+      Math.floor((budget.remainingBufferedBytes?.() ?? 0) / 4),
+    );
+    const paths: string[] = [];
+    let bytes = 0;
+    let index = from;
+    for (; index < this.#files.length; index += 1) {
+      const file = this.#files[index] as Found;
+      if (listedHit(this.#context, file) !== undefined) continue;
+      if (file.stat.contentClass !== "inline") continue;
+      if (bytes + file.stat.sizeBytes > allowance) break;
+      paths.push(file.path);
+      bytes += file.stat.sizeBytes;
+    }
+    this.#scanned = Math.max(index, from + 1);
+    if (fileSystem.readMany === undefined || paths.length < 2) return;
+    const bodies = fileSystem.readMany(paths, { maxBytes: allowance });
+    let held = 0;
+    paths.forEach((path, at) => {
+      const read = bodies[at];
+      if (read === undefined) return;
+      this.#ahead.set(path, read);
+      held += read.stat.sizeBytes;
+    });
+    if (this.#ahead.size > 0) this.#release = budget.buffered(held);
+  }
 }
 
 /** A page through the cache, asking the page itself for its current token. */
@@ -162,6 +259,38 @@ async function probedPage(context: ShellCommandContext, path: string): Promise<C
     return cached;
   }
   return await parseFresh(context, path);
+}
+
+async function loadDocuments(
+  context: ShellCommandContext,
+  files: readonly Found[],
+  recursive: boolean,
+  trustListing: boolean,
+): Promise<Document[]> {
+  const documents: Document[] = [];
+  const listed = trustListing ? new ListedPages(context, files) : undefined;
+  try {
+    for (const [index, file] of files.entries()) {
+      context.budget.checkDeadline();
+      const relPath = trimMdExtension(file.relFile);
+      const { page, ino, token, sizeBytes } =
+        listed === undefined ? await probedPage(context, file.path) : await listed.page(index);
+      documents.push({
+        ino,
+        token,
+        sizeBytes,
+        name: recursive ? relPath : lastSegment(relPath),
+        key: recursive ? documentPathKey(relPath) : documentKey(relPath),
+        path: file.path,
+        relPath,
+        page,
+        resolved: [],
+      });
+    }
+  } finally {
+    listed?.release();
+  }
+  return documents;
 }
 
 // --- discovery --------------------------------------------------------------
@@ -308,25 +437,7 @@ export class Vault {
     const trustListing =
       context.fileSystem.canUseBulkOperation?.("copy-source", resolvedRoot) === true;
     const files = sortByLower(discover(context, rootStat, recursive), (file) => file.relFile);
-    const documents: Document[] = [];
-    for (const file of files) {
-      context.budget.checkDeadline();
-      const relPath = trimMdExtension(file.relFile);
-      const { page, ino, token, sizeBytes } = trustListing
-        ? await listedPage(context, file)
-        : await probedPage(context, file.path);
-      documents.push({
-        ino,
-        token,
-        sizeBytes,
-        name: recursive ? relPath : lastSegment(relPath),
-        key: recursive ? documentPathKey(relPath) : documentKey(relPath),
-        path: file.path,
-        relPath,
-        page,
-        resolved: [],
-      });
-    }
+    const documents = await loadDocuments(context, files, recursive, trustListing);
     return new Vault(
       resolvedRoot,
       recursive,

@@ -184,6 +184,20 @@ export type StatManyResult =
   | { stat: VfsStat }
   | { error: { code: VfsErrorCode; message: string; path?: string } };
 
+export interface ReadManyOptions {
+  /** Most body bytes one call returns in total. Defaults to, and is capped at, 1 MiB. */
+  maxBytes?: number;
+}
+
+/**
+ * A whole inline body read in bulk, as the chunks `readFile`'s stream would
+ * yield, in order. The caller owns them.
+ */
+export interface InlineFileBody {
+  stat: InlineFileStat;
+  chunks: Uint8Array<ArrayBuffer>[];
+}
+
 export type ByteBody =
   | ReadableStream<Uint8Array>
   | Uint8Array
@@ -467,6 +481,16 @@ export interface VirtualFileSystem {
    * 1000 paths per call. Path errors are results; unexpected failures still throw.
    */
   statMany?(paths: readonly string[], options?: StatManyOptions): StatManyResult[];
+  /**
+   * Optional bulk read of whole inline file bodies, for callers that read
+   * many files in a row. Results preserve input order and duplicates. Each
+   * body passes the same permission checks as `readFile`. `undefined` means
+   * the path was not read in bulk — missing, refused, not an inline file,
+   * reached through a link, or past `maxBytes` — and the caller reads it with
+   * `readFile`, which reports the authoritative result. At most 1000 paths
+   * per call; unexpected failures still throw.
+   */
+  readMany?(paths: readonly string[], options?: ReadManyOptions): (InlineFileBody | undefined)[];
   /**
    * Reports the entry holding an identity, so a caller that keyed durable
    * state to one can find where it is now.

@@ -17,11 +17,12 @@ export function statResult(read: () => VfsStat): StatManyResult {
   }
 }
 
-export function validateStatPaths(paths: readonly string[]): void {
+export function validateStatPaths(paths: readonly string[], operation = "statMany"): void {
   if (!Array.isArray(paths) || paths.length > 1000)
-    throw new VfsError("E2BIG", "statMany accepts at most 1000 paths");
+    throw new VfsError("E2BIG", `${operation} accepts at most 1000 paths`);
   for (const path of paths)
-    if (typeof path !== "string") throw new VfsError("EINVAL", "statMany paths must be strings");
+    if (typeof path !== "string")
+      throw new VfsError("EINVAL", `${operation} paths must be strings`);
 }
 
 /** SQLite text bindings can replace lone surrogates; keep ordinary resolution there. */

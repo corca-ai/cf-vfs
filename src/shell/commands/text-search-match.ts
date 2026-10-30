@@ -32,6 +32,9 @@ function asciiLower(value: string): string {
 }
 
 const WORD = /[A-Za-z0-9_]/u;
+// Characters with a meaning in either POSIX dialect; a pattern without them,
+// once its anchors are set aside, matches only its own text.
+const LITERAL = /^[^.[\]()*+?{}|\\^$]+$/u;
 
 /**
  * `-x` anchors the whole pattern as one group, so an alternation must cover
@@ -54,6 +57,32 @@ export class GrepMatcher {
     private readonly options: GrepMatchOptions,
   ) {
     this.patterns = patterns.map((pattern) => this.compile(pattern));
+  }
+
+  /**
+   * A test that is false only for text no line of which can be selected,
+   * because every pattern requires a literal the text lacks. Undefined when
+   * some pattern requires none this can see.
+   */
+  candidates(): ((text: string) => boolean) | undefined {
+    const literals: string[] = [];
+    for (const pattern of this.patterns) {
+      const literal = this.requiredLiteral(pattern);
+      if (literal === undefined) return undefined;
+      literals.push(literal);
+    }
+    const fold = this.options.ignoreCase;
+    return (text) => {
+      const searched = fold ? asciiLower(text) : text;
+      return literals.some((literal) => searched.includes(literal));
+    };
+  }
+
+  private requiredLiteral(pattern: CompiledPattern): string | undefined {
+    if (pattern.regex === undefined) return pattern.needle === "" ? undefined : pattern.needle;
+    if (this.options.perl || this.options.ignoreCase) return undefined;
+    const unanchored = pattern.needle.replace(/^\^/u, "").replace(/\$$/u, "");
+    return LITERAL.test(unanchored) ? unanchored : undefined;
   }
 
   selects(line: string): boolean {

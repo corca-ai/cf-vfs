@@ -17,6 +17,7 @@ import type {
   OwnershipUpdateOptions,
   PageOptions,
   ReadFileOptions,
+  ReadManyOptions,
   RemoveOptions,
   RemoveResult,
   StatManyOptions,
@@ -28,6 +29,7 @@ import type {
   WriteFileOptions,
   WriteResult,
 } from "../vfs/types.js";
+import { readBodiesWhere } from "./batch-stats.js";
 import { ShellRefusalError } from "./errors.js";
 import type { ShellBudget, ShellFileSystem, ShellPolicy } from "./types.js";
 
@@ -259,6 +261,18 @@ export class ScopedFileSystem implements ShellFileSystem {
           options.follow === false ? this.#inner.lstat(path) : this.#inner.stat(path),
         ),
       )
+    );
+  }
+
+  /** Paths outside the readable roots are left to readFile, which refuses them. */
+  readMany(paths: readonly string[], options?: ReadManyOptions) {
+    const roots = this.#policy.readRoots;
+    return readBodiesWhere(
+      this.#inner,
+      paths,
+      options,
+      (path) =>
+        roots === undefined || (allowed(path, roots) && allowed(this.#resolved(path), roots)),
     );
   }
 

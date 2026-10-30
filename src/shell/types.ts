@@ -12,6 +12,7 @@ export type ShellFileSystem = Pick<
   | "getMutationToken"
   | "stat"
   | "statMany"
+  | "readMany"
   | "list"
   | "listPage"
   | "find"
