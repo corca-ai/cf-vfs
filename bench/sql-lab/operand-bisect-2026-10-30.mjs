@@ -11,7 +11,7 @@ import { lab } from "./lab.mjs";
 const [name] = process.argv.slice(2);
 const w = lab(name);
 const SCRIPTS = {
-  "empty": "true",
+  empty: "true",
   "glob only": "echo /wiki/*/*.md > /dev/null",
   "glob, one word per file to a pipe": "printf '%s\\n' /wiki/*/*.md | wc -l",
   "grep -lF > /dev/null": "grep -lF '[[note-0001' /wiki/*/*.md > /dev/null",
@@ -28,11 +28,19 @@ for (let round = 0; round < 3; round += 1) {
     const result = await w.shell(script);
     samples[label] ??= [];
     samples[label].push(result.ms);
-    if (round === 0) console.log(`${label.padEnd(36)} exit ${result.exitCode} ${JSON.stringify(result.stdout.trim()).slice(0, 40)} ${result.stderr.trim().slice(0, 80)}`);
+    if (round === 0)
+      console.log(
+        `${label.padEnd(36)} exit ${result.exitCode} ${JSON.stringify(result.stdout.trim()).slice(0, 40)} ${result.stderr.trim().slice(0, 80)}`,
+      );
   }
 }
 const median = (values) => [...values].sort((a, b) => a - b)[1];
 for (const [label, values] of Object.entries(samples)) {
-  console.log(`${label.padEnd(36)} ${String(median(values)).padStart(6)} ms  [${values.join(", ")}]`);
+  console.log(
+    `${label.padEnd(36)} ${String(median(values)).padStart(6)} ms  [${values.join(", ")}]`,
+  );
 }
-writeFileSync(new URL(`./operand-bisect-2026-10-30-${name}.json`, import.meta.url), `${JSON.stringify(samples, null, 1)}\n`);
+writeFileSync(
+  new URL(`./operand-bisect-2026-10-30-${name}.json`, import.meta.url),
+  `${JSON.stringify(samples, null, 1)}\n`,
+);
