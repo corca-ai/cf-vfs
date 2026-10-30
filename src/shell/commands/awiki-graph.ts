@@ -317,3 +317,99 @@ export function averageShortestPath(
   });
   return lines.join("\n");
 }
+
+// --- graph ------------------------------------------------------------------
+
+interface GraphNode {
+  readonly doc: number;
+  readonly inbound: number;
+  readonly outbound: number;
+  readonly missing: readonly string[];
+}
+
+/** Distinct missing pages a document links to, by name. */
+function missingTargets(vault: Vault, index: number): string[] {
+  const document = vault.doc(index);
+  const seen = new Set<string>();
+  const names: string[] = [];
+  document.page.links.forEach((link, position) => {
+    if (document.resolved[position] !== undefined || seen.has(link.targetKey)) return;
+    seen.add(link.targetKey);
+    names.push(normalizeDocumentName(link.displayTarget) || trim(link.displayTarget));
+  });
+  return names.sort(compareLower);
+}
+
+function graphNodes(vault: Vault): GraphNode[] {
+  return vault.sortDocuments(vault.documents.map((_, index) => index)).map((doc) => ({
+    doc,
+    inbound: vault.inboundOf(doc).size,
+    outbound: vault.directed[doc]?.size ?? 0,
+    missing: missingTargets(vault, doc),
+  }));
+}
+
+function outboundDocuments(vault: Vault, doc: number): number[] {
+  return vault.sortDocuments([...(vault.directed[doc] ?? [])]);
+}
+
+export function graphReport(vault: Vault): string {
+  const lines = graphNodes(vault).map(
+    (node) =>
+      `[[${vault.doc(node.doc).name}]] inbound=${node.inbound} outbound=${node.outbound} missing=${node.missing.length}`,
+  );
+  return lines.length === 0 ? "_ none" : lines.join("\n");
+}
+
+export function graphEdgesReport(vault: Vault): string {
+  const lines: string[] = [];
+  for (const node of graphNodes(vault)) {
+    const source = vault.doc(node.doc).name;
+    for (const target of outboundDocuments(vault, node.doc)) {
+      lines.push(`[[${source}]] -> [[${vault.doc(target).name}]]`);
+    }
+    for (const missing of node.missing) lines.push(`[[${source}]] -> [[${missing}]] (missing)`);
+  }
+  return lines.length === 0 ? "_ none" : lines.join("\n");
+}
+
+const JSON_ESCAPES: Readonly<Record<string, string>> = {
+  '"': '\\"',
+  "\\": "\\\\",
+  "\n": "\\n",
+  "\r": "\\r",
+  "\t": "\\t",
+};
+
+/** A JSON string as the native tool writes one: only quotes, backslashes and controls escaped. */
+function jsonString(value: string): string {
+  let out = '"';
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    const control = code < 0x20 ? `\\u${code.toString(16).padStart(4, "0")}` : character;
+    out += JSON_ESCAPES[character] ?? control;
+  }
+  return `${out}"`;
+}
+
+export function graphJsonReport(vault: Vault): string {
+  const nodes = graphNodes(vault);
+  const prefix = vault.root === "/" ? 1 : vault.root.length + 1;
+  const documents = nodes.map((node) => {
+    const document = vault.doc(node.doc);
+    return `{"name":${jsonString(document.name)},"path":${jsonString(document.path.slice(prefix))},"inbound":${node.inbound},"outbound":${node.outbound},"missing":${node.missing.length}}`;
+  });
+  const edges: string[] = [];
+  for (const node of nodes) {
+    const source = jsonString(vault.doc(node.doc).name);
+    for (const target of outboundDocuments(vault, node.doc)) {
+      edges.push(
+        `{"source":${source},"target":${jsonString(vault.doc(target).name)},"missing":false}`,
+      );
+    }
+    for (const missing of node.missing) {
+      edges.push(`{"source":${source},"target":${jsonString(missing)},"missing":true}`);
+    }
+  }
+  return `{"documents":[${documents.join(",")}],"edges":[${edges.join(",")}]}`;
+}

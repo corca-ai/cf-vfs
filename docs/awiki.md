@@ -18,7 +18,7 @@ own bundle budget.
 
 ## Behavior
 
-The command follows awiki 0.5.1: `lint`, `format`, `links`, `path`,
+The command follows awiki 0.6.0: `lint`, `format`, `links`, `graph`, `path`,
 `wanted`, `avg-shortest-path`, `suggest` and `rename`, with the same flags,
 output, diagnostics and statuses, so [awiki's CLI
 reference](https://github.com/corca-ai/awiki/blob/main/docs/cli.md) applies
@@ -28,7 +28,7 @@ names), the link-only-line rule, and seeded sampling: `suggest` and
 `avg-shortest-path` reproduce the native tool's ChaCha12 `StdRng`, so the same
 `-seed` picks the same document pairs. Messages that name an operating-system
 error use the native wording, such as `No such file or directory (os error
-2)`. `version` prints `0.5.1`, the release it follows.
+2)`. `version` prints `0.6.0`, the release it follows.
 
 Compatibility is pinned by `test/fixtures/awiki-compat.json`, recorded from
 the native binary by `npm run test:awiki-fixtures:regenerate` (set `AWIKI`

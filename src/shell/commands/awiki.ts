@@ -4,6 +4,9 @@ import { formatVault } from "./awiki-format.js";
 import {
   averageShortestPath,
   documentLine,
+  graphEdgesReport,
+  graphJsonReport,
+  graphReport,
   linksReport,
   lint,
   shortestPath,
@@ -30,7 +33,7 @@ import { commandPath, writeText } from "./helpers.js";
  * reads only the pages that name the old document.
  */
 
-const VERSION = "0.5.1";
+const VERSION = "0.6.0";
 
 const AWIKI = {
   name: "awiki",
@@ -55,6 +58,8 @@ Commands:
       Rename a document and update links to it
   awiki links [flags] <document>
       Show inbound and outbound links for a document
+  awiki graph [flags] [-edges] [-json]
+      Print link counts for every document, or every link
   awiki suggest [flags]
       Show refactoring candidates and graph-quality hints
   awiki wanted [flags]
@@ -188,6 +193,18 @@ async function linksCommand(context: ShellCommandContext, args: readonly string[
   const vault = await load(context, common);
   out(linksReport(vault, vault.resolveDocument(common.rest[0] ?? "")));
 }
+
+async function graphCommand(context: ShellCommandContext, args: readonly string[], out: Output) {
+  const rest = args.filter((arg) => !GRAPH_FLAGS.has(arg));
+  const json = args.some((arg) => arg === "-json" || arg === "--json");
+  const edges = args.some((arg) => arg === "-edges" || arg === "--edges");
+  const common = parseCommonWithHelp(rest, "Usage: awiki graph [flags] [-edges] [-json]");
+  if (common.rest.length > 0) throw new AwikiError("graph does not accept positional arguments");
+  const vault = await load(context, common);
+  out(json ? graphJsonReport(vault) : edges ? graphEdgesReport(vault) : graphReport(vault));
+}
+
+const GRAPH_FLAGS = new Set(["-edges", "--edges", "-json", "--json"]);
 
 async function pathCommand(context: ShellCommandContext, args: readonly string[], out: Output) {
   const common = parseCommonWithHelp(args, "Usage: awiki path [flags] <from> <to>");
@@ -399,6 +416,7 @@ const COMMANDS: Readonly<
   lint: lintCommand,
   format: formatCommand,
   links: linksCommand,
+  graph: graphCommand,
   path: pathCommand,
   suggest: suggestCommand,
   wanted: wantedCommand,

@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
 //
 // Must match `WORKDIR` in test/awiki-differential.test.ts.
 const WORKDIR = "/work";
-const VERSION = "0.5.1";
+const VERSION = "0.6.0";
 const binary = process.env.AWIKI ?? "awiki";
 const fixtureUrl = new URL("../test/fixtures/awiki-compat.json", import.meta.url);
 
@@ -299,6 +299,11 @@ const cases = [
       "lint -x",
       "format extra",
       "links -h",
+      "graph",
+      "graph -edges",
+      "graph -json",
+      "graph -h",
+      "graph extra",
       "path -h",
       "rename --help",
       "wanted -help",
@@ -316,6 +321,9 @@ const cases = [
       "links -r goals/login",
       "links -r login",
       "links -r plans/sub/detail",
+      "graph -r",
+      "graph -r -edges",
+      "graph -r --json",
       "path -r index plans/sub/detail",
       "wanted -r",
       "suggest -r --filter sampled-diameter,wanted-pressure",
@@ -401,6 +409,8 @@ const cases = [
       "avg-shortest-path -samples 1000 -examples 3 -seed 42",
       "avg-shortest-path",
       "wanted -n 5",
+      "graph",
+      "graph -edges -json",
     ],
   },
 ];
