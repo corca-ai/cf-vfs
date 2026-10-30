@@ -21,7 +21,7 @@ export function traversalState(sql: VfsSqlStorage): TraversalState {
 const WRITES = /\b(?:INSERT|UPDATE|DELETE|REPLACE)\b/iu;
 
 /** A plain `SELECT`, or a `WITH` that only feeds one, cannot change anything. */
-function reads(query: string): boolean {
+export function reads(query: string): boolean {
   const start = query.trimStart().slice(0, 6).toUpperCase();
   return start === "SELECT" || (start.startsWith("WITH") && !WRITES.test(query));
 }
