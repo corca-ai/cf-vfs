@@ -51,13 +51,42 @@ pages, medians of three alternating trials, same output in every pair:
 | `grep -rc '^owner:' /wiki` | 12.7 s | 6.4 s |
 | `awiki lint -r`, empty cache | 13.1 s | 6.9 s |
 
-## Not yet done
+## Candidate (f1f4f03, deployment 738da88c, build b9c0315f…)
 
-The candidate is not deployed: `deploy:public` records the measured commit and
-refuses an uncommitted tree. Remaining steps after committing:
+Full-suite control (`cf/candidate-1.json`): fixed-reference overall 99.73
+(within-run CI 95.5–104.1), against baseline runs of about 99.5, 99.5 and
+100.0; previous-commit ratio 100.07. Files 100.75, Git 99.59, metadata
+cache 102.61. SQL statements, rows read and rows written are unchanged in
+every one of the 190 workloads, as between the baseline runs. Raw timings
+drift by up to 1.5x between runs of the same build (`cf/desc-*.json`), which
+the reference-paired design absorbs; only paired values are compared.
 
-1. `npm run deploy:public`, then verify the deployed build id.
-2. `npm run bench:public -- --task --out cf/candidate-task-{1,2,3}.json`.
-3. `npm run bench:public -- --out cf/candidate-1.json` (control).
-4. Assess with `bench:assess:paired`; escalate per the scoping rule if the
-   control leaves the baseline spread.
+Agent task (`cf/candidate-task-{1,2,3}.json`): per-run paired geometric means
+1.125, 1.152 and 1.037 against 1.031, 1.003 and 0.822 for the baseline;
+pooled previous-commit ratio 116.5 with a 95% CI of 83.3–162.9, status
+uncertain. SQL is identical (3,560 statements, 8,281 rows read, 520 written
+per cycle). The candidate arm's medians are 535, 547 and 574 ms against 580,
+569 and 535 ms for the baseline; the geometric means move with single
+samples of 900–1,486 ms on either side.
+
+Because the point estimate exceeds 5% on a workload that runs changed code
+(the line splitter, through `grep -c`, `sed` and `cat`), it was investigated
+with alternating paired trials of the same agent task locally
+(`bench/agent-task-2026-10-12/local.mjs` on compiled graphs of 30c9e66 and
+f1f4f03, ten pairs per session after two warmups, two sessions,
+`local/agent-task-pairs-{1,2}.json`):
+
+| Phase | Session 1 | Session 2 |
+| --- | ---: | ---: |
+| inspect | 0.991 (0.954–1.004) | 0.971 (0.880–1.005) |
+| edit (`sed`, `cat`) | 0.968 (0.919–1.054) | 0.991 (0.908–1.036) |
+| verify (`grep -c`) | 1.010 (0.867–1.069) | 0.992 (0.922–1.049) |
+| stage | 0.992 (0.921–1.007) | 0.996 (0.985–1.010) |
+| commit | 0.973 (0.949–1.031) | 1.009 (0.988–1.045) |
+| total | 0.982 (0.941–0.999) | 0.996 (0.938–1.004) |
+
+No phase slows down. The control run shows no departure from the baseline
+A/A spread and no SQL change, so the scoping rule does not escalate to the
+full three-run protocol. The Cloudflare task-series result stays recorded as
+uncertain; alternating Cloudflare deploys would be the next step if it needs
+settling there.
