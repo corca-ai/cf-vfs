@@ -53,7 +53,12 @@ export class EvalRegistry extends DurableObject<AgentEvalEnv> {
     )`);
   }
 
-  async create(label: string, ttlMs: number, files: readonly SeedFile[]): Promise<CreateOutcome> {
+  async create(
+    label: string,
+    ttlMs: number,
+    files: readonly SeedFile[],
+    scale = 1,
+  ): Promise<CreateOutcome> {
     const now = Date.now();
     const id = crypto.randomUUID();
     const reserved = this.ctx.storage.transactionSync(() => {
@@ -78,7 +83,7 @@ export class EvalRegistry extends DurableObject<AgentEvalEnv> {
 
     const workspace = this.env.EVAL_WORKSPACES.getByName(id);
     try {
-      await workspace.provision({ id, label, createdAt: now, expiresAt: now + ttlMs });
+      await workspace.provision({ id, label, createdAt: now, expiresAt: now + ttlMs, scale });
       if (files.length > 0) {
         const seeded = await workspace.seed(files);
         if (!seeded.ok) throw new Error(seeded.error);

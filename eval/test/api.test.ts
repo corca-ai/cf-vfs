@@ -206,3 +206,22 @@ it("expires instances and finishes interrupted transitions from the alarm", asyn
   const info = await workspace.info();
   expect(info.ok).toBe(false);
 });
+
+it("scales the limits that grow with the wiki", async () => {
+  const script = "set -- $(seq 2500); echo $#";
+  const full = await create();
+  expect((await exec(full.id, script)).stdout).toBe("2500\n");
+  const scaled = await create({ scale: 0.2 });
+  const result = await exec(scaled.id, script);
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toContain("expansion");
+  const entry = (await log(scaled.id)).at(-1);
+  expect(entry?.limits.some((limit) => limit.max === 2000)).toBe(true);
+  for (const scale of [0, 1.5, "half"]) {
+    const refused = await api("/api/instances", {
+      method: "POST",
+      body: JSON.stringify({ scale }),
+    });
+    expect(refused.status).toBe(400);
+  }
+});

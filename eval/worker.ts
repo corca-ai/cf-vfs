@@ -116,6 +116,15 @@ function ttlMs(value: unknown): number {
   return value * 1000;
 }
 
+/** A limit scale in (0, 1]; see `scaledLimits`. */
+function limitScale(value: unknown): number {
+  if (value === undefined) return 1;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > 1) {
+    throw new HttpError(400, "scale must be a number greater than 0 and at most 1");
+  }
+  return value;
+}
+
 function label(value: unknown): string {
   if (value === undefined) return "";
   if (typeof value !== "string" || value.length > MAX_LABEL_LENGTH) {
@@ -156,6 +165,7 @@ async function route(
         label(input["label"]),
         ttlMs(input["ttlSeconds"]),
         seedFiles(input["files"]),
+        limitScale(input["scale"]),
       );
       if (!created.ok) throw new HttpError(created.status, created.error);
       return json({ instance: created.instance }, 201);

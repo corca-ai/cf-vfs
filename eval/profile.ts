@@ -1,3 +1,4 @@
+import { DEFAULT_SHELL_LIMITS } from "../src/shell/budget.js";
 import { awikiCommand } from "../src/shell/commands/awiki.js";
 import { awkCommand } from "../src/shell/commands/awk.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
@@ -17,6 +18,7 @@ import {
   linuxShellEnvironment,
   provisionLinuxFilesystem,
 } from "../src/shell/linux.js";
+import type { ShellLimits } from "../src/shell/types.js";
 import type { SqlFileSystem } from "../src/vfs/sql.js";
 import type { PosixCredentials } from "../src/vfs/types.js";
 
@@ -107,17 +109,60 @@ export async function seedEvalWorkspace(
   );
 }
 
+/**
+ * The limits that grow with the wiki an execution works over: counts of
+ * commands, matches, fields and records, bytes moved or held, and the
+ * deadline. Limits on one script, one line or one nesting stay as they are.
+ */
+const SCALED_LIMITS = [
+  "maxCommands",
+  "maxSteps",
+  "maxLoopIterations",
+  "maxCommandSubstitutionBytes",
+  "maxPipelineBytes",
+  "maxStdoutBytes",
+  "maxStderrBytes",
+  "maxMaterializedOutputBytes",
+  "maxTotalIoBytes",
+  "maxReadBytes",
+  "maxBufferedBytes",
+  "maxBufferedRecords",
+  "maxGlobMatches",
+  "maxExpansionWork",
+  "maxExpansionChars",
+  "maxExpansionFields",
+  "maxMutations",
+  "deadlineMs",
+] as const satisfies readonly (keyof ShellLimits)[];
+
+/**
+ * Limits for a workspace standing in for one `1 / scale` times larger: a
+ * 2,000-page wiki at scale 0.2 meets its limits where a 10,000-page wiki
+ * meets the defaults, at a fifth of the cost of seeding and reading it.
+ */
+function scaledLimits(scale: number): Partial<ShellLimits> {
+  if (scale === 1) return {};
+  return Object.fromEntries(
+    SCALED_LIMITS.map((name) => [
+      name,
+      Math.max(1, Math.round(DEFAULT_SHELL_LIMITS[name] * scale)),
+    ]),
+  );
+}
+
 export interface EvalShellOptions {
   readonly onEvent?: (event: ShellEvent) => void;
   /** The replay pins the clock to each logged execution's time. */
   readonly now?: () => number;
+  /** See {@link scaledLimits}; 1, the default, keeps the shell's own limits. */
+  readonly scale?: number;
 }
 
 /** A fresh shell for one execution; only the working directory carries over. */
 export function evalShell(
   fileSystem: SqlFileSystem,
   cwd: string,
-  { onEvent, now }: EvalShellOptions = {},
+  { onEvent, now, scale = 1 }: EvalShellOptions = {},
 ): InteractiveShell {
   return new InteractiveShell({
     fileSystem,
@@ -128,6 +173,7 @@ export function evalShell(
     credentials: EVAL_CREDENTIALS,
     umask: EVAL_UMASK,
     identityResolver: EVAL_IDENTITY_RESOLVER,
+    limits: scaledLimits(scale),
     ...(onEvent === undefined ? {} : { onEvent }),
     ...(now === undefined ? {} : { now }),
   });

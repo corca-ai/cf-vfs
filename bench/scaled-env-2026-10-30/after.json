@@ -1,0 +1,569 @@
+[
+ {
+  "name": "find count",
+  "script": "find wiki -name '*.md' | wc -l",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 90.52391599999999,
+   "stdout": "10000",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 12.658665999999926,
+   "stdout": "2000",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 12.927500000000009,
+   "stdout": "2000",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "find type f head",
+  "script": "find wiki -type f | head -3 | wc -l",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 45.231750000000034,
+   "stdout": "3",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 11.845249999999965,
+   "stdout": "3",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 10.230416999999989,
+   "stdout": "3",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "ls -R count",
+  "script": "ls -R wiki | wc -l",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 41.84254199999998,
+   "stdout": "10031",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 9.07695799999999,
+   "stdout": "2031",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 8.666875000000005,
+   "stdout": "2031",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "for over $(find)",
+  "script": "n=0; for f in $(find wiki -name '*.md'); do n=$((n+1)); done; echo $n",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 132.22279200000003,
+   "stdout": "10000",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 21.884624999999915,
+   "stdout": "2000",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 18.967374999999947,
+   "stdout": "2000",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "for over glob",
+  "script": "n=0; for f in wiki/*/*.md wiki/*/*/*.md; do n=$((n+1)); done; echo $n",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 164.57620799999995,
+   "stdout": "10000",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 24.69070899999997,
+   "stdout": "2000",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 24.126874999999927,
+   "stdout": "2000",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "while read find",
+  "script": "find wiki -name '*.md' | while read -r f; do head -1 \"$f\"; done | wc -l",
+  "full": {
+   "exitCode": 1,
+   "limit": "maxCommands",
+   "ms": 504.03154199999994,
+   "stdout": "9998",
+   "stderr": "shell command limit exceeded"
+  },
+  "scaled": {
+   "exitCode": 1,
+   "limit": "maxCommands",
+   "ms": 88.74008400000002,
+   "stdout": "1998",
+   "stderr": "shell command limit exceeded"
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 77.96387499999992,
+   "stdout": "2000",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": false
+ },
+ {
+  "name": "xargs grep -l",
+  "script": "find wiki -name '*.md' | xargs grep -l 'tags:' | wc -l",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 277.41483300000004,
+   "stdout": "10000",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 49.3941249999998,
+   "stdout": "2000",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 45.89512500000001,
+   "stdout": "2000",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "find -exec grep -L",
+  "script": "find wiki -name '*.md' -exec grep -L '^owner:' {} + | wc -l",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 474.41075,
+   "stdout": "1520",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 84.96887500000003,
+   "stdout": "294",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 78.63458300000002,
+   "stdout": "294",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "grep -rl",
+  "script": "grep -rl 'owner:' wiki | wc -l",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 274.2430410000002,
+   "stdout": "8480",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 54.310459000000264,
+   "stdout": "1706",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 51.759457999999995,
+   "stdout": "1706",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "grep -rc sum",
+  "script": "grep -rc '\\[\\[' wiki | awk -F: '{ s += $2 } END { print s }'",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 419.1432920000002,
+   "stdout": "99271",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 74.19687500000009,
+   "stdout": "19768",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 73.53608399999985,
+   "stdout": "19768",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "grep -o links ranked",
+  "script": "grep -rhoE '\\[\\[[^]|#]+' wiki | sort | uniq -c | sort -rn | head -3 | wc -l",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 813.2138339999997,
+   "stdout": "3",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 162.168584,
+   "stdout": "3",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 152.7312090000005,
+   "stdout": "3",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "grep -o inbound pipeline",
+  "script": "grep -roE '\\[\\[[^]|#]+' --include='*.md' wiki | sed -e 's|^wiki/||' -e 's|\\.md:\\[\\[| |' | awk '{ n = $1; sub(/.*\\//, \"\", n); if (n != $2) print n, $2 }' | sort -u | awk '{ print $2 }' | sort | uniq -c | wc -l",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 1576.4602080000004,
+   "stdout": "9312",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 321.9928749999999,
+   "stdout": "1912",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 303.6639589999995,
+   "stdout": "1912",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "cat glob wc",
+  "script": "cat wiki/*/*.md wiki/*/*/*.md | wc -c",
+  "full": {
+   "exitCode": 1,
+   "limit": null,
+   "ms": 172.1031670000002,
+   "stdout": "",
+   "stderr": "pipeline edge 1 exceeds the 8388608-byte limit"
+  },
+  "scaled": {
+   "exitCode": 1,
+   "limit": null,
+   "ms": 29.597624999999425,
+   "stdout": "",
+   "stderr": "pipeline edge 1 exceeds the 1677722-byte limit"
+  },
+  "unscaled": {
+   "exitCode": 1,
+   "limit": null,
+   "ms": 47.41816700000072,
+   "stdout": "",
+   "stderr": "pipeline edge 1 exceeds the 8388608-byte limit"
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "wc -l $(find)",
+  "script": "wc -l $(find wiki -name '*.md') | tail -1",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 441.2348329999995,
+   "stdout": "182 wiki/sales/topic-9754.md",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 80.44924999999967,
+   "stdout": "62 wiki/sales/topic-1979.md",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 75.58720900000026,
+   "stdout": "62 wiki/sales/topic-1979.md",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "awk over $(find)",
+  "script": "awk 'FNR == 1 { n++ } END { print n }' $(find wiki -name '*.md')",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 683.1616659999991,
+   "stdout": "10000",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 131.88329200000044,
+   "stdout": "2000",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 140.19570899999962,
+   "stdout": "2000",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "awk owners",
+  "script": "awk '/^owner:/ { n++ } END { print n }' $(find wiki -name '*.md')",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 1567.5508330000011,
+   "stdout": "8480",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 296.23720800000046,
+   "stdout": "1706",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 294.59216600000036,
+   "stdout": "1706",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "sed -n over find",
+  "script": "find wiki -name '*.md' | head -500 | xargs sed -n '2p' | wc -l",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 64.54575000000114,
+   "stdout": "1",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 33.69024999999965,
+   "stdout": "1",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 31.812457999998514,
+   "stdout": "1",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "awiki lint",
+  "script": "awiki lint -r -root wiki | head -1 | cut -c1-20",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 671.2659170000006,
+   "stdout": "// lint_failed docum",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 144.37262499999997,
+   "stdout": "// ok connected_grap",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 21.04962499999965,
+   "stdout": "// ok connected_grap",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "awiki graph orphans",
+  "script": "awiki graph -r -root wiki | grep -c ' inbound=0 '",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 102.788958000001,
+   "stdout": "739",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 20.104042000000845,
+   "stdout": "139",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 18.609457999998995,
+   "stdout": "139",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ },
+ {
+  "name": "awiki graph -json jq",
+  "script": "awiki graph -r -root wiki -json | jq '.documents | length'",
+  "full": {
+   "exitCode": 5,
+   "limit": "maxBufferedBytes",
+   "ms": 160.70887500000026,
+   "stdout": "",
+   "stderr": "shell buffered-byte limit exceeded"
+  },
+  "scaled": {
+   "exitCode": 5,
+   "limit": "maxBufferedBytes",
+   "ms": 31.82470900000044,
+   "stdout": "",
+   "stderr": "shell buffered-byte limit exceeded"
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 58.34449999999924,
+   "stdout": "2000",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": false
+ },
+ {
+  "name": "awiki wanted",
+  "script": "awiki wanted -r -root wiki -n 3 | wc -l",
+  "full": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 101.3192909999998,
+   "stdout": "41",
+   "stderr": ""
+  },
+  "scaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 17.45091599999978,
+   "stdout": "41",
+   "stderr": ""
+  },
+  "unscaled": {
+   "exitCode": 0,
+   "limit": null,
+   "ms": 22.126541999999972,
+   "stdout": "41",
+   "stderr": ""
+  },
+  "parity": true,
+  "unscaledParity": true
+ }
+]

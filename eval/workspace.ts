@@ -20,6 +20,8 @@ interface WorkspaceMeta {
   readonly label: string;
   readonly createdAt: number;
   readonly expiresAt: number;
+  /** Limit scale; absent on workspaces created before it existed, meaning 1. */
+  readonly scale?: number;
 }
 
 interface SqlCost {
@@ -191,6 +193,7 @@ export class EvalWorkspace extends DurableObject<AgentEvalEnv> {
       const startCwd = cwdReset ? LINUX_WORKSPACE : cwdBefore;
       const shell = evalShell(this.fileSystem, startCwd, {
         onEvent: (event) => this.observe(event),
+        scale: this.meta?.scale ?? 1,
       });
 
       const recording: Recording = {

@@ -42,7 +42,7 @@ returns `401`.
 
 | Method | Path | Body / query | Result |
 | --- | --- | --- | --- |
-| `POST` | `/api/instances` | `{ label?, ttlSeconds?, files? }` | `201 { instance }` |
+| `POST` | `/api/instances` | `{ label?, ttlSeconds?, files?, scale? }` | `201 { instance }` |
 | `GET` | `/api/instances` | | `{ instances }` |
 | `GET` | `/api/instances/:id` | | `{ instance, workspace }` |
 | `DELETE` | `/api/instances/:id` | | `204` |
@@ -81,6 +81,21 @@ Each log entry contains:
 
 The log supports replaying each execution against a real shell and analysing
 failures and cost.
+
+## Smaller wikis with scaled limits
+
+`scale` (greater than 0, at most 1, default 1) multiplies the shell limits
+that grow with the data an execution works over: counts of commands, loop
+iterations, matches, fields and records, the byte limits for reads, I/O,
+pipes, output and buffering, and the deadline. Limits on one script, one
+line or one nesting level stay as they are. A 2,000-page wiki at `scale:
+0.2` meets its limits where a 10,000-page wiki meets the defaults, at a fifth
+of the seeding, reading and agent-token cost. The agent sees the same
+diagnostics either way.
+
+`bench/scaled-env-2026-10-30/calibrate.ts` checks that claim: probe scripts
+built from what agents ran over a wiki must succeed or stop at the same limit
+on both. Rerun it after changing limits or adding a command agents lean on.
 
 ## Replaying sessions instead of rerunning agents
 

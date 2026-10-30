@@ -1,0 +1,21 @@
+   find count                 10k: ok 91ms                              2k@0.2: ok 13ms                              ratio  7.2  2k@1: same
+   find type f head           10k: ok 45ms                              2k@0.2: ok 12ms                              ratio  3.8  2k@1: same
+   ls -R count                10k: ok 42ms                              2k@0.2: ok 9ms                               ratio  4.6  2k@1: same
+   for over $(find)           10k: ok 132ms                             2k@0.2: ok 22ms                              ratio  6.0  2k@1: same
+   for over glob              10k: ok 165ms                             2k@0.2: ok 25ms                              ratio  6.7  2k@1: same
+   while read find            10k: exit 1 [maxCommands] 504ms           2k@0.2: exit 1 [maxCommands] 89ms            ratio  5.7  2k@1: ok 78ms
+   xargs grep -l              10k: ok 277ms                             2k@0.2: ok 49ms                              ratio  5.6  2k@1: same
+   find -exec grep -L         10k: ok 474ms                             2k@0.2: ok 85ms                              ratio  5.6  2k@1: same
+   grep -rl                   10k: ok 274ms                             2k@0.2: ok 54ms                              ratio  5.0  2k@1: same
+   grep -rc sum               10k: ok 419ms                             2k@0.2: ok 74ms                              ratio  5.6  2k@1: same
+   grep -o links ranked       10k: ok 813ms                             2k@0.2: ok 162ms                             ratio  5.0  2k@1: same
+   grep -o inbound pipeline   10k: ok 1576ms                            2k@0.2: ok 322ms                             ratio  4.9  2k@1: same
+   cat glob wc                10k: exit 1 172ms                         2k@0.2: exit 1 30ms                          ratio  5.8  2k@1: same
+   wc -l $(find)              10k: ok 441ms                             2k@0.2: ok 80ms                              ratio  5.5  2k@1: same
+   awk over $(find)           10k: ok 683ms                             2k@0.2: ok 132ms                             ratio  5.2  2k@1: same
+   awk owners                 10k: ok 1568ms                            2k@0.2: ok 296ms                             ratio  5.3  2k@1: same
+   sed -n over find           10k: ok 65ms                              2k@0.2: ok 34ms                              ratio  1.9  2k@1: same
+   awiki lint                 10k: ok 671ms                             2k@0.2: ok 144ms                             ratio  4.6  2k@1: same
+   awiki graph orphans        10k: ok 103ms                             2k@0.2: ok 20ms                              ratio  5.1  2k@1: same
+   awiki graph -json jq       10k: exit 5 [maxBufferedBytes] 161ms      2k@0.2: exit 5 [maxBufferedBytes] 32ms       ratio  5.0  2k@1: ok 58ms
+   awiki wanted               10k: ok 101ms                             2k@0.2: ok 17ms                              ratio  5.8  2k@1: same

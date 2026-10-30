@@ -1,0 +1,21 @@
+   find count                 10k: exit 1 [maxGlobMatches] 42ms         2k@0.2: exit 1 [maxGlobMatches] 7ms          ratio  5.9  2k@1: ok 10ms
+   find type f head           10k: exit 1 [maxGlobMatches] 34ms         2k@0.2: exit 1 [maxGlobMatches] 7ms          ratio  4.8  2k@1: ok 9ms
+   ls -R count                10k: ok 34ms                              2k@0.2: ok 7ms                               ratio  5.0  2k@1: same
+   for over $(find)           10k: exit 1 [maxGlobMatches] 35ms         2k@0.2: exit 1 [maxGlobMatches] 7ms          ratio  5.1  2k@1: ok 22ms
+   for over glob              10k: ok 146ms                             2k@0.2: ok 22ms                              ratio  6.8  2k@1: same
+   while read find            10k: exit 1 [maxGlobMatches] 33ms         2k@0.2: exit 1 [maxGlobMatches] 7ms          ratio  4.9  2k@1: ok 81ms
+   xargs grep -l              10k: exit 1 [maxGlobMatches] 34ms         2k@0.2: exit 1 [maxGlobMatches] 7ms          ratio  5.0  2k@1: ok 43ms
+   find -exec grep -L         10k: exit 1 [maxGlobMatches] 32ms         2k@0.2: exit 1 [maxGlobMatches] 6ms          ratio  5.0  2k@1: ok 68ms
+   grep -rl                   10k: ok 241ms                             2k@0.2: ok 46ms                              ratio  5.2  2k@1: same
+   grep -rc sum               10k: ok 344ms                             2k@0.2: ok 63ms                              ratio  5.4  2k@1: same
+   grep -o links ranked       10k: ok 661ms                             2k@0.2: ok 124ms                             ratio  5.3  2k@1: same
+   grep -o inbound pipeline   10k: exit 1 [maxExpansionWork] 812ms      2k@0.2: exit 1 [maxExpansionWork] 170ms      ratio  4.8  2k@1: ok 231ms
+   cat glob wc                10k: exit 1 146ms                         2k@0.2: exit 1 22ms                          ratio  6.7  2k@1: same
+   wc -l $(find)              10k: exit 1 [maxGlobMatches] 33ms         2k@0.2: exit 1 [maxGlobMatches] 6ms          ratio  5.1  2k@1: ok 67ms
+   awk over $(find)           10k: exit 1 [maxGlobMatches] 33ms         2k@0.2: exit 1 [maxGlobMatches] 7ms          ratio  4.7  2k@1: ok 109ms
+   awk owners                 10k: exit 1 [maxGlobMatches] 33ms         2k@0.2: exit 1 [maxGlobMatches] 6ms          ratio  5.1  2k@1: ok 278ms
+   sed -n over find           10k: exit 1 [maxGlobMatches] 32ms         2k@0.2: exit 1 [maxGlobMatches] 7ms          ratio  4.7  2k@1: ok 30ms
+   awiki lint                 10k: ok 628ms                             2k@0.2: ok 122ms                             ratio  5.1  2k@1: same
+   awiki graph orphans        10k: ok 98ms                              2k@0.2: ok 16ms                              ratio  6.0  2k@1: same
+   awiki graph -json jq       10k: exit 5 [maxBufferedBytes] 137ms      2k@0.2: exit 5 [maxBufferedBytes] 26ms       ratio  5.3  2k@1: ok 49ms
+   awiki wanted               10k: ok 97ms                              2k@0.2: ok 16ms                              ratio  6.0  2k@1: same
