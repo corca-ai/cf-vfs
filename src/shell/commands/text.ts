@@ -11,12 +11,12 @@ import {
   BufferedTextWriter,
   collectStream,
   commandPath,
-  inputStreams,
   parseInteger,
   readTextLines,
   writeBytes,
   writeText,
 } from "./helpers.js";
+import { inputSources } from "./inputs.js";
 import type { ParsedUtilityOption } from "./options.js";
 
 export { commCommand, joinCommand } from "./text-compare.js";
@@ -168,8 +168,8 @@ export const uniqCommand = /* @__PURE__ */ defineApplet(UNIQ, async (context, ar
     await output.write(`${count ? `${String(repeats).padStart(7)} ` : ""}${previous.value}\n`);
   };
   try {
-    for await (const input of inputStreams(context, parsed.operands, fds[0])) {
-      for await (const line of readTextLines(context, input.stream, input.name)) {
+    for await (const input of inputSources(context, parsed.operands, fds[0])) {
+      for await (const line of readTextLines(context, input.source, input.name)) {
         const value = line.endsWith("\n") ? line.slice(0, -1) : line;
         const current = uniqKey(value, key);
         // A group keeps its first record, as GNU prints it.
@@ -326,8 +326,8 @@ export const cutCommand = /* @__PURE__ */ defineApplet(CUT, async (context, argv
   const invocation = parseCutInvocation(argv);
   const output = new BufferedTextWriter(context, fds[1]);
   try {
-    for await (const input of inputStreams(context, invocation.operands, fds[0])) {
-      for await (const line of readTextLines(context, input.stream, input.name)) {
+    for await (const input of inputSources(context, invocation.operands, fds[0])) {
+      for await (const line of readTextLines(context, input.source, input.name)) {
         const rendered = cutLine(line, invocation);
         if (rendered !== undefined) await output.write(rendered);
       }
@@ -348,8 +348,8 @@ export const nlCommand = /* @__PURE__ */ defineApplet(NL, async (context, argv, 
   let lineNumber = 1;
   const output = new BufferedTextWriter(context, fds[1]);
   try {
-    for await (const input of inputStreams(context, argv, fds[0])) {
-      for await (const line of readTextLines(context, input.stream, input.name)) {
+    for await (const input of inputSources(context, argv, fds[0])) {
+      for await (const line of readTextLines(context, input.source, input.name)) {
         const rendered = numberedLine(line, lineNumber);
         await output.write(rendered.text);
         lineNumber = rendered.next;
@@ -391,8 +391,8 @@ export const foldCommand = /* @__PURE__ */ defineApplet(FOLD, async (context, ar
   }
   const output = new BufferedTextWriter(context, fds[1]);
   try {
-    for await (const input of inputStreams(context, parsed.operands, fds[0])) {
-      for await (const line of readTextLines(context, input.stream, input.name)) {
+    for await (const input of inputSources(context, parsed.operands, fds[0])) {
+      for await (const line of readTextLines(context, input.source, input.name)) {
         await writeFoldedLine(output, line, width);
       }
     }

@@ -1,7 +1,9 @@
 import { VfsError } from "../../core/errors.js";
 import type { EntryPage, VfsStat } from "../../vfs/types.js";
 import type { ShellCommandContext } from "../types.js";
-import { commandPath, displayPath, openInput } from "./helpers.js";
+import { commandPath, displayPath } from "./helpers.js";
+import { openInput } from "./inputs.js";
+import { ReadAhead } from "./read-ahead.js";
 
 /**
  * One entry of a recursive walk: an openable stream, or the reason it is not.
@@ -35,8 +37,6 @@ export type CommandInput =
 /** Decides from a walked file's displayed path whether to open it. */
 export type RecursiveFilter = (name: string) => boolean;
 
-const BULK_READ_BYTES = 1024 * 1024;
-
 interface WalkedFile {
   readonly name: string;
   readonly entry: VfsStat;
@@ -63,39 +63,28 @@ async function* walkedInputs(
   context: ShellCommandContext,
   files: readonly WalkedFile[],
 ): AsyncGenerator<CommandInput> {
-  const { budget, fileSystem } = context;
-  let at = 0;
-  while (at < files.length) {
-    // Bodies read ahead count against the shell's buffer while they are held.
-    const bytes = Math.min(
-      BULK_READ_BYTES,
-      Math.floor((budget.remainingBufferedBytes?.() ?? 0) / 4),
-    );
-    const group = bulkGroup(files, at, bytes);
-    if (fileSystem.readMany === undefined || group.length < 2) {
-      yield await openWalked(context, files[at] as WalkedFile);
-      at += 1;
-      continue;
-    }
-    const bodies = fileSystem.readMany(
-      group.map((file) => file.entry.path),
-      { maxBytes: bytes },
-    );
-    const release = budget.buffered(
-      bodies.reduce((total, read) => total + (read?.stat.sizeBytes ?? 0), 0),
-    );
-    try {
-      for (const [index, file] of group.entries()) {
-        const read = bodies[index];
-        // Anything not read in bulk takes the ordinary path and its errors.
+  const ahead = new ReadAhead(context);
+  try {
+    let at = 0;
+    while (at < files.length) {
+      const group = bulkGroup(files, at, ahead.allowance());
+      if (group.length < 2) {
+        yield await openWalked(context, files[at] as WalkedFile);
+        at += 1;
+        continue;
+      }
+      ahead.fill(group.map((file) => file.entry.path));
+      for (const file of group) {
+        const read = ahead.take(file.entry.path);
+        // Anything not read in bulk, or changed since, takes the ordinary path.
         yield read === undefined
           ? await openWalked(context, file)
           : { name: file.name, chunks: read.chunks };
       }
-    } finally {
-      release();
+      at += group.length;
     }
-    at += group.length;
+  } finally {
+    ahead.release();
   }
 }
 
@@ -113,10 +102,9 @@ async function openWalked(context: ShellCommandContext, file: WalkedFile): Promi
 
 /**
  * Walks a directory operand page by page. Each page's accepted files are read
- * in bulk where the filesystem offers it: two statements per batch of bodies
- * instead of a call and a stream per file, which is what dominates a large
- * walk on Workers. A body read ahead is at most one batch older than the
- * moment its file is reached.
+ * ahead in bulk where the filesystem offers it: two statements per batch of
+ * bodies instead of a call and a stream per file, which is what dominates a
+ * large walk on Workers. See {@link ReadAhead} for why that changes nothing.
  */
 async function* recursiveDirectoryInputs(
   context: ShellCommandContext,

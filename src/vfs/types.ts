@@ -492,6 +492,13 @@ export interface VirtualFileSystem {
    */
   readMany?(paths: readonly string[], options?: ReadManyOptions): (InlineFileBody | undefined)[];
   /**
+   * Optional counter of committed changes to this filesystem's storage. While
+   * it holds still, nothing has changed, so a body from `readMany` is what
+   * `readFile` would return now; a caller reading ahead compares it before
+   * using a body it read earlier. Only equality is meaningful.
+   */
+  changeGeneration?(): number;
+  /**
    * Reports the entry holding an identity, so a caller that keyed durable
    * state to one can find where it is now.
    *

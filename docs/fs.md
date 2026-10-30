@@ -246,6 +246,13 @@ implementations, including the collaborative overlay, can omit it.
 The SQL backend applies `readFile`'s traversal and read-permission checks to
 each entry and spends two statements per 64 paths: the entries, then the bodies
 of those it admits, so a refused or oversized body is never materialized.
-`grep -r` and `awiki` use it. On Workers a stream per file costs about 0.15 ms
+
+`fileSystem.changeGeneration?.()` is a counter that moves whenever a statement
+that may change the storage runs, through any filesystem over the same storage;
+reads leave it still. The shell reads ahead with `readMany` and hands out a body
+only while the counter has not moved since, so a command gets exactly what
+reading the file at its turn would give, even when it writes a later operand
+itself. `grep`, `cat`, `wc`, `sed`, `awk` and the other operand utilities,
+`grep -r` and `awiki` read this way. On Workers a stream per file costs about 0.15 ms
 and dominates a walk over many small files; bulk bodies are consumed without
 one ([measurements](../bench/sql-lab/report-2026-10-30.md)).

@@ -2,8 +2,8 @@ import { VfsError } from "../../core/errors.js";
 import { splitLinesPreservingEndings } from "../../core/lines.js";
 import { basename, normalizeFileSystemPath } from "../../core/path.js";
 import { encodeUtf8, utf8ByteLength } from "../../core/unicode.js";
-import type { ByteRange, InlineReadResult } from "../../vfs/types.js";
-import { chargeConsumed, fileBody, openContent } from "../content.js";
+import type { InlineReadResult } from "../../vfs/types.js";
+import { chargeConsumed, fileBody } from "../content.js";
 import type { ShellCommandContext, ShellSink } from "../types.js";
 
 export interface BufferLease<T> {
@@ -23,7 +23,8 @@ export async function writeText(sink: ShellSink, value: string): Promise<void> {
   await writeBytes(sink, encodeUtf8(value));
 }
 
-function cancellation(signal: AbortSignal): VfsError {
+/** The error an aborted execution raises, its own reason when that is one. */
+export function cancellation(signal: AbortSignal): VfsError {
   return signal.reason instanceof VfsError
     ? signal.reason
     : new VfsError("ECANCELED", "execution was cancelled");
@@ -93,50 +94,6 @@ export class BufferedTextWriter {
     this.release();
     this.release = () => undefined;
   }
-}
-
-export async function* inputStreams(
-  context: ShellCommandContext,
-  argv: readonly string[],
-  stdin: ReadableStream<Uint8Array>,
-  range?: ByteRange,
-): AsyncGenerator<{ name: string; stream: ReadableStream<Uint8Array> }> {
-  if (argv.length === 0) {
-    yield { name: "-", stream: stdin };
-    return;
-  }
-  for (const path of argv) {
-    if (path === "-") {
-      yield { name: "-", stream: stdin };
-      continue;
-    }
-    yield { name: path, stream: await openInput(context, path, range) };
-  }
-}
-
-/**
- * Opens one operand, streaming an opaque R2 body when the session allows it.
- *
- * Every path into a command's input goes through here — operands, recursive
- * walks, and `<` redirection — so a command cannot accidentally get a
- * different answer depending on how its input was spelled.
- *
- * A consumer that stops early cancels the stream, which stops the transfer.
- * The retention lease behind an opaque read is a deadline in the row and
- * lapses on its own; there is nothing to release.
- */
-export async function openInput(
-  context: ShellCommandContext,
-  path: string,
-  range?: ByteRange,
-): Promise<ReadableStream<Uint8Array>> {
-  const body = await openContent(context.fileSystem, commandPath(context, path), {
-    reader: context.content,
-    access: context.policy.opaqueContent,
-    signal: context.signal,
-    ...(range === undefined ? {} : { range }),
-  });
-  return body.stream;
 }
 
 /**

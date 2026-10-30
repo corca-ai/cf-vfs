@@ -22,6 +22,13 @@ included.
   consume the bodies without a stream per file, which on Workers cost more
   than reading them. Over a 10,000-page wiki on Cloudflare, `grep -rlF` went
   from 8.5 s to 1.7 s and a cold `awiki lint` from 13.1 s to 6.9 s.
+- Add the optional `changeGeneration` to filesystems, a counter of statements
+  that may change the storage. Bulk reads are used only while it holds still,
+  so reading ahead can never return a file older than reading it at its turn.
+- `cat`, `wc`, `grep`, `sed`, `awk`, `uniq`, `cut`, `nl`, `fold` and the other
+  operand utilities read their file operands ahead in bulk. Over 8,055
+  operands on Cloudflare `cat` went from 6.8 s to 1.9 s, `grep -lF` from
+  9.3 s to 2.0 s and `wc -l` from 7.4 s to 2.1 s.
 - `grep` skips the lines of a bulk-read body that cannot contain a literal
   every pattern requires, with the same read charges, UTF-8 and line-limit
   failures, so its answers do not change.

@@ -4,7 +4,8 @@ import {
   defineApplet,
   parseAppletOptions,
 } from "./applet.js";
-import { BufferedTextWriter, inputStreams, parseInteger, readWithAbort } from "./helpers.js";
+import { BufferedTextWriter, parseInteger, readWithAbort } from "./helpers.js";
+import { inputStreams } from "./inputs.js";
 
 const OD = {
   name: "od",

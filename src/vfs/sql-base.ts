@@ -3,6 +3,7 @@ import { descendantRange } from "../core/path.js";
 import { InFlightByteBudget } from "./buffering.js";
 import { resolveFileSystemLimits, validatePositiveInteger } from "./config.js";
 import { emitVfsEvent, type VfsEventSink, type VfsMutationOp } from "./events.js";
+import { countingChanges, type TraversalState, traversalState } from "./sql-changes.js";
 import { migrateSql } from "./sql-migrate.js";
 import {
   type DirectoryEntryRow,
@@ -29,21 +30,6 @@ import { traversalAncestors } from "./traversal.js";
 import type { OpaqueStore } from "./types.js";
 
 type TraversalParent = Pick<DirectoryEntryRow, "path" | "kind" | "mode" | "uid" | "gid">;
-
-interface TraversalState {
-  generation: number;
-  depth: number;
-  stableTraversalDepth: number;
-}
-const TRAVERSAL_STATES = new WeakMap<VfsSqlStorage, TraversalState>();
-function traversalState(sql: VfsSqlStorage): TraversalState {
-  let state = TRAVERSAL_STATES.get(sql);
-  if (state === undefined) {
-    state = { generation: 0, depth: 0, stableTraversalDepth: 0 };
-    TRAVERSAL_STATES.set(sql, state);
-  }
-  return state;
-}
 
 const DEFAULT_MAX_DATABASE_BYTES = 10_000_000_000;
 const DEFAULT_DATABASE_HEADROOM_BYTES = 64 * 1024 * 1024;
@@ -216,8 +202,8 @@ export abstract class SqlBase {
   constructor(storage: SqlFileSystemStorage, options: SqlFileSystemOptions = {}) {
     const limits = resolveFileSystemLimits(options);
     this.storage = storage;
-    this.sql = storage.sql;
-    this.traversalState = traversalState(this.sql);
+    this.traversalState = traversalState(storage.sql);
+    this.sql = countingChanges(storage.sql, this.traversalState);
     this.chunkBytes = limits.chunkBytes;
     this.maxInlineFileBytes = limits.maxInlineFileBytes;
     this.maxInlineLogicalBytes = limits.maxInlineLogicalBytes;
@@ -636,7 +622,13 @@ export abstract class SqlBase {
     }
   }
 
+  /** See {@link VirtualFileSystem.changeGeneration}; shared by every filesystem over the storage. */
+  changeGeneration(): number {
+    return this.traversalState.changes;
+  }
+
   protected execBatch(query: string): void {
+    this.traversalState.changes += 1;
     if (this.storage.execBatch === undefined) this.sql.exec(query);
     else this.storage.execBatch(query);
   }
