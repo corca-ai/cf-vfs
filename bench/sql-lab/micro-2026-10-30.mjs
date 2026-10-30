@@ -31,14 +31,25 @@ const KINDS = {
 const times = {};
 for (let round = 0; round < 5; round += 1) {
   for (const [kind, n] of Object.entries(KINDS)) {
-    (times[kind] ??= []).push((await w.micro(kind, n)).ms);
+    times[kind] ??= [];
+    times[kind].push((await w.micro(kind, n)).ms);
   }
 }
 const ping = median(times.empty);
 const results = {};
 for (const [kind, n] of Object.entries(KINDS)) {
   const ms = median(times[kind]);
-  results[kind] = { n, ms, samples: times[kind], perOpUs: kind === "empty" ? null : ((ms - ping) * 1000) / n };
-  console.log(`${kind.padEnd(16)} n=${String(n).padStart(8)} ${String(ms).padStart(6)} ms  ${kind === "empty" ? "" : `${results[kind].perOpUs.toFixed(3)} µs/op`}  [${times[kind].join(", ")}]`);
+  results[kind] = {
+    n,
+    ms,
+    samples: times[kind],
+    perOpUs: kind === "empty" ? null : ((ms - ping) * 1000) / n,
+  };
+  console.log(
+    `${kind.padEnd(16)} n=${String(n).padStart(8)} ${String(ms).padStart(6)} ms  ${kind === "empty" ? "" : `${results[kind].perOpUs.toFixed(3)} µs/op`}  [${times[kind].join(", ")}]`,
+  );
 }
-writeFileSync(new URL(`./micro-2026-10-30-${name}.json`, import.meta.url), `${JSON.stringify(results, null, 1)}\n`);
+writeFileSync(
+  new URL(`./micro-2026-10-30-${name}.json`, import.meta.url),
+  `${JSON.stringify(results, null, 1)}\n`,
+);
