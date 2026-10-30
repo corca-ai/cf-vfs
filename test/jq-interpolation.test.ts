@@ -213,3 +213,16 @@ describe("jq string interpolation and formats", () => {
     },
   ]);
 });
+
+describe("jq work", () => {
+  bashCases(
+    [
+      {
+        name: "charges evaluation to expansion work, not execution steps",
+        script: "seq 3000 | jq -s 'map({n: .}) | sort_by(-.n) | .[0].n'",
+        stdout: "3000\n",
+      },
+    ],
+    { limits: { maxSteps: 2000 } },
+  );
+});

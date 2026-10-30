@@ -19,6 +19,10 @@ included.
 - `jq` takes string interpolation, `"\(.name): \(.count)"`, and the formats
   `@text`, `@json`, `@csv`, `@tsv`, `@html`, `@uri`, `@sh` and `@base64`;
   they were refused, and agents reach for them first. Outputs match jq.
+- `jq` charges its evaluation to expansion work instead of execution steps,
+  as `awk` and `sed` do. Reading `awiki graph -json` for 2,000 pages (1.5 MB)
+  exceeded the 100,000-step limit before any filter ran; jq's own work limit
+  and the buffered-byte limit still bound it.
 - `awiki` checks its cached pages against the directory listing instead of
   reading each page for its token, wherever no collaborative overlay can
   intervene: a warm run over 10,000 pages issues 37 SQL statements instead

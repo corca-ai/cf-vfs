@@ -1,6 +1,6 @@
 import { isVfsError } from "../../core/errors.js";
 import { compileJq, JqRuntimeError, JqSyntaxError, parseJqArgument } from "../../core/jq.js";
-import { JqEvaluationBudget } from "../../core/jq-budget.js";
+import { type JqBudget, JqEvaluationBudget } from "../../core/jq-budget.js";
 import { type JsonValue, parseJsonStream, renderJson } from "../../core/json-value.js";
 import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import {
@@ -201,7 +201,7 @@ async function runJqFilter(
     for (const subject of subjects) {
       let results: JsonValue[];
       try {
-        results = filter.run(subject, context.budget);
+        results = filter.run(subject, jqHost(context));
       } catch (error) {
         if (!(error instanceof JqRuntimeError)) throw error;
         await output.flush();
@@ -237,8 +237,22 @@ async function runJqFilter(
  * The whole input is read before the first output, so an opaque body is
  * `ENOTSUP` for the same reason `sort`'s is.
  */
+/**
+ * The shell budget as jq sees it. Evaluation work is charged to expansion
+ * work rather than to execution steps, as `awk` and `sed` record work is: a
+ * `sort_by` over a few thousand objects is ordinary, and jq's own work limit
+ * and the buffered-byte limit already bound it.
+ */
+function jqHost(context: ShellCommandContext): JqBudget {
+  return {
+    limits: context.budget.limits,
+    step: (count) => context.budget.expansionWork(count),
+    buffered: (bytes) => context.budget.buffered(bytes),
+  };
+}
+
 export const jqCommand = /* @__PURE__ */ defineApplet(JQ, async (context, argv, fds) => {
-  const budget = new JqEvaluationBudget(context.budget);
+  const budget = new JqEvaluationBudget(jqHost(context));
   try {
     const { filter, paths, has } = await jqInvocation(context, argv, budget);
     if (filter instanceof JqSyntaxError) {
