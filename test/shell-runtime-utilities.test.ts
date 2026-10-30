@@ -155,20 +155,36 @@ it("shares glob, record, and recursive mutation budgets across the execution", a
     exitCode: 1,
     stdout: "",
   });
-  expect(await shell.executeText({ script: "find /tree -type f" })).toMatchObject({
-    exitCode: 1,
-    stdout: "",
-  });
-  expect(await shell.executeText({ script: "find /tree -name '*.missing'" })).toMatchObject({
-    exitCode: 1,
-    stdout: "",
-  });
   expect(await shell.executeText({ script: "tree /tree" })).toMatchObject({
     exitCode: 1,
     stdout: "",
   });
   expect(await shell.executeText({ script: "rm -r /tree" })).toMatchObject({ exitCode: 1 });
   expect(fileSystem.stat("/tree/a").kind).toBe("file");
+});
+
+it("streams find past the glob match limit and bounds it by expansion work", async () => {
+  const fileSystem = createTestFileSystem();
+  for (const name of ["a", "b", "c", "d"]) {
+    await fileSystem.writeFile(`/tree/${name}`, name, { createParents: true });
+  }
+  const streaming = new Shell({
+    fileSystem,
+    commands: defaultShellCommands,
+    limits: { maxGlobMatches: 2 },
+  });
+  expect(await streaming.executeText({ script: "find /tree -type f | wc -l" })).toMatchObject({
+    exitCode: 0,
+    stdout: "4\n",
+  });
+  const bounded = new Shell({
+    fileSystem,
+    commands: defaultShellCommands,
+    limits: { maxExpansionWork: 3 },
+  });
+  const result = await bounded.executeText({ script: "find /tree -type f" });
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr).toContain("shell expansion work limit exceeded");
 });
 
 it("sorts signed decimal numeric prefixes without precision loss", async () => {

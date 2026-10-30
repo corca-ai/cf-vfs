@@ -146,14 +146,17 @@ Every execution owns one shared budget across all pipeline stages. Defaults:
 | bytes read from file bodies | 1 GiB |
 | simultaneously buffered semantic data | 16 MiB |
 | one decoded line / buffered records | 1 MiB / 100,000 |
-| glob matches of one expansion or `find` / mutations | 10,000 / 10,000 |
+| glob matches of one expansion or `tree` / mutations | 10,000 / 10,000 |
 | deadline / no-output-consumer timeout | 30 s / 5 s |
 
 Lower these per workload. A policy mutation limit can only tighten the runtime
 limit. Reading a file body counts against the read limit rather than total
 I/O: a rereading pass holds nothing and the deadline bounds its time, so an
 agent can search a 10 MB tree a hundred times in one execution, while data
-moving between commands keeps the tighter bound. Script depth is counted separately from source depth, so a script that
+moving between commands keeps the tighter bound. `find` and `grep -r` hold no
+matches while they walk, so their walks charge expansion work for each entry
+scanned rather than the per-expansion match limit: `find` over a
+10,000-page wiki is an ordinary command. Script depth is counted separately from source depth, so a script that
 sources a file that runs a script is bounded by both. Glob scans, traversal, decoded records, and output all charge their
 specific limit as well as relevant shared work/I/O limits.
 

@@ -1,5 +1,5 @@
 import { depthFrom, dirname } from "../../core/path.js";
-import type { FindOptions, VfsStat } from "../../vfs/types.js";
+import type { EntryPage, FindOptions, VfsStat } from "../../vfs/types.js";
 import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import { type AppletSpec, defineApplet } from "./applet.js";
 import {
@@ -124,26 +124,45 @@ class FindEvaluator {
   }
 }
 
-function findRootEntries(
+/**
+ * A subtree page by page. `find` evaluates each entry as it arrives and keeps
+ * none of them, so the walk charges expansion work for what it scans rather
+ * than the per-expansion match limit, as `grep -r`'s walk does.
+ */
+function* walkPages(context: ShellCommandContext, path: string): Generator<VfsStat> {
+  let cursor: string | null = null;
+  do {
+    context.budget.step();
+    const page: EntryPage = context.fileSystem.findPage({
+      path,
+      includeRoot: true,
+      ...(cursor === null ? {} : { cursor }),
+    });
+    context.budget.expansionWork(page.scanned);
+    yield* page.entries;
+    cursor = page.nextCursor;
+  } while (cursor !== null);
+}
+
+function* findRootEntries(
   context: ShellCommandContext,
   root: string,
   expression: FindExpression,
-): FindEntry[] {
+): Generator<FindEntry> {
   const normalized = commandPath(context, root);
   // A link named on the command line is reported but never descended into.
   const operand = context.fileSystem.lstat(normalized);
   if (operand.kind === "symlink") {
-    context.budget.glob(1);
-    return [{ stat: operand, display: displayPath(root, normalized, normalized), depth: 0 }];
+    context.budget.expansionWork(1);
+    yield { stat: operand, display: displayPath(root, normalized, normalized), depth: 0 };
+    return;
   }
   const traversalRoot = context.fileSystem.realpath(normalized);
-  const entries: FindEntry[] = [];
-  for (const stat of boundedFind(context, { path: normalized, includeRoot: true })) {
+  for (const stat of walkPages(context, normalized)) {
     const depth = depthFrom(traversalRoot, stat.path);
     if (expression.maxDepth !== undefined && depth > expression.maxDepth) continue;
-    entries.push({ stat, display: displayPath(root, traversalRoot, stat.path), depth });
+    yield { stat, display: displayPath(root, traversalRoot, stat.path), depth };
   }
-  return entries;
 }
 
 function findExecArgv(exec: FindExec, paths: readonly string[]): readonly string[] {
