@@ -1,0 +1,2826 @@
+{
+  "baseline": "9ae59691413969bab8ee09eda580b5e5c9eef445",
+  "candidate": "9ae59691413969bab8ee09eda580b5e5c9eef445",
+  "note": "Descriptive screening; any >5% slowdown or unresolved zero needs investigation. Not statistical proof of improvement.",
+  "threshold": 0.05,
+  "costRegressions": [
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "commit",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          1.7503749999999627,
+          1.5033339999999953,
+          1.5161249999998745
+        ],
+        "medianMs": 1.5161249999998745,
+        "minMs": 1.5033339999999953,
+        "maxMs": 1.7503749999999627,
+        "sql": {
+          "statements": 113
+        }
+      },
+      "counter": "statements",
+      "before": 105,
+      "after": 113
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "clone-bare",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          5.035250000000019,
+          4.583250000000021,
+          4.357749999999896
+        ],
+        "medianMs": 4.583250000000021,
+        "minMs": 4.357749999999896,
+        "maxMs": 5.035250000000019,
+        "sql": {
+          "statements": 569
+        }
+      },
+      "counter": "statements",
+      "before": 567,
+      "after": 569
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "clone-worktree",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          20.00629200000003,
+          14.90929200000005,
+          13.77599999999984
+        ],
+        "medianMs": 14.90929200000005,
+        "minMs": 13.77599999999984,
+        "maxMs": 20.00629200000003,
+        "sql": {
+          "statements": 1992
+        }
+      },
+      "counter": "statements",
+      "before": 1987,
+      "after": 1992
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "fetch-unchanged",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          5.193749999999909,
+          6.508833999999979,
+          4.947083999999904
+        ],
+        "medianMs": 5.193749999999909,
+        "minMs": 4.947083999999904,
+        "maxMs": 6.508833999999979,
+        "sql": {
+          "statements": 987
+        }
+      },
+      "counter": "statements",
+      "before": 979,
+      "after": 987
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "pull-unchanged",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          9.677916000000096,
+          14.615709000000038,
+          10.05554200000006
+        ],
+        "medianMs": 10.05554200000006,
+        "minMs": 9.677916000000096,
+        "maxMs": 14.615709000000038,
+        "sql": {
+          "statements": 1175
+        }
+      },
+      "counter": "statements",
+      "before": 1167,
+      "after": 1175
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "push-one",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          4.901666999999975,
+          5.103749999999991,
+          5.053417000000081
+        ],
+        "medianMs": 5.053417000000081,
+        "minMs": 4.901666999999975,
+        "maxMs": 5.103749999999991,
+        "sql": {
+          "statements": 946
+        }
+      },
+      "counter": "statements",
+      "before": 939,
+      "after": 946
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "pull-one",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          19.756124999999997,
+          19.415040999999974,
+          19.988374999999905
+        ],
+        "medianMs": 19.756124999999997,
+        "minMs": 19.415040999999974,
+        "maxMs": 19.988374999999905,
+        "sql": {
+          "statements": 1800
+        }
+      },
+      "counter": "statements",
+      "before": 1788,
+      "after": 1800
+    },
+    {
+      "row": {
+        "group": "git-recovery",
+        "operation": "partial-add-retry",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          149.1852919999983,
+          157.3230410000033,
+          152.66025000000081
+        ],
+        "medianMs": 152.66025000000081,
+        "minMs": 149.1852919999983,
+        "maxMs": 157.3230410000033,
+        "sql": {
+          "statements": 9468
+        }
+      },
+      "counter": "statements",
+      "before": 9460,
+      "after": 9468
+    }
+  ],
+  "workloads": 190,
+  "comparable": 190,
+  "sqlCoverage": 190,
+  "unresolved": [],
+  "regressions": [
+    {
+      "row": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          0.5099589999999807,
+          0.5126249999999573,
+          0.5049579999999878
+        ],
+        "medianMs": 0.5099589999999807,
+        "minMs": 0.5049579999999878,
+        "maxMs": 0.5126249999999573,
+        "sql": {
+          "statements": 129
+        }
+      },
+      "ratio": 1.0742560178973264
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": false,
+        "iterations": 100,
+        "samplesMs": [
+          3.0510830000000055,
+          3.14979100000005,
+          2.8825420000000577
+        ],
+        "medianMs": 3.0510830000000055,
+        "minMs": 2.8825420000000577,
+        "maxMs": 3.14979100000005,
+        "sql": {
+          "statements": 1009
+        }
+      },
+      "ratio": 1.0719501020977682
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          2.906916000000024,
+          2.2594589999999926,
+          2.584124999999858
+        ],
+        "medianMs": 2.584124999999858,
+        "minMs": 2.2594589999999926,
+        "maxMs": 2.906916000000024,
+        "sql": {
+          "statements": 230
+        }
+      },
+      "ratio": 1.115349339088159
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          0.5017500000000155,
+          0.9043749999999591,
+          0.456957999999986
+        ],
+        "medianMs": 0.5017500000000155,
+        "minMs": 0.456957999999986,
+        "maxMs": 0.9043749999999591,
+        "sql": {
+          "statements": 12
+        }
+      },
+      "ratio": 1.1498138069321513
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          0.6195829999999205,
+          0.6070420000000922,
+          0.8295829999999569
+        ],
+        "medianMs": 0.6195829999999205,
+        "minMs": 0.6070420000000922,
+        "maxMs": 0.8295829999999569,
+        "sql": {
+          "statements": 41
+        }
+      },
+      "ratio": 1.187129371144999
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-all",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          15.129957999999988,
+          14.15375000000006,
+          13.354249999999865
+        ],
+        "medianMs": 14.15375000000006,
+        "minMs": 13.354249999999865,
+        "maxMs": 15.129957999999988,
+        "sql": {
+          "statements": 1827
+        }
+      },
+      "ratio": 1.091327968506533
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "pull-unchanged",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          9.677916000000096,
+          14.615709000000038,
+          10.05554200000006
+        ],
+        "medianMs": 10.05554200000006,
+        "minMs": 9.677916000000096,
+        "maxMs": 14.615709000000038,
+        "sql": {
+          "statements": 1175
+        }
+      },
+      "ratio": 1.106184707817976
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-unchanged",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          4.3034999999999854,
+          4.161959000000024,
+          4.1134579999998095
+        ],
+        "medianMs": 4.161959000000024,
+        "minMs": 4.1134579999998095,
+        "maxMs": 4.3034999999999854,
+        "sql": {
+          "statements": 140
+        }
+      },
+      "ratio": 1.0811454123732278
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "change-one",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          0.05404199999998127,
+          0.06445900000005622,
+          0.05679200000008677
+        ],
+        "medianMs": 0.05679200000008677,
+        "minMs": 0.05404199999998127,
+        "maxMs": 0.06445900000005622,
+        "sql": {
+          "statements": 7
+        }
+      },
+      "ratio": 1.1348866951760657
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "write",
+        "files": 100,
+        "cache": true,
+        "iterations": 100,
+        "samplesMs": [
+          2.997250000000008,
+          2.832499999999982,
+          2.971666000000141
+        ],
+        "medianMs": 2.971666000000141,
+        "minMs": 2.832499999999982,
+        "maxMs": 2.997250000000008,
+        "sql": {
+          "statements": 1012
+        }
+      },
+      "ratio": 1.068672438817789
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "stat",
+        "files": 100,
+        "cache": true,
+        "iterations": 100,
+        "samplesMs": [
+          0.3569169999999531,
+          0.33916599999997743,
+          0.36283400000002075
+        ],
+        "medianMs": 0.3569169999999531,
+        "minMs": 0.33916599999997743,
+        "maxMs": 0.36283400000002075,
+        "sql": {
+          "statements": 2
+        }
+      },
+      "ratio": 1.05220690549742
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          0.23708299999998417,
+          0.20604199999991124,
+          0.22770799999989322
+        ],
+        "medianMs": 0.22770799999989322,
+        "minMs": 0.20604199999991124,
+        "maxMs": 0.23708299999998417,
+        "sql": {
+          "statements": 22
+        }
+      },
+      "ratio": 1.0507546986972098
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          31.957499999999982,
+          31.669417000000067,
+          31.471958000000086
+        ],
+        "medianMs": 31.669417000000067,
+        "minMs": 31.471958000000086,
+        "maxMs": 31.957499999999982,
+        "sql": {
+          "statements": 10012
+        }
+      },
+      "ratio": 1.1193293104125912
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          6.820541999999932,
+          8.26037499999984,
+          7.921792000000096
+        ],
+        "medianMs": 7.921792000000096,
+        "minMs": 6.820541999999932,
+        "maxMs": 8.26037499999984,
+        "sql": {
+          "statements": 1002
+        }
+      },
+      "ratio": 1.183262122145661
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          3.516208000000006,
+          3.867000000000189,
+          4.0338330000004134
+        ],
+        "medianMs": 3.867000000000189,
+        "minMs": 3.516208000000006,
+        "maxMs": 4.0338330000004134,
+        "sql": {
+          "statements": 1006
+        }
+      },
+      "ratio": 1.0587147252517255
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          13.91883400000006,
+          15.482957999999599,
+          15.35779199999979
+        ],
+        "medianMs": 15.35779199999979,
+        "minMs": 13.91883400000006,
+        "maxMs": 15.482957999999599,
+        "sql": {
+          "statements": 8000
+        }
+      },
+      "ratio": 1.1461644391360173
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          7.672542000000249,
+          7.868000000000393,
+          7.67174999999952
+        ],
+        "medianMs": 7.672542000000249,
+        "minMs": 7.67174999999952,
+        "maxMs": 7.868000000000393,
+        "sql": {
+          "statements": 15
+        }
+      },
+      "ratio": 1.0880658443217917
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          2.044499999999971,
+          1.9222920000001977,
+          2.012749999999869
+        ],
+        "medianMs": 2.012749999999869,
+        "minMs": 1.9222920000001977,
+        "maxMs": 2.044499999999971,
+        "sql": {
+          "statements": 13
+        }
+      },
+      "ratio": 1.1479289940832085
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "init",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          0.5605419999997139,
+          0.5608750000001237,
+          0.5826250000000073
+        ],
+        "medianMs": 0.5608750000001237,
+        "minMs": 0.5605419999997139,
+        "maxMs": 0.5826250000000073,
+        "sql": {
+          "statements": 129
+        }
+      },
+      "ratio": 1.0593380400336725
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "populate",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          30.843250000000353,
+          31.65650000000005,
+          32.07158299999992
+        ],
+        "medianMs": 31.65650000000005,
+        "minMs": 30.843250000000353,
+        "maxMs": 32.07158299999992,
+        "sql": {
+          "statements": 10090
+        }
+      },
+      "ratio": 1.1259931425625207
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          144.53804199999968,
+          157.83216699999957,
+          156.66291699999965
+        ],
+        "medianMs": 156.66291699999965,
+        "minMs": 144.53804199999968,
+        "maxMs": 157.83216699999957,
+        "sql": {
+          "statements": 21184
+        }
+      },
+      "ratio": 1.0955084848580177
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          18.36225000000013,
+          19.727332999999817,
+          20.071458999999777
+        ],
+        "medianMs": 19.727332999999817,
+        "minMs": 18.36225000000013,
+        "maxMs": 20.071458999999777,
+        "sql": {
+          "statements": 2058
+        }
+      },
+      "ratio": 1.0667411701985818
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          20.27212499999996,
+          20.022791000000325,
+          20.946875000000546
+        ],
+        "medianMs": 20.27212499999996,
+        "minMs": 20.022791000000325,
+        "maxMs": 20.946875000000546,
+        "sql": {
+          "statements": 2066
+        }
+      },
+      "ratio": 1.0886456707349732
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "diff",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          0.6492920000000595,
+          0.4894169999997757,
+          0.5542500000001382
+        ],
+        "medianMs": 0.5542500000001382,
+        "minMs": 0.4894169999997757,
+        "maxMs": 0.6492920000000595,
+        "sql": {
+          "statements": 12
+        }
+      },
+      "ratio": 1.0605970726185148
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          1.671624999999949,
+          1.325749999999971,
+          1.6043749999998909
+        ],
+        "medianMs": 1.6043749999998909,
+        "minMs": 1.325749999999971,
+        "maxMs": 1.671624999999949,
+        "sql": {
+          "statements": 26
+        }
+      },
+      "ratio": 1.2708756298433879
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          3.267749999999978,
+          3.1954589999995733,
+          3.284834000000046
+        ],
+        "medianMs": 3.267749999999978,
+        "minMs": 3.1954589999995733,
+        "maxMs": 3.284834000000046,
+        "sql": {
+          "statements": 63
+        }
+      },
+      "ratio": 1.1620559010144529
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "log",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          0.3336669999998776,
+          0.36183400000027177,
+          0.36179100000026665
+        ],
+        "medianMs": 0.36179100000026665,
+        "minMs": 0.3336669999998776,
+        "maxMs": 0.36183400000027177,
+        "sql": {
+          "statements": 14
+        }
+      },
+      "ratio": 1.0731657397115344
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          32.04150000000027,
+          30.49762499999997,
+          29.313250000000153
+        ],
+        "medianMs": 30.49762499999997,
+        "minMs": 29.313250000000153,
+        "maxMs": 32.04150000000027,
+        "sql": {
+          "statements": 2900
+        }
+      },
+      "ratio": 1.1440684976014004
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          50.39087500000005,
+          28.790458999999828,
+          43.48591600000054
+        ],
+        "medianMs": 43.48591600000054,
+        "minMs": 28.790458999999828,
+        "maxMs": 50.39087500000005,
+        "sql": {
+          "statements": 2900
+        }
+      },
+      "ratio": 1.487602801416782
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "init",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          1.6310419999999795,
+          1.3351659999998446,
+          1.6965000000000146
+        ],
+        "medianMs": 1.6310419999999795,
+        "minMs": 1.3351659999998446,
+        "maxMs": 1.6965000000000146,
+        "sql": {
+          "statements": 189
+        }
+      },
+      "ratio": 1.3142086387444911
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "populate",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          34.44345799999974,
+          30.942792000000736,
+          32.768708999999944
+        ],
+        "medianMs": 32.768708999999944,
+        "minMs": 30.942792000000736,
+        "maxMs": 34.44345799999974,
+        "sql": {
+          "statements": 10090
+        }
+      },
+      "ratio": 1.166978561720058
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-all",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          123.85912499999995,
+          111.13387499999953,
+          116.15070800000012
+        ],
+        "medianMs": 116.15070800000012,
+        "minMs": 111.13387499999953,
+        "maxMs": 123.85912499999995,
+        "sql": {
+          "statements": 11793
+        }
+      },
+      "ratio": 1.098819431436547
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "commit",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          4.21770800000013,
+          4.1411669999997684,
+          8.064667000000554
+        ],
+        "medianMs": 4.21770800000013,
+        "minMs": 4.1411669999997684,
+        "maxMs": 8.064667000000554,
+        "sql": {
+          "statements": 170
+        }
+      },
+      "ratio": 1.0688227058189261
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "clone-bare",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          15.400083999999879,
+          15.557749999999942,
+          16.518042000000605
+        ],
+        "medianMs": 15.557749999999942,
+        "minMs": 15.400083999999879,
+        "maxMs": 16.518042000000605,
+        "sql": {
+          "statements": 893
+        }
+      },
+      "ratio": 1.0947553494203002
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "clone-worktree",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          107.58320800000001,
+          106.34254200000032,
+          103.88154100000065
+        ],
+        "medianMs": 106.34254200000032,
+        "minMs": 103.88154100000065,
+        "maxMs": 107.58320800000001,
+        "sql": {
+          "statements": 12050
+        }
+      },
+      "ratio": 1.1384822289891452
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "fetch-unchanged",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          19.798749999999927,
+          19.83233299999938,
+          24.465833000000202
+        ],
+        "medianMs": 19.83233299999938,
+        "minMs": 19.798749999999927,
+        "maxMs": 24.465833000000202,
+        "sql": {
+          "statements": 3192
+        }
+      },
+      "ratio": 1.1431178939270603
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "pull-unchanged",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          53.31020899999976,
+          54.402125000000524,
+          72.33887500000037
+        ],
+        "medianMs": 54.402125000000524,
+        "minMs": 53.31020899999976,
+        "maxMs": 72.33887500000037,
+        "sql": {
+          "statements": 4325
+        }
+      },
+      "ratio": 1.1302351266763497
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-unchanged",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          30.497207999999773,
+          35.63370799999939,
+          36.05383299999994
+        ],
+        "medianMs": 35.63370799999939,
+        "minMs": 30.497207999999773,
+        "maxMs": 36.05383299999994,
+        "sql": {
+          "statements": 1085
+        }
+      },
+      "ratio": 1.1411641994187272
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "change-one",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          0.07804099999975733,
+          0.07837500000005093,
+          0.08324999999967986
+        ],
+        "medianMs": 0.07837500000005093,
+        "minMs": 0.07804099999975733,
+        "maxMs": 0.08324999999967986,
+        "sql": {
+          "statements": 7
+        }
+      },
+      "ratio": 1.1625406054824836
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-one",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          3.010041999999885,
+          2.885833000000275,
+          3.1863750000002256
+        ],
+        "medianMs": 3.010041999999885,
+        "minMs": 2.885833000000275,
+        "maxMs": 3.1863750000002256,
+        "sql": {
+          "statements": 73
+        }
+      },
+      "ratio": 1.0549213849206747
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "push-one",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          18.5920000000001,
+          18.7393749999992,
+          20.69133299999976
+        ],
+        "medianMs": 18.7393749999992,
+        "minMs": 18.5920000000001,
+        "maxMs": 20.69133299999976,
+        "sql": {
+          "statements": 2944
+        }
+      },
+      "ratio": 1.1041212198200168
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "pull-one",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          97.95833300000004,
+          95.95074999999997,
+          101.31558300000052
+        ],
+        "medianMs": 97.95833300000004,
+        "minMs": 95.95074999999997,
+        "maxMs": 101.31558300000052,
+        "sql": {
+          "statements": 5662
+        }
+      },
+      "ratio": 1.145829323174374
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "change-all",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          19.010459000000083,
+          17.879417000000103,
+          19.272166000000652
+        ],
+        "medianMs": 19.010459000000083,
+        "minMs": 17.879417000000103,
+        "maxMs": 19.272166000000652,
+        "sql": {
+          "statements": 6001
+        }
+      },
+      "ratio": 1.1422867343273635
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-changed",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          141.5646670000001,
+          137.04062499999964,
+          201.85429100000056
+        ],
+        "medianMs": 141.5646670000001,
+        "minMs": 137.04062499999964,
+        "maxMs": 201.85429100000056,
+        "sql": {
+          "statements": 10821
+        }
+      },
+      "ratio": 1.218803337299997
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "remove-files",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1000,
+        "samplesMs": [
+          15.954874999999902,
+          16.231000000000677,
+          22.624416000000565
+        ],
+        "medianMs": 16.231000000000677,
+        "minMs": 15.954874999999902,
+        "maxMs": 22.624416000000565,
+        "sql": {
+          "statements": 9000
+        }
+      },
+      "ratio": 1.093103955930487
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-removals-repeat",
+        "files": 1000,
+        "cache": false,
+        "iterations": 20,
+        "samplesMs": [
+          118.38529100000005,
+          118.87362499999927,
+          176.82870899999944
+        ],
+        "medianMs": 118.87362499999927,
+        "minMs": 118.38529100000005,
+        "maxMs": 176.82870899999944,
+        "sql": {
+          "statements": 1688
+        }
+      },
+      "ratio": 1.137037975833771
+    },
+    {
+      "row": {
+        "group": "git-shell",
+        "operation": "add-removals",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          5.413457999999991,
+          6.75275000000056,
+          6.9465000000000146
+        ],
+        "medianMs": 6.75275000000056,
+        "minMs": 5.413457999999991,
+        "maxMs": 6.9465000000000146,
+        "sql": {
+          "statements": 73
+        }
+      },
+      "ratio": 1.4699198381876073
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1000,
+        "samplesMs": [
+          31.125500000000102,
+          31.42937499999971,
+          42.83574999999928
+        ],
+        "medianMs": 31.42937499999971,
+        "minMs": 31.125500000000102,
+        "maxMs": 42.83574999999928,
+        "sql": {
+          "statements": 10012
+        }
+      },
+      "ratio": 1.1060044532432216
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1000,
+        "samplesMs": [
+          3.7512500000002547,
+          4.256250000000364,
+          4.730207999999948
+        ],
+        "medianMs": 4.256250000000364,
+        "minMs": 3.7512500000002547,
+        "maxMs": 4.730207999999948,
+        "sql": {
+          "statements": 2
+        }
+      },
+      "ratio": 1.2861675606255332
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1000,
+        "samplesMs": [
+          0.47820899999987887,
+          0.4653330000001006,
+          0.5073750000001382
+        ],
+        "medianMs": 0.47820899999987887,
+        "minMs": 0.4653330000001006,
+        "maxMs": 0.5073750000001382,
+        "sql": {
+          "statements": 7
+        }
+      },
+      "ratio": 1.0738234085509937
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1000,
+        "samplesMs": [
+          10.052375000000211,
+          8.891916999999921,
+          11.978417000000263
+        ],
+        "medianMs": 10.052375000000211,
+        "minMs": 8.891916999999921,
+        "maxMs": 11.978417000000263,
+        "sql": {
+          "statements": 1000
+        }
+      },
+      "ratio": 1.1930894308942939
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": true,
+        "iterations": 10,
+        "samplesMs": [
+          32.91883299999972,
+          34.568750000000364,
+          42.483916000000136
+        ],
+        "medianMs": 34.568750000000364,
+        "minMs": 32.91883299999972,
+        "maxMs": 42.483916000000136,
+        "sql": {
+          "statements": 20
+        }
+      },
+      "ratio": 1.1021236238459395
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1000,
+        "samplesMs": [
+          14.477499999999964,
+          15.229500000000371,
+          25.144374999999854
+        ],
+        "medianMs": 15.229500000000371,
+        "minMs": 14.477499999999964,
+        "maxMs": 25.144374999999854,
+        "sql": {
+          "statements": 8000
+        }
+      },
+      "ratio": 1.06580434688894
+    },
+    {
+      "row": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          1.940417000000707,
+          2.1208749999996144,
+          3.0423329999994166
+        ],
+        "medianMs": 2.1208749999996144,
+        "minMs": 1.940417000000707,
+        "maxMs": 3.0423329999994166,
+        "sql": {
+          "statements": 13
+        }
+      },
+      "ratio": 1.1574724681590514
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "init",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          0.6930830000001151,
+          0.6090410000006159,
+          0.7849159999996118
+        ],
+        "medianMs": 0.6930830000001151,
+        "minMs": 0.6090410000006159,
+        "maxMs": 0.7849159999996118,
+        "sql": {
+          "statements": 129
+        }
+      },
+      "ratio": 1.255205399816238
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "populate",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1000,
+        "samplesMs": [
+          31.888208000000304,
+          30.615875000000415,
+          45.28037499999937
+        ],
+        "medianMs": 31.888208000000304,
+        "minMs": 30.615875000000415,
+        "maxMs": 45.28037499999937,
+        "sql": {
+          "statements": 10090
+        }
+      },
+      "ratio": 1.1035636970610376
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          155.4617500000004,
+          174.10575000000063,
+          229.56212500000038
+        ],
+        "medianMs": 174.10575000000063,
+        "minMs": 155.4617500000004,
+        "maxMs": 229.56212500000038,
+        "sql": {
+          "statements": 21153
+        }
+      },
+      "ratio": 1.1633448232948622
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "commit",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          4.250208999999813,
+          3.9646249999996144,
+          12.372458000001643
+        ],
+        "medianMs": 4.250208999999813,
+        "minMs": 3.9646249999996144,
+        "maxMs": 12.372458000001643,
+        "sql": {
+          "statements": 188
+        }
+      },
+      "ratio": 1.1819544727962383
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          12.193374999999833,
+          13.911041999999725,
+          16.482874999999694
+        ],
+        "medianMs": 13.911041999999725,
+        "minMs": 12.193374999999833,
+        "maxMs": 16.482874999999694,
+        "sql": {
+          "statements": 47
+        }
+      },
+      "ratio": 1.1845947456641284
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          14.711583000000246,
+          14.196332999999868,
+          18.079499999999825
+        ],
+        "medianMs": 14.711583000000246,
+        "minMs": 14.196332999999868,
+        "maxMs": 18.079499999999825,
+        "sql": {
+          "statements": 53
+        }
+      },
+      "ratio": 1.1519373407251718
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "diff",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          0.5181659999998374,
+          0.6361249999999927,
+          0.8789170000000013
+        ],
+        "medianMs": 0.6361249999999927,
+        "minMs": 0.5181659999998374,
+        "maxMs": 0.8789170000000013,
+        "sql": {
+          "statements": 10
+        }
+      },
+      "ratio": 1.056101857278592
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          1.375333999999384,
+          1.3213340000002063,
+          2.2674999999999272
+        ],
+        "medianMs": 1.375333999999384,
+        "minMs": 1.3213340000002063,
+        "maxMs": 2.2674999999999272,
+        "sql": {
+          "statements": 23
+        }
+      },
+      "ratio": 1.0513443619960123
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "log",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          0.348667000000205,
+          0.2914999999993597,
+          0.38220799999908195
+        ],
+        "medianMs": 0.348667000000205,
+        "minMs": 0.2914999999993597,
+        "maxMs": 0.38220799999908195,
+        "sql": {
+          "statements": 13
+        }
+      },
+      "ratio": 1.1259453734025855
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "branch",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          0.24245800000062445,
+          0.21254200000021228,
+          0.28995900000154506
+        ],
+        "medianMs": 0.24245800000062445,
+        "minMs": 0.21254200000021228,
+        "maxMs": 0.28995900000154506,
+        "sql": {
+          "statements": 22
+        }
+      },
+      "ratio": 1.1545619047646782
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          21.060207999999875,
+          20.493416000000252,
+          27.354333999999653
+        ],
+        "medianMs": 21.060207999999875,
+        "minMs": 20.493416000000252,
+        "maxMs": 27.354333999999653,
+        "sql": {
+          "statements": 602
+        }
+      },
+      "ratio": 1.0862193292419267
+    },
+    {
+      "row": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 1000,
+        "cache": true,
+        "iterations": 1,
+        "samplesMs": [
+          19.536207999999533,
+          20.84337500000038,
+          29.038000000000466
+        ],
+        "medianMs": 20.84337500000038,
+        "minMs": 19.536207999999533,
+        "maxMs": 29.038000000000466,
+        "sql": {
+          "statements": 600
+        }
+      },
+      "ratio": 1.151519964642395
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          34.911041999999725,
+          29.17645899999843,
+          24.257125000000087
+        ],
+        "medianMs": 29.17645899999843,
+        "minMs": 24.257125000000087,
+        "maxMs": 34.911041999999725,
+        "sql": {
+          "statements": 3233
+        }
+      },
+      "ratio": 1.23170217963855
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          23.080832999999984,
+          18.525290999999925,
+          19.64025000000038
+        ],
+        "medianMs": 19.64025000000038,
+        "minMs": 18.525290999999925,
+        "maxMs": 23.080832999999984,
+        "sql": {
+          "statements": 1861
+        }
+      },
+      "ratio": 1.3255511512812912
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          6.295084000001225,
+          5.354749999998603,
+          5.4334170000001905
+        ],
+        "medianMs": 5.4334170000001905,
+        "minMs": 5.354749999998603,
+        "maxMs": 6.295084000001225,
+        "sql": {
+          "statements": 167
+        }
+      },
+      "ratio": 1.440588058434129
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          0.19395799999983865,
+          0.1367500000014843,
+          0.15395799999896553
+        ],
+        "medianMs": 0.15395799999896553,
+        "minMs": 0.1367500000014843,
+        "maxMs": 0.19395799999983865,
+        "sql": {
+          "statements": 26
+        }
+      },
+      "ratio": 1.3927682941076056
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          4.904708000000028,
+          2.9922090000000026,
+          2.8255840000001626
+        ],
+        "medianMs": 2.9922090000000026,
+        "minMs": 2.8255840000001626,
+        "maxMs": 4.904708000000028,
+        "sql": {
+          "statements": 143
+        }
+      },
+      "ratio": 1.2267339628649647
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          5.482292000000598,
+          4.167708000000857,
+          4.277334000000337
+        ],
+        "medianMs": 4.277334000000337,
+        "minMs": 4.167708000000857,
+        "maxMs": 5.482292000000598,
+        "sql": {
+          "statements": 269
+        }
+      },
+      "ratio": 1.184487936585134
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          2.4264579999999114,
+          2.513374999998632,
+          1.9607500000001892
+        ],
+        "medianMs": 2.4264579999999114,
+        "minMs": 1.9607500000001892,
+        "maxMs": 2.513374999998632,
+        "sql": {
+          "statements": 105
+        }
+      },
+      "ratio": 1.3902550401564573
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          1.163209000000279,
+          1.3386669999999867,
+          1.0244579999998678
+        ],
+        "medianMs": 1.163209000000279,
+        "minMs": 1.0244579999998678,
+        "maxMs": 1.3386669999999867,
+        "sql": {
+          "statements": 49
+        }
+      },
+      "ratio": 1.0954293113595484
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          1.2554999999993015,
+          1.244541999998546,
+          1.1413749999992433
+        ],
+        "medianMs": 1.244541999998546,
+        "minMs": 1.1413749999992433,
+        "maxMs": 1.2554999999993015,
+        "sql": {
+          "statements": 80
+        }
+      },
+      "ratio": 1.1802670186949151
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "add-rest",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          3.726250000001528,
+          3.3045840000013413,
+          2.69720899999993
+        ],
+        "medianMs": 3.3045840000013413,
+        "minMs": 2.69720899999993,
+        "maxMs": 3.726250000001528,
+        "sql": {
+          "statements": 154
+        }
+      },
+      "ratio": 1.3427809833410158
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          2.2194579999995767,
+          1.4558750000014697,
+          1.2615420000001905
+        ],
+        "medianMs": 1.4558750000014697,
+        "minMs": 1.2615420000001905,
+        "maxMs": 2.2194579999995767,
+        "sql": {
+          "statements": 88
+        }
+      },
+      "ratio": 1.3110569593313008
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          13.471166999999696,
+          10.062334000000192,
+          8.958208000000013
+        ],
+        "medianMs": 10.062334000000192,
+        "minMs": 8.958208000000013,
+        "maxMs": 13.471166999999696,
+        "sql": {
+          "statements": 502
+        }
+      },
+      "ratio": 1.1267538037316787
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          14.388291000001118,
+          11.340375000001586,
+          10.287707999999839
+        ],
+        "medianMs": 11.340375000001586,
+        "minMs": 10.287707999999839,
+        "maxMs": 14.388291000001118,
+        "sql": {
+          "statements": 463
+        }
+      },
+      "ratio": 1.3588880924360938
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          2.978624999999738,
+          3.413083999999799,
+          3.32300000000032
+        ],
+        "medianMs": 3.32300000000032,
+        "minMs": 2.978624999999738,
+        "maxMs": 3.413083999999799,
+        "sql": {
+          "statements": 137
+        }
+      },
+      "ratio": 1.5029962680642535
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          76.6371250000011,
+          60.94024999999965,
+          73.01533399999971
+        ],
+        "medianMs": 73.01533399999971,
+        "minMs": 60.94024999999965,
+        "maxMs": 76.6371250000011,
+        "sql": {
+          "statements": 3266
+        }
+      },
+      "ratio": 1.2505141702311637
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          31.340707999999722,
+          28.4753329999985,
+          30.464082999998936
+        ],
+        "medianMs": 30.464082999998936,
+        "minMs": 28.4753329999985,
+        "maxMs": 31.340707999999722,
+        "sql": {
+          "statements": 1881
+        }
+      },
+      "ratio": 1.2052215177978913
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          6.98016699999971,
+          5.373375000001033,
+          9.793125000000146
+        ],
+        "medianMs": 6.98016699999971,
+        "minMs": 5.373375000001033,
+        "maxMs": 9.793125000000146,
+        "sql": {
+          "statements": 167
+        }
+      },
+      "ratio": 1.0653015769137553
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          0.34099999999853026,
+          0.2335830000010901,
+          0.6127080000005662
+        ],
+        "medianMs": 0.34099999999853026,
+        "minMs": 0.2335830000010901,
+        "maxMs": 0.6127080000005662,
+        "sql": {
+          "statements": 26
+        }
+      },
+      "ratio": 1.4110325364993976
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          4.671167000000423,
+          2.563332999998238,
+          7.54504100000122
+        ],
+        "medianMs": 4.671167000000423,
+        "minMs": 2.563332999998238,
+        "maxMs": 7.54504100000122,
+        "sql": {
+          "statements": 143
+        }
+      },
+      "ratio": 1.1907381675423103
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          10.326583000000028,
+          9.246374999998807,
+          14.077291000001424
+        ],
+        "medianMs": 10.326583000000028,
+        "minMs": 9.246374999998807,
+        "maxMs": 14.077291000001424,
+        "sql": {
+          "statements": 269
+        }
+      },
+      "ratio": 1.191236817221682
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          2.5346669999998994,
+          2.712499999999636,
+          3.563833000000159
+        ],
+        "medianMs": 2.712499999999636,
+        "minMs": 2.5346669999998994,
+        "maxMs": 3.563833000000159,
+        "sql": {
+          "statements": 105
+        }
+      },
+      "ratio": 1.421893863027645
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          5.364458000000013,
+          6.123916000000463,
+          5.167417000000569
+        ],
+        "medianMs": 5.364458000000013,
+        "minMs": 5.167417000000569,
+        "maxMs": 6.123916000000463,
+        "sql": {
+          "statements": 49
+        }
+      },
+      "ratio": 1.5706790615962336
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          1.7505419999997684,
+          1.784958000000188,
+          2.324333000000479
+        ],
+        "medianMs": 1.784958000000188,
+        "minMs": 1.7505419999997684,
+        "maxMs": 2.324333000000479,
+        "sql": {
+          "statements": 80
+        }
+      },
+      "ratio": 1.4585969356497286
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          2.019209000000046,
+          1.5771249999997963,
+          2.099500000000262
+        ],
+        "medianMs": 2.019209000000046,
+        "minMs": 1.5771249999997963,
+        "maxMs": 2.099500000000262,
+        "sql": {
+          "statements": 88
+        }
+      },
+      "ratio": 1.4088726766309734
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          15.591374999999971,
+          12.700749999999971,
+          18.53179100000125
+        ],
+        "medianMs": 15.591374999999971,
+        "minMs": 12.700749999999971,
+        "maxMs": 18.53179100000125,
+        "sql": {
+          "statements": 509
+        }
+      },
+      "ratio": 1.260583948982785
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          11.844583000000057,
+          10.89837499999885,
+          17.208707999998296
+        ],
+        "medianMs": 11.844583000000057,
+        "minMs": 10.89837499999885,
+        "maxMs": 17.208707999998296,
+        "sql": {
+          "statements": 465
+        }
+      },
+      "ratio": 1.2281497265210697
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          3.4344160000000556,
+          2.755417000000307,
+          4.983249999999316
+        ],
+        "medianMs": 3.4344160000000556,
+        "minMs": 2.755417000000307,
+        "maxMs": 4.983249999999316,
+        "sql": {
+          "statements": 137
+        }
+      },
+      "ratio": 1.425339753363208
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "prepare",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          188.37245900000016,
+          188.96204200000102,
+          185.27366699999948
+        ],
+        "medianMs": 188.37245900000016,
+        "minMs": 185.27366699999948,
+        "maxMs": 188.96204200000102,
+        "sql": {
+          "statements": 23104
+        }
+      },
+      "ratio": 1.1239744992805718
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "clone",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          108.39800000000105,
+          115.95937500000036,
+          110.45149999999921
+        ],
+        "medianMs": 110.45149999999921,
+        "minMs": 108.39800000000105,
+        "maxMs": 115.95937500000036,
+        "sql": {
+          "statements": 10941
+        }
+      },
+      "ratio": 1.0890361695403763
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "status-clean",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          35.756915999998455,
+          36.87175000000025,
+          37.267916000000696
+        ],
+        "medianMs": 36.87175000000025,
+        "minMs": 35.756915999998455,
+        "maxMs": 37.267916000000696,
+        "sql": {
+          "statements": 1081
+        }
+      },
+      "ratio": 1.1798739882708482
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "edit",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          0.1882500000010623,
+          0.195041000000856,
+          0.1884169999993901
+        ],
+        "medianMs": 0.1884169999993901,
+        "minMs": 0.1882500000010623,
+        "maxMs": 0.195041000000856,
+        "sql": {
+          "statements": 26
+        }
+      },
+      "ratio": 1.2351892277996968
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "status-dirty",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          21.216207999999824,
+          21.476416999999856,
+          23.574540999999954
+        ],
+        "medianMs": 21.476416999999856,
+        "minMs": 21.216207999999824,
+        "maxMs": 23.574540999999954,
+        "sql": {
+          "statements": 1057
+        }
+      },
+      "ratio": 1.1160300553176832
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "diff",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          29.130332999999155,
+          30.934666000001016,
+          32.4122499999994
+        ],
+        "medianMs": 30.934666000001016,
+        "minMs": 29.130332999999155,
+        "maxMs": 32.4122499999994,
+        "sql": {
+          "statements": 2069
+        }
+      },
+      "ratio": 1.1308028201836577
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "add-partial",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          7.979083000000173,
+          7.738290999999663,
+          7.296249999999418
+        ],
+        "medianMs": 7.738290999999663,
+        "minMs": 7.296249999999418,
+        "maxMs": 7.979083000000173,
+        "sql": {
+          "statements": 89
+        }
+      },
+      "ratio": 1.105141284386134
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "diff-staged",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          4.862499999999272,
+          5.577750000000378,
+          5.27654099999927
+        ],
+        "medianMs": 5.27654099999927,
+        "minMs": 4.862499999999272,
+        "maxMs": 5.577750000000378,
+        "sql": {
+          "statements": 49
+        }
+      },
+      "ratio": 1.1347502493569415
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "commit-partial",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          3.221417000000656,
+          3.320792000000438,
+          3.270709000000352
+        ],
+        "medianMs": 3.270709000000352,
+        "minMs": 3.221417000000656,
+        "maxMs": 3.320792000000438,
+        "sql": {
+          "statements": 72
+        }
+      },
+      "ratio": 1.3077819348494744
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "add-rest",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          20.470124999999825,
+          20.932958000001236,
+          21.553124999998545
+        ],
+        "medianMs": 20.932958000001236,
+        "minMs": 20.470124999999825,
+        "maxMs": 21.553124999998545,
+        "sql": {
+          "statements": 1068
+        }
+      },
+      "ratio": 1.0911059389214477
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "commit-rest",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          2.7328749999996944,
+          2.7662079999990965,
+          2.787292000000889
+        ],
+        "medianMs": 2.7662079999990965,
+        "minMs": 2.7328749999996944,
+        "maxMs": 2.787292000000889,
+        "sql": {
+          "statements": 72
+        }
+      },
+      "ratio": 1.1451707318681943
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "checkout-base",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          49.729707999998936,
+          52.83262500000092,
+          52.9593330000007
+        ],
+        "medianMs": 52.83262500000092,
+        "minMs": 49.729707999998936,
+        "maxMs": 52.9593330000007,
+        "sql": {
+          "statements": 1777
+        }
+      },
+      "ratio": 1.1655337489969346
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "checkout-main",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          50.92579100000148,
+          51.781042000000525,
+          51.764250000000175
+        ],
+        "medianMs": 51.764250000000175,
+        "minMs": 50.92579100000148,
+        "maxMs": 51.781042000000525,
+        "sql": {
+          "statements": 1738
+        }
+      },
+      "ratio": 1.0975188865457233
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "status-final",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          20.20770799999991,
+          20.257166999999754,
+          20.523166999999376
+        ],
+        "medianMs": 20.257166999999754,
+        "minMs": 20.20770799999991,
+        "maxMs": 20.523166999999376,
+        "sql": {
+          "statements": 1051
+        }
+      },
+      "ratio": 1.143296602003966
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "prepare",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          216.05954199999906,
+          224.0059169999986,
+          256.943874999999
+        ],
+        "medianMs": 224.0059169999986,
+        "minMs": 216.05954199999906,
+        "maxMs": 256.943874999999,
+        "sql": {
+          "statements": 23104
+        }
+      },
+      "ratio": 1.1045795056041467
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "status-clean",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          37.54254199999923,
+          36.88191700000061,
+          35.75787499999933
+        ],
+        "medianMs": 36.88191700000061,
+        "minMs": 35.75787499999933,
+        "maxMs": 37.54254199999923,
+        "sql": {
+          "statements": 1081
+        }
+      },
+      "ratio": 1.1580016091241847
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "edit",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          0.2626250000012078,
+          0.28404200000113633,
+          0.28770799999983865
+        ],
+        "medianMs": 0.28404200000113633,
+        "minMs": 0.2626250000012078,
+        "maxMs": 0.28770799999983865,
+        "sql": {
+          "statements": 26
+        }
+      },
+      "ratio": 1.17534944924507
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "status-dirty",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          21.765457999999853,
+          21.787500000000364,
+          21.191375000000335
+        ],
+        "medianMs": 21.765457999999853,
+        "minMs": 21.191375000000335,
+        "maxMs": 21.787500000000364,
+        "sql": {
+          "statements": 1057
+        }
+      },
+      "ratio": 1.147037041428687
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "diff",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          36.59770799999933,
+          37.582915999999386,
+          37.96650000000045
+        ],
+        "medianMs": 37.582915999999386,
+        "minMs": 36.59770799999933,
+        "maxMs": 37.96650000000045,
+        "sql": {
+          "statements": 2069
+        }
+      },
+      "ratio": 1.1393466544898894
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "add-partial",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          7.997333999999682,
+          8.121999999999389,
+          7.728750000000218
+        ],
+        "medianMs": 7.997333999999682,
+        "minMs": 7.728750000000218,
+        "maxMs": 8.121999999999389,
+        "sql": {
+          "statements": 89
+        }
+      },
+      "ratio": 1.159369962307999
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "diff-staged",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          8.021042000000307,
+          7.518500000000131,
+          8.663499999998749
+        ],
+        "medianMs": 8.021042000000307,
+        "minMs": 7.518500000000131,
+        "maxMs": 8.663499999998749,
+        "sql": {
+          "statements": 49
+        }
+      },
+      "ratio": 1.1366013035775584
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "commit-partial",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          3.4369170000009035,
+          3.5634160000008706,
+          3.368000000000393
+        ],
+        "medianMs": 3.4369170000009035,
+        "minMs": 3.368000000000393,
+        "maxMs": 3.5634160000008706,
+        "sql": {
+          "statements": 72
+        }
+      },
+      "ratio": 1.3352005354922691
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "add-rest",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          22.844333999999435,
+          21.063333000000057,
+          22.745667000002868
+        ],
+        "medianMs": 22.745667000002868,
+        "minMs": 21.063333000000057,
+        "maxMs": 22.844333999999435,
+        "sql": {
+          "statements": 1068
+        }
+      },
+      "ratio": 1.1993997218657082
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          2.912000000000262,
+          2.5754999999990105,
+          2.500624999996944
+        ],
+        "medianMs": 2.5754999999990105,
+        "minMs": 2.500624999996944,
+        "maxMs": 2.912000000000262,
+        "sql": {
+          "statements": 72
+        }
+      },
+      "ratio": 1.0546324592567509
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          55.81399999999849,
+          60.19454200000109,
+          55.73950000000332
+        ],
+        "medianMs": 55.81399999999849,
+        "minMs": 55.73950000000332,
+        "maxMs": 60.19454200000109,
+        "sql": {
+          "statements": 1782
+        }
+      },
+      "ratio": 1.135380875795359
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          53.82587499999863,
+          53.02649999999994,
+          51.62079199999789
+        ],
+        "medianMs": 53.02649999999994,
+        "minMs": 51.62079199999789,
+        "maxMs": 53.82587499999863,
+        "sql": {
+          "statements": 1738
+        }
+      },
+      "ratio": 1.1371177213255987
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "status-final",
+        "files": 1000,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          21.098041999999623,
+          21.495166999999128,
+          24.90808299999844
+        ],
+        "medianMs": 21.495166999999128,
+        "minMs": 21.098041999999623,
+        "maxMs": 24.90808299999844,
+        "sql": {
+          "statements": 1051
+        }
+      },
+      "ratio": 1.0992229303434227
+    },
+    {
+      "row": {
+        "group": "git-recovery",
+        "operation": "index-capacity",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          24.324250000001484,
+          22.375584000001254,
+          24.51508399999875
+        ],
+        "medianMs": 24.324250000001484,
+        "minMs": 22.375584000001254,
+        "maxMs": 24.51508399999875,
+        "sql": {
+          "statements": 1849
+        }
+      },
+      "ratio": 1.1671414947789687
+    },
+    {
+      "row": {
+        "group": "git-recovery",
+        "operation": "concurrent-two-adds",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          25.031458000001294,
+          21.807333999997354,
+          22.831082999997307
+        ],
+        "medianMs": 22.831082999997307,
+        "minMs": 21.807333999997354,
+        "maxMs": 25.031458000001294,
+        "sql": {
+          "statements": 2098
+        }
+      },
+      "ratio": 1.0695490090204811
+    },
+    {
+      "row": {
+        "group": "git-recovery",
+        "operation": "partial-add-retry",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          149.1852919999983,
+          157.3230410000033,
+          152.66025000000081
+        ],
+        "medianMs": 152.66025000000081,
+        "minMs": 149.1852919999983,
+        "maxMs": 157.3230410000033,
+        "sql": {
+          "statements": 9468
+        }
+      },
+      "ratio": 1.1072520144686109
+    },
+    {
+      "row": {
+        "group": "git-recovery",
+        "operation": "checkout-failure",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          42.2119169999969,
+          41.628249999997934,
+          42.185584000002564
+        ],
+        "medianMs": 42.185584000002564,
+        "minMs": 41.628249999997934,
+        "maxMs": 42.2119169999969,
+        "sql": {
+          "statements": 3598
+        }
+      },
+      "ratio": 1.1127274501723485
+    }
+  ],
+  "metrics": [
+    {
+      "id": "overall",
+      "label": "Overall · VFS",
+      "ratio": 1.1196432728608376
+    },
+    {
+      "id": "files",
+      "label": "File operations · VFS",
+      "ratio": 1.0336356192751461
+    },
+    {
+      "id": "git",
+      "label": "Git & coding · VFS",
+      "ratio": 1.1322988842509245
+    },
+    {
+      "id": "cache",
+      "label": "Metadata cache",
+      "ratio": 1.0520923403603915
+    }
+  ],
+  "worstRatio": 1.5706790615962336,
+  "requiresReview": true
+}
