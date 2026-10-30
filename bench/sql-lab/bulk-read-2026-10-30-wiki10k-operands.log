@@ -1,0 +1,68 @@
+read stream                            6626 ms  49742343 bytes
+read many-stream                       4568 ms  49742343 bytes
+read many                              2844 ms  49742343 bytes
+cat glob per-file                      7179 ms  exit 0 "" 
+cat glob bulk                          1931 ms  exit 0 "" 
+grep -lF glob per-file                 7692 ms  exit 0 "" 
+grep -lF glob bulk                     1844 ms  exit 0 "" 
+grep -c glob per-file                 14820 ms  exit 0 "" 
+grep -c glob bulk                      6422 ms  exit 0 "" 
+wc -l glob per-file                    7449 ms  exit 0 "" 
+wc -l glob bulk                        1632 ms  exit 0 "" 
+read many                              3301 ms  49742343 bytes
+read many-stream                       3788 ms  49742343 bytes
+read stream                            5233 ms  49742343 bytes
+cat glob bulk                          1953 ms  exit 0 "" 
+cat glob per-file                      6986 ms  exit 0 "" 
+grep -lF glob bulk                     2043 ms  exit 0 "" 
+grep -lF glob per-file                 9260 ms  exit 0 "" 
+grep -c glob bulk                      9023 ms  exit 0 "" 
+grep -c glob per-file                 12810 ms  exit 0 "" 
+wc -l glob bulk                        2247 ms  exit 0 "" 
+wc -l glob per-file                    6559 ms  exit 0 "" 
+read stream                            5941 ms  49742343 bytes
+read many-stream                       4302 ms  49742343 bytes
+read many                              2474 ms  49742343 bytes
+cat glob per-file                      6595 ms  exit 0 "" 
+cat glob bulk                          1712 ms  exit 0 "" 
+grep -lF glob per-file                 7525 ms  exit 0 "" 
+grep -lF glob bulk                     1797 ms  exit 0 "" 
+grep -c glob per-file                 15139 ms  exit 0 "" 
+grep -c glob bulk                      6790 ms  exit 0 "" 
+wc -l glob per-file                    7816 ms  exit 0 "" 
+wc -l glob bulk                        2080 ms  exit 0 "" 
+read many                              5247 ms  49742343 bytes
+read many-stream                       4550 ms  49742343 bytes
+read stream                            6001 ms  49742343 bytes
+cat glob bulk                          1488 ms  exit 0 "" 
+cat glob per-file                      6555 ms  exit 0 "" 
+grep -lF glob bulk                     2381 ms  exit 0 "" 
+grep -lF glob per-file                 9821 ms  exit 0 "" 
+grep -c glob bulk                      6613 ms  exit 0 "" 
+grep -c glob per-file                 13012 ms  exit 0 "" 
+wc -l glob bulk                        2052 ms  exit 0 "" 
+wc -l glob per-file                    7980 ms  exit 0 "" 
+read stream                            7483 ms  49742343 bytes
+read many-stream                       3534 ms  49742343 bytes
+read many                              2576 ms  49742343 bytes
+cat glob per-file                      6817 ms  exit 0 "" 
+cat glob bulk                          2304 ms  exit 0 "" 
+grep -lF glob per-file                 9375 ms  exit 0 "" 
+grep -lF glob bulk                     2215 ms  exit 0 "" 
+grep -c glob per-file                 13101 ms  exit 0 "" 
+grep -c glob bulk                      6374 ms  exit 0 "" 
+wc -l glob per-file                    7121 ms  exit 0 "" 
+wc -l glob bulk                        2229 ms  exit 0 "" 
+
+medians
+read stream                            6001 ms  [6626, 5233, 5941, 6001, 7483]
+read many-stream                       4302 ms  [4568, 3788, 4302, 4550, 3534]
+read many                              2844 ms  [2844, 3301, 2474, 5247, 2576]
+cat glob per-file                      6817 ms  [7179, 6986, 6595, 6555, 6817]
+cat glob bulk                          1931 ms  [1931, 1953, 1712, 1488, 2304]
+grep -lF glob per-file                 9260 ms  [7692, 9260, 7525, 9821, 9375]
+grep -lF glob bulk                     2043 ms  [1844, 2043, 1797, 2381, 2215]
+grep -c glob per-file                 13101 ms  [14820, 12810, 15139, 13012, 13101]
+grep -c glob bulk                      6613 ms  [6422, 9023, 6790, 6613, 6374]
+wc -l glob per-file                    7449 ms  [7449, 6559, 7816, 7980, 7121]
+wc -l glob bulk                        2080 ms  [1632, 2247, 2080, 2052, 2229]

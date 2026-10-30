@@ -36,6 +36,7 @@ import { NO_ENTRY_IDENTITY } from "../vfs/types.js";
 import { ordinaryPath, readBodiesWhere, readStatBatch } from "./batch-stats.js";
 import { writeCheckedBatch } from "./batch-writes.js";
 import { aliasSink, nullSink } from "./device-sinks.js";
+import { localEntryPage } from "./entry-pages.js";
 import type { ShellFileDescriptors, ShellFileSystem, ShellSink } from "./types.js";
 
 /**
@@ -163,24 +164,6 @@ async function drain(body: ByteBody): Promise<void> {
     const next = await reader.read();
     if (next.done) return;
   }
-}
-
-function localEntryPage(entries: readonly VfsStat[], options?: PageOptions): EntryPage {
-  if (
-    options?.limit !== undefined &&
-    (!Number.isSafeInteger(options.limit) || options.limit <= 0)
-  ) {
-    throw new VfsError("EINVAL", "limit must be a positive safe integer");
-  }
-  const cursor = options?.cursor ?? "";
-  const remaining = entries.filter((entry) => entry.path > cursor);
-  const limit = options?.limit ?? remaining.length;
-  const kept = remaining.slice(0, limit);
-  return {
-    entries: kept,
-    nextCursor: remaining.length > limit ? (kept.at(-1)?.path ?? null) : null,
-    scanned: kept.length,
-  };
 }
 
 interface ReservedIndex {
@@ -347,6 +330,10 @@ export class ReservedPathFileSystem implements ShellFileSystem {
     return readStatBatch(this.#inner, paths, options, this.#rootNames, (path) =>
       options.follow === false ? this.lstat(path) : this.stat(path),
     );
+  }
+
+  changeGeneration(): number {
+    return this.#inner.changeGeneration?.() ?? Number.NaN;
   }
 
   readMany(paths: readonly string[], options?: ReadManyOptions) {

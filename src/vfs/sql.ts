@@ -190,6 +190,10 @@ class PosixFileSystemView implements VirtualFileSystem {
     return this.inner.readMany(paths, options, this.access);
   }
 
+  changeGeneration(): number {
+    return this.inner.changeGeneration();
+  }
+
   lstat(path: string): VfsStat {
     return this.inner.lstat(path, this.access);
   }

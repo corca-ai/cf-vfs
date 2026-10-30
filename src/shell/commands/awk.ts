@@ -22,7 +22,8 @@ import {
   validateFieldSeparator,
 } from "./awk-runtime.js";
 import { retainAwkVariable } from "./awk-strings.js";
-import { BufferedTextWriter, inputStreams, readFileText, readTextLines } from "./helpers.js";
+import { BufferedTextWriter, readFileText, readTextLines } from "./helpers.js";
+import { inputSources } from "./inputs.js";
 
 const AWK = {
   name: "awk",
@@ -188,10 +189,10 @@ async function executeInput(
   writer: BufferedTextWriter,
 ): Promise<boolean> {
   const input = fds[0];
-  for await (const source of inputStreams(state.context, paths, input)) {
-    state.filename = source.name;
+  for await (const operand of inputSources(state.context, paths, input)) {
+    state.filename = operand.name;
     state.fnr = 0;
-    for await (const line of readTextLines(state.context, source.stream, source.name)) {
+    for await (const line of readTextLines(state.context, operand.source, operand.name)) {
       setField(state, 0, inputValue(line.endsWith("\n") ? line.slice(0, -1) : line));
       state.fields = [];
       state.fieldsValid = false;

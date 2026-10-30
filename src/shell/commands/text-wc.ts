@@ -1,8 +1,9 @@
 import { VfsError } from "../../core/errors.js";
 import type { InlineReadResult } from "../../vfs/types.js";
-import type { ShellCommandContext } from "../types.js";
+import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import { type AppletSpecWithOptions, defineApplet, parseAppletOptions } from "./applet.js";
-import { commandPath, inputStreams, readWithAbort, writeText } from "./helpers.js";
+import { cancellation, commandPath, readWithAbort, writeText } from "./helpers.js";
+import { inputStreams, OperandReader } from "./inputs.js";
 
 const WC = {
   name: "wc",
@@ -128,8 +129,30 @@ class WcTextCounter {
 
 function newlineCount(bytes: Uint8Array): number {
   let count = 0;
-  for (const byte of bytes) if (byte === 0x0a) count += 1;
+  for (let at = bytes.indexOf(0x0a); at >= 0; at = bytes.indexOf(0x0a, at + 1)) count += 1;
   return count;
+}
+
+/** Counts bulk-read chunks exactly as {@link wcStream} counts the stream they replace. */
+function wcChunks(
+  context: ShellCommandContext,
+  chunks: readonly Uint8Array[],
+  path: string,
+  selection: WcSelection,
+): WcCounts {
+  const text =
+    selection.lines || selection.words ? new WcTextCounter(path, selection.words) : undefined;
+  let lines = 0;
+  let bytes = 0;
+  for (const chunk of chunks) {
+    if (context.signal.aborted) throw cancellation(context.signal);
+    context.budget.io(chunk.byteLength);
+    bytes += chunk.byteLength;
+    if (selection.lines) lines += newlineCount(chunk);
+    text?.write(chunk);
+  }
+  text?.write();
+  return { lines, words: text?.words ?? 0, bytes };
 }
 
 async function wcStream(
@@ -172,21 +195,41 @@ function wcFields(counts: WcCounts, selection: WcSelection): number[] {
 
 export const wcCommand = /* @__PURE__ */ defineApplet(WC, async (context, argv, fds) => {
   const { selection, operands } = wcSelection(argv);
-  for (const operand of operands) {
-    const metadataBytes = await wcMetadataBytes(context, operand, selection);
-    if (metadataBytes !== undefined) {
-      await writeText(fds[1], `${metadataBytes} ${operand}\n`);
-      continue;
+  const files = new OperandReader(
+    context,
+    operands.map((operand) => operand ?? "-"),
+  );
+  try {
+    for (const [index, operand] of operands.entries()) {
+      await wcOperand(context, fds, selection, operand, () => files.take(index));
     }
-    for await (const input of inputStreams(
-      context,
-      operand === undefined ? [] : [operand],
-      fds[0],
-    )) {
-      const counts = await wcStream(context, input.stream, input.name, selection);
-      const fields = wcFields(counts, selection);
-      await writeText(fds[1], `${fields.join(" ")}${input.name === "-" ? "" : ` ${input.name}`}\n`);
-    }
+  } finally {
+    files.release();
   }
   return 0;
 });
+
+async function wcOperand(
+  context: ShellCommandContext,
+  fds: ShellFileDescriptors,
+  selection: WcSelection,
+  operand: string | undefined,
+  bulk: () => readonly Uint8Array[] | undefined,
+): Promise<void> {
+  const metadataBytes = await wcMetadataBytes(context, operand, selection);
+  if (metadataBytes !== undefined) {
+    await writeText(fds[1], `${metadataBytes} ${operand}\n`);
+    return;
+  }
+  const chunks = operand === undefined ? undefined : bulk();
+  if (operand !== undefined && chunks !== undefined) {
+    const fields = wcFields(wcChunks(context, chunks, operand, selection), selection);
+    await writeText(fds[1], `${fields.join(" ")} ${operand}\n`);
+    return;
+  }
+  for await (const input of inputStreams(context, operand === undefined ? [] : [operand], fds[0])) {
+    const counts = await wcStream(context, input.stream, input.name, selection);
+    const fields = wcFields(counts, selection);
+    await writeText(fds[1], `${fields.join(" ")}${input.name === "-" ? "" : ` ${input.name}`}\n`);
+  }
+}

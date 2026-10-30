@@ -1,0 +1,20 @@
+empty                                exit 0 "" 
+glob only                            exit 0 "" 
+glob, one word per file to a pipe    exit 0 "8055" 
+grep -lF > /dev/null                 exit 0 "" 
+grep -lF | wc -l                     exit 0 "21" 
+grep -rlF > /dev/null                exit 0 "" 
+wc -l > /dev/null                    exit 0 "" 
+wc -l | tail -1                      exit 0 "182 /wiki/sales/topic-9754.md" 
+awk FNR==1 > /dev/null               exit 0 "" 
+cat > /dev/null                      exit 0 "" 
+empty                                    22 ms  [194, 20, 22]
+glob only                               415 ms  [711, 410, 415]
+glob, one word per file to a pipe       590 ms  [673, 445, 590]
+grep -lF > /dev/null                   2190 ms  [2190, 2863, 1838]
+grep -lF | wc -l                       2007 ms  [2007, 2556, 1932]
+grep -rlF > /dev/null                  2945 ms  [2945, 7063, 2502]
+wc -l > /dev/null                      2467 ms  [1783, 3292, 2467]
+wc -l | tail -1                        4422 ms  [3250, 5310, 4422]
+awk FNR==1 > /dev/null                 7214 ms  [6835, 7427, 7214]
+cat > /dev/null                        1754 ms  [1754, 1734, 2748]

@@ -13,6 +13,7 @@ export type ShellFileSystem = Pick<
   | "stat"
   | "statMany"
   | "readMany"
+  | "changeGeneration"
   | "list"
   | "listPage"
   | "find"

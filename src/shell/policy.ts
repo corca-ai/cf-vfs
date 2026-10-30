@@ -264,6 +264,11 @@ export class ScopedFileSystem implements ShellFileSystem {
     );
   }
 
+  // NaN never equals itself: without the capability no body read ahead is current.
+  changeGeneration(): number {
+    return this.#inner.changeGeneration?.() ?? Number.NaN;
+  }
+
   /** Paths outside the readable roots are left to readFile, which refuses them. */
   readMany(paths: readonly string[], options?: ReadManyOptions) {
     const roots = this.#policy.readRoots;

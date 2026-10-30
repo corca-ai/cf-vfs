@@ -3,7 +3,8 @@ import { Md5 } from "../../core/md5.js";
 import { chargeConsumed } from "../content.js";
 import type { ShellCommandContext } from "../types.js";
 import { type AppletSpec, appletUsageError, defineApplet } from "./applet.js";
-import { inputStreams, readWithAbort, writeText } from "./helpers.js";
+import { readWithAbort, writeText } from "./helpers.js";
+import { inputStreams } from "./inputs.js";
 
 const MD5SUM = {
   name: "md5sum",

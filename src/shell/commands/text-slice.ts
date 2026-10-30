@@ -4,7 +4,6 @@ import type { ShellCommandContext, ShellSink } from "../types.js";
 import { type AppletSpecWithOptions, defineApplet, parseAppletOptions } from "./applet.js";
 import {
   collectStream,
-  inputStreams,
   inputTexts,
   parseInteger,
   readWithAbort,
@@ -12,6 +11,7 @@ import {
   writeBytes,
   writeText,
 } from "./helpers.js";
+import { inputStreams } from "./inputs.js";
 
 /** Shared by `head` and `tail`, which accept the same option spellings. */
 const SLICE_OPTIONS = {

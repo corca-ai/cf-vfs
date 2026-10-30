@@ -1,5 +1,5 @@
 import { isVfsError, VfsError } from "../../core/errors.js";
-import type { InlineFileBody, VfsStat } from "../../vfs/types.js";
+import type { VfsStat } from "../../vfs/types.js";
 import { shellModeAllows } from "../access.js";
 import { openContent } from "../content.js";
 import { fileSystemOrigin } from "../fs-origin.js";
@@ -17,6 +17,7 @@ import {
 } from "./awiki-parse.js";
 import { compareText, debugQuote, lower } from "./awiki-text.js";
 import { collectStream } from "./helpers.js";
+import { ReadAhead } from "./read-ahead.js";
 
 /** An `awiki` failure, printed as `awiki: MESSAGE` with status 1. */
 export class AwikiError extends Error {}
@@ -144,8 +145,6 @@ function listedHit(context: ShellCommandContext, file: Found): CachedPage | unde
     : undefined;
 }
 
-const READ_AHEAD_BYTES = 1024 * 1024;
-
 function joined(chunks: readonly Uint8Array[], bytes: number): Uint8Array {
   if (chunks.length === 1) return chunks[0] as Uint8Array;
   const body = new Uint8Array(bytes);
@@ -169,13 +168,13 @@ function joined(chunks: readonly Uint8Array[], bytes: number): Uint8Array {
 class ListedPages {
   readonly #context: ShellCommandContext;
   readonly #files: readonly Found[];
-  readonly #ahead = new Map<string, InlineFileBody>();
+  readonly #ahead: ReadAhead;
   #scanned = 0;
-  #release: () => void = () => undefined;
 
   constructor(context: ShellCommandContext, files: readonly Found[]) {
     this.#context = context;
     this.#files = files;
+    this.#ahead = new ReadAhead(context);
   }
 
   async page(index: number): Promise<CachedPage> {
@@ -187,10 +186,8 @@ class ListedPages {
       return cached;
     }
     if (index >= this.#scanned) this.#readAhead(index);
-    const read = this.#ahead.get(file.path);
+    const read = this.#ahead.take(file.path);
     if (read === undefined) return await parseFresh(this.#context, file.path);
-    this.#ahead.delete(file.path);
-    if (this.#ahead.size === 0) this.release();
     this.#context.budget.read(read.stat.sizeBytes);
     let content: string;
     try {
@@ -203,19 +200,12 @@ class ListedPages {
 
   /** Returns the shell buffer held by bodies read ahead and not yet taken. */
   release(): void {
-    this.#ahead.clear();
-    this.#release();
-    this.#release = () => undefined;
+    this.#ahead.release();
   }
 
+  /** Reads ahead the run of misses from `from` that fits in one fill. */
   #readAhead(from: number): void {
-    this.release();
-    const { budget, fileSystem } = this.#context;
-    // Bodies read ahead count against the shell's buffer while they are held.
-    const allowance = Math.min(
-      READ_AHEAD_BYTES,
-      Math.floor((budget.remainingBufferedBytes?.() ?? 0) / 4),
-    );
+    const allowance = this.#ahead.allowance();
     const paths: string[] = [];
     let bytes = 0;
     let index = from;
@@ -228,16 +218,7 @@ class ListedPages {
       bytes += file.stat.sizeBytes;
     }
     this.#scanned = Math.max(index, from + 1);
-    if (fileSystem.readMany === undefined || paths.length < 2) return;
-    const bodies = fileSystem.readMany(paths, { maxBytes: allowance });
-    let held = 0;
-    paths.forEach((path, at) => {
-      const read = bodies[at];
-      if (read === undefined) return;
-      this.#ahead.set(path, read);
-      held += read.stat.sizeBytes;
-    });
-    if (this.#ahead.size > 0) this.#release = budget.buffered(held);
+    this.#ahead.fill(paths);
   }
 }
 

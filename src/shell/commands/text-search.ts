@@ -10,13 +10,13 @@ import {
 import {
   BufferedTextWriter,
   commandPath,
-  inputStreams,
   parseInteger,
   readFileText,
   readTextLines,
   skipTextLines,
   writeText,
 } from "./helpers.js";
+import { inputStreams, OperandReader, openInput } from "./inputs.js";
 import { type CommandInput, recursiveInputs } from "./recursive-inputs.js";
 import { GrepMatcher } from "./text-search-match.js";
 
@@ -488,13 +488,30 @@ async function* operandInputs(
     yield* inputStreams(context, paths, stdin);
     return;
   }
-  for (const path of paths) {
-    try {
-      yield* inputStreams(context, [path], stdin);
-    } catch (error) {
-      if (!(error instanceof VfsError)) throw error;
-      yield { name: path, error };
+  const operands = new OperandReader(context, paths);
+  try {
+    for (const [index, path] of paths.entries()) {
+      if (path === "-") {
+        yield { name: "-", stream: stdin };
+        continue;
+      }
+      const chunks = operands.take(index);
+      if (chunks !== undefined) {
+        yield { name: path, chunks };
+        continue;
+      }
+      let stream: ReadableStream<Uint8Array>;
+      try {
+        stream = await openInput(context, path);
+      } catch (error) {
+        if (!(error instanceof VfsError)) throw error;
+        yield { name: path, error };
+        continue;
+      }
+      yield { name: path, stream };
     }
+  } finally {
+    operands.release();
   }
 }
 

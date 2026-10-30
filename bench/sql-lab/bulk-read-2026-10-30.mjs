@@ -10,7 +10,7 @@ import { lab } from "./lab.mjs";
 // alternate within each trial, and the first arm alternates across trials.
 // Exploration only: adoption follows the performance protocol.
 
-const [name, trialsArg] = process.argv.slice(2);
+const [name, trialsArg] = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
 const trials = Number(trialsArg ?? 3);
 const w = lab(name);
 
@@ -37,11 +37,18 @@ async function readAll(mode) {
   return { ms: Date.now() - start, bytes };
 }
 
-const SCRIPTS = {
-  "grep -rlF link": "grep -rlF '[[note-0001' /wiki | wc -l",
-  "grep -rc owner": "grep -rc '^owner:' /wiki | tail -1",
-  "awiki lint cold": "awiki lint -r -root /wiki >/dev/null; echo $?",
-};
+const SCRIPTS = process.argv.includes("--operands")
+  ? {
+      "cat glob": "cat /wiki/*/*.md > /dev/null",
+      "grep -lF glob": "grep -lF '[[note-0001' /wiki/*/*.md > /dev/null",
+      "grep -c glob": "grep -c '^owner:' /wiki/*/*.md > /dev/null",
+      "wc -l glob": "wc -l /wiki/*/*.md > /dev/null",
+    }
+  : {
+      "grep -rlF link": "grep -rlF '[[note-0001' /wiki | wc -l",
+      "grep -rc owner": "grep -rc '^owner:' /wiki | tail -1",
+      "awiki lint cold": "awiki lint -r -root /wiki >/dev/null; echo $?",
+    };
 
 const samples = {};
 const record = (label, value) => {
@@ -81,6 +88,9 @@ for (const [label, values] of Object.entries(samples)) {
   );
 }
 writeFileSync(
-  new URL(`./bulk-read-2026-10-30-${name}.json`, import.meta.url),
+  new URL(
+    `./bulk-read-2026-10-30-${name}${process.argv.includes("--operands") ? "-operands" : ""}.json`,
+    import.meta.url,
+  ),
   `${JSON.stringify({ summary, samples }, null, 1)}\n`,
 );

@@ -6,10 +6,10 @@ import {
   BufferedTextWriter,
   collectText,
   commandPath,
-  inputStreams,
   readTextLines,
   writeText,
 } from "./helpers.js";
+import { inputSources } from "./inputs.js";
 import {
   type SedAddress as Address,
   parseSedScript,
@@ -116,8 +116,8 @@ async function* streamedRecords(
 ): AsyncGenerator<SedRecord> {
   // Numbering and `$` span the operands as one stream, the way `sed` reads
   // them: `$` is the last record of the last file, not of each file.
-  for await (const input of inputStreams(context, operands, stdin)) {
-    for await (const line of readTextLines(context, input.stream, input.name)) {
+  for await (const input of inputSources(context, operands, stdin)) {
+    for await (const line of readTextLines(context, input.source, input.name)) {
       yield toRecord(line);
     }
   }
