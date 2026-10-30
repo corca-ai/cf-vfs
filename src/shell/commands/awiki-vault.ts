@@ -15,7 +15,7 @@ import {
   resolveTargetRel,
   trimMdExtension,
 } from "./awiki-parse.js";
-import { compareLower, compareText, debugQuote, lower } from "./awiki-text.js";
+import { compareText, debugQuote, lower } from "./awiki-text.js";
 import { collectStream } from "./helpers.js";
 
 /** An `awiki` failure, printed as `awiki: MESSAGE` with status 1. */
@@ -231,6 +231,14 @@ function discover(context: ShellCommandContext, root: VfsStat, recursive: boolea
   return found;
 }
 
+/** `items` stably ordered by the lowercase of `key`, lowercasing each once. */
+function sortByLower<T>(items: readonly T[], key: (item: T) => string): T[] {
+  return items
+    .map((item) => ({ item, sortKey: lower(key(item)) }))
+    .sort((a, b) => compareText(a.sortKey, b.sortKey))
+    .map(({ item }) => item);
+}
+
 // --- the vault --------------------------------------------------------------
 
 export class Vault {
@@ -240,6 +248,9 @@ export class Vault {
   readonly inbound: Set<number>[];
   readonly neighbors: number[][];
   private readonly docsByKey = new Map<string, number>();
+  /** Lowercased names and paths, computed once: sorting compares them often. */
+  private readonly lowerNames: string[];
+  private readonly lowerPaths: string[];
 
   private constructor(
     readonly root: string,
@@ -253,6 +264,8 @@ export class Vault {
       this.docsByKey.set(document.key, index);
     }
     const count = documents.length;
+    this.lowerNames = documents.map((document) => lower(document.name));
+    this.lowerPaths = documents.map((document) => lower(document.relPath));
     this.directed = Array.from({ length: count }, () => new Set());
     this.inbound = Array.from({ length: count }, () => new Set());
     const undirected: Set<number>[] = Array.from({ length: count }, () => new Set());
@@ -294,9 +307,7 @@ export class Vault {
     // read would, and its tokens can validate the cache without a read per page.
     const trustListing =
       context.fileSystem.canUseBulkOperation?.("copy-source", resolvedRoot) === true;
-    const files = discover(context, rootStat, recursive).sort((a, b) =>
-      compareLower(a.relFile, b.relFile),
-    );
+    const files = sortByLower(discover(context, rootStat, recursive), (file) => file.relFile);
     const documents: Document[] = [];
     for (const file of files) {
       context.budget.checkDeadline();
@@ -316,8 +327,11 @@ export class Vault {
         resolved: [],
       });
     }
-    documents.sort((a, b) => compareLower(a.relPath, b.relPath));
-    return new Vault(resolvedRoot, recursive, documents);
+    return new Vault(
+      resolvedRoot,
+      recursive,
+      sortByLower(documents, (document) => document.relPath),
+    );
   }
 
   doc(index: number): Document {
@@ -336,8 +350,13 @@ export class Vault {
     return inbound;
   }
 
+  /** Orders documents by lowercase name, as every listing does. */
+  compareDocuments(a: number, b: number): number {
+    return compareText(this.lowerNames[a] ?? "", this.lowerNames[b] ?? "");
+  }
+
   sortDocuments(indices: number[]): number[] {
-    return indices.sort((a, b) => compareLower(this.doc(a).name, this.doc(b).name));
+    return indices.sort((a, b) => this.compareDocuments(a, b));
   }
 
   private buildIdentifiers(): void {
@@ -364,7 +383,8 @@ export class Vault {
     const depth = (index: number) => this.doc(index).relPath.split("/").length - 1;
     for (const list of this.basenames.values()) {
       list.sort(
-        (a, b) => depth(a) - depth(b) || compareLower(this.doc(a).relPath, this.doc(b).relPath),
+        (a, b) =>
+          depth(a) - depth(b) || compareText(this.lowerPaths[a] ?? "", this.lowerPaths[b] ?? ""),
       );
     }
   }

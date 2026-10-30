@@ -4,14 +4,30 @@
  * strips U+FEFF), code point string order, and round-half-even decimals.
  */
 
-const WHITE_SPACE = /\p{White_Space}/u;
-const LEADING_SPACE = /^\p{White_Space}+/u;
-const TRAILING_SPACE = /\p{White_Space}+$/u;
-const SPACE_RUNS = /\p{White_Space}+/u;
 const LETTER_OR_DIGIT = /[\p{Alphabetic}\p{N}]/u;
 
+/**
+ * Unicode `White_Space`, which Rust's `char::is_whitespace` tests. Every
+ * member is in the Basic Multilingual Plane, so one code unit decides; the
+ * regular expressions this replaces dominated parsing a large wiki.
+ */
+function isSpaceCode(code: number): boolean {
+  if (code < 0x80) return code === 0x20 || (code >= 0x09 && code <= 0x0d);
+  return (
+    code === 0x85 ||
+    code === 0xa0 ||
+    code === 0x1680 ||
+    (code >= 0x2000 && code <= 0x200a) ||
+    code === 0x2028 ||
+    code === 0x2029 ||
+    code === 0x202f ||
+    code === 0x205f ||
+    code === 0x3000
+  );
+}
+
 export function isWhiteSpace(character: string): boolean {
-  return WHITE_SPACE.test(character);
+  return character.length === 1 && isSpaceCode(character.charCodeAt(0));
 }
 
 export function isLetterOrDigit(character: string): boolean {
@@ -23,15 +39,30 @@ export function trim(value: string): string {
 }
 
 export function trimStart(value: string): string {
-  return value.replace(LEADING_SPACE, "");
+  let start = 0;
+  while (start < value.length && isSpaceCode(value.charCodeAt(start))) start += 1;
+  return start === 0 ? value : value.slice(start);
 }
 
 export function trimEnd(value: string): string {
-  return value.replace(TRAILING_SPACE, "");
+  let end = value.length;
+  while (end > 0 && isSpaceCode(value.charCodeAt(end - 1))) end -= 1;
+  return end === value.length ? value : value.slice(0, end);
 }
 
 export function splitWhitespace(value: string): string[] {
-  return value.split(SPACE_RUNS).filter((part) => part !== "");
+  const words: string[] = [];
+  let start = -1;
+  for (let index = 0; index <= value.length; index += 1) {
+    const space = index === value.length || isSpaceCode(value.charCodeAt(index));
+    if (space && start >= 0) {
+      words.push(value.slice(start, index));
+      start = -1;
+    } else if (!space && start < 0) {
+      start = index;
+    }
+  }
+  return words;
 }
 
 /** `[ \t\n\f\r]`, Rust's `is_ascii_whitespace`. */
@@ -71,8 +102,33 @@ export function trimLine(line: string): string {
   return line.slice(0, end);
 }
 
+/** Whitespace runs collapsed to single spaces, without the outer ones. */
 export function normalizePreviewLine(line: string): string {
-  return splitWhitespace(line).join(" ");
+  return normalizeCounting(line).text;
+}
+
+/**
+ * The normalized line and its word count in one pass. A line that already has
+ * single spaces between words, as prose mostly does, is returned as it is.
+ */
+export function normalizeCounting(line: string): { text: string; words: number } {
+  let previousSpace = true;
+  let spaces = 0;
+  for (let index = 0; index < line.length; index += 1) {
+    const code = line.charCodeAt(index);
+    const space = code === 0x20;
+    if ((space && previousSpace) || (!space && isSpaceCode(code))) {
+      const words = splitWhitespace(line);
+      return { text: words.join(" "), words: words.length };
+    }
+    if (space) spaces += 1;
+    previousSpace = space;
+  }
+  if (line.length > 0 && previousSpace) {
+    const words = splitWhitespace(line);
+    return { text: words.join(" "), words: words.length };
+  }
+  return { text: line, words: line.length === 0 ? 0 : spaces + 1 };
 }
 
 function backtickRunEnd(line: string, index: number): number {

@@ -24,6 +24,10 @@ included.
   intervene: a warm run over 10,000 pages issues 37 SQL statements instead
   of 10,037, and a cold run no longer asks a page for its token before
   reading it (20,038 statements instead of 30,038).
+- `awiki` parses pages about four times faster: whitespace is tested by code
+  unit instead of Unicode regular expressions, link scanning jumps between
+  brackets, and sort keys are lowercased once. Parsing, not SQL, was about 90%
+  of a first run over 10,000 pages.
 
 ## [0.5.0] — 2026-10-30
 

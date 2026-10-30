@@ -2,9 +2,9 @@ import {
   containsLetterOrDigit,
   FenceState,
   maskInlineCode,
+  normalizeCounting,
   normalizePreviewLine,
   scanLines,
-  splitWhitespace,
   startsIndented,
   stripLineOnlyMarkdown,
   trim,
@@ -361,35 +361,35 @@ export interface Span {
 
 /** `[[…]]` spans of a masked line, with their inner text. */
 export function* wikiSpans(masked: string): Generator<Span & { readonly inner: string }> {
-  let index = 0;
-  while (index + 3 < masked.length) {
-    if (masked[index] === "[" && masked[index + 1] === "[") {
-      const end = masked.indexOf("]]", index + 2);
-      if (end >= 0) {
-        yield { start: index, end: end + 2, inner: masked.slice(index + 2, end) };
-        index = end + 2;
-        continue;
-      }
+  for (let start = masked.indexOf("[["); start >= 0 && start + 3 < masked.length; ) {
+    const end = masked.indexOf("]]", start + 2);
+    if (end < 0) {
+      start = masked.indexOf("[[", start + 1);
+      continue;
     }
-    index += 1;
+    yield { start, end: end + 2, inner: masked.slice(start + 2, end) };
+    start = masked.indexOf("[[", end + 2);
   }
 }
 
-/** `[label](destination)` spans; `images` decides whether `![…](…)` is skipped whole. */
+/**
+ * `[label](destination)` spans; `skipImages` decides whether `![…](…)` is
+ * skipped whole (flagged as an image) or its `!` is simply passed over.
+ * Equivalent to scanning character by character, jumping between `[`s.
+ */
 export function* markdownSpans(
   masked: string,
   skipImages: boolean,
 ): Generator<Span & { readonly labelEnd: number; readonly image: boolean }> {
   let index = 0;
-  while (index < masked.length) {
-    const bang = masked[index] === "!";
-    // Skipping an image whole starts at its `[`; otherwise a `!` is passed over.
-    const image = skipImages && bang && masked[index + 1] === "[";
-    const span = bang && !image ? undefined : linkSpanAt(masked, image ? index + 1 : index);
+  for (let open = masked.indexOf("["); open >= 0; open = masked.indexOf("[", index)) {
+    const span = linkSpanAt(masked, open);
     if (span === undefined) {
-      index += 1;
+      index = open + 1;
       continue;
     }
+    // A `!` the scan has not passed yet opens an image here.
+    const image = skipImages && open - 1 >= index && masked[open - 1] === "!";
     yield { ...span, image };
     index = span.end;
   }
@@ -490,9 +490,9 @@ export function parsePage(content: string): ParsedPage {
     if (fences.fence(trimmed) || fences.inside) return;
     rewriteKeysInLine(line.text, rewriteKeys);
     if (trimmed === "") return;
-    const context = normalizePreviewLine(trimmed);
+    const { text: context, words: lineWords } = normalizeCounting(trimmed);
     visibleLines += 1;
-    words += splitWhitespace(context).length;
+    words += lineWords;
     const parsed = parseLinksInLine(line.text, context);
     if (parsed.length === 1 && isLinkOnlyLine(trimmed)) {
       linkOnly.push({ line: bodyStartLine + index + 1, text: trimmed });

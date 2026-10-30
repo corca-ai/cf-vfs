@@ -71,7 +71,7 @@ export function largestComponent(vault: Vault): number[] {
       component.length > best.length ||
       (component.length === best.length &&
         component.length > 0 &&
-        compareLower(vault.doc(component[0] ?? 0).name, vault.doc(best[0] ?? 0).name) < 0)
+        vault.compareDocuments(component[0] ?? 0, best[0] ?? 0) < 0)
     ) {
       best = component;
     }
@@ -120,13 +120,8 @@ export function lint(vault: Vault): LintReport {
     components.push(vault.sortDocuments(collectComponent(vault, index, visited)));
   });
   vault.sortDocuments(orphans);
-  linkOnly.sort(
-    (a, b) => compareLower(vault.doc(a.index).name, vault.doc(b.index).name) || a.line - b.line,
-  );
-  components.sort(
-    (a, b) =>
-      b.length - a.length || compareLower(vault.doc(a[0] ?? 0).name, vault.doc(b[0] ?? 0).name),
-  );
+  linkOnly.sort((a, b) => vault.compareDocuments(a.index, b.index) || a.line - b.line);
+  components.sort((a, b) => b.length - a.length || vault.compareDocuments(a[0] ?? 0, b[0] ?? 0));
   const islands = components.slice(1);
   const largest = components[0]?.length ?? (orphans.length > 0 ? 1 : 0);
   const rates = `largest_component_ratio=${fixed(ratio(largest, count), 4)} orphan_rate=${fixed(ratio(orphans.length, count), 4)} content_coverage=${fixed(ratio(covered, count), 4)}`;
