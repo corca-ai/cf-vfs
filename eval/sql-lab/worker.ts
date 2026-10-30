@@ -1,6 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import { DurableObjectFileSystem } from "../../src/vfs/do-sql.js";
+import type { SqlFileSystem } from "../../src/vfs/sql.js";
+import { streamFromOwnedChunks } from "../../src/vfs/streams.js";
 import { authorized, body, HttpError, json } from "../http.js";
+import { evalShell } from "../profile.js";
 
 /**
  * A SQL laboratory on Cloudflare: Durable Objects holding a real cf-vfs
@@ -28,7 +31,164 @@ const MAX_ROWS = 1_000;
 const MAX_CELL_CHARS = 200;
 
 type Binding = string | number | null;
-type ReadMode = "stream" | "cancel" | "stat";
+type ReadMode = "stream" | "cancel" | "stat" | "many" | "many-stream";
+
+interface ShellRun {
+  readonly exitCode: number;
+  readonly stdoutBytes: number;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+const BODY = new TextEncoder().encode("x".repeat(5000));
+const LINE = `${"a wiki line of ordinary prose with a [[link]] in it, ".repeat(4)}\n`;
+const ENCODER = new TextEncoder();
+const SCRATCH = new Uint8Array(64 * 1024);
+
+function scannedUtf8Length(value: string): number {
+  let bytes = value.length;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code < 0x80) continue;
+    if (code < 0x800) bytes += 1;
+    else if (code >= 0xd800 && code < 0xdc00 && index + 1 < value.length) {
+      bytes += 2;
+      index += 1;
+    } else bytes += 2;
+  }
+  return bytes;
+}
+
+async function drain(stream: ReadableStream<Uint8Array>): Promise<number> {
+  const reader = stream.getReader();
+  let bytes = 0;
+  for (let next = await reader.read(); !next.done; next = await reader.read()) {
+    bytes += next.value.byteLength;
+  }
+  return bytes;
+}
+
+async function* counting(n: number): AsyncGenerator<number> {
+  for (let index = 0; index < n; index += 1) yield index;
+}
+
+/**
+ * Fixed microbenchmarks of runtime operations the shell performs per file or
+ * per line, run `n` times each. The object's clock stands still while they
+ * run, so callers time the request.
+ */
+const MICRO: Record<string, (n: number) => Promise<number> | number> = {
+  empty: () => 0,
+  "sync-call": (n) => {
+    let total = 0;
+    for (let index = 0; index < n; index += 1) total += String(index).slice(1).length;
+    return total;
+  },
+  "await-resolved": async (n) => {
+    let total = 0;
+    for (let index = 0; index < n; index += 1) total += await Promise.resolve(1);
+    return total;
+  },
+  "async-generator": async (n) => {
+    let total = 0;
+    for await (const value of counting(n)) total += value;
+    return total;
+  },
+  "date-now": (n) => {
+    let total = 0;
+    for (let index = 0; index < n; index += 1) total += Date.now() & 1;
+    return total;
+  },
+  "abort-listener": (n) => {
+    const signal = new AbortController().signal;
+    const listener = () => undefined;
+    for (let index = 0; index < n; index += 1) {
+      signal.addEventListener("abort", listener, { once: true });
+      signal.removeEventListener("abort", listener);
+    }
+    return n;
+  },
+  "text-decode": (n) => {
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    let total = 0;
+    for (let index = 0; index < n; index += 1)
+      total += decoder.decode(BODY, { stream: true }).length;
+    return total;
+  },
+  "line-encode": (n) => {
+    let total = 0;
+    for (let index = 0; index < n; index += 1) total += ENCODER.encode(LINE).byteLength;
+    return total;
+  },
+  "line-encode-into": (n) => {
+    let total = 0;
+    for (let index = 0; index < n; index += 1) total += ENCODER.encodeInto(LINE, SCRATCH).written;
+    return total;
+  },
+  "line-scan": (n) => {
+    let total = 0;
+    for (let index = 0; index < n; index += 1) total += scannedUtf8Length(LINE);
+    return total;
+  },
+  "line-ascii-regex": (n) => {
+    let total = 0;
+    for (let index = 0; index < n; index += 1) {
+      total += /[\u0080-\u{10ffff}]/u.test(LINE) ? 0 : LINE.length;
+    }
+    return total;
+  },
+  "copy-body": (n) => {
+    let total = 0;
+    for (let index = 0; index < n; index += 1) total += BODY.slice().byteLength;
+    return total;
+  },
+  "owned-stream": async (n) => {
+    let total = 0;
+    for (let index = 0; index < n; index += 1)
+      total += await drain(streamFromOwnedChunks([BODY.slice()]));
+    return total;
+  },
+  "default-stream": async (n) => {
+    let total = 0;
+    for (let index = 0; index < n; index += 1) {
+      total += await drain(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(BODY.slice());
+            controller.close();
+          },
+        }),
+      );
+    }
+    return total;
+  },
+  "blob-stream": async (n) => {
+    let total = 0;
+    for (let index = 0; index < n; index += 1)
+      total += await drain(new Blob([BODY.slice()]).stream());
+    return total;
+  },
+};
+
+/**
+ * The filesystem a lab shell runs over: a fresh object per run, so caches
+ * keyed by filesystem start cold, and with bulk reads withheld when asked.
+ */
+function shellFileSystem(fileSystem: SqlFileSystem, bulk: boolean): SqlFileSystem {
+  const view = <T extends object>(target: T): T =>
+    new Proxy(target, {
+      get(inner, property) {
+        if (property === "readMany" && !bulk) return undefined;
+        if (property === "forCredentials") {
+          const forCredentials = Reflect.get(inner, property) as (...args: unknown[]) => object;
+          return (...args: unknown[]) => view(forCredentials.apply(inner, args));
+        }
+        const value: unknown = Reflect.get(inner, property);
+        return typeof value === "function" ? value.bind(inner) : value;
+      },
+    });
+  return view(fileSystem);
+}
 
 interface Statement {
   readonly sql: string;
@@ -118,6 +278,22 @@ export class SqlLab extends DurableObject<LabEnv> {
    */
   async readFiles(paths: readonly string[], mode: ReadMode): Promise<number> {
     let bytes = 0;
+    if (mode === "many" || mode === "many-stream") {
+      for (let at = 0; at < paths.length; at += 100) {
+        for (const read of this.fileSystem.readMany(paths.slice(at, at + 100))) {
+          if (read === undefined) throw new Error("a page was not read in bulk");
+          if (mode === "many") {
+            bytes += read.stat.sizeBytes;
+            continue;
+          }
+          const reader = streamFromOwnedChunks(read.chunks).getReader();
+          for (let next = await reader.read(); !next.done; next = await reader.read()) {
+            bytes += next.value.byteLength;
+          }
+        }
+      }
+      return bytes;
+    }
     for (const path of paths) {
       if (mode === "stat") {
         bytes += this.fileSystem.stat(path).sizeBytes;
@@ -135,6 +311,24 @@ export class SqlLab extends DurableObject<LabEnv> {
       }
     }
     return bytes;
+  }
+
+  async micro(kind: string, n: number): Promise<number> {
+    const run = MICRO[kind];
+    if (run === undefined) throw new Error(`unknown microbenchmark ${kind}`);
+    return await run(n);
+  }
+
+  /** Runs a script in a fresh evaluation shell over the lab's files. */
+  async shell(script: string, bulk: boolean): Promise<ShellRun> {
+    const shell = evalShell(shellFileSystem(this.fileSystem, bulk), "/");
+    const result = await shell.executeText({ script });
+    return {
+      exitCode: result.exitCode,
+      stdoutBytes: result.stdout.length,
+      stdout: result.stdout.slice(0, 2000),
+      stderr: result.stderr.slice(0, 2000),
+    };
   }
 
   async destroy(): Promise<void> {
@@ -188,6 +382,10 @@ function seedFiles(value: unknown): { path: string; content: string }[] {
   });
 }
 
+function isReadMode(value: unknown): value is ReadMode {
+  return ["stream", "cancel", "stat", "many", "many-stream"].includes(value as string);
+}
+
 function paths(value: unknown): string[] {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
     throw new HttpError(400, "paths must be an array of strings");
@@ -219,10 +417,21 @@ async function route(request: Request, env: LabEnv): Promise<Response> {
       const results = await lab.sql(statements(input["statements"]), repeat, maxRows);
       return respond({ repeat, results });
     }
+    if (action === "micro") {
+      const kind = input["kind"];
+      if (typeof kind !== "string") throw new HttpError(400, "kind must be a string");
+      const n = bounded(input["n"], 1, 10_000_000, "n");
+      return respond({ result: await lab.micro(kind, n) });
+    }
+    if (action === "shell") {
+      const script = input["script"];
+      if (typeof script !== "string") throw new HttpError(400, "script must be a string");
+      return respond({ ...(await lab.shell(script, input["bulk"] !== false)) });
+    }
     if (action === "read") {
       const mode = input["mode"] ?? "stream";
-      if (mode !== "stream" && mode !== "cancel" && mode !== "stat") {
-        throw new HttpError(400, "mode must be stream, cancel or stat");
+      if (!isReadMode(mode)) {
+        throw new HttpError(400, "mode must be stream, cancel, stat, many or many-stream");
       }
       return respond({ bytes: await lab.readFiles(paths(input["paths"]), mode) });
     }

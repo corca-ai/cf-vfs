@@ -1,0 +1,453 @@
+{
+  "run": {
+    "id": "ui4fdkkhfglv52g7zoxxp3gz",
+    "query": {
+      "id": "adhoc",
+      "description": "",
+      "name": "",
+      "generated": false,
+      "parameters": {
+        "filters": [
+          {
+            "key": "$metadata.message",
+            "operation": "includes",
+            "value": "benchmark failed",
+            "type": "string"
+          }
+        ],
+        "orderBy": {
+          "value": "timestamp"
+        }
+      },
+      "workspaceId": "b23e9b2e3a9159dd7eb3fa51f839c5c5",
+      "environmentId": "cloudflare",
+      "userId": "2d00c6b1230eb666d4a9e6753290bd12",
+      "created": "2026-10-30T10:23:20.448Z",
+      "updated": "2026-10-30T10:23:20.448Z"
+    },
+    "accountId": "b23e9b2e3a9159dd7eb3fa51f839c5c5",
+    "timeframe": {
+      "from": 1793352199899,
+      "to": 1793355799899
+    },
+    "userId": "2d00c6b1230eb666d4a9e6753290bd12",
+    "status": "COMPLETED",
+    "granularity": 60000,
+    "dry": false,
+    "statistics": {
+      "elapsed": 0.126217464,
+      "rows_read": 3786202,
+      "bytes_read": 144337204,
+      "abr_level": 1
+    }
+  },
+  "events": {
+    "events": [
+      {
+        "source": {
+          "level": "error",
+          "message": "public benchmark failed",
+          "runId": "8294399a-f462-4a8e-b5d9-87137acc3f19",
+          "error": "Scratch fixture was interrupted",
+          "index": 18
+        },
+        "dataset": "cloudflare-workers",
+        "timestamp": 1793355614999,
+        "$workers": {
+          "truncated": false,
+          "scriptName": "cf-vfs-benchmark",
+          "scriptVersion": {
+            "id": "182725fa-d273-403a-9720-119812b994f9"
+          },
+          "durableObjectId": "0e5edb69af3877c5475d16ae89d8537d440da962dfb6ba1f9df3a58eeeb94662",
+          "eventType": "jsrpc",
+          "entrypoint": "PublicBenchmarks",
+          "executionModel": "durableObject",
+          "event": {
+            "rpcMethod": "snapshot"
+          }
+        },
+        "$metadata": {
+          "id": "01M66562RQ000000000000000F",
+          "requestId": "95fb9a54870f42d923447596bf6cb42b",
+          "traceId": "90f4de043ffeabe0e8c10752f8bd4763",
+          "spanId": "d46424fd7f640a82",
+          "trigger": "PublicBenchmarks.jsrpc",
+          "timestampNs": "1793355614999000000",
+          "service": "cf-vfs-benchmark",
+          "level": "error",
+          "error": "public benchmark failed",
+          "message": "public benchmark failed",
+          "account": "b23e9b2e3a9159dd7eb3fa51f839c5c5",
+          "type": "cf-worker",
+          "origin": "jsrpc",
+          "eventSize": 778
+        }
+      },
+      {
+        "source": {
+          "level": "error",
+          "message": "public benchmark failed",
+          "runId": "ed28878c-f713-49f2-8823-b7f4c360526d",
+          "error": "Network connection lost.",
+          "index": 55
+        },
+        "dataset": "cloudflare-workers",
+        "timestamp": 1793355382772,
+        "$workers": {
+          "truncated": false,
+          "scriptName": "cf-vfs-benchmark",
+          "scriptVersion": {
+            "id": "182725fa-d273-403a-9720-119812b994f9"
+          },
+          "durableObjectId": "0e5edb69af3877c5475d16ae89d8537d440da962dfb6ba1f9df3a58eeeb94662",
+          "eventType": "jsrpc",
+          "entrypoint": "PublicBenchmarks",
+          "executionModel": "durableObject",
+          "event": {
+            "rpcMethod": "snapshot"
+          }
+        },
+        "$metadata": {
+          "id": "01M664YZZM000000000000000F",
+          "requestId": "1f998b4abe3dad40902204b623bdffbc",
+          "traceId": "f7fe4887cfeb60d32dcf7a7ce61a04ad",
+          "spanId": "2b3803bef14c4fc6",
+          "trigger": "PublicBenchmarks.jsrpc",
+          "timestampNs": "1793355382772000000",
+          "service": "cf-vfs-benchmark",
+          "level": "error",
+          "error": "public benchmark failed",
+          "message": "public benchmark failed",
+          "account": "b23e9b2e3a9159dd7eb3fa51f839c5c5",
+          "type": "cf-worker",
+          "origin": "jsrpc",
+          "eventSize": 771
+        }
+      }
+    ],
+    "fields": [
+      {
+        "type": "string",
+        "key": "level"
+      },
+      {
+        "type": "string",
+        "key": "$workers.scriptName"
+      },
+      {
+        "type": "string",
+        "key": "$workers.scriptVersion.id"
+      },
+      {
+        "type": "string",
+        "key": "$workers.durableObjectId"
+      },
+      {
+        "type": "string",
+        "key": "$workers.eventType"
+      },
+      {
+        "type": "string",
+        "key": "$workers.entrypoint"
+      },
+      {
+        "type": "string",
+        "key": "$workers.executionModel"
+      },
+      {
+        "type": "string",
+        "key": "$workers.event.rpcMethod"
+      },
+      {
+        "type": "string",
+        "key": "message"
+      },
+      {
+        "type": "string",
+        "key": "runId"
+      },
+      {
+        "type": "string",
+        "key": "error"
+      },
+      {
+        "type": "boolean",
+        "key": "$workers.truncated"
+      },
+      {
+        "type": "number",
+        "key": "index"
+      }
+    ],
+    "count": 2,
+    "series": [
+      {
+        "time": "2026-10-30 09:25:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:26:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:27:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:28:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:29:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:30:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:31:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:32:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:33:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:34:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:35:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:36:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:37:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:38:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:39:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:40:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:41:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:42:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:43:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:44:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:45:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:46:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:47:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:48:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:49:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:50:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:51:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:52:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:53:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:54:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:55:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:56:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:57:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:58:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 09:59:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:00:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:01:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:02:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:03:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:04:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:05:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:06:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:07:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:08:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:09:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:10:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:11:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:12:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:13:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:14:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:15:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:16:00",
+        "data": [
+          {
+            "aggregates": {
+              "_count": 1,
+              "_countErrors": 1,
+              "_interval": 1
+            },
+            "count": 1,
+            "errors": 1,
+            "interval": 1,
+            "sampleInterval": 1
+          }
+        ]
+      },
+      {
+        "time": "2026-10-30 10:17:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:18:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:19:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:20:00",
+        "data": [
+          {
+            "aggregates": {
+              "_count": 1,
+              "_countErrors": 1,
+              "_interval": 1
+            },
+            "count": 1,
+            "errors": 1,
+            "interval": 1,
+            "sampleInterval": 1
+          }
+        ]
+      },
+      {
+        "time": "2026-10-30 10:21:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:22:00",
+        "data": []
+      },
+      {
+        "time": "2026-10-30 10:23:00",
+        "data": []
+      }
+    ]
+  },
+  "statistics": {
+    "elapsed": 0.126217464,
+    "rows_read": 3786202,
+    "bytes_read": 144337204,
+    "abr_level": 1
+  }
+}
