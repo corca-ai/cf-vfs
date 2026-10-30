@@ -1,0 +1,14 @@
+empty request (RPC and Worker)                   20 ms  [23, 18, 20, 16, 23]  
+SELECT 1 x 1,000                                 35 ms  [35, 35, 32]  1 rows, read 0
+path lookup x 1,000                              37 ms  [37, 48, 37]  0 rows, read 0
+  per statement: SELECT 1 0.015 ms, lookup 0.017 ms
+readFile per page (5 requests)                 5729 ms  49742343 bytes, 10000 pages
+every body, one range scan                      342 ms  [351, 331, 342]  10000 rows, read 30011
+64 bodies by path, one statement x 10            85 ms  [88, 85, 67]  64 rows, read 192
+  10,000 bodies in 64-path batches: about 1016 ms
+instr: pages linking note-0001                  949 ms  [821, 951, 949]  1 rows, read 30009
+instr: pages with an owner line                 708 ms  [699, 708, 937]  1 rows, read 30009
+LIKE: pages linking note-0001                   645 ms  [645, 613, 851]  1 rows, read 30009
+FTS5: build index over every body              2660 ms  [2660]  0 rows, read 0; 0 rows, read 1; 0 rows, read 30011
+FTS5: pages matching note 0001 x 100             45 ms  [45, 56, 43]  1 rows, read 29
+FTS5: index size                                 35 ms  [35, 44, 32]  1 rows, read 3241

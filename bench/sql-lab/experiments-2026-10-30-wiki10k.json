@@ -1,0 +1,273 @@
+{
+ "empty request (RPC and Worker)": {
+  "ms": 20,
+  "samples": [
+   23,
+   18,
+   20,
+   16,
+   23
+  ],
+  "repeat": 1,
+  "results": []
+ },
+ "SELECT 1 x 1,000": {
+  "ms": 35,
+  "samples": [
+   35,
+   35,
+   32
+  ],
+  "repeat": 1000,
+  "results": [
+   {
+    "columns": [
+     "1"
+    ],
+    "rows": [
+     {
+      "1": 1
+     }
+    ],
+    "rowCount": 1,
+    "rowsRead": 0,
+    "rowsWritten": 0
+   }
+  ]
+ },
+ "path lookup x 1,000": {
+  "ms": 37,
+  "samples": [
+   37,
+   48,
+   37
+  ],
+  "repeat": 1000,
+  "results": [
+   {
+    "columns": [
+     "id"
+    ],
+    "rows": [],
+    "rowCount": 0,
+    "rowsRead": 0,
+    "rowsWritten": 0
+   }
+  ]
+ },
+ "readFile per page": {
+  "ms": 5729,
+  "bytes": 49742343,
+  "pages": 10000
+ },
+ "every body, one range scan": {
+  "ms": 342,
+  "samples": [
+   351,
+   331,
+   342
+  ],
+  "repeat": 1,
+  "results": [
+   {
+    "columns": [
+     "path",
+     "chunk_index",
+     "body"
+    ],
+    "rows": [
+     {
+      "path": "/wiki/product/spec-0000.md",
+      "chunk_index": 0,
+      "body": {
+       "blobBytes": 12987
+      }
+     }
+    ],
+    "rowCount": 10000,
+    "rowsRead": 30011,
+    "rowsWritten": 0
+   }
+  ]
+ },
+ "64 bodies by path, one statement x 10": {
+  "ms": 85,
+  "samples": [
+   88,
+   85,
+   67
+  ],
+  "repeat": 10,
+  "results": [
+   {
+    "columns": [
+     "path",
+     "body"
+    ],
+    "rows": [
+     {
+      "path": "/wiki/data/guide-0046.md",
+      "body": {
+       "blobBytes": 4263
+      }
+     }
+    ],
+    "rowCount": 64,
+    "rowsRead": 192,
+    "rowsWritten": 0
+   }
+  ]
+ },
+ "instr: pages linking note-0001": {
+  "ms": 949,
+  "samples": [
+   821,
+   951,
+   949
+  ],
+  "repeat": 1,
+  "results": [
+   {
+    "columns": [
+     "n"
+    ],
+    "rows": [
+     {
+      "n": 28
+     }
+    ],
+    "rowCount": 1,
+    "rowsRead": 30009,
+    "rowsWritten": 0
+   }
+  ]
+ },
+ "instr: pages with an owner line": {
+  "ms": 708,
+  "samples": [
+   699,
+   708,
+   937
+  ],
+  "repeat": 1,
+  "results": [
+   {
+    "columns": [
+     "n"
+    ],
+    "rows": [
+     {
+      "n": 8480
+     }
+    ],
+    "rowCount": 1,
+    "rowsRead": 30009,
+    "rowsWritten": 0
+   }
+  ]
+ },
+ "LIKE: pages linking note-0001": {
+  "ms": 645,
+  "samples": [
+   645,
+   613,
+   851
+  ],
+  "repeat": 1,
+  "results": [
+   {
+    "columns": [
+     "n"
+    ],
+    "rows": [
+     {
+      "n": 28
+     }
+    ],
+    "rowCount": 1,
+    "rowsRead": 30009,
+    "rowsWritten": 0
+   }
+  ]
+ },
+ "FTS5: build index over every body": {
+  "ms": 2660,
+  "samples": [
+   2660
+  ],
+  "repeat": 1,
+  "results": [
+   {
+    "columns": [],
+    "rows": [],
+    "rowCount": 0,
+    "rowsRead": 0,
+    "rowsWritten": 0
+   },
+   {
+    "columns": [],
+    "rows": [],
+    "rowCount": 0,
+    "rowsRead": 1,
+    "rowsWritten": 2
+   },
+   {
+    "columns": [],
+    "rows": [],
+    "rowCount": 0,
+    "rowsRead": 30011,
+    "rowsWritten": 10000
+   }
+  ]
+ },
+ "FTS5: pages matching note 0001 x 100": {
+  "ms": 45,
+  "samples": [
+   45,
+   56,
+   43
+  ],
+  "repeat": 100,
+  "results": [
+   {
+    "columns": [
+     "n"
+    ],
+    "rows": [
+     {
+      "n": 29
+     }
+    ],
+    "rowCount": 1,
+    "rowsRead": 29,
+    "rowsWritten": 0
+   }
+  ]
+ },
+ "FTS5: index size": {
+  "ms": 35,
+  "samples": [
+   35,
+   44,
+   32
+  ],
+  "repeat": 1,
+  "results": [
+   {
+    "columns": [
+     "pages",
+     "bytes"
+    ],
+    "rows": [
+     {
+      "pages": 3241,
+      "bytes": 12468027
+     }
+    ],
+    "rowCount": 1,
+    "rowsRead": 3241,
+    "rowsWritten": 0
+   }
+  ]
+ }
+}

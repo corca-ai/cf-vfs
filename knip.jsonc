@@ -65,6 +65,7 @@
     "bench/scaled-env-2026-10-30/calibrate.ts",
     "scripts/*.mjs",
     "eval/worker.ts",
+    "eval/sql-lab/worker.ts",
     "eval/test/*.test.ts",
     "vitest*.config.ts"
   ],
@@ -73,7 +74,7 @@
   // with no package behind them.
   "ignoreDependencies": ["cloudflare"],
   // A separate package with its own dependencies, deployed with `cf`.
-  "ignore": ["eval/cloudflare.config.ts", "eval/benchmark-deploy/**"],
+  "ignore": ["eval/cloudflare.config.ts", "eval/benchmark-deploy/**", "eval/sql-lab/cloudflare.config.ts"],
   "rules": {
     // A library legitimately exports types consumers never import in this repo.
     "types": "warn",

@@ -97,6 +97,20 @@ diagnostics either way.
 built from what agents ran over a wiki must succeed or stop at the same limit
 on both. Rerun it after changing limits or adding a command agents lean on.
 
+## The SQL lab
+
+`eval/sql-lab` is a separate Worker, `cf-vfs-sql-lab` at `lab.vfs.borca.ai`,
+deployed with `npm run deploy:lab` and authorized by `LAB_TOKEN` from the
+git-ignored `eval/sql-lab/.secrets.json`. Each lab is a Durable Object with
+the cf-vfs schema: `POST /lab/:name/seed` writes files through the
+filesystem, `POST /lab/:name/sql` runs statements (`repeat` times, returning
+the first repetition's rows and rows read and written), `POST /lab/:name/read`
+reads paths through the filesystem (`mode`: `stream`, `cancel` or `stat`), and
+`DELETE /lab/:name` drops it; a lab deletes itself a day after it is seeded.
+`bench/sql-lab/lab.mjs` is the client. It never shares a namespace with
+evaluation workspaces or the public benchmark, because arbitrary SQL is every
+right over an object's data.
+
 ## Replaying sessions instead of rerunning agents
 
 An agent run takes tens of minutes and varies from run to run, so it is a slow
