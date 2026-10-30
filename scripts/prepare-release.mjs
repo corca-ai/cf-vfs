@@ -45,19 +45,25 @@ assert(pending !== "", "the Unreleased section is empty, so there is nothing to 
 // derivable from the repository.
 const today = execFileSync("date", ["-u", "+%Y-%m-%d"], { encoding: "utf8" }).trim();
 
+// Replacements are functions: a string replacement would expand `$` patterns
+// such as `` $` `` that changelog prose about regular expressions contains.
 changelog = changelog.replace(
   `## [Unreleased]\n\n${pending}`,
-  `## [Unreleased]\n\n## [${version}] — ${today}\n\n${pending}`,
+  () => `## [Unreleased]\n\n## [${version}] — ${today}\n\n${pending}`,
 );
 changelog = changelog.replace(
   `[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v${previous}...HEAD`,
-  `[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v${version}...HEAD\n` +
+  () =>
+    `[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v${version}...HEAD\n` +
     `[${version}]: https://github.com/corca-ai/cf-vfs/compare/v${previous}...v${version}`,
 );
 assert(changelog.includes(`[${version}]: `), "the Unreleased comparison link was not where expected");
 
 writeFileSync(changelogPath, changelog);
-writeFileSync(manifestPath, manifest.replace(`"version": "${previous}"`, `"version": "${version}"`));
+writeFileSync(
+  manifestPath,
+  manifest.replace(`"version": "${previous}"`, () => `"version": "${version}"`),
+);
 
 process.stdout.write(
   `prepared ${previous} -> ${version}\n` +
