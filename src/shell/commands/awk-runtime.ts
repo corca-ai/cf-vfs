@@ -61,11 +61,19 @@ export const stringValue = (value: string, numeric = false): AwkString => ({
   numeric,
 });
 
+const NUMERIC_STRING = /^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\s*$/u;
+
+/** Whether a string could look numeric, by its first character: most fields cannot. */
+function mayLookNumeric(value: string): boolean {
+  const code = value.charCodeAt(0);
+  if (code >= 0x30 && code <= 0x39) return true;
+  if (code === 0x2b || code === 0x2d || code === 0x2e) return true;
+  // Anything outside ASCII, or ASCII whitespace, is left to the full test.
+  return code >= 0x80 || code === 0x20 || (code >= 0x09 && code <= 0x0d);
+}
+
 export const inputValue = (value: string): AwkString =>
-  stringValue(
-    value,
-    value === "" || /^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\s*$/u.test(value),
-  );
+  stringValue(value, value === "" || (mayLookNumeric(value) && NUMERIC_STRING.test(value)));
 
 function numericPrefix(value: string): number {
   const prefix = /^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/u.exec(value)?.[0];
@@ -352,12 +360,25 @@ function countLiteralFields(state: AwkRuntimeState, text: string, separator: str
   }
 }
 
+/** Fields between runs of blanks and newlines, in one pass. */
+function whitespaceFields(text: string): AwkString[] {
+  const fields: AwkString[] = [];
+  let start = -1;
+  for (let index = 0; index <= text.length; index += 1) {
+    const code = index < text.length ? text.charCodeAt(index) : 0x20;
+    if (code === 0x20 || code === 0x09 || code === 0x0a) {
+      if (start >= 0) fields.push(inputValue(text.slice(start, index)));
+      start = -1;
+    } else if (start < 0) start = index;
+  }
+  return fields;
+}
+
 export function splitText(state: AwkRuntimeState, text: string, separator: string): AwkString[] {
   if (text === "") return [];
   if (separator === " ") {
-    const trimmed = text.replace(/^[ \t\n]+|[ \t\n]+$/gu, "");
-    countWhitespaceFields(state, trimmed);
-    return trimmed === "" ? [] : trimmed.split(/[ \t\n]+/u).map(inputValue);
+    countWhitespaceFields(state, text);
+    return whitespaceFields(text);
   }
   if ([...separator].length === 1) {
     countLiteralFields(state, text, separator);

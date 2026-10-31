@@ -85,6 +85,12 @@ export function sinkFromWritable(writable: WritableStream<Uint8Array>): ShellSin
   return new SharedSink({ writer: writable.getWriter(), references: 1, terminal: false });
 }
 
+/**
+ * The state behind one pipe. Writes go straight to the readable side rather
+ * than through a writable stream, which on Workers saved a crossing into the
+ * runtime per write; the queue, its capacity and backpressure are the
+ * stream's own, as before.
+ */
 class BytePipeState {
   #controller: ReadableStreamDefaultController<Uint8Array> | undefined;
   #bytesWritten = 0;
@@ -92,12 +98,22 @@ class BytePipeState {
   #pullWaiters: Array<() => void> = [];
   readonly options: BytePipeOptions;
   readonly readable: ReadableStream<Uint8Array>;
-  readonly writable: WritableStream<Uint8Array>;
 
   constructor(options: BytePipeOptions) {
     this.options = options;
-    this.readable = this.#createReadable();
-    this.writable = this.#createWritable();
+    this.readable = new ReadableStream<Uint8Array>(
+      {
+        start: (controller) => {
+          this.#controller = controller;
+        },
+        pull: () => this.#wakeWriters(),
+        cancel: (reason) => this.#consumerCancelled(reason),
+      },
+      {
+        highWaterMark: Math.min(options.maximumBytes, 64 * 1024),
+        size: (chunk) => chunk.byteLength,
+      },
+    );
   }
 
   #cancellationError(): unknown {
@@ -129,22 +145,6 @@ class BytePipeState {
       void Promise.resolve().then(() => cancelExecution(cancellation));
     }
     this.#wakeWriters();
-  }
-
-  #createReadable(): ReadableStream<Uint8Array> {
-    return new ReadableStream<Uint8Array>(
-      {
-        start: (controller) => {
-          this.#controller = controller;
-        },
-        pull: () => this.#wakeWriters(),
-        cancel: (reason) => this.#consumerCancelled(reason),
-      },
-      {
-        highWaterMark: Math.min(this.options.maximumBytes, 64 * 1024),
-        size: (chunk) => chunk.byteLength,
-      },
-    );
   }
 
   abortFromSignal = (): void => {
@@ -203,28 +203,104 @@ class BytePipeState {
     this.#wakeWriters();
   }
 
-  #createWritable(): WritableStream<Uint8Array> {
-    return new WritableStream<Uint8Array>({
-      write: async (chunk) => {
-        try {
-          this.#accept(chunk);
-          await this.#waitForCapacity();
-        } catch (error) {
-          this.#fail(error);
-          throw error;
-        }
+  /** `chunk` is the pipe's own: the sink copied it when the write was made. */
+  async write(chunk: Uint8Array): Promise<void> {
+    try {
+      this.#accept(chunk);
+      await this.#waitForCapacity();
+    } catch (error) {
+      this.#fail(error);
+      throw error;
+    }
+  }
+
+  close(): void {
+    this.#removeAbortListener();
+    if (this.#cancelled === undefined) this.#controller?.close();
+    this.#wakeWriters();
+  }
+
+  abort(reason: unknown): void {
+    this.#removeAbortListener();
+    if (this.#cancelled === undefined) this.#controller?.error(reason);
+    this.#wakeWriters();
+  }
+}
+
+interface PipeSinkState {
+  readonly pipe: BytePipeState;
+  references: number;
+  terminal: boolean;
+  /** Writes run one at a time in call order, as a stream writer queues them. */
+  tail: Promise<void>;
+  writing: number;
+  failure: unknown;
+}
+
+/** The writing end of a pipe, shared by every descriptor duplicated from it. */
+class PipeSink implements ShellSink {
+  private readonly state: PipeSinkState;
+  private released = false;
+
+  constructor(state: PipeSinkState) {
+    this.state = state;
+  }
+
+  clone(): ShellSink {
+    if (this.released || this.state.terminal) throw new VfsError("EPIPE", "sink is closed");
+    this.state.references += 1;
+    return new PipeSink(this.state);
+  }
+
+  write(chunk: Uint8Array): Promise<void> {
+    if (this.released || this.state.terminal) {
+      return Promise.reject(new VfsError("EPIPE", "sink is closed"));
+    }
+    const { state } = this;
+    // The bytes are taken when the call is made, as a stream writer does.
+    const idle = state.writing === 0 && state.failure === undefined;
+    const bytes = chunk.slice();
+    state.writing += 1;
+    const written = idle
+      ? state.pipe.write(bytes)
+      : state.tail.then(() => {
+          if (state.failure !== undefined) throw state.failure;
+          return state.pipe.write(bytes);
+        });
+    const settled = written.then(
+      () => {
+        state.writing -= 1;
       },
-      close: () => {
-        this.#removeAbortListener();
-        if (this.#cancelled === undefined) this.#controller?.close();
-        this.#wakeWriters();
+      (error: unknown) => {
+        state.writing -= 1;
+        state.failure ??= error;
       },
-      abort: (reason) => {
-        this.#removeAbortListener();
-        if (this.#cancelled === undefined) this.#controller?.error(reason);
-        this.#wakeWriters();
-      },
-    });
+    );
+    state.tail = settled;
+    return written;
+  }
+
+  async close(): Promise<void> {
+    if (this.released) return;
+    this.released = true;
+    if (this.state.terminal) return;
+    this.state.references -= 1;
+    if (this.state.references === 0) {
+      this.state.terminal = true;
+      await this.state.tail;
+      if (this.state.failure !== undefined) throw this.state.failure;
+      this.state.pipe.close();
+    }
+  }
+
+  async abort(reason?: unknown): Promise<void> {
+    if (this.released) return;
+    this.released = true;
+    if (this.state.terminal) return;
+    this.state.references = 0;
+    this.state.terminal = true;
+    this.state.failure ??= reason ?? new VfsError("EPIPE", "sink was aborted");
+    this.state.pipe.abort(reason);
   }
 }
 
@@ -232,5 +308,15 @@ export function createBytePipe(options: BytePipeOptions): BytePipe {
   const state = new BytePipeState(options);
   if (options.signal.aborted) state.abortFromSignal();
   else options.signal.addEventListener("abort", state.abortFromSignal, { once: true });
-  return { readable: state.readable, sink: sinkFromWritable(state.writable) };
+  return {
+    readable: state.readable,
+    sink: new PipeSink({
+      pipe: state,
+      references: 1,
+      terminal: false,
+      tail: Promise.resolve(),
+      writing: 0,
+      failure: undefined,
+    }),
+  };
 }

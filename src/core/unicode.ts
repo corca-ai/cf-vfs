@@ -5,13 +5,14 @@ export function encodeUtf8(value: string): Uint8Array<ArrayBuffer> {
   return UTF8_ENCODER.encode(value);
 }
 
+const NON_ASCII = /[\u0080-\u{10ffff}]/u;
+
 /** Returns the number of bytes needed to encode `value` as UTF-8. */
 export function utf8ByteLength(value: string): number {
-  // Encoding dominates short ASCII keys, paths, and records. Keep the native
-  // encoder for larger text: scanning an 8 KiB ASCII string was slower than
-  // encoding it in the local A/B benchmark.
-  if (value.length <= 128 && !/[\u0080-\u{10ffff}]/u.test(value)) return value.length;
-  return encodeUtf8(value).byteLength;
+  // ASCII text is its own length. On Workers encoding allocates a buffer per
+  // call and costs about seven times the scan for a 200-character line, so
+  // only text that is not ASCII is encoded to be measured.
+  return NON_ASCII.test(value) ? encodeUtf8(value).byteLength : value.length;
 }
 
 export function firstCodePoint(value: string): number {

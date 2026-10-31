@@ -54,7 +54,20 @@ export interface ParsedPage {
 
 // --- paths -------------------------------------------------------------------
 
+/** A path with no empty, `.` or `..` segment and no outer slash is already clean. */
+function alreadyClean(path: string): boolean {
+  return (
+    path !== "" &&
+    !path.startsWith(".") &&
+    !path.startsWith("/") &&
+    !path.endsWith("/") &&
+    !path.includes("//") &&
+    !path.includes("/.")
+  );
+}
+
 export function cleanPath(path: string): string {
+  if (alreadyClean(path)) return path;
   const parts: string[] = [];
   const segments = path.split("/");
   segments.forEach((segment, index) => {

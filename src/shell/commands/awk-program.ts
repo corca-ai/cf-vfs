@@ -80,6 +80,11 @@ export class AwkOutput {
     return 0;
   }
 
+  /** Whether standard output or error holds text a flush would write. */
+  get pending(): boolean {
+    return this.stdout.length > 0 || this.stderr.length > 0;
+  }
+
   async flush(writer: BufferedTextWriter, stderr: ShellSink): Promise<void> {
     const [out, err] = [this.stdout.join(""), this.stderr.join("")];
     this.held -= utf8ByteLength(out) + utf8ByteLength(err);
@@ -371,7 +376,7 @@ export async function executeRules(
   for (const rule of rules) {
     if (rule.phase !== phase) continue;
     const control = executeRule(rule, state, output);
-    await output.flush(writer, stderr);
+    if (output.pending) await output.flush(writer, stderr);
     if (control.kind !== "none") return control;
   }
   return NO_CONTROL;

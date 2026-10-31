@@ -1,0 +1,33 @@
+--- /Users/ak/.claude/jobs/58b39da0/tmp/worker-committable.ts	2026-10-31 09:11:44
++++ eval/sql-lab/worker.ts	2026-10-31 09:11:44
+@@ -7,6 +7,8 @@
+ import { streamFromOwnedChunks } from "../../src/vfs/streams.js";
+ import { authorized, body, HttpError, json } from "../http.js";
+ import { evalShell } from "../profile.js";
++// Paired A/B scaffolding, not committed: main's shell bundled beside the candidate's.
++import { evalShell as baselineEvalShell } from "./.baseline/eval/profile.js";
+ 
+ /**
+  * A SQL laboratory on Cloudflare: Durable Objects holding a real cf-vfs
+@@ -373,8 +375,9 @@
+   }
+ 
+   /** Runs a script in a fresh evaluation shell over the lab's files. */
+-  async shell(script: string, bulk: boolean): Promise<ShellRun> {
+-    const shell = evalShell(shellFileSystem(this.fileSystem, bulk), "/");
++  async shell(script: string, bulk: boolean, version?: string): Promise<ShellRun> {
++    const make = version === "baseline" ? baselineEvalShell : evalShell;
++    const shell = make(shellFileSystem(this.fileSystem, bulk) as never, "/");
+     const result = await shell.executeText({ script });
+     return {
+       exitCode: result.exitCode,
+@@ -481,7 +484,8 @@
+     if (action === "shell") {
+       const script = input["script"];
+       if (typeof script !== "string") throw new HttpError(400, "script must be a string");
+-      return respond({ ...(await lab.shell(script, input["bulk"] !== false)) });
++      const version = typeof input["version"] === "string" ? input["version"] : undefined;
++      return respond({ ...(await lab.shell(script, input["bulk"] !== false, version)) });
+     }
+     if (action === "read") {
+       const mode = input["mode"] ?? "stream";
