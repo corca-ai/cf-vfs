@@ -57,8 +57,12 @@ export function lab(name) {
       return call("POST", `/${name}/micro`, { kind, n });
     },
     /** Runs a script in a fresh evaluation shell; `bulk: false` withholds readMany. */
-    shell(script, { bulk = true } = {}) {
-      return call("POST", `/${name}/shell`, { script, bulk });
+    shell(script, { bulk = true, version } = {}) {
+      return call("POST", `/${name}/shell`, {
+        script,
+        bulk,
+        ...(version === undefined ? {} : { version }),
+      });
     },
     destroy() {
       return call("DELETE", `/${name}`);

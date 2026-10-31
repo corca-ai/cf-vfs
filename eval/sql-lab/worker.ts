@@ -1,4 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
+import { utf8ByteLength } from "../../src/core/unicode.js";
+import { parsePage } from "../../src/shell/commands/awiki-parse.js";
+import { createBytePipe } from "../../src/shell/pipe.js";
 import { DurableObjectFileSystem } from "../../src/vfs/do-sql.js";
 import type { SqlFileSystem } from "../../src/vfs/sql.js";
 import { streamFromOwnedChunks } from "../../src/vfs/streams.js";
@@ -31,7 +34,7 @@ const MAX_ROWS = 1_000;
 const MAX_CELL_CHARS = 200;
 
 type Binding = string | number | null;
-type ReadMode = "stream" | "cancel" | "stat" | "many" | "many-stream";
+type ReadMode = "stream" | "cancel" | "stat" | "many" | "many-stream" | "decode" | "parse";
 
 interface ShellRun {
   readonly exitCode: number;
@@ -136,6 +139,44 @@ const MICRO: Record<string, (n: number) => Promise<number> | number> = {
       total += /[\u0080-\u{10ffff}]/u.test(LINE) ? 0 : LINE.length;
     }
     return total;
+  },
+  nfc: (n) => {
+    let total = 0;
+    for (let index = 0; index < n; index += 1)
+      total += `design/note-${index & 1023}`.normalize("NFC").length;
+    return total;
+  },
+  "nfc-ascii-checked": (n) => {
+    let total = 0;
+    for (let index = 0; index < n; index += 1) {
+      const name = `design/note-${index & 1023}`;
+      total += (/[\u0080-\u{10ffff}]/u.test(name) ? name.normalize("NFC") : name).length;
+    }
+    return total;
+  },
+  lowercase: (n) => {
+    let total = 0;
+    for (let index = 0; index < n; index += 1)
+      total += `Design/Note-${index & 1023}`.toLowerCase().length;
+    return total;
+  },
+  "utf8-length": (n) => {
+    let total = 0;
+    for (let index = 0; index < n; index += 1) total += utf8ByteLength(LINE);
+    return total;
+  },
+  "pipe-lines": async (n) => {
+    // The shell's pipe, one short line per write, drained as it is written.
+    const pipe = createBytePipe({
+      maximumBytes: 64 * 1024 * 1024,
+      signal: new AbortController().signal,
+      name: "lab pipe",
+    });
+    const line = new TextEncoder().encode("a line of about thirty bytes\n");
+    const drained = drain(pipe.readable);
+    for (let index = 0; index < n; index += 1) await pipe.sink.write(line);
+    await pipe.sink.close();
+    return await drained;
   },
   "copy-body": (n) => {
     let total = 0;
@@ -278,6 +319,18 @@ export class SqlLab extends DurableObject<LabEnv> {
    */
   async readFiles(paths: readonly string[], mode: ReadMode): Promise<number> {
     let bytes = 0;
+    if (mode === "decode" || mode === "parse") {
+      // awiki's first-run work per page after a bulk read: decode, then parse.
+      const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+      for (let at = 0; at < paths.length; at += 100) {
+        for (const read of this.fileSystem.readMany(paths.slice(at, at + 100))) {
+          if (read === undefined) throw new Error("a page was not read in bulk");
+          const text = decoder.decode(read.chunks[0]);
+          bytes += mode === "parse" ? parsePage(text).links.length : text.length;
+        }
+      }
+      return bytes;
+    }
     if (mode === "many" || mode === "many-stream") {
       for (let at = 0; at < paths.length; at += 100) {
         for (const read of this.fileSystem.readMany(paths.slice(at, at + 100))) {
@@ -383,7 +436,9 @@ function seedFiles(value: unknown): { path: string; content: string }[] {
 }
 
 function isReadMode(value: unknown): value is ReadMode {
-  return ["stream", "cancel", "stat", "many", "many-stream"].includes(value as string);
+  return ["stream", "cancel", "stat", "many", "many-stream", "decode", "parse"].includes(
+    value as string,
+  );
 }
 
 function paths(value: unknown): string[] {

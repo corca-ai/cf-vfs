@@ -8,7 +8,7 @@ import { lab } from "./lab.mjs";
 // line (an await, an async generator step, a clock read). Each is the median
 // of five requests minus the median empty request, divided by its count.
 
-const [name] = process.argv.slice(2);
+const [name, only] = process.argv.slice(2);
 const w = lab(name);
 const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
 const KINDS = {
@@ -23,14 +23,21 @@ const KINDS = {
   "line-encode-into": 100_000,
   "line-scan": 100_000,
   "line-ascii-regex": 100_000,
+  nfc: 100_000,
+  "nfc-ascii-checked": 100_000,
+  lowercase: 100_000,
+  "utf8-length": 100_000,
+  "pipe-lines": 10_000,
   "copy-body": 10_000,
   "owned-stream": 10_000,
   "default-stream": 10_000,
   "blob-stream": 10_000,
 };
 const times = {};
+const wanted = only === undefined ? undefined : new Set(["empty", ...only.split(",")]);
 for (let round = 0; round < 5; round += 1) {
   for (const [kind, n] of Object.entries(KINDS)) {
+    if (wanted !== undefined && !wanted.has(kind)) continue;
     times[kind] ??= [];
     times[kind].push((await w.micro(kind, n)).ms);
   }
@@ -38,6 +45,7 @@ for (let round = 0; round < 5; round += 1) {
 const ping = median(times.empty);
 const results = {};
 for (const [kind, n] of Object.entries(KINDS)) {
+  if (times[kind] === undefined) continue;
   const ms = median(times[kind]);
   results[kind] = {
     n,
