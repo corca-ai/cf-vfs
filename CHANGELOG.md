@@ -16,6 +16,20 @@ included.
 
 ## [Unreleased]
 
+- Measuring text as UTF-8 tests for ASCII before encoding, at any length.
+  On Workers encoding allocates a buffer per call; for a 200-character line
+  it cost 1.1 µs against 0.06 µs for the test, and `awk`, buffered output and
+  line splitting measure every record.
+- `awk` splits default fields in one pass, skips the numeric-string test for
+  fields that cannot start a number, and no longer waits on an empty output
+  flush after every rule. Over 8,055 pages on Cloudflare, in pairs against
+  the previous shell, `awk 'FNR == 1'` took 0.65 and `awk '{ print $1 }' |
+  wc -l` 0.73 of the time.
+- Pipes take writes directly instead of through a writable stream, halving
+  the cost of a short write on Workers (20.8 µs to 9.8 µs).
+- `awiki` cleans already clean paths and counts the words of plain ASCII
+  lines without testing each character for Unicode whitespace; a cold
+  `awiki lint` over 10,000 pages on Cloudflare took 0.89 of the time.
 - Add the optional `readMany` to filesystems: whole inline bodies for many
   paths in two SQL statements per 64 paths, leaving anything it cannot read
   in bulk to `readFile`. `grep -r` and a cold `awiki` load read through it and

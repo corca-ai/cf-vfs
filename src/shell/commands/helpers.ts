@@ -153,13 +153,6 @@ function accountRecord(state: TextLineState, context: ShellCommandContext, path?
   }
 }
 
-const NON_ASCII = /[\u0080-\u{10ffff}]/u;
-
-/** A line's UTF-8 length. On Workers testing for ASCII is far cheaper than encoding. */
-function lineByteLength(line: string): number {
-  return NON_ASCII.test(line) ? utf8ByteLength(line) : line.length;
-}
-
 function takeTextLine(
   state: TextLineState,
   context: ShellCommandContext,
@@ -169,7 +162,7 @@ function takeTextLine(
   if (newline < 0) return undefined;
   const line = state.pending.slice(0, newline + 1);
   state.pending = state.pending.slice(newline + 1);
-  if (lineByteLength(line) > context.budget.limits.maxLineBytes) {
+  if (utf8ByteLength(line) > context.budget.limits.maxLineBytes) {
     throw new VfsError("E2BIG", "line byte limit exceeded", path);
   }
   accountRecord(state, context, path);
@@ -196,7 +189,7 @@ function* chunkTextLines(
       if (line === undefined) break;
       yield line;
     }
-    if (lineByteLength(state.pending) > context.budget.limits.maxLineBytes) {
+    if (utf8ByteLength(state.pending) > context.budget.limits.maxLineBytes) {
       throw new VfsError("E2BIG", "line byte limit exceeded", path);
     }
   }

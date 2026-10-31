@@ -116,6 +116,11 @@ export function normalizeCounting(line: string): { text: string; words: number }
   let spaces = 0;
   for (let index = 0; index < line.length; index += 1) {
     const code = line.charCodeAt(index);
+    // Printable ASCII other than a space is most of any line: a word goes on.
+    if (code > 0x20 && code < 0x7f) {
+      previousSpace = false;
+      continue;
+    }
     const space = code === 0x20;
     if ((space && previousSpace) || (!space && isSpaceCode(code))) {
       const words = splitWhitespace(line);
