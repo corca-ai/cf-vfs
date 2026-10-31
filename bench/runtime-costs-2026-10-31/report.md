@@ -71,3 +71,14 @@ No overall or per-workload regression is established: the overall interval
 includes 100, the flagged rows do not reproduce in alternating pairs, and SQL
 costs are unchanged. The point estimate of about +1% overall stays recorded;
 the next cohort before a release repeats the full three runs.
+
+## After deployment
+
+v0.5.1 (f6ff17f) deployed as b2bcffe7 with the measured build, abf55820…: the
+release changed only the changelog and `package.json`, which the build
+fingerprint does not cover. One full run of the deployed build
+(`cf/deployed-main-1.json`) verified all 212,268 checks and read 99.14 of the
+reference overall (95.09–103.36), inside the baseline's runs. The agent
+evaluation Worker was redeployed from the same commit and answered a smoke
+test of `grep -r`, `cat` and `wc` over operands, `awk`, `awiki` and a `tee`
+pipeline as expected.
