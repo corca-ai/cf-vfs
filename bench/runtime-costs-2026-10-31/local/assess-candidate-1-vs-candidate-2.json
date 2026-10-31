@@ -1,0 +1,221 @@
+{
+  "baseline": "d99294d89ff565943e51ab65a6401b085612b42d",
+  "candidate": "d99294d89ff565943e51ab65a6401b085612b42d",
+  "note": "Descriptive screening; any >5% slowdown or unresolved zero needs investigation. Not statistical proof of improvement.",
+  "threshold": 0.05,
+  "costRegressions": [
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "prepare",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          20.834082999999737,
+          21.222207999999227,
+          20.864207999999053
+        ],
+        "medianMs": 20.864207999999053,
+        "minMs": 20.834082999999737,
+        "maxMs": 21.222207999999227,
+        "sql": {
+          "statements": 3233
+        }
+      },
+      "counter": "statements",
+      "before": 3225,
+      "after": 3233
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          1.1228330000003552,
+          1.0302910000000338,
+          0.9709999999995489
+        ],
+        "medianMs": 1.0302910000000338,
+        "minMs": 0.9709999999995489,
+        "maxMs": 1.1228330000003552,
+        "sql": {
+          "statements": 88
+        }
+      },
+      "counter": "statements",
+      "before": 80,
+      "after": 88
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          8.494917000000896,
+          8.693624999999884,
+          8.481665999999677
+        ],
+        "medianMs": 8.494917000000896,
+        "minMs": 8.481665999999677,
+        "maxMs": 8.693624999999884,
+        "sql": {
+          "statements": 500
+        }
+      },
+      "counter": "statements",
+      "before": 498,
+      "after": 500
+    },
+    {
+      "row": {
+        "group": "coding-small",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          7.667709000000286,
+          7.960833999999522,
+          7.8637089999992895
+        ],
+        "medianMs": 7.8637089999992895,
+        "minMs": 7.667709000000286,
+        "maxMs": 7.960833999999522,
+        "sql": {
+          "statements": 461
+        }
+      },
+      "counter": "statements",
+      "before": 459,
+      "after": 461
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "clone",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          22.24224999999933,
+          22.83666699999958,
+          23.644249999999374
+        ],
+        "medianMs": 22.83666699999958,
+        "minMs": 22.24224999999933,
+        "maxMs": 23.644249999999374,
+        "sql": {
+          "statements": 1886
+        }
+      },
+      "counter": "statements",
+      "before": 1881,
+      "after": 1886
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "commit-rest",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          1.0475409999999101,
+          1.0378749999999854,
+          0.9574169999996229
+        ],
+        "medianMs": 1.0378749999999854,
+        "minMs": 0.9574169999996229,
+        "maxMs": 1.0475409999999101,
+        "sql": {
+          "statements": 88
+        }
+      },
+      "counter": "statements",
+      "before": 80,
+      "after": 88
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "checkout-base",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          10.977084000000104,
+          11.305041000000529,
+          10.853624999999738
+        ],
+        "medianMs": 10.977084000000104,
+        "minMs": 10.853624999999738,
+        "maxMs": 11.305041000000529,
+        "sql": {
+          "statements": 509
+        }
+      },
+      "counter": "statements",
+      "before": 507,
+      "after": 509
+    },
+    {
+      "row": {
+        "group": "coding-mixed",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": false,
+        "iterations": 1,
+        "samplesMs": [
+          11.137541000000056,
+          11.843791000000238,
+          8.84441599999991
+        ],
+        "medianMs": 11.137541000000056,
+        "minMs": 8.84441599999991,
+        "maxMs": 11.843791000000238,
+        "sql": {
+          "statements": 465
+        }
+      },
+      "counter": "statements",
+      "before": 463,
+      "after": 465
+    }
+  ],
+  "workloads": 190,
+  "comparable": 190,
+  "sqlCoverage": 190,
+  "unresolved": [],
+  "regressions": [],
+  "metrics": [
+    {
+      "id": "overall",
+      "label": "Overall · VFS",
+      "ratio": 0.7707079840027206
+    },
+    {
+      "id": "files",
+      "label": "File operations · VFS",
+      "ratio": 0.849718541566945
+    },
+    {
+      "id": "git",
+      "label": "Git & coding · VFS",
+      "ratio": 0.7602027460314142
+    },
+    {
+      "id": "cache",
+      "label": "Metadata cache",
+      "ratio": 0.8085003920347007
+    }
+  ],
+  "worstRatio": 1.0021706312291034,
+  "requiresReview": true
+}
