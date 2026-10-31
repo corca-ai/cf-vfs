@@ -16,6 +16,8 @@ included.
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-10-31
+
 - Measuring text as UTF-8 tests for ASCII before encoding, at any length.
   On Workers encoding allocates a buffer per call; for a 200-character line
   it cost 1.1 µs against 0.06 µs for the test, and `awk`, buffered output and
@@ -681,7 +683,8 @@ to the release, so the package can be installed by a consumer that pins
 [`a335bd1`]: https://github.com/corca-ai/cf-vfs/commit/a335bd1
 [`1a4447d`]: https://github.com/corca-ai/cf-vfs/commit/1a4447d
 [`32a2c15`]: https://github.com/corca-ai/cf-vfs/commit/32a2c15
-[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/corca-ai/cf-vfs/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/corca-ai/cf-vfs/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/corca-ai/cf-vfs/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/corca-ai/cf-vfs/compare/v0.4.0...v0.4.1
