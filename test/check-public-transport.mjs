@@ -33,6 +33,7 @@ async function exercise(loseClaim, delayListen = false) {
       process.execPath,
       [
         "bench/public-remote.mjs",
+        "--user-requested",
         "--url",
         `http://127.0.0.1:${port}`,
         "--build",
@@ -75,7 +76,39 @@ async function exercise(loseClaim, delayListen = false) {
     await new Promise((resolve) => server.close(resolve));
   }
 }
+/** Without --user-requested the client refuses before it sends anything. */
+async function refusesUnrequested() {
+  let requests = 0;
+  const server = createServer((_request, response) => {
+    requests += 1;
+    response.end("{}");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const child = spawn(
+      process.execPath,
+      ["bench/public-remote.mjs", "--url", `http://127.0.0.1:${server.address().port}`],
+      {
+        env: { ...process.env, CF_VFS_PUBLIC_BENCHMARK_TOKEN: "transport-test-only" },
+        stdio: ["ignore", "ignore", "pipe"],
+        timeout: 15_000,
+      },
+    );
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    const code = await new Promise((resolve) => child.once("exit", resolve));
+    assert.notEqual(code, 0);
+    assert.match(stderr, /--user-requested/);
+    assert.equal(requests, 0, "An unrequested deployed run must not reach the Worker");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
 try {
+  await refusesUnrequested();
   await exercise(false);
   await exercise(true);
   await exercise(false, true);

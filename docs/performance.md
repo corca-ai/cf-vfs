@@ -461,8 +461,9 @@ The public chart now uses the paired protocol described below. One point represe
 one commit, with raw observations from up to twelve complete runs; the latest ten
 distinct commits are retained. Old unpaired records remain archived separately.
 Opening the page never runs a benchmark. Deploy committed source with
-`npm run deploy:public`, which uses `cf deploy`, never `wrangler deploy`; use `npm run bench:public -- --out cf.json` for an
-authenticated fresh run. Public requests retain the ten-minute VFS mtime cache.
+`npm run deploy:public`, which uses `cf deploy`, never `wrangler deploy`; when the
+user asks for one, `npm run bench:public -- --user-requested --out cf.json`
+requests an authenticated fresh run. Public requests retain the ten-minute VFS mtime cache.
 
 The [ten-round production evaluation](../bench/cf-optimization-2026-10-08/report.md)
 archives every candidate and actual CF run, including rejected optimizations.
@@ -531,72 +532,72 @@ the final deadline/abort check. No filesystem API or schema is added.
 
 ## Comprehensive regression protocol
 
-Performance adoption requires full-suite evidence, not only a faster target.
-The repository instructions in AGENTS.md require this for future work.
+Performance adoption requires full-suite evidence, not only a faster target,
+and that evidence is local. The repository instructions in AGENTS.md require
+this for future work.
+
+Cloudflare usage is billed. Until 2026-11-02 this protocol asked for three
+complete deployed full-suite runs per version of any change on the plan's
+path; two days of that, with 10,000-page lab experiments beside it, cost far
+more than it told. Large workloads — a 10,000-page wiki, the full benchmark
+plan — now run only locally, and Cloudflare is used for small experiments that
+check that what was measured locally holds on Workers.
+
+1. Save the baseline commit, runtime, workload plan, warmups, raw samples,
+   validation results and SQL counters, including UID/GID/groups and fixture
+   permissions. Run the entire local plan for both versions, including both
+   file counts, both cache variants, Git engine, shell Git, coding profiles and
+   recovery probes: `npm run bench:public:local -- --out local.json` compiles
+   and runs it on NodeSqlFileSystem, and `--root /path/to/baseline-worktree`
+   selects an isolated baseline checkout with matching dependencies. Existing
+   `bench:check` and SQL/compatibility/bundle guards remain required.
+2. Collect paired local evidence with `bench:local:paired` (below), balancing
+   `ORDER_OFFSET=0/1` across preselected sessions, and investigate every >5%
+   slowdown with at least ten alternating pairs. Preselect the comparison and
+   overall metric; do not stop or retry until a favorable result appears. A
+   geometric mean below 1 does not override a confirmed material regression
+   unless the user explicitly accepts the documented tradeoff. SQL reductions
+   and latency gains are separate claims; meter statements, rows read and rows
+   written separately.
+3. Run the large workloads the change is about, such as a 10,000-page wiki,
+   locally only.
+4. Check the pattern on Cloudflare when Workers can differ from Node, as
+   [the next section](#scope-the-cloudflare-evidence-to-the-change) describes.
+5. Adopt only when overall improvement is supported and no material
+   unexplained per-workload or cost regression remains. Keep POSIX tests and
+   bundle budgets passing. Save unsuccessful experiments too.
 
 ### Scope the Cloudflare evidence to the change
 
-The full local plan is always required. How much Cloudflare evidence a change
-needs depends on whether the deployed workloads execute its code; three full
-CF runs take close to an hour per version, which measures only noise for code
-the plan never reaches.
+A Cloudflare check confirms that the local pattern — the direction and rough
+size of a change, and its SQL counts — holds on Workers. It is needed only
+where Workers can differ from Node: crossings into the runtime (streams,
+buffer allocation, encoders, abort signals), SQLite page reads, RPC. A change
+whose cost is ordinary JavaScript needs none; Workers run it about five times
+slower, uniformly.
 
-- **On the full plan's path** — the VFS, SQL, storage, Git, or anything else
-  the 190 workloads execute: at least three complete full-suite runs per
-  version, as the steps below describe.
-- **Off that path** — for example the shell's text utilities and regular
-  expression engine, which only the agent task runs: at least three runs per
-  version of the series that exercises the code (`bench:public -- --task` for
-  shell utilities), and one complete full-suite run of the candidate as a
-  regression control against the retained baseline runs. Record how the path
-  was established, such as the workloads' scripts or a coverage trace.
-- **Escalate** to the full three-run protocol, and the ten-pair investigation,
-  when the control run departs from what two baseline runs of the same code
-  show (A/A): an overall geometric mean outside their spread, or clearly more
-  rows slower than 5% than the A/A pair has. Also escalate when a workload that
-  runs the changed code slows down, or any SQL cost changes. A fixed 5% bar
-  per workload cannot be the trigger: one full run cannot resolve a single
-  workload, and two runs of unchanged code differ by more than 5% on about a
-  third of the rows ([evidence](../bench/regex-prefix-2026-10-29/report.md)).
-  Keep at least two baseline full runs so the A/A spread exists.
-- **Batch** off-path changes: several may share one baseline cohort, and a full
-  three-run cohort is repeated before a release that includes performance
-  changes.
+- **Scale.** About 200 pages, or a fixture of that order. `python3
+  bench/awiki-scenarios-2026-10-30/fixtures.py OUT s3-200` writes the S3 wiki
+  at 200 pages. The SQL lab refuses to hold more than 1,000 files.
+- **Design.** Bundle both versions in one lab deployment and alternate them on
+  the same Durable Object, five pairs or fewer per command
+  ([scaffolding](../bench/sql-lab/runtime-pairs-lab-scaffolding-2026-10-31.patch.txt)).
+  Redeploying between versions is not a comparison: sessions minutes apart
+  differed by up to 2x ([evidence](../bench/sql-lab/runtime-report-2026-10-31.md)).
+- **Budget.** Minutes of Durable Object time for the whole check. Destroy the
+  lab when it ends (`DELETE /lab/:name`); a lab deletes itself two hours after
+  it is seeded in any case.
+- **Never** retry a failed run or add runs to reach a result; report it.
 
-1. Save the baseline commit/build, runtime, workload plan, warmups, raw samples,
-   validation results and SQL counters, including UID/GID/groups and fixture
-   permissions. Run the entire local and actual CF
-   plans, including both file counts, both cache variants, Git engine, shell
-   Git, coding profiles and recovery probes.
-2. Run the same plan for the candidate. `npm run bench:public:local -- --out
-   local.json` compiles and runs the full public plan on NodeSqlFileSystem;
-   `--root /path/to/baseline-worktree` selects an isolated baseline checkout
-   with matching dependencies. `npm run bench:public -- --out cf.json` requests
-   the authenticated full deployed suite and verifies its build identity.
-   Existing `bench:check` and SQL/compatibility/bundle guards remain required.
-3. For paired production results, run `npm run bench:assess:paired -- cf.json`.
-   It reports fixed-reference and previous-commit comparisons separately, using
-   the retained raw pairs and run clusters. Exit 2 means improvement is not
-   established or regression review is required. `bench:assess` and the old
-   `--baseline` option remain descriptive tools for legacy results, not an
-   adoption gate. Missing SQL counters are not evidence of unchanged costs;
-   separately meter statements, rows read and rows written.
-4. For a change on the full plan's path, collect at least three complete runs
-   per version (eighteen pairs per workload)
-   and repeat across sessions when environment drift is suspected. Preselect the
-   comparison cohort and overall metric; do not stop/retry only until a favorable
-   result appears. Investigate every >5% slowdown with additional matched evidence.
-   A geometric mean below 1 does not automatically override a confirmed material
-   regression unless the user explicitly accepts the documented tradeoff.
-   Credential-bound optimizations need matching credential-bound comparisons:
-   the public unbound plan cannot establish their acceleration. Keep its full
-   suite as a control. SQL reductions and latency gains are separate claims;
-   SQL counts alone do not establish dollar savings.
-5. Adopt only when overall improvement is supported and no material unexplained
-   per-workload or cost regression remains, except an explicitly accepted
-   per-workload latency tradeoff. Keep POSIX tests and bundle budgets
-   passing. Save unsuccessful experiments too. After deploying, rerun the full
-   CF suite for the expected build; revert an unaccepted confirmed regression.
+The deployed full suite and the agent task series (`npm run bench:public`, with
+or without `--task`) run only when the user asks, and the client refuses to
+start without `--user-requested`. Deploy the public benchmark for a release,
+not for a candidate. When a suite run is requested, it keeps the paired
+fixed-reference design below: `npm run bench:assess:paired -- cf.json` reports
+fixed-reference and previous-commit comparisons separately, and one full run
+cannot resolve a single workload — two runs of unchanged code differ by more
+than 5% on about a third of the rows
+([evidence](../bench/regex-prefix-2026-10-29/report.md)).
 
 ### Control CF evaluation topology
 
@@ -763,9 +764,9 @@ identities are checked. This describes a warm coding task, excluding initial
 repository creation; prepare/clone in the original suite remain cold controls.
 
 Request runs explicitly; the same ten-minute VFS-mtime cache, active-run
-coalescing, six alternating pairs, three-run minimum and one-point-per-commit
-history rules apply. Run `npm run bench:public -- --task --out task.json` for
-authenticated evaluation. `demo/benchmark-task-reference` is independently
+coalescing, six alternating pairs and one-point-per-commit history rules apply.
+Only when the user asks, run `npm run bench:public -- --user-requested --task
+--out task.json` for authenticated evaluation. `demo/benchmark-task-reference` is independently
 frozen. `node bench/pin-reference.mjs --pin --task` explicitly starts a new task
 series; ordinary optimizations must not run it. Both reference hashes and
 fixture/dependency inputs are verified by the existing reference gate.

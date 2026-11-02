@@ -29,48 +29,45 @@ with `eval/benchmark-deploy/cloudflare.config.ts`.
 
 ## Performance changes
 
-For every performance change, follow [the comprehensive performance protocol](docs/performance.md#comprehensive-regression-protocol).
-Capture baseline and candidate **full** local suites with matching workloads,
-engines and measurement protocols; a targeted benchmark alone cannot approve
-adoption. Scale the Cloudflare evidence to the change, as
-[scoping](docs/performance.md#scope-the-cloudflare-evidence-to-the-change)
-describes: a change the full plan executes (VFS, SQL, storage, Git) needs at
-least three complete CF full-suite runs per version; a change off that path
-needs three runs per version of the series that exercises it (the agent task
-for shell utilities) and one candidate full-suite control run, escalating to
-the full protocol when the control run departs from the baseline A/A spread,
-a workload that runs the changed code slows down, or any SQL cost changes. Report per-workload regressions, equal-weight
-geometric means (overall and families), and SQL statements/rows read/rows written
-separately. Use `bench:public:local`, `bench:public`, and `bench:assess` for the
-shared full plan and legacy descriptive screening. Use `bench:assess:paired` for
-new paired production results.
-For paired local adoption evidence, use `bench:local:paired` with immutable
-compiled baseline/candidate graphs. Its `local-group-v1` protocol creates fresh
-fixtures per arm/group and completes a group before switching arms, matching CF.
-Balance `ORDER_OFFSET=0/1` across preselected independent local sessions. Legacy
-stage-interleaved local runs are screening evidence and must not be pooled with
-the group protocol. Retain GC pauses; never trim or subtract them to fix a score.
-Keep the reference frozen across library optimizations; do not repin it to erase
-regressions. Verify A/A calibration and both reference and previous-commit
-comparisons. Never cherry-pick runs, remove unresolved workloads or treat pairs
-within one run as independent sessions. Zero timings are unresolved, not
-infinite speedups. Investigate every >5% slowdown with at least ten alternating
-paired trials; smaller changes within noise are not proven wins. Retain a
-performance candidate only when the overall improvement is supported and no
-material per-workload or SQL-cost regression remains unexplained. Preserve
-POSIX behavior and bundle budgets. Save raw evidence and rejected experiments.
-Finish deployment and logging configuration before measurement cohorts. Do not
-compare different CF evaluation topologies as if only library code changed.
-Reuse the evaluation Worker, DO names/bindings and entry point across baseline
-and candidate cohorts; record both arms' RPC ping distributions. Additive RPC
-delay does not cancel in ratios. Preserve cross-topology results as diagnostics,
-and require same-topology full-suite evidence before attributing gains to code.
-Never subtract RPC pings from timings. Do not
-attach or detach `wrangler tail` or dashboard live logs during measurements:
-Cloudflare can replace Durable Objects when live logging is enabled, even with
-an unchanged source build. Preserve affected runs as excluded diagnostics.
-After deployment rerun the full CF suite and verify the measured build/commit;
-revert an unaccepted confirmed regression. A user may explicitly accept a
-documented per-workload latency tradeoff when the full-suite geometric mean
-improves; preserve the raw regression evidence and correctness/cost gates. UI-only/documentation changes need relevant
-checks and UI verification, not claims of filesystem acceleration.
+Cloudflare usage is billed, and full-scale runs there cost far more than they
+tell. **Run large workloads (a 10,000-page wiki, the full benchmark plan) only
+locally. On Cloudflare run only small experiments, about 200 pages, whose job
+is to check that the pattern measured locally holds on Workers.** See
+[the protocol](docs/performance.md#comprehensive-regression-protocol).
+
+- Adoption evidence is local. Capture baseline and candidate **full** local
+  suites (`bench:public:local`) with matching workloads, engines and
+  measurement protocols; a targeted benchmark alone cannot approve adoption.
+  Use `bench:local:paired` with immutable compiled baseline/candidate graphs
+  for paired evidence: its `local-group-v1` protocol creates fresh fixtures per
+  arm/group and completes a group before switching arms. Balance
+  `ORDER_OFFSET=0/1` across preselected sessions. Investigate every >5%
+  slowdown with at least ten alternating paired trials.
+- A Cloudflare check is one small experiment per change, and only where
+  Workers can differ from Node (runtime crossings such as streams and buffer
+  allocation, SQLite page reads, RPC): in the SQL lab, about 200 pages, both
+  versions bundled in one deployment and alternated in pairs (five pairs or
+  fewer), minutes of Durable Object time in all. It confirms the direction and
+  rough size of the local result and SQL counts; it does not replace local
+  evidence. Destroy the lab when the experiment ends.
+- Do not run the deployed full suite or task series (`bench:public`), and do
+  not deploy the public benchmark for a candidate, unless the user asks. Never
+  retry a failed Cloudflare run or add runs to reach a result; report it.
+- Report per-workload regressions, equal-weight geometric means (overall and
+  families) and SQL statements/rows read/rows written separately. Retain GC
+  pauses; never trim or subtract them. Keep the benchmark reference frozen; do
+  not repin it to erase regressions. Never cherry-pick runs, remove unresolved
+  workloads or treat pairs within one run as independent sessions. Zero timings
+  are unresolved, not infinite speedups. Smaller changes within noise are not
+  proven wins.
+- Retain a candidate only when the overall improvement is supported and no
+  material per-workload or SQL-cost regression remains unexplained. A user may
+  explicitly accept a documented per-workload latency tradeoff. Preserve POSIX
+  behavior and bundle budgets. Save raw evidence and rejected experiments.
+- When the user asks for a Cloudflare suite run: finish deployment and logging
+  configuration first, keep one evaluation topology for both arms, never attach
+  `wrangler tail` or dashboard live logs during it, and preserve affected runs
+  as diagnostics.
+
+UI-only/documentation changes need relevant checks and UI verification, not
+claims of filesystem acceleration.
