@@ -3,10 +3,13 @@ import { readFileSync } from "node:fs";
 // A client for the SQL lab Worker (eval/sql-lab). The bearer token comes from
 // eval/sql-lab/.secrets.json and is never printed.
 
-const BASE = "https://lab.vfs.borca.ai/lab";
-const token = JSON.parse(
-  readFileSync(new URL("../../eval/sql-lab/.secrets.json", import.meta.url), "utf8"),
-).LAB_TOKEN;
+// LAB_URL points the client at a local `cf dev` lab, with its own LAB_TOKEN.
+const BASE = `${process.env.LAB_URL ?? "https://lab.vfs.borca.ai"}/lab`;
+const token =
+  process.env.LAB_URL === undefined
+    ? JSON.parse(readFileSync(new URL("../../eval/sql-lab/.secrets.json", import.meta.url), "utf8"))
+        .LAB_TOKEN
+    : process.env.LAB_TOKEN;
 const headers = {
   Authorization: `Bearer ${token}`,
   "Content-Type": "application/json",

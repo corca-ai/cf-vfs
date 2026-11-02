@@ -1,0 +1,46 @@
+read stream                             603 ms  49742343 bytes
+read many-stream                        268 ms  49742343 bytes
+read many                               170 ms  49742343 bytes
+cat glob per-file                       384 ms  exit 0 "" 
+cat glob bulk                           205 ms  exit 0 "" 
+grep -lF glob per-file                  470 ms  exit 0 "" 
+grep -lF glob bulk                      204 ms  exit 0 "" 
+grep -c glob per-file                   976 ms  exit 0 "" 
+grep -c glob bulk                       712 ms  exit 0 "" 
+wc -l glob per-file                     477 ms  exit 0 "" 
+wc -l glob bulk                         237 ms  exit 0 "" 
+read many                               191 ms  49742343 bytes
+read many-stream                        256 ms  49742343 bytes
+read stream                             614 ms  49742343 bytes
+cat glob bulk                           186 ms  exit 0 "" 
+cat glob per-file                       386 ms  exit 0 "" 
+grep -lF glob bulk                      212 ms  exit 0 "" 
+grep -lF glob per-file                  470 ms  exit 0 "" 
+grep -c glob bulk                       722 ms  exit 0 "" 
+grep -c glob per-file                  1000 ms  exit 0 "" 
+wc -l glob bulk                         240 ms  exit 0 "" 
+wc -l glob per-file                     463 ms  exit 0 "" 
+read stream                             703 ms  49742343 bytes
+read many-stream                        278 ms  49742343 bytes
+read many                               221 ms  49742343 bytes
+cat glob per-file                       385 ms  exit 0 "" 
+cat glob bulk                           199 ms  exit 0 "" 
+grep -lF glob per-file                  471 ms  exit 0 "" 
+grep -lF glob bulk                      204 ms  exit 0 "" 
+grep -c glob per-file                   979 ms  exit 0 "" 
+grep -c glob bulk                       721 ms  exit 0 "" 
+wc -l glob per-file                     466 ms  exit 0 "" 
+wc -l glob bulk                         247 ms  exit 0 "" 
+
+medians
+read stream                             614 ms  [603, 614, 703]
+read many-stream                        268 ms  [268, 256, 278]
+read many                               191 ms  [170, 191, 221]
+cat glob per-file                       385 ms  [384, 386, 385]
+cat glob bulk                           199 ms  [205, 186, 199]
+grep -lF glob per-file                  470 ms  [470, 470, 471]
+grep -lF glob bulk                      204 ms  [204, 212, 204]
+grep -c glob per-file                   979 ms  [976, 1000, 979]
+grep -c glob bulk                       721 ms  [712, 722, 721]
+wc -l glob per-file                     466 ms  [477, 463, 466]
+wc -l glob bulk                         240 ms  [237, 240, 247]

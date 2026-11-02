@@ -569,12 +569,25 @@ check that what was measured locally holds on Workers.
 
 ### Scope the Cloudflare evidence to the change
 
-A Cloudflare check confirms that the local pattern — the direction and rough
-size of a change, and its SQL counts — holds on Workers. It is needed only
-where Workers can differ from Node: crossings into the runtime (streams,
-buffer allocation, encoders, abort signals), SQLite page reads, RPC. A change
-whose cost is ordinary JavaScript needs none; Workers run it about five times
-slower, uniformly.
+Workers can differ from Node where code crosses into the runtime (streams,
+buffer allocation, encoders, abort signals) or reads SQLite pages. Answer those
+questions on **local workerd** first, at no cost: `npm run lab:local` serves
+the SQL lab with `cf dev` (Durable Objects always run locally there), and
+`LAB_URL=http://localhost:8787 LAB_TOKEN=local-lab-only` points the
+`bench/sql-lab` scripts at it; a lab reached from the loopback address holds
+up to 20,000 files. Its
+[calibration](../bench/local-workerd-2026-11-02/report.md) repeated every
+Cloudflare result on record: all version pairs and bulk comparisons pointed
+the same way, ordinary JavaScript and SQL ran 5–9 times faster than on
+Cloudflare, uniformly, and streams and buffer allocation a further 2–3 and 8
+times faster, so local workerd understates stream- and allocation-heavy
+effects (0.43 locally was 0.20 on Cloudflare). A change whose cost is ordinary
+JavaScript needs no Workers check at all.
+
+A Cloudflare check runs before a release, or when local workerd cannot answer:
+production storage (replication, output gates), RPC and placement, or the
+absolute size of an allocation-heavy effect. It confirms that the local
+pattern — direction, rough size, SQL counts — holds on Workers.
 
 - **Scale.** About 200 pages, or a fixture of that order. `python3
   bench/awiki-scenarios-2026-10-30/fixtures.py OUT s3-200` writes the S3 wiki
