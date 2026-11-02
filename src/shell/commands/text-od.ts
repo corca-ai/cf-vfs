@@ -4,7 +4,7 @@ import {
   defineApplet,
   parseAppletOptions,
 } from "./applet.js";
-import { BufferedTextWriter, parseInteger, readWithAbort } from "./helpers.js";
+import { BufferedTextWriter, parseInteger, watchReader } from "./helpers.js";
 import { inputStreams } from "./inputs.js";
 
 const OD = {
@@ -362,15 +362,17 @@ export const odCommand = /* @__PURE__ */ defineApplet(OD, async (context, argv, 
   try {
     for await (const operand of inputStreams(context, parsed.operands, fds[0])) {
       const reader = operand.stream.getReader();
+      const watched = watchReader(reader, context.signal);
       try {
         while (!input.done) {
-          const read = await readWithAbort(reader, context.signal);
+          const read = await watched.read();
           if (read.done) break;
           context.budget.io(read.value.byteLength);
           await input.feed(read.value, writer);
         }
       } finally {
         await reader.cancel().catch(() => undefined);
+        watched.unwatch();
         reader.releaseLock();
       }
     }

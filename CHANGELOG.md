@@ -39,6 +39,12 @@ included.
   takes 0.79 of the time on local workerd, `grep -rn` 0.75. Concurrent
   pipeline stages can interleave differently, because grep yields to other
   stages less often.
+- `awk` runs the records of bodies read in bulk without an `await` per
+  record, buffered command output is awaited only when it reaches its sink,
+  and a command reading a stream watches the execution's abort once per
+  reader instead of once per chunk: `awk` over 8,055 files takes 0.70–0.78
+  of the time on local workerd, stream readers such as `wc` and `tail`
+  0.95–0.97.
 
 ## [0.5.1] — 2026-10-31
 

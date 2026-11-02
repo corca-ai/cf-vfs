@@ -85,13 +85,18 @@ export class AwkOutput {
     return this.stdout.length > 0 || this.stderr.length > 0;
   }
 
-  async flush(writer: BufferedTextWriter, stderr: ShellSink): Promise<void> {
+  /** Writes what is held, returning a promise only when it had to reach a sink. */
+  flush(writer: BufferedTextWriter, stderr: ShellSink): Promise<void> | undefined {
     const [out, err] = [this.stdout.join(""), this.stderr.join("")];
     this.held -= utf8ByteLength(out) + utf8ByteLength(err);
     this.stdout = [];
     this.stderr = [];
-    if (out !== "") await writer.write(out);
-    if (err !== "") await writeText(stderr, err);
+    const writing = out === "" ? undefined : writer.put(out);
+    if (err === "") return writing;
+    return (async () => {
+      if (writing !== undefined) await writing;
+      await writeText(stderr, err);
+    })();
   }
 
   /** Publishes each redirected file once, replacing or appending as it was opened. */
@@ -364,19 +369,43 @@ function executeRule(rule: Rule, state: RuntimeState, output: AwkOutput): Contro
   }
 }
 
-/** Runs the rules of one phase, flushing what each rule printed before the next. */
-export async function executeRules(
+/**
+ * Runs the rules of `phase`, flushing output after each. A promise only when
+ * a flush had to reach a sink, so a record that prints into the buffer costs
+ * no await.
+ */
+export function executeRules(
   rules: readonly Rule[],
   phase: Rule["phase"],
   state: RuntimeState,
   output: AwkOutput,
   writer: BufferedTextWriter,
   stderr: ShellSink,
-): Promise<Control> {
-  for (const rule of rules) {
+): Control | Promise<Control> {
+  return executeRulesFrom(0, rules, phase, state, output, writer, stderr);
+}
+
+function executeRulesFrom(
+  from: number,
+  rules: readonly Rule[],
+  phase: Rule["phase"],
+  state: RuntimeState,
+  output: AwkOutput,
+  writer: BufferedTextWriter,
+  stderr: ShellSink,
+): Control | Promise<Control> {
+  for (let index = from; index < rules.length; index += 1) {
+    const rule = rules[index] as Rule;
     if (rule.phase !== phase) continue;
     const control = executeRule(rule, state, output);
-    if (output.pending) await output.flush(writer, stderr);
+    const flushing = output.pending ? output.flush(writer, stderr) : undefined;
+    if (flushing !== undefined) {
+      return flushing.then(() =>
+        control.kind !== "none"
+          ? control
+          : executeRulesFrom(index + 1, rules, phase, state, output, writer, stderr),
+      );
+    }
     if (control.kind !== "none") return control;
   }
   return NO_CONTROL;

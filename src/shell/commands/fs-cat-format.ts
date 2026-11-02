@@ -1,5 +1,5 @@
 import type { ShellCommandContext, ShellSink } from "../types.js";
-import { readWithAbort, writeBytes } from "./helpers.js";
+import { watchReader, writeBytes } from "./helpers.js";
 
 /** `cat` display options, which apply to the concatenated stream as one. */
 export interface CatFormat {
@@ -80,14 +80,16 @@ export async function formatToSink(
   formatter: CatFormatter,
 ): Promise<void> {
   const reader = stream.getReader();
+  const watched = watchReader(reader, context.signal);
   try {
     while (true) {
-      const read = await readWithAbort(reader, context.signal);
+      const read = await watched.read();
       if (read.done) return;
       context.budget.io(read.value.byteLength);
       await writeBytes(sink, formatter.transform(read.value));
     }
   } finally {
+    watched.unwatch();
     reader.releaseLock();
   }
 }

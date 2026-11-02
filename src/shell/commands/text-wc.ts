@@ -2,7 +2,7 @@ import { VfsError } from "../../core/errors.js";
 import type { InlineReadResult } from "../../vfs/types.js";
 import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import { type AppletSpecWithOptions, defineApplet, parseAppletOptions } from "./applet.js";
-import { cancellation, commandPath, readWithAbort, writeText } from "./helpers.js";
+import { cancellation, commandPath, watchReader, writeText } from "./helpers.js";
 import { inputStreams, OperandReader } from "./inputs.js";
 
 const WC = {
@@ -162,13 +162,14 @@ async function wcStream(
   selection: WcSelection,
 ): Promise<WcCounts> {
   const reader = stream.getReader();
+  const watched = watchReader(reader, context.signal);
   const text =
     selection.lines || selection.words ? new WcTextCounter(path, selection.words) : undefined;
   let lines = 0;
   let bytes = 0;
   try {
     for (;;) {
-      const read = await readWithAbort(reader, context.signal);
+      const read = await watched.read();
       if (read.done) break;
       context.budget.io(read.value.byteLength);
       bytes += read.value.byteLength;
@@ -181,6 +182,7 @@ async function wcStream(
     await reader.cancel(error).catch(() => undefined);
     throw error;
   } finally {
+    watched.unwatch();
     reader.releaseLock();
   }
 }

@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { awkCommand } from "../src/shell/commands/awk.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { writeText } from "../src/shell/commands/helpers.js";
 import { Shell } from "../src/shell/shell.js";
@@ -46,6 +47,52 @@ it("wakes a pending stdin read on cancellation", async () => {
   expect(result).toEqual({ exitCode: 1 });
   await Promise.all([stdout, stderr]);
 });
+
+// The pull starts only when a command reads (a high-water mark of zero), so
+// the cancellation and the deadline land while the read is waiting.
+for (const script of [
+  "cat",
+  "cat -n",
+  "wc -l",
+  "md5sum",
+  "tr a b",
+  "head -c 5",
+  "tail -n 1",
+  "grep x",
+  "grep -c x",
+  "awk '{ print }'",
+  "od -c",
+  "sort",
+]) {
+  for (const stop of ["cancel", "deadline"] as const) {
+    it(`ends \`${script}\` waiting on stdin at the ${stop}`, async () => {
+      const shell = new Shell({
+        fileSystem: createTestFileSystem(),
+        commands: [...defaultShellCommands, awkCommand],
+        limits: { deadlineMs: stop === "deadline" ? 40 : 5_000 },
+      });
+      const reading = Promise.withResolvers<void>();
+      const execution = shell.executeStream({
+        script: `${script}; touch /after`,
+        stdin: new ReadableStream<Uint8Array>(
+          {
+            pull() {
+              reading.resolve();
+              return new Promise(() => undefined);
+            },
+          },
+          { highWaterMark: 0 },
+        ),
+      });
+      const stdout = readAllBytes(execution.stdout, 1024).catch(() => new Uint8Array());
+      const stderr = readAllBytes(execution.stderr, 1024).catch(() => new Uint8Array());
+      await reading.promise;
+      if (stop === "cancel") execution.cancel();
+      await expect(execution.completed).resolves.toEqual({ exitCode: 1 });
+      await Promise.all([stdout, stderr]);
+    });
+  }
+}
 
 it("cancels execution when the caller cancels a root output stream", async () => {
   const waitForCancel = defineTestApplet("wait-for-cancel", async (context, _argv, fds) => {

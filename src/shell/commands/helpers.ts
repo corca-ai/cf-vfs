@@ -5,6 +5,9 @@ import { encodeUtf8, utf8ByteLength } from "../../core/unicode.js";
 import type { InlineReadResult } from "../../vfs/types.js";
 import { chargeConsumed, fileBody } from "../content.js";
 import type { ShellCommandContext, ShellSink } from "../types.js";
+import { cancellation, watchReader } from "./watch-reader.js";
+
+export { cancellation, watchReader } from "./watch-reader.js";
 
 export interface BufferLease<T> {
   value: T;
@@ -23,34 +26,6 @@ export async function writeText(sink: ShellSink, value: string): Promise<void> {
   await writeBytes(sink, encodeUtf8(value));
 }
 
-/** The error an aborted execution raises, its own reason when that is one. */
-export function cancellation(signal: AbortSignal): VfsError {
-  return signal.reason instanceof VfsError
-    ? signal.reason
-    : new VfsError("ECANCELED", "execution was cancelled");
-}
-
-export async function readWithAbort(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  signal: AbortSignal,
-): Promise<ReadableStreamReadResult<Uint8Array>> {
-  if (signal.aborted) throw cancellation(signal);
-  return await new Promise<ReadableStreamReadResult<Uint8Array>>((resolve, reject) => {
-    const abort = (): void => {
-      const error = cancellation(signal);
-      void reader.cancel(error).catch(() => undefined);
-      reject(error);
-    };
-    signal.addEventListener("abort", abort, { once: true });
-    void reader
-      .read()
-      .then(resolve, reject)
-      .finally(() => {
-        signal.removeEventListener("abort", abort);
-      });
-  });
-}
-
 export class BufferedTextWriter {
   private readonly context: ShellCommandContext;
   private readonly sink: ShellSink;
@@ -66,12 +41,36 @@ export class BufferedTextWriter {
   }
 
   async write(value: string): Promise<void> {
+    const writing = this.put(value);
+    if (writing !== undefined) await writing;
+  }
+
+  /**
+   * Writes `value`, returning a promise only when it had to reach the sink:
+   * text that fits the slab is only buffered, and a caller writing line by
+   * line need not await each line. Await a returned promise before the next
+   * write, or the writes reach the sink out of order; a budget limit throws
+   * at once rather than rejecting.
+   */
+  put(value: string): Promise<void> | undefined {
     const bytes = utf8ByteLength(value);
+    if ((this.bytes > 0 && this.bytes + bytes > this.slabBytes) || bytes >= this.slabBytes) {
+      return this.#putAfterFlush(value, bytes);
+    }
+    this.#buffer(value, bytes);
+    return undefined;
+  }
+
+  async #putAfterFlush(value: string, bytes: number): Promise<void> {
     if (this.bytes > 0 && this.bytes + bytes > this.slabBytes) await this.flush();
     if (bytes >= this.slabBytes) {
       await writeText(this.sink, value);
       return;
     }
+    this.#buffer(value, bytes);
+  }
+
+  #buffer(value: string, bytes: number): void {
     this.release();
     this.buffer += value;
     this.bytes += bytes;
@@ -177,7 +176,7 @@ function takeTextLine(
  * UTF-8 decoder that strips a leading BOM, as decoding the chunk here would
  * give it, so it is not decoded twice; it is ignored for longer bodies.
  */
-export function* chunkTextLines(
+function* chunkTextLines(
   context: ShellCommandContext,
   chunks: readonly Uint8Array[],
   path?: string,
@@ -230,6 +229,44 @@ export function skipTextLines(
   }
 }
 
+/**
+ * The lines of a command's input: synchronously for a bulk-read body, so a
+ * caller iterating them with {@link eachLine} awaits only what needs it.
+ */
+export function textLines(
+  context: ShellCommandContext,
+  source: ReadableStream<Uint8Array> | readonly Uint8Array[],
+  path?: string,
+  decoded?: string,
+): Iterable<string> | AsyncIterable<string> {
+  return Array.isArray(source)
+    ? chunkTextLines(context, source as readonly Uint8Array[], path, decoded)
+    : readTextLines(context, source as ReadableStream<Uint8Array>, path);
+}
+
+/**
+ * Visits each line until `visit` returns true. A line of a synchronous source
+ * is awaited only when `visit` returns a promise: `for await` would await
+ * every value even of a synchronous iterable, and on Workers an await costs
+ * more than handling a short line.
+ */
+export async function eachLine(
+  lines: Iterable<string> | AsyncIterable<string>,
+  visit: (line: string) => boolean | Promise<boolean>,
+): Promise<void> {
+  if (Symbol.asyncIterator in lines) {
+    for await (const line of lines) {
+      const stop = visit(line);
+      if (stop === true || (stop !== false && (await stop))) return;
+    }
+    return;
+  }
+  for (const line of lines) {
+    const stop = visit(line);
+    if (stop === true || (stop !== false && (await stop))) return;
+  }
+}
+
 export async function* readTextLines(
   context: ShellCommandContext,
   source: ReadableStream<Uint8Array> | readonly Uint8Array[],
@@ -241,12 +278,13 @@ export async function* readTextLines(
   }
   const stream = source as ReadableStream<Uint8Array>;
   const reader = stream.getReader();
+  const watched = watchReader(reader, context.signal);
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const state: TextLineState = { pending: "", records: 0 };
   let finished = false;
   try {
     for (;;) {
-      const read = await readWithAbort(reader, context.signal);
+      const read = await watched.read();
       if (read.done) {
         state.pending += decodeUtf8(decoder, undefined, path);
         finished = true;
@@ -275,6 +313,7 @@ export async function* readTextLines(
       await reader
         .cancel(new VfsError("EPIPE", "line consumer stopped early"))
         .catch(() => undefined);
+    watched.unwatch();
     reader.releaseLock();
   }
 }
@@ -285,13 +324,14 @@ export async function collectStream(
   maximumBytes = context.budget.limits.maxBufferedBytes,
 ): Promise<BufferLease<Uint8Array>> {
   const reader = stream.getReader();
+  const watched = watchReader(reader, context.signal);
   const chunks: Uint8Array[] = [];
   let total = 0;
   let release: () => void = () => undefined;
   let retained = false;
   try {
     for (;;) {
-      const result = await readWithAbort(reader, context.signal);
+      const result = await watched.read();
       if (result.done) break;
       total += result.value.byteLength;
       chargeConsumed(context.budget, stream, result.value.byteLength);
@@ -323,6 +363,7 @@ export async function collectStream(
     await reader.cancel(error).catch(() => undefined);
     throw error;
   } finally {
+    watched.unwatch();
     reader.releaseLock();
     if (!retained) release();
   }
@@ -373,6 +414,7 @@ export async function collectText(
   if (Array.isArray(source)) return collectChunkText(context, source, path, maximumBytes);
   const stream = source as ReadableStream<Uint8Array>;
   const reader = stream.getReader();
+  const watched = watchReader(reader, context.signal);
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const chunks: string[] = [];
   let total = 0;
@@ -380,10 +422,10 @@ export async function collectText(
   let retained = false;
   try {
     while (true) {
-      if (context.signal.aborted) {
+      if (watched.aborted) {
         throw context.signal.reason ?? new VfsError("ECANCELED", "execution was cancelled");
       }
-      const result = await readWithAbort(reader, context.signal);
+      const result = await watched.read();
       if (result.done) break;
       total += result.value.byteLength;
       chargeConsumed(context.budget, stream, result.value.byteLength);
@@ -403,6 +445,7 @@ export async function collectText(
     await reader.cancel(error).catch(() => undefined);
     throw error;
   } finally {
+    watched.unwatch();
     reader.releaseLock();
     if (!retained) release();
   }
@@ -445,12 +488,13 @@ export async function pipeToSink(
   sink: ShellSink,
 ): Promise<void> {
   const reader = stream.getReader();
+  const watched = watchReader(reader, context.signal);
   try {
     while (true) {
-      if (context.signal.aborted) {
+      if (watched.aborted) {
         throw context.signal.reason ?? new VfsError("ECANCELED", "execution was cancelled");
       }
-      const result = await readWithAbort(reader, context.signal);
+      const result = await watched.read();
       if (result.done) break;
       chargeConsumed(context.budget, stream, result.value.byteLength);
       await sink.write(result.value);
@@ -459,6 +503,7 @@ export async function pipeToSink(
     await reader.cancel(error).catch(() => undefined);
     throw error;
   } finally {
+    watched.unwatch();
     reader.releaseLock();
   }
 }

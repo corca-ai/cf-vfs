@@ -6,8 +6,8 @@ import {
   collectStream,
   inputTexts,
   parseInteger,
-  readWithAbort,
   splitLines,
+  watchReader,
   writeBytes,
   writeText,
 } from "./helpers.js";
@@ -151,6 +151,7 @@ async function headBytes(
   sink: ShellSink,
 ): Promise<void> {
   const reader = stream.getReader();
+  const watched = watchReader(reader, context.signal);
   let remaining = count;
   let finished = false;
   try {
@@ -159,7 +160,7 @@ async function headBytes(
       return;
     }
     while (remaining > 0) {
-      const result = await readWithAbort(reader, context.signal);
+      const result = await watched.read();
       if (result.done) {
         finished = true;
         break;
@@ -179,6 +180,7 @@ async function headBytes(
         .cancel(new VfsError("EPIPE", "head stopped reading input"))
         .catch(() => undefined);
     }
+    watched.unwatch();
     reader.releaseLock();
   }
 }
@@ -191,13 +193,14 @@ async function headLines(
   sink: ShellSink,
 ): Promise<void> {
   const reader = stream.getReader();
+  const watched = watchReader(reader, context.signal);
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const account = new HeadLineAccount(context, path);
   let remaining = count;
   let finished = false;
   try {
     while (remaining > 0) {
-      const result = await readWithAbort(reader, context.signal);
+      const result = await watched.read();
       if (result.done) {
         account.finish();
         await writeText(sink, decodeHead(decoder, undefined, false, path));
@@ -223,6 +226,7 @@ async function headLines(
         .cancel(new VfsError("EPIPE", "head stopped reading input"))
         .catch(() => undefined);
     }
+    watched.unwatch();
     reader.releaseLock();
   }
 }

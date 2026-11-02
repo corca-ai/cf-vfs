@@ -3,7 +3,7 @@ import { Md5 } from "../../core/md5.js";
 import { chargeConsumed } from "../content.js";
 import type { ShellCommandContext } from "../types.js";
 import { type AppletSpec, appletUsageError, defineApplet } from "./applet.js";
-import { readWithAbort, writeText } from "./helpers.js";
+import { watchReader, writeText } from "./helpers.js";
 import { inputStreams } from "./inputs.js";
 
 const MD5SUM = {
@@ -18,14 +18,16 @@ async function md5(
 ): Promise<string> {
   const digest = new Md5();
   const reader = stream.getReader();
+  const watched = watchReader(reader, context.signal);
   try {
     for (;;) {
-      const read = await readWithAbort(reader, context.signal);
+      const read = await watched.read();
       if (read.done) break;
       chargeConsumed(context.budget, stream, read.value.byteLength);
       digest.update(read.value);
     }
   } finally {
+    watched.unwatch();
     reader.releaseLock();
   }
   return digest.hex();
