@@ -16,6 +16,12 @@ included.
 
 ## [Unreleased]
 
+- `sed` runs its script without an `await` per step: records of bodies read
+  in bulk are taken synchronously and output awaits only when it reaches its
+  sink. Over 8,055 files it takes 0.50–0.57 of the time on local workerd, a
+  piped input 0.70 and `sed -i` 0.68. Concurrent pipeline stages can
+  interleave differently.
+
 ## [0.5.2] — 2026-11-02
 
 - `sed -i` reads its operands ahead in bulk, publishing each rewrite at once
