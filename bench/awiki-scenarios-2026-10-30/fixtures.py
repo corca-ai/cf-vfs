@@ -133,7 +133,12 @@ def s3(count=2000):
 
 if __name__ == "__main__":
     out = sys.argv[1]
-    builds = (("s1", s1), ("s3", s3), ("s3-10k", lambda: s3(10_000)))
+    builds = (
+        ("s1", s1),
+        ("s3", s3),
+        ("s3-200", lambda: s3(200)),
+        ("s3-10k", lambda: s3(10_000)),
+    )
     for name, build in builds if len(sys.argv) < 3 else [b for b in builds if b[0] in sys.argv[2:]]:
         files, expected = build()
         json.dump({"files": files, "expected": expected}, open(f"{out}/{name}.json", "w"))

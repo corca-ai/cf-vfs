@@ -96,6 +96,8 @@ diagnostics either way.
 `bench/scaled-env-2026-10-30/calibrate.ts` checks that claim: probe scripts
 built from what agents ran over a wiki must succeed or stop at the same limit
 on both. Rerun it after changing limits or adding a command agents lean on.
+It runs locally; a 10,000-page wiki is never seeded on Cloudflare
+([protocol](../docs/performance.md#scope-the-cloudflare-evidence-to-the-change)).
 
 ## The SQL lab
 
@@ -106,7 +108,10 @@ the cf-vfs schema: `POST /lab/:name/seed` writes files through the
 filesystem, `POST /lab/:name/sql` runs statements (`repeat` times, returning
 the first repetition's rows and rows read and written), `POST /lab/:name/read`
 reads paths through the filesystem (`mode`: `stream`, `cancel` or `stat`), and
-`DELETE /lab/:name` drops it; a lab deletes itself a day after it is seeded.
+`DELETE /lab/:name` drops it; a lab deletes itself two hours after it is
+seeded and holds at most 1,000 files. Labs are for small experiments, about
+200 pages, that check a pattern measured locally holds on Workers; large
+workloads run only locally ([protocol](../docs/performance.md#scope-the-cloudflare-evidence-to-the-change)).
 `bench/sql-lab/lab.mjs` is the client. It never shares a namespace with
 evaluation workspaces or the public benchmark, because arbitrary SQL is every
 right over an object's data.

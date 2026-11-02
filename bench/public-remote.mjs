@@ -12,6 +12,14 @@ function option(name) {
   if (!value || value.startsWith("--")) throw new Error(`${name} needs a value`);
   return value;
 }
+// A deployed suite run costs real money and runs for many minutes. It runs
+// only when the user asks for one (AGENTS.md); local suites and small lab
+// experiments are the ordinary evidence.
+if (!args.includes("--user-requested")) {
+  throw new Error(
+    "bench:public runs the deployed suite on Cloudflare; pass --user-requested only when the user asked for this run",
+  );
+}
 const endpoint = args.includes("--task") ? "/api/benchmarks/task" : "/api/benchmarks";
 const base = new URL(option("--url") ?? "https://vfs.borca.ai");
 if (base.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(base.hostname))

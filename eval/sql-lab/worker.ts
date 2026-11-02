@@ -26,7 +26,9 @@ interface LabEnv {
 }
 
 const LAB_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/u;
-const LAB_TTL_MS = 24 * 60 * 60 * 1000;
+// Labs are for small experiments (AGENTS.md): two hours and 1,000 files at most.
+const LAB_TTL_MS = 2 * 60 * 60 * 1000;
+const MAX_LAB_FILES = 1_000;
 const MAX_SEED_FILES = 1_000;
 const MAX_STATEMENTS = 64;
 const MAX_REPEAT = 1_000;
@@ -264,6 +266,12 @@ export class SqlLab extends DurableObject<LabEnv> {
 
   /** Writes files through the filesystem, so the rows are the library's own. */
   async seed(files: readonly { path: string; content: string }[]): Promise<number> {
+    const held = this.ctx.storage.sql
+      .exec("SELECT count(*) AS n FROM vfs_entries WHERE kind = 'file'")
+      .one()["n"] as number;
+    if (held + files.length > MAX_LAB_FILES) {
+      throw new Error(`a lab holds at most ${MAX_LAB_FILES} files; run large workloads locally`);
+    }
     await this.fileSystem.writeFiles(
       files.map((file) => ({
         path: file.path.startsWith("/") ? file.path : `/${file.path}`,

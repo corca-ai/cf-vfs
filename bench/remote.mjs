@@ -162,6 +162,12 @@ async function requestBenchmark(endpoint, token, timeoutMs) {
   });
 }
 
+// A deployed run costs real money; it runs only when the user asks (AGENTS.md).
+if (!process.argv.includes("--user-requested")) {
+  throw new Error(
+    "bench:remote runs on Cloudflare; pass --user-requested only when the user asked",
+  );
+}
 const profile = argumentValue("--profile") ?? "quick";
 if (profile !== "quick" && profile !== "full") {
   throw new Error("--profile must be quick or full");
