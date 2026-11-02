@@ -1,0 +1,559 @@
+diff --git a/eval/sql-lab/worker.ts b/eval/sql-lab/worker.ts
+index 9f33d6c..7bd6e13 100644
+--- a/eval/sql-lab/worker.ts
++++ b/eval/sql-lab/worker.ts
+@@ -259,14 +259,25 @@ function cell(value: SqlStorageValue): unknown {
+ }
+ 
+ export class SqlLab extends DurableObject<LabEnv> {
+-  private readonly fileSystem: DurableObjectFileSystem;
++  private fileSystem: DurableObjectFileSystem;
+ 
+   constructor(ctx: DurableObjectState, env: LabEnv) {
+     super(ctx, env);
+-    this.fileSystem = new DurableObjectFileSystem(ctx.storage, { workspaceId: ctx.id.toString() });
++    this.fileSystem = this.openFileSystem();
+     ctx.blockConcurrencyWhile(() => this.fileSystem.initialize());
+   }
+ 
++  private openFileSystem(): DurableObjectFileSystem {
++    return new DurableObjectFileSystem(this.ctx.storage, { workspaceId: this.ctx.id.toString() });
++  }
++
++  /** Drops every row, then a fresh filesystem, so a later request finds a schema. */
++  private async reset(): Promise<void> {
++    await this.ctx.storage.deleteAll();
++    this.fileSystem = this.openFileSystem();
++    await this.fileSystem.initialize();
++  }
++
+   /** Writes files through the filesystem, so the rows are the library's own. */
+   async seed(files: readonly { path: string; content: string }[], local: boolean): Promise<number> {
+     const held = this.ctx.storage.sql
+@@ -398,11 +409,11 @@ export class SqlLab extends DurableObject<LabEnv> {
+ 
+   async destroy(): Promise<void> {
+     await this.ctx.storage.deleteAlarm();
+-    await this.ctx.storage.deleteAll();
++    await this.reset();
+   }
+ 
+   override async alarm(): Promise<void> {
+-    await this.ctx.storage.deleteAll();
++    await this.reset();
+   }
+ }
+ 
+diff --git a/src/shell/budget.ts b/src/shell/budget.ts
+index b207a51..a092ed5 100644
+--- a/src/shell/budget.ts
++++ b/src/shell/budget.ts
+@@ -230,6 +230,10 @@ export class ExecutionBudget implements ShellBudget {
+     this.expansionWork(characters + fields);
+   }
+ 
++  remainingMutations(): number {
++    return this.limits.maxMutations - this.mutations;
++  }
++
+   remainingBufferedBytes(): number {
+     return this.limits.maxBufferedBytes - this.bufferedBytes;
+   }
+diff --git a/src/shell/commands/helpers.ts b/src/shell/commands/helpers.ts
+index 762c83a..a24abdd 100644
+--- a/src/shell/commands/helpers.ts
++++ b/src/shell/commands/helpers.ts
+@@ -322,12 +322,46 @@ export async function collectStream(
+   }
+ }
+ 
++/** Collects bulk-read chunks as text with the checks {@link collectText} applies to a stream. */
++function collectChunkText(
++  context: ShellCommandContext,
++  chunks: readonly Uint8Array[],
++  path: string | undefined,
++  maximumBytes: number,
++): BufferLease<string> {
++  const decoder = new TextDecoder("utf-8", { fatal: true });
++  const parts: string[] = [];
++  let total = 0;
++  let release: () => void = () => undefined;
++  try {
++    for (const chunk of chunks) {
++      if (context.signal.aborted) {
++        throw context.signal.reason ?? new VfsError("ECANCELED", "execution was cancelled");
++      }
++      total += chunk.byteLength;
++      context.budget.read(chunk.byteLength);
++      if (total > maximumBytes)
++        throw new VfsError("E2BIG", "buffered command input limit exceeded");
++      release();
++      release = context.budget.buffered(total);
++      parts.push(decodeUtf8(decoder, chunk, path));
++    }
++    parts.push(decodeUtf8(decoder, undefined, path));
++  } catch (error) {
++    release();
++    throw error;
++  }
++  return { value: parts.join(""), release };
++}
++
+ export async function collectText(
+   context: ShellCommandContext,
+-  stream: ReadableStream<Uint8Array>,
++  source: ReadableStream<Uint8Array> | readonly Uint8Array[],
+   path?: string,
+   maximumBytes = context.budget.limits.maxBufferedBytes,
+ ): Promise<BufferLease<string>> {
++  if (Array.isArray(source)) return collectChunkText(context, source, path, maximumBytes);
++  const stream = source as ReadableStream<Uint8Array>;
+   const reader = stream.getReader();
+   const decoder = new TextDecoder("utf-8", { fatal: true });
+   const chunks: string[] = [];
+diff --git a/src/shell/commands/in-place-writes.ts b/src/shell/commands/in-place-writes.ts
+new file mode 100644
+index 0000000..637e614
+--- /dev/null
++++ b/src/shell/commands/in-place-writes.ts
+@@ -0,0 +1,102 @@
++import { VfsError } from "../../core/errors.js";
++import type { WriteFilesEntry } from "../../vfs/types.js";
++import type { ShellCommandContext } from "../types.js";
++
++const BATCH_ENTRIES = 64;
++const BATCH_BYTES = 1024 * 1024;
++
++/** One whole-file rewrite, guarded by the token its source was read at. */
++export type InPlaceWrite = WriteFilesEntry & { readonly body: string };
++
++interface PendingWrite {
++  readonly entry: InPlaceWrite;
++  /** The operand as the caller named it, for its diagnostic. */
++  readonly name: string;
++}
++
++/**
++ * Guarded whole-file rewrites a command makes over many operands, published
++ * together.
++ *
++ * Each rewrite would otherwise be its own transaction and its own statements.
++ * They collect here and go out as one `writeFiles` batch, which either
++ * applies every rewrite or none. A batch that fails is written again one file
++ * at a time, so each operand meets exactly the outcome and the diagnostic it
++ * would have met alone, in operand order. Callers flush before reporting
++ * anything else and before reading a path that is still pending, so neither
++ * output order nor what a later operand reads can tell the difference.
++ */
++export class InPlaceWrites {
++  readonly #context: ShellCommandContext;
++  readonly #report: (name: string, error: unknown) => Promise<void>;
++  #pending: PendingWrite[] = [];
++  #paths = new Set<string>();
++  #bytes = 0;
++
++  constructor(
++    context: ShellCommandContext,
++    report: (name: string, error: unknown) => Promise<void>,
++  ) {
++    this.#context = context;
++    this.#report = report;
++  }
++
++  /** Whether a rewrite of `path` is waiting to be published. */
++  pending(path: string): boolean {
++    return this.#paths.has(path);
++  }
++
++  /** Queues a rewrite; resolves to whether a flush it caused reported a failure. */
++  async add(entry: InPlaceWrite, name: string): Promise<boolean> {
++    this.#pending.push({ entry, name });
++    this.#paths.add(entry.path);
++    this.#bytes += entry.body.length;
++    if (this.#pending.length < BATCH_ENTRIES && this.#bytes < BATCH_BYTES) return false;
++    return await this.flush();
++  }
++
++  /** Publishes everything queued; resolves to whether any rewrite failed. */
++  async flush(): Promise<boolean> {
++    const batch = this.#pending;
++    this.#pending = [];
++    this.#paths = new Set();
++    this.#bytes = 0;
++    if (batch.length === 0 || (await this.#publishTogether(batch))) return false;
++    return await this.#publishEach(batch);
++  }
++
++  /** One atomic batch; false when it was not tried or changed nothing. */
++  async #publishTogether(batch: readonly PendingWrite[]): Promise<boolean> {
++    const { budget, fileSystem } = this.#context;
++    // A batch that would cross the mutation limit is left to single writes,
++    // which stop at the exact file the limit stops at.
++    const fits = (budget.remainingMutations?.() ?? 0) >= batch.length;
++    if (batch.length < 2 || fileSystem.writeFiles === undefined || !fits) return false;
++    try {
++      await fileSystem.writeFiles(batch.map((write) => write.entry));
++      return true;
++    } catch (error) {
++      if (error instanceof VfsError) return false;
++      throw error;
++    }
++  }
++
++  async #publishEach(batch: readonly PendingWrite[]): Promise<boolean> {
++    let failed = false;
++    for (const { entry, name } of batch) {
++      try {
++        await this.#context.fileSystem.writeFile(entry.path, entry.body, {
++          ...(entry.ifMutationToken === undefined
++            ? {}
++            : { ifMutationToken: entry.ifMutationToken }),
++          disposition: "replace",
++          ...(entry.mode === undefined ? {} : { mode: entry.mode }),
++        });
++      } catch (error) {
++        await this.#report(name, error);
++        failed = true;
++      }
++    }
++    return failed;
++  }
++}
+diff --git a/src/shell/commands/inputs.ts b/src/shell/commands/inputs.ts
+index ec111bc..1e0b196 100644
+--- a/src/shell/commands/inputs.ts
++++ b/src/shell/commands/inputs.ts
+@@ -1,6 +1,6 @@
+ import { VfsError } from "../../core/errors.js";
+ import { streamFromOwnedChunks } from "../../vfs/streams.js";
+-import type { ByteRange } from "../../vfs/types.js";
++import type { ByteRange, InlineFileBody } from "../../vfs/types.js";
+ import { fileBody, openContent } from "../content.js";
+ import type { ShellCommandContext } from "../types.js";
+ import { commandPath } from "./helpers.js";
+@@ -66,13 +66,18 @@ export class OperandReader {
+ 
+   /** The bulk body of operand `index`, or undefined to open it. */
+   take(index: number): readonly Uint8Array<ArrayBuffer>[] | undefined {
++    return this.takeBody(index)?.chunks;
++  }
++
++  /** The bulk body of operand `index` with its stat, or undefined to open it. */
++  takeBody(index: number): InlineFileBody | undefined {
+     if (index >= this.#window) {
+       this.#window = index + OPERAND_WINDOW;
+       this.#ahead.fill(this.#paths(this.#argv.slice(index, this.#window)));
+     }
+     const path = this.#argv[index];
+     if (path === undefined || path === "-") return undefined;
+-    return this.#ahead.take(this.#resolved(path) ?? "")?.chunks;
++    return this.#ahead.take(this.#resolved(path) ?? "");
+   }
+ 
+   release(): void {
+diff --git a/src/shell/commands/sed-text.ts b/src/shell/commands/sed-text.ts
+index ca01e74..5e5a248 100644
+--- a/src/shell/commands/sed-text.ts
++++ b/src/shell/commands/sed-text.ts
+@@ -10,10 +10,12 @@ export class SedText {
+   constructor(
+     private readonly budget: ShellBudget,
+     private readonly maximumCharacters = budget.limits.maxExpansionChars,
++    /** Whether appending is work; text already charged where it was produced is not. */
++    private readonly work = true,
+   ) {}
+ 
+   append(value: string): void {
+-    this.budget.expansionWork(value.length);
++    if (this.work) this.budget.expansionWork(value.length);
+     if (this.value.length + value.length > this.maximumCharacters)
+       throw new VfsError("E2BIG", "sed: text expansion limit exceeded");
+     const bytes = this.bytes + utf8ByteLength(value);
+diff --git a/src/shell/commands/sed.ts b/src/shell/commands/sed.ts
+index b586ef4..2a1c183 100644
+--- a/src/shell/commands/sed.ts
++++ b/src/shell/commands/sed.ts
+@@ -1,4 +1,5 @@
+ import { VfsError } from "../../core/errors.js";
++import type { InlineFileBody, InlineReadResult } from "../../vfs/types.js";
+ import { fileBody } from "../content.js";
+ import type { ShellBudget, ShellCommandContext, ShellFileDescriptors } from "../types.js";
+ import { appletUsageError, defineApplet, parseAppletOptions } from "./applet.js";
+@@ -9,7 +10,8 @@ import {
+   readTextLines,
+   writeText,
+ } from "./helpers.js";
+-import { inputSources } from "./inputs.js";
++import { type InPlaceWrite, InPlaceWrites } from "./in-place-writes.js";
++import { inputSources, OperandReader } from "./inputs.js";
+ import {
+   type SedAddress as Address,
+   parseSedScript,
+@@ -449,18 +451,38 @@ async function editOperands(
+   fds: ShellFileDescriptors,
+ ): Promise<number> {
+   let failed = false;
+-  for (const path of invocation.operands) {
+-    try {
+-      if (await editInPlace(context, invocation, path)) break;
+-    } catch (error) {
+-      // One bad operand is that operand's failure. Remaining files are still
+-      // edited, each under its own mutation token.
+-      await writeText(
+-        fds[2],
+-        `sed: ${path}: ${error instanceof Error ? error.message : String(error)}\n`,
+-      );
+-      failed = true;
++  // One bad operand is that operand's failure. Remaining files are still
++  // edited, each under its own mutation token.
++  const report = async (path: string, error: unknown): Promise<void> => {
++    await writeText(
++      fds[2],
++      `sed: ${path}: ${error instanceof Error ? error.message : String(error)}\n`,
++    );
++  };
++  const writes = new InPlaceWrites(context, report);
++  const operands = new OperandReader(context, invocation.operands);
++  try {
++    for (const [index, path] of invocation.operands.entries()) {
++      try {
++        const edit = await editInPlace(
++          context,
++          invocation,
++          path,
++          () => operands.takeBody(index),
++          writes,
++        );
++        if (await writes.add(edit.write, path)) failed = true;
++        if (edit.quit) break;
++      } catch (error) {
++        // Earlier rewrites go out first, so diagnostics keep operand order.
++        if (await writes.flush()) failed = true;
++        await report(path, error);
++        failed = true;
++      }
+     }
++    if (await writes.flush()) failed = true;
++  } finally {
++    operands.release();
+   }
+   return failed ? 2 : 0;
+ }
+@@ -498,21 +520,37 @@ export const sedCommand = /* @__PURE__ */ defineApplet(SED, async (context, argv
+   return 0;
+ });
+ 
+-/** Rewrites one file in place, as a single guarded publication. */
++/** Edits one file in place into a single guarded publication, without publishing it. */
+ async function editInPlace(
+   context: ShellCommandContext,
+   invocation: SedInvocation,
+   path: string,
+-): Promise<boolean> {
++  bulk: () => InlineFileBody | undefined,
++  writes: InPlaceWrites,
++): Promise<{ write: InPlaceWrite; quit: boolean }> {
+   const normalized = commandPath(context, path);
+-  const current = context.fileSystem.readFile(normalized);
++  // A rewrite of this file still waiting would be invisible to a read.
++  if (writes.pending(normalized)) await writes.flush();
++  let read = bulk();
++  let current = read === undefined ? context.fileSystem.readFile(normalized) : undefined;
++  if (current !== undefined && writes.pending(current.stat.path)) {
++    // The operand reached a pending file through a link: publish, then read again.
++    await current.stream.cancel();
++    await writes.flush();
++    read = undefined;
++    current = context.fileSystem.readFile(normalized);
++  }
++  const stat = read?.stat ?? (current as InlineReadResult).stat;
+   const token =
+-    current.stat.path === normalized
+-      ? current.stat.mutationToken
+-      : context.fileSystem.getMutationToken(normalized);
+-  const source = await collectText(context, fileBody(current.stream), normalized);
+-  // `-i` numbers each file on its own, as GNU's implied `-s` does.
+-  const edited = new SedText(context.budget, context.budget.limits.maxBufferedBytes);
++    stat.path === normalized ? stat.mutationToken : context.fileSystem.getMutationToken(normalized);
++  const source = await collectText(
++    context,
++    read?.chunks ?? fileBody((current as InlineReadResult).stream),
++    normalized,
++  );
++  // `-i` numbers each file on its own, as GNU's implied `-s` does. The
++  // records were charged as they were emitted, so the copy is not charged again.
++  const edited = new SedText(context.budget, context.budget.limits.maxBufferedBytes, false);
+   let quit: boolean;
+   try {
+     const records = new PeekingSource(textRecords(source.value));
+@@ -529,10 +567,8 @@ async function editInPlace(
+   }
+   // The edit is either the whole new file or nothing, and a concurrent write
+   // to the same path loses.
+-  await context.fileSystem.writeFile(normalized, edited.result(), {
+-    ifMutationToken: token,
+-    disposition: "replace",
+-    mode: current.stat.mode,
+-  });
+-  return quit;
++  return {
++    write: { path: normalized, body: edited.result(), ifMutationToken: token, mode: stat.mode },
++    quit,
++  };
+ }
+diff --git a/src/shell/policy.ts b/src/shell/policy.ts
+index 43bd38c..b3b155f 100644
+--- a/src/shell/policy.ts
++++ b/src/shell/policy.ts
+@@ -191,10 +191,16 @@ export class ScopedFileSystem implements ShellFileSystem {
+     return this.#inner.availableWriteBufferBytes ?? 0;
+   }
+ 
+-  writeFiles(entries: Parameters<VirtualFileSystem["writeFiles"]>[0]) {
++  async writeFiles(entries: Parameters<VirtualFileSystem["writeFiles"]>[0]) {
+     for (const entry of entries) this.write(entry.path);
+     this.#budget.mutation(entries.length);
+-    return this.#inner.writeFiles(entries);
++    try {
++      return await this.#inner.writeFiles(entries);
++    } catch (error) {
++      // An atomic batch that failed changed nothing, so it spent nothing.
++      this.#budget.mutation(-entries.length);
++      throw error;
++    }
+   }
+ 
+   lstat(path: string) {
+diff --git a/src/shell/types.ts b/src/shell/types.ts
+index 259bdb8..7a0b55b 100644
+--- a/src/shell/types.ts
++++ b/src/shell/types.ts
+@@ -415,6 +415,8 @@ export interface ShellBudget {
+   buffered(bytes: number): () => void;
+   /** Available space for optional optimizations; absent means use the normal path. */
+   remainingBufferedBytes?(): number;
++  /** Mutations left before the limit, for batching them; absent means write one at a time. */
++  remainingMutations?(): number;
+   checkDeadline(): void;
+   remainingDeadlineMs(): number;
+ }
+diff --git a/test/fixtures/bundle-budgets.json b/test/fixtures/bundle-budgets.json
+index cced639..00ab2b2 100644
+--- a/test/fixtures/bundle-budgets.json
++++ b/test/fixtures/bundle-budgets.json
+@@ -3,14 +3,14 @@
+   "toleranceRatio": 0.75,
+   "budgets": {
+     "ls": 22656,
+-    "commands": 28800,
+-    "awk": 116224,
++    "commands": 28928,
++    "awk": 117376,
+     "vfs": 225152,
+-    "shell": 250752,
+-    "interactive": 260480,
++    "shell": 250880,
++    "interactive": 260736,
+     "default-registry": 633600,
+     "r2-opaque": 226944,
+-    "linux-profile": 835456,
++    "linux-profile": 839936,
+     "fs-adapter": 262016,
+     "fs-tiered": 272384,
+     "git": 586624,
+diff --git a/test/sed-in-place-batch.test.ts b/test/sed-in-place-batch.test.ts
+new file mode 100644
+index 0000000..234d9c5
+--- /dev/null
++++ b/test/sed-in-place-batch.test.ts
+@@ -0,0 +1,90 @@
++import { expect, it } from "vitest";
++import { VfsError } from "../src/core/errors.js";
++import { defaultShellCommands } from "../src/shell/commands/default.js";
++import { Shell } from "../src/shell/shell.js";
++import type { ShellLimits } from "../src/shell/types.js";
++import type { NodeSqlFileSystem } from "../src/testing/node.js";
++import { createTestFileSystem } from "./helpers/node-sql.js";
++
++function refuseBatches(inner: object, property: string | symbol): unknown {
++  if (property === "readMany") return undefined;
++  if (property === "writeFiles") {
++    return () => Promise.reject(new VfsError("ENOTSUP", "batch writes are unavailable"));
++  }
++  const value: unknown = Reflect.get(inner, property);
++  return typeof value === "function" ? value.bind(inner) : value;
++}
++
++/**
++ * A filesystem whose views offer no bulk reads and refuse batch writes, so a
++ * batch falls back to writing each file alone.
++ */
++function oneAtATime(fs: NodeSqlFileSystem): NodeSqlFileSystem {
++  return new Proxy(fs, {
++    get(inner, property) {
++      if (property !== "forCredentials") return refuseBatches(inner, property);
++      return (...args: Parameters<NodeSqlFileSystem["forCredentials"]>) =>
++        new Proxy(inner.forCredentials(...args), { get: refuseBatches });
++    },
++  });
++}
++
++async function scenario(
++  batched: boolean,
++  script: string,
++  limits: Partial<ShellLimits> = {},
++  hazards = true,
++) {
++  let statements = 0;
++  const fs = createTestFileSystem({ chunkBytes: 4096, onStatement: () => statements++ });
++  fs.setMetadata("/", { mode: 0o777 });
++  await fs.writeFiles(
++    Array.from({ length: 150 }, (_, i) => ({
++      path: `/w/p${String(i).padStart(3, "0")}.md`,
++      body: `title ${i}\nowner: team${i % 4}\n${"body ".repeat(i % 2 === 0 ? 10 : 3000)}\n`,
++    })),
++    { createParents: true },
++  );
++  fs.setOwnership("/w", { uid: 1000, gid: 1000 });
++  for (let i = 0; i < 150; i += 1)
++    fs.setOwnership(`/w/p${String(i).padStart(3, "0")}.md`, { uid: 1000, gid: 1000 });
++  if (hazards) {
++    fs.setMetadata("/w/p007.md", { mode: 0o444 });
++    fs.symlink("/w/alias.md", "/w/p003.md");
++  }
++  const shell = new Shell({
++    fileSystem: batched ? fs : oneAtATime(fs),
++    commands: defaultShellCommands,
++    limits,
++  });
++  statements = 0;
++  const result = await shell.executeText({
++    cwd: "/w",
++    credentials: { uid: 1000, gid: 1000 },
++    script: `${script}; echo "status $?"; cat p000.md p003.md p007.md p149.md | grep -c Owner; grep -l Owner p*.md | wc -l`,
++  });
++  return { result, statements };
++}
++
++it("publishes sed -i rewrites in batches with the outcomes of writing each file alone", async () => {
++  const cases: [string, Partial<ShellLimits>?][] = [
++    ["sed -i 's/owner:/Owner:/' p*.md"],
++    ["sed -i 's/owner:/Owner:/' p001.md p002.md p001.md alias.md p003.md missing.md p004.md"],
++    ["sed -i '3q; s/owner:/Owner:/' p*.md"],
++    ["sed -i 's/owner:/Owner:/' p*.md", { maxMutations: 40 }],
++    ["sed -i -e 's/owner:/Owner:/' -e 's/title/Title/' p0*.md p1*.md"],
++  ];
++  for (const [script, limits] of cases) {
++    const batched = await scenario(true, script, limits);
++    const single = await scenario(false, script, limits);
++    expect(batched.result, script).toEqual(single.result);
++  }
++  const batched = await scenario(true, "sed -i 's/owner:/Owner:/' p*.md");
++  expect(batched.result.stderr).toContain("p007.md");
++  expect(batched.result.stdout).toContain("149");
++  // Without a link or a refused file every batch commits as one.
++  const clean = await scenario(true, "sed -i 's/owner:/Owner:/' p*.md", {}, false);
++  const cleanSingle = await scenario(false, "sed -i 's/owner:/Owner:/' p*.md", {}, false);
++  expect(clean.result).toEqual(cleanSingle.result);
++  expect(clean.statements).toBeLessThan(cleanSingle.statements * 0.75);
++});
