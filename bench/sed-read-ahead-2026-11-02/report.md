@@ -82,3 +82,30 @@ be larger; it is not measured.
   differently, because bulk reads await less often than streams; each outcome
   is one a reader could see. This was already so for `cat` and `grep` since
   read-ahead shipped.
+
+## Full local suite
+
+`bench:local:paired` (`local-group-v1`, full plan, `FIXED_GIT_TIME=1`,
+`CREDENTIALS=demo`), main (aa3be95) against this change (13e91eb) as compiled
+graphs, four sessions with `ORDER_OFFSET` 0, 1, 0, 1, six pairs each
+(`local-paired-s1..4.json`, summarized by `bench/summarize-local-pairs.mjs`):
+
+| | ratio |
+| --- | ---: |
+| overall (190 workloads) | 1.003 |
+| coding-mixed / coding-small | 1.013 / 1.001 |
+| files | 0.996 |
+| git / git-recovery / git-shell | 1.008 / 1.003 / 0.995 |
+
+Nine workloads were more than 5% slower. Rechecked with twelve pairs in two
+sessions (`local-paired-recheck-o0/1.json`), the groups holding them came to
+0.999, and the workloads above 5% changed (`git/diff/1000` went from 0.90 in
+the suite to 1.07). None of them runs `sed` or reads ahead: `edit` writes
+through the filesystem directly, the rest are Git. An A/A control, the
+change's graph against itself over the same groups (`local-paired-aa.json`),
+put `git/diff/1000` at 1.23 and `coding-mixed/status-clean/100` at 1.19, so
+these are within the suite's noise for those workloads.
+
+SQL replay: 2,097,245 statements on main, 2,097,230 here; rows read 2,096,845
+and 2,096,820. The differences are a few statements or rows in Git workloads
+and appear in the A/A control too (Git's concurrent object writes).
