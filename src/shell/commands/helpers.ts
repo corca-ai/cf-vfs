@@ -172,18 +172,24 @@ function takeTextLine(
 /**
  * Splits bulk-read chunks into lines exactly as {@link readTextLines} splits
  * the stream that would have yielded them, charging each chunk as a file read.
+ *
+ * `decoded`, for a one-chunk body, is its text already decoded with a fatal
+ * UTF-8 decoder that strips a leading BOM, as decoding the chunk here would
+ * give it, so it is not decoded twice; it is ignored for longer bodies.
  */
-function* chunkTextLines(
+export function* chunkTextLines(
   context: ShellCommandContext,
   chunks: readonly Uint8Array[],
   path?: string,
+  decoded?: string,
 ): Generator<string> {
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const state: TextLineState = { pending: "", records: 0 };
+  const whole = chunks.length === 1 ? decoded : undefined;
   for (const chunk of chunks) {
     if (context.signal.aborted) throw cancellation(context.signal);
     context.budget.read(chunk.byteLength);
-    state.pending += decodeUtf8(decoder, chunk, path);
+    state.pending += whole ?? decodeUtf8(decoder, chunk, path);
     for (;;) {
       const line = takeTextLine(state, context, path);
       if (line === undefined) break;

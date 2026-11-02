@@ -1,8 +1,8 @@
 import { VfsError } from "../../core/errors.js";
 import type { EntryPage, VfsStat } from "../../vfs/types.js";
-import type { ShellCommandContext } from "../types.js";
+import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import { commandPath, displayPath } from "./helpers.js";
-import { openInput } from "./inputs.js";
+import { inputStreams, OperandReader, openInput } from "./inputs.js";
 import { ReadAhead } from "./read-ahead.js";
 
 /**
@@ -156,5 +156,42 @@ export async function* recursiveInputs(
     }
     const root = context.fileSystem.realpath(normalized);
     yield* recursiveDirectoryInputs(context, path, root, accept);
+  }
+}
+
+/** Operand inputs where one unreadable file is that file's error, as `grep` reports it. */
+export async function* operandInputs(
+  context: ShellCommandContext,
+  paths: readonly string[],
+  stdin: ShellFileDescriptors[0],
+): AsyncGenerator<CommandInput> {
+  if (paths.length === 0) {
+    yield* inputStreams(context, paths, stdin);
+    return;
+  }
+  const operands = new OperandReader(context, paths);
+  try {
+    for (const [index, path] of paths.entries()) {
+      if (path === "-") {
+        yield { name: "-", stream: stdin };
+        continue;
+      }
+      const chunks = operands.take(index);
+      if (chunks !== undefined) {
+        yield { name: path, chunks };
+        continue;
+      }
+      let stream: ReadableStream<Uint8Array>;
+      try {
+        stream = await openInput(context, path);
+      } catch (error) {
+        if (!(error instanceof VfsError)) throw error;
+        yield { name: path, error };
+        continue;
+      }
+      yield { name: path, stream };
+    }
+  } finally {
+    operands.release();
   }
 }

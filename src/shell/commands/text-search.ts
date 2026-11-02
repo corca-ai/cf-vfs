@@ -1,4 +1,3 @@
-import { VfsError } from "../../core/errors.js";
 import { matchesGlob } from "../../core/glob.js";
 import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import {
@@ -9,6 +8,7 @@ import {
 } from "./applet.js";
 import {
   BufferedTextWriter,
+  chunkTextLines,
   commandPath,
   parseInteger,
   readFileText,
@@ -16,8 +16,7 @@ import {
   skipTextLines,
   writeText,
 } from "./helpers.js";
-import { inputStreams, OperandReader, openInput } from "./inputs.js";
-import { type CommandInput, recursiveInputs } from "./recursive-inputs.js";
+import { type CommandInput, operandInputs, recursiveInputs } from "./recursive-inputs.js";
 import { GrepMatcher } from "./text-search-match.js";
 
 type GrepOption =
@@ -287,15 +286,16 @@ class GrepContext {
     this.lastPrinted = 0;
   }
 
-  async unselected(name: string, number: number, line: string): Promise<void> {
+  /** Holds or prints an unselected line; a promise only when it is printed. */
+  unselected(name: string, number: number, line: string): Promise<void> | undefined {
     if (this.afterRemaining > 0) {
       this.afterRemaining -= 1;
-      await this.write(name, number, line, "-");
-      return;
+      return this.write(name, number, line, "-");
     }
-    if (this.invocation.before === 0) return;
+    if (this.invocation.before === 0) return undefined;
     this.before.push({ line, number });
     if (this.before.length > this.invocation.before) this.before.shift();
+    return undefined;
   }
 
   async selected(number: number, name: string, body: () => Promise<void>): Promise<void> {
@@ -331,6 +331,12 @@ class GrepContext {
     this.lastPrinted = number;
     this.printedAny = true;
   }
+}
+
+interface InputProgress {
+  matches: number;
+  lines: number;
+  limit: number;
 }
 
 class GrepRunner {
@@ -388,58 +394,99 @@ class GrepRunner {
     name: string,
     source: ReadableStream<Uint8Array> | readonly Uint8Array[],
   ): Promise<number> {
-    let inputMatches = 0;
-    let lineNumber = 0;
-    const limit = this.invocation.maxCount ?? Number.POSITIVE_INFINITY;
-    if (Array.isArray(source) && this.cannotSelect(name, source)) return 0;
-    for await (const line of readTextLines(this.context, source, name)) {
-      lineNumber += 1;
-      // After `-m` matches only trailing context is still printed.
-      const exhausted = inputMatches >= limit;
-      if (exhausted && !this.lines.trailing) break;
-      if (!(await this.consider(name, lineNumber, line, exhausted))) continue;
-      this.matches += 1;
-      inputMatches += 1;
-      if (this.listsFiles) break;
+    if (!Array.isArray(source))
+      return await this.scanLines(name, readTextLines(this.context, source, name));
+    const chunks = source as readonly Uint8Array[];
+    const text = this.prefilter(name, chunks);
+    if (text === SKIPPED) return 0;
+    // A bulk body splits synchronously: a line costs no await unless it is printed.
+    return await this.scanLines(name, chunkTextLines(this.context, chunks, name, text));
+  }
+
+  private async scanLines(
+    name: string,
+    lines: Iterable<string> | AsyncIterable<string>,
+  ): Promise<number> {
+    const input: InputProgress = {
+      matches: 0,
+      lines: 0,
+      limit: this.invocation.maxCount ?? Number.POSITIVE_INFINITY,
+    };
+    if (Symbol.asyncIterator in lines) {
+      for await (const line of lines) if (await this.scanLine(name, line, input)) break;
+      return input.matches;
     }
-    return inputMatches;
+    // `for await` would await every line even of a synchronous iterable.
+    for (const line of lines) {
+      const stop = this.scanLine(name, line, input);
+      if (stop === true || (stop !== false && (await stop))) break;
+    }
+    return input.matches;
+  }
+
+  /** One line of an input: whether to stop reading the input, or a promise of it. */
+  private scanLine(name: string, line: string, input: InputProgress): boolean | Promise<boolean> {
+    input.lines += 1;
+    // After `-m` matches only trailing context is still printed.
+    const exhausted = input.matches >= input.limit;
+    if (exhausted && !this.lines.trailing) return true;
+    const considered = this.consider(name, input.lines, line, exhausted);
+    return typeof considered === "boolean"
+      ? this.recordSelection(considered, input)
+      : considered.then((selected) => this.recordSelection(selected, input));
+  }
+
+  /** Counts a selected line, returning whether the input needs no more reading. */
+  private recordSelection(selected: boolean, input: InputProgress): boolean {
+    if (!selected) return false;
+    this.matches += 1;
+    input.matches += 1;
+    return this.listsFiles;
   }
 
   /**
-   * Whether a bulk-read body has no line this invocation could select, in
-   * which case it is consumed without splitting its lines one by one.
+   * Rules out a bulk-read body no line of which this invocation could select:
+   * `SKIPPED` when it was consumed without splitting its lines one by one,
+   * otherwise its text when it was decoded to find out, or `undefined` when
+   * there was no prefilter or the body is not valid UTF-8.
    */
-  private cannotSelect(name: string, chunks: readonly Uint8Array[]): boolean {
+  private prefilter(
+    name: string,
+    chunks: readonly Uint8Array[],
+  ): string | typeof SKIPPED | undefined {
     const { invert, maxCount } = this.invocation;
-    if (this.candidates === undefined || invert || maxCount === 0) return false;
+    if (this.candidates === undefined || invert || maxCount === 0) return undefined;
     let text: string;
     try {
       text = decodeText(chunks);
     } catch {
-      return false;
+      return undefined;
     }
-    if (this.candidates(text)) return false;
+    if (this.candidates(text)) return text;
     skipTextLines(this.context, chunks, true, name);
-    return true;
+    return SKIPPED;
   }
 
-  /** Prints one line as a match or as context, returning whether it was selected. */
-  private async consider(
+  /**
+   * Prints one line as a match or as context, returning whether it was
+   * selected — at once when nothing is printed for it.
+   */
+  private consider(
     name: string,
     lineNumber: number,
     line: string,
     exhausted: boolean,
-  ): Promise<boolean> {
+  ): boolean | Promise<boolean> {
     const candidate = line.endsWith("\n") ? line.slice(0, -1) : line;
     const selected = !exhausted && this.selected(candidate);
     if (!this.printsLines) return selected;
-    if (!selected) await this.lines.unselected(name, lineNumber, line);
-    else {
-      await this.lines.selected(lineNumber, name, () =>
-        this.writeSelected(name, lineNumber, line, candidate),
-      );
+    if (!selected) {
+      const printing = this.lines.unselected(name, lineNumber, line);
+      return printing === undefined ? false : printing.then(() => false);
     }
-    return selected;
+    return this.lines
+      .selected(lineNumber, name, () => this.writeSelected(name, lineNumber, line, candidate))
+      .then(() => true);
   }
 
   private selected(candidate: string): boolean {
@@ -478,42 +525,8 @@ class GrepRunner {
   }
 }
 
-/** Operand inputs where one unreadable file is that file's error, as `grep` reports it. */
-async function* operandInputs(
-  context: ShellCommandContext,
-  paths: readonly string[],
-  stdin: ShellFileDescriptors[0],
-): AsyncGenerator<CommandInput> {
-  if (paths.length === 0) {
-    yield* inputStreams(context, paths, stdin);
-    return;
-  }
-  const operands = new OperandReader(context, paths);
-  try {
-    for (const [index, path] of paths.entries()) {
-      if (path === "-") {
-        yield { name: "-", stream: stdin };
-        continue;
-      }
-      const chunks = operands.take(index);
-      if (chunks !== undefined) {
-        yield { name: path, chunks };
-        continue;
-      }
-      let stream: ReadableStream<Uint8Array>;
-      try {
-        stream = await openInput(context, path);
-      } catch (error) {
-        if (!(error instanceof VfsError)) throw error;
-        yield { name: path, error };
-        continue;
-      }
-      yield { name: path, stream };
-    }
-  } finally {
-    operands.release();
-  }
-}
+/** A body that {@link GrepRunner.prefilter} consumed: none of its lines can be selected. */
+const SKIPPED = Symbol("skipped");
 
 /** A body's whole text, as decoding its chunks in turn would give it. */
 function decodeText(chunks: readonly Uint8Array[]): string {

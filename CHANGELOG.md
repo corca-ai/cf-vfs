@@ -34,6 +34,11 @@ included.
   a native stream. On Workers, pipeline stages now interleave as they do in
   Node, so the order of lines that different stages write to one stderr can
   differ from before.
+- `grep` splits bodies read in bulk without an `await` per line and decodes
+  a body it could match once instead of twice: `grep -rc` over 10,000 pages
+  takes 0.79 of the time on local workerd, `grep -rn` 0.75. Concurrent
+  pipeline stages can interleave differently, because grep yields to other
+  stages less often.
 
 ## [0.5.1] — 2026-10-31
 
