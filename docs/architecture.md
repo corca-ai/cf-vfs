@@ -396,11 +396,16 @@ eviction.
 
 ## Shell and RPC boundaries
 
-The manual raw-`ReadableStream` pipe has byte-sized high-water accounting,
-backpressure, cancellation wakeups, ref-counted sinks, and no dependency on
-custom `TransformStream` transformer semantics. Pipelines start every stage
-before awaiting completion. File descriptor duplication is evaluated
-left-to-right.
+The pipe keeps its queue in JavaScript, with byte-sized high-water
+accounting, backpressure, cancellation wakeups, ref-counted sinks, and no
+dependency on custom `TransformStream` transformer semantics. Its `readable`
+is a real `ReadableStream`, but `getReader()` returns a reader of that queue,
+and a pipeline stage's input reads it without a reader at all, so pipes make
+no runtime crossing per chunk. The first read of the native stream itself
+(`pipeTo`, a `Response`, async iteration) hands the queue over to it, and
+from then on the pipe is the plain native stream it used to be. Pipelines
+start every stage before awaiting completion. File descriptor duplication is
+evaluated left-to-right.
 
 In-process execution returns `{ stdout, stderr, completed, cancel }`. Remote
 `executeTo()` instead accepts explicit stdin/stdout/stderr streams and returns

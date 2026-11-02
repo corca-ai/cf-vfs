@@ -1,0 +1,3859 @@
+{
+  "complete": true,
+  "protocol": {
+    "id": "local-group-v1",
+    "pairUnit": "group",
+    "description": "Fresh fixture per arm/group; complete group before switching arms; untimed setup/validation/cleanup; separate SQL replay. No GC trimming."
+  },
+  "trials": 12,
+  "warmups": 2,
+  "orderOffset": 1,
+  "baselineRoot": "/Users/ak/.claude/jobs/58b39da0/tmp/graphs/g-item1",
+  "candidateRoot": "/Users/ak/.claude/jobs/58b39da0/tmp/graphs/g-item2",
+  "credentials": {
+    "uid": 1000,
+    "gid": 1000
+  },
+  "identityTime": 1700000000000,
+  "limits": {
+    "workspaceId": "benchmark-fixture",
+    "maxEntries": 20000,
+    "maxInlineLogicalBytes": 33554432,
+    "maxInFlightBufferedBytes": 16777216
+  },
+  "fullPlan": false,
+  "groups": [
+    "files:1000:false"
+  ],
+  "workloads": [
+    {
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      }
+    }
+  ],
+  "regressions": [],
+  "costRegressions": [],
+  "rows": [
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 26.537000000000035,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.229167000000075,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.8567079999999123,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.584124999999972,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.135708000000022,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.872208999999998,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 35.30745800000011,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.498207999999977,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 2.039166000000023,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 26.650375000000054,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.746582999999987,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.8156249999999545,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.003708999999958,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.833791999999903,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 15.607250000000022,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 35.982000000000085,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.470957999999996,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 2.0199159999999665,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 31.085874999999987,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 10.562666000000036,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 5.4071669999999585,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 10.036749999999984,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 29.79829200000006,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.96745900000019,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 36.266791999999896,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.848332999999911,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 2.058415999999852,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 26.623874999999998,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.607999999999947,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 4.229374999999891,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.474333999999999,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.848458000000164,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.928834000000052,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 34.905874999999924,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.304624999999987,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 1.9901250000000346,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 32.11679099999992,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 10.00304200000005,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.8563329999999496,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.3599999999999,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.34079100000008,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.495833999999832,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 34.99529200000006,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.386166999999887,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 1.9678750000000491,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 26.358249999999998,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.710749999999962,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.9308750000000146,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.535583000000088,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.211957999999868,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.677457999999888,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 34.63195799999994,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.310416999999916,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 1.9734169999999267,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 26.07508400000006,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.7407919999998285,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.8109170000000177,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.138500000000022,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.68466699999999,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.834500000000162,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 34.72591700000021,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.389249999999947,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 1.9824169999999413,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 26.38412500000004,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.853541999999834,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.8665839999998752,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.180457999999817,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.419624999999996,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.576292000000194,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 35.53387500000008,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.2807920000000195,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 1.987666999999874,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 26.542625000000044,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.204750000000104,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.8315840000000208,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.121958000000177,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.42795799999999,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 15.920917000000145,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 35.125,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.978875000000016,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 2.0434170000000904,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 26.07241699999986,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.755583999999999,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.805499999999938,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.049833999999919,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.873874999999998,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.42170800000008,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 34.76200000000017,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.304833000000144,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 1.9611660000000484,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 25.723707999999988,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.667833999999857,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.762333000000126,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.115082999999686,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.751166999999896,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.463291000000027,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 35.031167000000096,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.26620899999989,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 2.017084000000068,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 26.308374999999614,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.674875000000156,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.7497079999998277,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.069833000000017,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.359042000000045,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.411416999999801,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 35.44812499999989,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.281125000000429,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 1.928957999999966,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 29.983749999999873,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 9.547874999999749,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 4.673333000000184,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 10.371084000000337,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.581249999999727,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.787374999999884,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 34.84975000000031,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.316542000000027,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 2.062750000000051,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 26.396707999999762,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.663250000000062,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.8001249999997526,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.1354160000000775,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.78520800000024,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.936833000000206,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 34.66170800000009,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.360583000000133,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 2.014541999999892,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 29.730791999999838,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 11.069041000000198,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 5.369125000000167,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 9.997249999999894,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.40670900000032,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.478458000000046,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 34.63124999999991,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.405166999999892,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 2.0380409999997937,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 25.8725000000004,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.7188750000000255,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.7401660000000447,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.251166000000012,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 29.966874999999618,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 14.349333000000115,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 35.05749999999989,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.405582999999751,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 2.004791999999725,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 26.96137499999986,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.708875000000262,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.771042000000307,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.346332999999959,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.74420800000007,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.575541000000158,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 35.49433399999998,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.31270799999993,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 2.0074580000000424,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 26.918833000000177,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.7705409999998665,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.8221669999998085,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.269833999999719,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.602249999999913,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.436166999999841,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 35.19154099999969,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.271832999999788,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 1.9422920000001795,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 25.69491700000026,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.604832999999871,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.7388750000000073,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.528916000000208,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.091457999999875,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.58883300000025,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 35.732540999999856,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.425458000000162,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 2.1528339999999844,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 25.953165999999783,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.581583000000137,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.6885419999998703,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.134915999999976,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 27.72104100000024,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.492249999999785,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 34.655125000000226,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.214124999999967,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 1.9733750000000327,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 25.374667000000045,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.63149999999996,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.825290999999652,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.049125000000004,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 27.804375000000164,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.271792000000005,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 35.21354100000008,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.25979099999995,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 1.9753330000003189,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 26.058542000000216,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.453750000000127,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.6607500000000073,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 5.814750000000004,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 27.32837500000005,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.25149999999985,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 35.23799999999983,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.104458999999679,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 1.944250000000011,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 26.0603329999999,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.905292000000372,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.7345830000003843,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 8.17470800000001,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.409082999999555,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.509209000000283,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 38.243916000000354,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.311792000000423,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 2.015082999999777,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 29.711750000000393,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.3891670000002705,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 4.003541999999925,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.89391599999999,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.295292000000245,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 14.45837500000016,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 36.26374999999962,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.321000000000367,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 2.027042000000165,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 1000
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 31.88066600000002,
+      "statements": 11016,
+      "returnedRows": 5008,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 9.784583999999995,
+      "statements": 1002,
+      "returnedRows": 2001,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 4.919665999999779,
+      "statements": 1006,
+      "returnedRows": 1004,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 10.534915999999612,
+      "statements": 2000,
+      "returnedRows": 2000,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.35112500000014,
+      "statements": 20,
+      "returnedRows": 10010,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 13.974624999999833,
+      "statements": 8000,
+      "returnedRows": 4000,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 35.70854099999997,
+      "statements": 13000,
+      "returnedRows": 11000,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.282874999999876,
+      "statements": 19,
+      "returnedRows": 1012,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 2.000542000000678,
+      "statements": 17,
+      "returnedRows": 8,
+      "verified": 1000
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "write",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 26.954541000000063,
+      "statements": 11016,
+      "returnedRows": 5008,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "stat",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.788709000000381,
+      "statements": 1002,
+      "returnedRows": 2001,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "stat-after-overwrite",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 3.8912920000002487,
+      "statements": 1006,
+      "returnedRows": 1004,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "read",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 6.399083000000246,
+      "statements": 2000,
+      "returnedRows": 2000,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "readdir",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 28.419750000000022,
+      "statements": 20,
+      "returnedRows": 10010,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "append",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 14.201125000000502,
+      "statements": 8000,
+      "returnedRows": 4000,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "rename",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 36.009666999999354,
+      "statements": 13000,
+      "returnedRows": 11000,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "copy-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 7.289667000000009,
+      "statements": 19,
+      "returnedRows": 1012,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "files",
+        "operation": "remove-tree",
+        "files": 1000,
+        "cache": false,
+        "trial": 0
+      },
+      "ms": 2.0035420000003796,
+      "statements": 17,
+      "returnedRows": 8,
+      "verified": 1000
+    }
+  ]
+}

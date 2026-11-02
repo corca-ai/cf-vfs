@@ -1,4 +1,5 @@
 import { VfsError } from "../../core/errors.js";
+import type { InlineReadResult } from "../../vfs/types.js";
 import { fileBody } from "../content.js";
 import type { ShellBudget, ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import { appletUsageError, defineApplet, parseAppletOptions } from "./applet.js";
@@ -9,7 +10,7 @@ import {
   readTextLines,
   writeText,
 } from "./helpers.js";
-import { inputSources } from "./inputs.js";
+import { inputSources, OperandReader } from "./inputs.js";
 import {
   type SedAddress as Address,
   parseSedScript,
@@ -449,18 +450,23 @@ async function editOperands(
   fds: ShellFileDescriptors,
 ): Promise<number> {
   let failed = false;
-  for (const path of invocation.operands) {
-    try {
-      if (await editInPlace(context, invocation, path)) break;
-    } catch (error) {
-      // One bad operand is that operand's failure. Remaining files are still
-      // edited, each under its own mutation token.
-      await writeText(
-        fds[2],
-        `sed: ${path}: ${error instanceof Error ? error.message : String(error)}\n`,
-      );
-      failed = true;
+  const operands = new OperandReader(context, invocation.operands);
+  try {
+    for (const [index, path] of invocation.operands.entries()) {
+      try {
+        if (await editInPlace(context, invocation, path, index, operands)) break;
+      } catch (error) {
+        // One bad operand is that operand's failure. Remaining files are still
+        // edited, each under its own mutation token.
+        await writeText(
+          fds[2],
+          `sed: ${path}: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+        failed = true;
+      }
     }
+  } finally {
+    operands.release();
   }
   return failed ? 2 : 0;
 }
@@ -498,21 +504,32 @@ export const sedCommand = /* @__PURE__ */ defineApplet(SED, async (context, argv
   return 0;
 });
 
-/** Rewrites one file in place, as a single guarded publication. */
+/**
+ * Rewrites one file in place, as a single guarded publication. Operands are
+ * read ahead in bulk; each write is published at once, as before, and the
+ * read-ahead revalidates the other bodies it holds against it.
+ */
 async function editInPlace(
   context: ShellCommandContext,
   invocation: SedInvocation,
   path: string,
+  index: number,
+  operands: OperandReader,
 ): Promise<boolean> {
   const normalized = commandPath(context, path);
-  const current = context.fileSystem.readFile(normalized);
+  const read = operands.takeBody(index);
+  const current = read === undefined ? context.fileSystem.readFile(normalized) : undefined;
+  const stat = read?.stat ?? (current as InlineReadResult).stat;
   const token =
-    current.stat.path === normalized
-      ? current.stat.mutationToken
-      : context.fileSystem.getMutationToken(normalized);
-  const source = await collectText(context, fileBody(current.stream), normalized);
-  // `-i` numbers each file on its own, as GNU's implied `-s` does.
-  const edited = new SedText(context.budget, context.budget.limits.maxBufferedBytes);
+    stat.path === normalized ? stat.mutationToken : context.fileSystem.getMutationToken(normalized);
+  const source = await collectText(
+    context,
+    read?.chunks ?? fileBody((current as InlineReadResult).stream),
+    normalized,
+  );
+  // `-i` numbers each file on its own, as GNU's implied `-s` does. The
+  // records were charged as they were emitted, so the copy is not charged again.
+  const edited = new SedText(context.budget, context.budget.limits.maxBufferedBytes, false);
   let quit: boolean;
   try {
     const records = new PeekingSource(textRecords(source.value));
@@ -532,7 +549,7 @@ async function editInPlace(
   await context.fileSystem.writeFile(normalized, edited.result(), {
     ifMutationToken: token,
     disposition: "replace",
-    mode: current.stat.mode,
+    mode: stat.mode,
   });
   return quit;
 }

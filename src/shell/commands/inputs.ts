@@ -1,6 +1,6 @@
 import { VfsError } from "../../core/errors.js";
 import { streamFromOwnedChunks } from "../../vfs/streams.js";
-import type { ByteRange } from "../../vfs/types.js";
+import type { ByteRange, InlineFileBody } from "../../vfs/types.js";
 import { fileBody, openContent } from "../content.js";
 import type { ShellCommandContext } from "../types.js";
 import { commandPath } from "./helpers.js";
@@ -66,13 +66,18 @@ export class OperandReader {
 
   /** The bulk body of operand `index`, or undefined to open it. */
   take(index: number): readonly Uint8Array<ArrayBuffer>[] | undefined {
+    return this.takeBody(index)?.chunks;
+  }
+
+  /** The bulk body of operand `index` with its stat, or undefined to open it. */
+  takeBody(index: number): InlineFileBody | undefined {
     if (index >= this.#window) {
       this.#window = index + OPERAND_WINDOW;
       this.#ahead.fill(this.#paths(this.#argv.slice(index, this.#window)));
     }
     const path = this.#argv[index];
     if (path === undefined || path === "-") return undefined;
-    return this.#ahead.take(this.#resolved(path) ?? "")?.chunks;
+    return this.#ahead.take(this.#resolved(path) ?? "");
   }
 
   release(): void {

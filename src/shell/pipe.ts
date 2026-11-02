@@ -1,4 +1,5 @@
 import { VfsError } from "../core/errors.js";
+import { type DirectSource, deferred, readDirectly, released } from "./direct-read.js";
 import type { ShellSink } from "./types.js";
 
 interface BytePipeOptions {
@@ -85,35 +86,80 @@ export function sinkFromWritable(writable: WritableStream<Uint8Array>): ShellSin
   return new SharedSink({ writer: writable.getWriter(), references: 1, terminal: false });
 }
 
+const DONE: ReadableStreamReadDoneResult<Uint8Array> = Object.freeze({
+  done: true,
+  value: undefined,
+});
+const EMPTY = new Uint8Array(0);
+
+interface PendingRead {
+  resolve: (result: ReadableStreamReadResult<Uint8Array>) => void;
+  reject: (error: unknown) => void;
+}
+
 /**
- * The state behind one pipe. Writes go straight to the readable side rather
- * than through a writable stream, which on Workers saved a crossing into the
- * runtime per write; the queue, its capacity and backpressure are the
- * stream's own, as before.
+ * The state behind one pipe: a queue of chunks kept in JavaScript.
+ *
+ * Readers from `getReader()`, and a pipeline stage's input, read the queue
+ * directly (see {@link readDirectly}), so a chunk makes no runtime crossing on
+ * Workers. Whatever reads the native stream itself — `pipeTo`, a `Response`,
+ * async iteration — pulls from the same queue, one chunk per read, and from
+ * then on every reader is native. Capacity, backpressure, closing,
+ * cancelling and errors follow a default stream with a high-water mark of
+ * `min(maximumBytes, 64 KiB)` bytes.
+ *
+ * `#cancelled` is why writes fail: the consumer cancelled, the execution was
+ * aborted, or a write failed. `#finished` is what readers see once the queue
+ * is drained: the end, or `#error`.
  */
-class BytePipeState {
+class BytePipeState implements DirectSource {
   #controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+  readonly #goNative: () => void;
+  #queue: Uint8Array[] = [];
+  #head = 0;
+  #queuedBytes = 0;
+  #reads: PendingRead[] = [];
+  #closeRequested = false;
+  #finished: "closed" | "errored" | undefined;
+  #error: unknown;
+  #closed: ReturnType<typeof deferred> | undefined;
   #bytesWritten = 0;
   #cancelled: unknown;
   #pullWaiters: Array<() => void> = [];
+  readonly #capacity: number;
   readonly options: BytePipeOptions;
   readonly readable: ReadableStream<Uint8Array>;
 
   constructor(options: BytePipeOptions) {
     this.options = options;
+    this.#capacity = Math.min(options.maximumBytes, 64 * 1024);
     this.readable = new ReadableStream<Uint8Array>(
       {
         start: (controller) => {
           this.#controller = controller;
         },
-        pull: () => this.#wakeWriters(),
-        cancel: (reason) => this.#consumerCancelled(reason),
+        pull: (controller) => this.#pull(controller),
+        cancel: (reason) => this.cancel(reason),
       },
-      {
-        highWaterMark: Math.min(options.maximumBytes, 64 * 1024),
-        size: (chunk) => chunk.byteLength,
-      },
+      // Zero pulls only for a read, so the native queue holds nothing.
+      { highWaterMark: 0 },
     );
+    this.#goNative = readDirectly(this.readable, this);
+  }
+
+  async #pull(controller: ReadableStreamDefaultController<Uint8Array>): Promise<void> {
+    this.#goNative();
+    try {
+      const result = await this.read();
+      if (result.done) controller.close();
+      else controller.enqueue(result.value);
+    } catch (error) {
+      try {
+        controller.error(error);
+      } catch {
+        // The stream already failed or was cancelled.
+      }
+    }
   }
 
   #cancellationError(): unknown {
@@ -127,10 +173,112 @@ class BytePipeState {
   }
 
   #wakeWriters(): void {
-    if (this.#cancelled === undefined && (this.#controller?.desiredSize ?? 0) <= 0) return;
+    if (
+      this.#cancelled === undefined &&
+      this.#finished !== "errored" &&
+      this.#queuedBytes >= this.#capacity
+    )
+      return;
     const waiters = this.#pullWaiters;
     this.#pullWaiters = [];
     for (const resolve of waiters) resolve();
+  }
+
+  #settleReads(settle: (read: PendingRead) => void): void {
+    const reads = this.#reads;
+    this.#reads = [];
+    for (const read of reads) settle(read);
+  }
+
+  #enqueue(chunk: Uint8Array): void {
+    // An empty chunk carries nothing; the native stream dropped it on Workers.
+    if (chunk.byteLength === 0 || this.#finished !== undefined || this.#closeRequested) return;
+    const read = this.#reads.shift();
+    if (read !== undefined) {
+      read.resolve({ done: false, value: chunk });
+      return;
+    }
+    this.#queue.push(chunk);
+    this.#queuedBytes += chunk.byteLength;
+  }
+
+  #dequeue(): Uint8Array {
+    const chunk = this.#queue[this.#head] ?? EMPTY;
+    this.#queue[this.#head] = EMPTY;
+    this.#head += 1;
+    this.#queuedBytes -= chunk.byteLength;
+    if (this.#head === this.#queue.length) {
+      this.#queue = [];
+      this.#head = 0;
+    } else if (this.#head >= 1024 && this.#head * 2 >= this.#queue.length) {
+      this.#queue = this.#queue.slice(this.#head);
+      this.#head = 0;
+    }
+    return chunk;
+  }
+
+  #discardQueue(): void {
+    this.#queue = [];
+    this.#head = 0;
+    this.#queuedBytes = 0;
+  }
+
+  #finishClosed(): void {
+    this.#finished = "closed";
+    this.#closed?.resolve();
+    this.#settleReads((read) => read.resolve(DONE));
+  }
+
+  /** As a stream controller's `error()`: discards the queue and fails every read. */
+  #errorStream(error: unknown): void {
+    if (this.#finished !== undefined) return;
+    this.#finished = "errored";
+    this.#error = error;
+    // The native stream fails at once, as it did, so a consumer of it sees
+    // the error before it next reads.
+    try {
+      this.#controller?.error(error);
+    } catch {
+      // The consumer may already have cancelled the stream.
+    }
+    this.#discardQueue();
+    this.#closed?.reject(error);
+    this.#settleReads((read) => read.reject(error));
+  }
+
+  read(): Promise<ReadableStreamReadResult<Uint8Array>> {
+    if (this.#head < this.#queue.length) {
+      const value = this.#dequeue();
+      if (this.#closeRequested && this.#head === this.#queue.length) this.#finishClosed();
+      else this.#wakeWriters();
+      return Promise.resolve({ done: false, value });
+    }
+    if (this.#finished === "errored") return Promise.reject(this.#error);
+    if (this.#finished === "closed") return Promise.resolve(DONE);
+    return new Promise((resolve, reject) => this.#reads.push({ resolve, reject }));
+  }
+
+  release(): void {
+    this.#settleReads((read) => read.reject(released()));
+  }
+
+  closed(): Promise<undefined> {
+    if (this.#closed === undefined) {
+      this.#closed = deferred();
+      if (this.#finished === "closed") this.#closed.resolve();
+      else if (this.#finished === "errored") this.#closed.reject(this.#error);
+    }
+    return this.#closed.promise;
+  }
+
+  /** The consumer gives up: what is queued is dropped and the stream ends. */
+  cancel(reason: unknown): Promise<void> {
+    if (this.#finished === "errored") return Promise.reject(this.#error);
+    if (this.#finished === "closed") return Promise.resolve();
+    this.#discardQueue();
+    this.#finishClosed();
+    this.#consumerCancelled(reason);
+    return Promise.resolve();
   }
 
   #consumerCancelled(reason: unknown): void {
@@ -150,11 +298,7 @@ class BytePipeState {
   abortFromSignal = (): void => {
     if (this.#cancelled !== undefined) return;
     this.#cancelled = this.#cancellationError();
-    try {
-      this.#controller?.error(this.#cancelled);
-    } catch {
-      // The consumer may already have closed the stream.
-    }
+    this.#errorStream(this.#cancelled);
     this.#wakeWriters();
   };
 
@@ -173,11 +317,11 @@ class BytePipeState {
         `${this.options.name} exceeds the ${this.options.maximumBytes}-byte limit`,
       );
     }
-    this.#controller?.enqueue(chunk);
+    this.#enqueue(chunk);
   }
 
   async #waitForCapacity(): Promise<void> {
-    if ((this.#controller?.desiredSize ?? 1) > 0) return;
+    if (this.#queuedBytes < this.#capacity) return;
     let idleTimer: ReturnType<typeof setTimeout> | undefined;
     if (this.options.idleTimeoutMs !== undefined && this.options.onIdle !== undefined) {
       idleTimer = setTimeout(this.options.onIdle, this.options.idleTimeoutMs);
@@ -189,16 +333,14 @@ class BytePipeState {
     }
     if (this.options.signal.aborted) throw this.#cancellationError();
     if (this.#cancelled !== undefined) throw this.#closedError();
+    // Another descriptor of the same pipe aborted it: the bytes went nowhere.
+    if (this.#finished === "errored") throw this.#error;
   }
 
   #fail(error: unknown): void {
     if (this.#cancelled === undefined) {
       this.#cancelled = error;
-      try {
-        this.#controller?.error(error);
-      } catch {
-        // The reader may have been cancelled concurrently.
-      }
+      this.#errorStream(error);
     }
     this.#wakeWriters();
   }
@@ -216,13 +358,16 @@ class BytePipeState {
 
   close(): void {
     this.#removeAbortListener();
-    if (this.#cancelled === undefined) this.#controller?.close();
+    if (this.#cancelled === undefined && this.#finished === undefined && !this.#closeRequested) {
+      this.#closeRequested = true;
+      if (this.#head === this.#queue.length) this.#finishClosed();
+    }
     this.#wakeWriters();
   }
 
   abort(reason: unknown): void {
     this.#removeAbortListener();
-    if (this.#cancelled === undefined) this.#controller?.error(reason);
+    if (this.#cancelled === undefined) this.#errorStream(reason);
     this.#wakeWriters();
   }
 }

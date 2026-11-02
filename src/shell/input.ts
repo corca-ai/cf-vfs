@@ -1,5 +1,12 @@
 import { VfsError } from "../core/errors.js";
 import { chargeConsumed } from "./content.js";
+import {
+  type DirectSource,
+  deferred,
+  readDirectly,
+  readerWithoutLock,
+  released,
+} from "./direct-read.js";
 import type { ShellBudget } from "./types.js";
 
 export interface InputRecord {
@@ -53,7 +60,9 @@ class ShellInputCursor {
     if (this.done) return { done: true, value: undefined };
     if (this.reading) throw new VfsError("EIO", "shell input is already being consumed");
     this.reading = true;
-    const reader = this.source.getReader();
+    // A pipe is read without a native lock: taking and releasing one per
+    // chunk would cross into the runtime twice on Workers.
+    const reader = readerWithoutLock(this.source) ?? this.source.getReader();
     const cancelled = (): VfsError =>
       signal?.reason instanceof VfsError
         ? signal.reason
@@ -156,16 +165,91 @@ class ShellInputCursor {
   }
 }
 
+interface PendingRead {
+  resolve: (result: ReadableStreamReadResult<Uint8Array>) => void;
+  reject: (error: unknown) => void;
+}
+
+/**
+ * A stage input as its readers see it, as the stream over the cursor did:
+ * reads are answered in order with one read of the cursor at a time, a read
+ * finished after its reader let go is kept for the next one, and once the
+ * cursor fails every later read and cancel fails the same way.
+ */
+class InputReads implements DirectSource {
+  readonly #cursor: ShellInputCursor;
+  #waiting: PendingRead[] = [];
+  #reading = false;
+  #kept: ReadableStreamReadResult<Uint8Array> | undefined;
+  #failed = false;
+  #error: unknown;
+  readonly #closed = deferred();
+
+  constructor(cursor: ShellInputCursor) {
+    this.#cursor = cursor;
+  }
+
+  read(): Promise<ReadableStreamReadResult<Uint8Array>> {
+    if (this.#failed) return Promise.reject(this.#error);
+    const kept = this.#kept;
+    if (kept !== undefined) {
+      this.#kept = undefined;
+      return Promise.resolve(kept);
+    }
+    return new Promise((resolve, reject) => {
+      this.#waiting.push({ resolve, reject });
+      this.#next();
+    });
+  }
+
+  #next(): void {
+    if (this.#reading || this.#waiting.length === 0) return;
+    this.#reading = true;
+    this.#cursor.readChunk().then(
+      (result) => {
+        this.#reading = false;
+        if (result.done) this.#closed.resolve();
+        const read = this.#waiting.shift();
+        if (read === undefined) this.#kept = result;
+        else read.resolve(result);
+        this.#next();
+      },
+      (error: unknown) => {
+        this.#reading = false;
+        this.#failed = true;
+        this.#error = error;
+        this.#closed.reject(error);
+        for (const read of this.#waiting.splice(0)) read.reject(error);
+      },
+    );
+  }
+
+  cancel(reason: unknown): Promise<void> {
+    return this.#failed ? Promise.reject(this.#error) : this.#cursor.cancel(reason);
+  }
+
+  closed(): Promise<undefined> {
+    return this.#closed.promise;
+  }
+
+  release(): void {
+    for (const read of this.#waiting.splice(0)) read.reject(released());
+  }
+}
+
 const cursors = new WeakMap<ReadableStream<Uint8Array>, ShellInputCursor>();
 
 export function shellInput(source: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
   if (cursors.has(source)) return source;
   const cursor = new ShellInputCursor(source);
+  const reads = new InputReads(cursor);
+  let goNative = (): void => undefined;
   const stream = new ReadableStream<Uint8Array>(
     {
       async pull(controller) {
+        goNative();
         try {
-          const result = await cursor.readChunk();
+          const result = await reads.read();
           if (result.done) controller.close();
           else controller.enqueue(result.value);
         } catch (error) {
@@ -173,11 +257,14 @@ export function shellInput(source: ReadableStream<Uint8Array>): ReadableStream<U
         }
       },
       async cancel(reason) {
-        await cursor.cancel(reason);
+        await reads.cancel(reason);
       },
     },
     { highWaterMark: 0 },
   );
+  // Commands read their input with `getReader()`, which reads the cursor
+  // through `reads` instead of through this stream's pull.
+  goNative = readDirectly(stream, reads);
   cursors.set(stream, cursor);
   return stream;
 }

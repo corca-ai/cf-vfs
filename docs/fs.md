@@ -250,9 +250,16 @@ of those it admits, so a refused or oversized body is never materialized.
 `fileSystem.changeGeneration?.()` is a counter that moves whenever a statement
 that may change the storage runs, through any filesystem over the same storage;
 reads leave it still. The shell reads ahead with `readMany` and hands out a body
-only while the counter has not moved since, so a command gets exactly what
-reading the file at its turn would give, even when it writes a later operand
-itself. `grep`, `cat`, `wc`, `sed`, `awk` and the other operand utilities,
-`grep -r` and `awiki` read this way. On Workers a stream per file costs about 0.15 ms
+while the counter has not moved since; once it has, a body is handed out only
+after one fresh stat of its path shows the same entry at the same revision and
+mutation token, which every write of a body or its metadata moves. A command
+therefore gets what reading the file at its turn would give, even when it
+writes the files it reads, as `sed -i` does. Held bodies are bounded per
+execution (1 MiB across its stages) rather than charged to the shell's buffer,
+so buffer limits trip where reading one file at a time would trip them.
+Reading ahead awaits less often than a stream, so a concurrently running
+stage may interleave differently; each outcome is one a reader could see.
+`grep`, `cat`, `wc`, `sed` (including `-i`), `awk` and the other operand
+utilities, `grep -r` and `awiki` read this way. On Workers a stream per file costs about 0.15 ms
 and dominates a walk over many small files; bulk bodies are consumed without
 one ([measurements](../bench/sql-lab/report-2026-10-30.md)).

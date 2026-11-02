@@ -16,6 +16,25 @@ included.
 
 ## [Unreleased]
 
+- `sed -i` reads its operands ahead in bulk, publishing each rewrite at once
+  as before, and no longer charges the rewritten text to expansion work a
+  second time: over 870 files it stopped at the expansion-work limit and now
+  completes, and over 278 files it takes 0.85 of the time on local workerd
+  with 14% fewer SQL statements.
+- Read-ahead keeps a body across changes elsewhere: after any change it
+  hands a body over once a fresh stat shows the same revision and mutation
+  token, where it discarded everything. Held bodies count against a 1 MiB
+  pool per execution instead of the shell's buffer, so buffer limits trip
+  where reading one file at a time trips them; with read-ahead they could
+  trip earlier.
+- Shell pipes keep their queue in JavaScript, and commands and pipeline
+  stage input read it without the native stream, so a chunk no longer crosses
+  into the runtime: `wc -l` over 8,055 files piped to `tail` takes 0.86 of the
+  time on local workerd. `pipeTo`, `Response` and async iteration still read
+  a native stream. On Workers, pipeline stages now interleave as they do in
+  Node, so the order of lines that different stages write to one stderr can
+  differ from before.
+
 ## [0.5.1] — 2026-10-31
 
 - Measuring text as UTF-8 tests for ASCII before encoding, at any length.
