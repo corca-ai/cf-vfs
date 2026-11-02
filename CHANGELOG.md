@@ -16,6 +16,8 @@ included.
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-11-02
+
 - `sed -i` reads its operands ahead in bulk, publishing each rewrite at once
   as before, and no longer charges the rewritten text to expansion work a
   second time: over 870 files it stopped at the expansion-work limit and now
@@ -713,7 +715,8 @@ to the release, so the package can be installed by a consumer that pins
 [`a335bd1`]: https://github.com/corca-ai/cf-vfs/commit/a335bd1
 [`1a4447d`]: https://github.com/corca-ai/cf-vfs/commit/1a4447d
 [`32a2c15`]: https://github.com/corca-ai/cf-vfs/commit/32a2c15
-[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/corca-ai/cf-vfs/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/corca-ai/cf-vfs/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/corca-ai/cf-vfs/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/corca-ai/cf-vfs/compare/v0.4.1...v0.4.2
