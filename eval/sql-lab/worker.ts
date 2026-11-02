@@ -26,9 +26,12 @@ interface LabEnv {
 }
 
 const LAB_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/u;
-// Labs are for small experiments (AGENTS.md): two hours and 1,000 files at most.
+// Labs on Cloudflare are for small experiments (AGENTS.md): two hours and
+// 1,000 files at most. A lab on local workerd (`cf dev`, reached from the
+// loopback address), where large workloads cost nothing, takes up to 20,000.
 const LAB_TTL_MS = 2 * 60 * 60 * 1000;
 const MAX_LAB_FILES = 1_000;
+const MAX_LOCAL_LAB_FILES = 20_000;
 const MAX_SEED_FILES = 1_000;
 const MAX_STATEMENTS = 64;
 const MAX_REPEAT = 1_000;
@@ -265,12 +268,13 @@ export class SqlLab extends DurableObject<LabEnv> {
   }
 
   /** Writes files through the filesystem, so the rows are the library's own. */
-  async seed(files: readonly { path: string; content: string }[]): Promise<number> {
+  async seed(files: readonly { path: string; content: string }[], local: boolean): Promise<number> {
     const held = this.ctx.storage.sql
       .exec("SELECT count(*) AS n FROM vfs_entries WHERE kind = 'file'")
       .one()["n"] as number;
-    if (held + files.length > MAX_LAB_FILES) {
-      throw new Error(`a lab holds at most ${MAX_LAB_FILES} files; run large workloads locally`);
+    const cap = local ? MAX_LOCAL_LAB_FILES : MAX_LAB_FILES;
+    if (held + files.length > cap) {
+      throw new Error(`a lab holds at most ${cap} files; run large workloads locally`);
     }
     await this.fileSystem.writeFiles(
       files.map((file) => ({
@@ -473,7 +477,13 @@ async function route(request: Request, env: LabEnv): Promise<Response> {
   const started = Date.now();
   const respond = (value: Record<string, unknown>) => json({ ...value, ms: Date.now() - started });
   try {
-    if (action === "seed") return respond({ written: await lab.seed(seedFiles(input["files"])) });
+    if (action === "seed") {
+      // `cf dev` rewrites the URL to the deployed domain but reports the
+      // loopback client; on Cloudflare the edge sets the real client address.
+      const client = request.headers.get("cf-connecting-ip");
+      const local = client === "::1" || client === "127.0.0.1";
+      return respond({ written: await lab.seed(seedFiles(input["files"]), local) });
+    }
     if (action === "sql") {
       const repeat = bounded(input["repeat"], 1, MAX_REPEAT, "repeat");
       const maxRows = bounded(input["maxRows"], 20, MAX_ROWS, "maxRows");

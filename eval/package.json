@@ -15,6 +15,7 @@
   "scripts": {
     "deploy": "cf deploy --secrets-file .secrets.json",
     "build": "cf build",
-    "deploy:lab": "ln -sfn ../node_modules sql-lab/node_modules && cd sql-lab && cf deploy --secrets-file .secrets.json"
+    "deploy:lab": "ln -sfn ../node_modules sql-lab/node_modules && cd sql-lab && cf deploy --secrets-file .secrets.json",
+    "lab:local": "ln -sfn ../node_modules sql-lab/node_modules && cd sql-lab && (test -f .dev.vars || printf 'LAB_TOKEN=local-lab-only\\n' > .dev.vars) && cf dev"
   }
 }

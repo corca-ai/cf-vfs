@@ -29,6 +29,9 @@ with `eval/benchmark-deploy/cloudflare.config.ts`.
 
 ## Performance changes
 
+**Never run a large benchmark on Cloudflare unless the user explicitly
+instructs it, in any circumstance** — not the deployed full suite or task
+series, not a large lab experiment, not to verify a deployment or a release.
 Cloudflare usage is billed, and full-scale runs there cost far more than they
 tell. **Run large workloads (a 10,000-page wiki, the full benchmark plan) only
 locally. On Cloudflare run only small experiments, about 200 pages, whose job
@@ -43,13 +46,19 @@ is to check that the pattern measured locally holds on Workers.** See
   arm/group and completes a group before switching arms. Balance
   `ORDER_OFFSET=0/1` across preselected sessions. Investigate every >5%
   slowdown with at least ten alternating paired trials.
-- A Cloudflare check is one small experiment per change, and only where
-  Workers can differ from Node (runtime crossings such as streams and buffer
-  allocation, SQLite page reads, RPC): in the SQL lab, about 200 pages, both
+- Where Workers can differ from Node (runtime crossings such as streams and
+  buffer allocation, SQLite page reads), answer on **local workerd** first:
+  `npm run lab:local` serves the SQL lab with `cf dev` at no cost, and
+  `LAB_URL=http://localhost:8787 LAB_TOKEN=local-lab-only` points the
+  `bench/sql-lab` scripts at it. It reproduced the direction of every
+  Cloudflare result on record and understates their size, most for stream- and
+  allocation-heavy changes
+  ([calibration](bench/local-workerd-2026-11-02/report.md)).
+- A Cloudflare check is a small experiment before a release, or when local
+  workerd cannot answer (production storage, RPC and placement, the absolute
+  size of an allocation-heavy effect): in the SQL lab, about 200 pages, both
   versions bundled in one deployment and alternated in pairs (five pairs or
-  fewer), minutes of Durable Object time in all. It confirms the direction and
-  rough size of the local result and SQL counts; it does not replace local
-  evidence. Destroy the lab when the experiment ends.
+  fewer), minutes of Durable Object time in all. Destroy the lab when it ends.
 - Do not run the deployed full suite or task series (`bench:public`), and do
   not deploy the public benchmark for a candidate, unless the user asks. Never
   retry a failed Cloudflare run or add runs to reach a result; report it.

@@ -112,6 +112,9 @@ reads paths through the filesystem (`mode`: `stream`, `cancel` or `stat`), and
 seeded and holds at most 1,000 files. Labs are for small experiments, about
 200 pages, that check a pattern measured locally holds on Workers; large
 workloads run only locally ([protocol](../docs/performance.md#scope-the-cloudflare-evidence-to-the-change)).
+`npm run lab:local` serves the same lab on local workerd with `cf dev`, which
+answers most "does this hold on Workers?" questions at no cost; point the
+client at it with `LAB_URL=http://localhost:8787 LAB_TOKEN=local-lab-only`.
 `bench/sql-lab/lab.mjs` is the client. It never shares a namespace with
 evaluation workspaces or the public benchmark, because arbitrary SQL is every
 right over an object's data.

@@ -1,0 +1,6 @@
+awk FNR==1 glob > null       pairs   8  ratio 0.755 [0.745, 0.763]  baseline 525 ms  candidate 391 ms
+awk print $1 glob | wc -l    pairs   8  ratio 0.771 [0.766, 0.776]  baseline 1001 ms  candidate 770 ms
+wc -l glob | tail -1         pairs   8  ratio 0.974 [0.956, 0.992]  baseline 328 ms  candidate 315 ms
+awiki lint cold              pairs   8  ratio 0.977 [0.965, 0.987]  baseline 660 ms  candidate 642 ms
+grep -rc owner | tail        pairs   8  ratio 0.984 [0.969, 0.996]  baseline 389 ms  candidate 383 ms
+cat dir | grep -c x          pairs   8  ratio 0.963 [0.933, 0.995]  baseline 45 ms  candidate 44 ms
