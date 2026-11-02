@@ -8,12 +8,12 @@ import {
 } from "./applet.js";
 import {
   BufferedTextWriter,
-  chunkTextLines,
   commandPath,
+  eachLine,
   parseInteger,
   readFileText,
-  readTextLines,
   skipTextLines,
+  textLines,
   writeText,
 } from "./helpers.js";
 import { type CommandInput, operandInputs, recursiveInputs } from "./recursive-inputs.js";
@@ -272,7 +272,7 @@ class GrepContext {
     private readonly output: BufferedTextWriter,
   ) {}
 
-  private get active(): boolean {
+  get active(): boolean {
     return this.invocation.before > 0 || this.invocation.after > 0;
   }
 
@@ -296,6 +296,18 @@ class GrepContext {
     this.before.push({ line, number });
     if (this.before.length > this.invocation.before) this.before.shift();
     return undefined;
+  }
+
+  /**
+   * A selected line printed with no context lines around it, as
+   * {@link selected} prints it, without awaiting unless the writer flushes.
+   */
+  selectedAlone(number: number, text: string): Promise<void> | undefined {
+    const writing = this.output.put(text);
+    this.lastPrinted = number;
+    this.printedAny = true;
+    this.afterRemaining = this.invocation.after;
+    return writing;
   }
 
   async selected(number: number, name: string, body: () => Promise<void>): Promise<void> {
@@ -394,33 +406,21 @@ class GrepRunner {
     name: string,
     source: ReadableStream<Uint8Array> | readonly Uint8Array[],
   ): Promise<number> {
-    if (!Array.isArray(source))
-      return await this.scanLines(name, readTextLines(this.context, source, name));
-    const chunks = source as readonly Uint8Array[];
-    const text = this.prefilter(name, chunks);
-    if (text === SKIPPED) return 0;
-    // A bulk body splits synchronously: a line costs no await unless it is printed.
-    return await this.scanLines(name, chunkTextLines(this.context, chunks, name, text));
-  }
-
-  private async scanLines(
-    name: string,
-    lines: Iterable<string> | AsyncIterable<string>,
-  ): Promise<number> {
+    let text: string | undefined;
+    if (Array.isArray(source)) {
+      const prefiltered = this.prefilter(name, source as readonly Uint8Array[]);
+      if (prefiltered === SKIPPED) return 0;
+      text = prefiltered;
+    }
     const input: InputProgress = {
       matches: 0,
       lines: 0,
       limit: this.invocation.maxCount ?? Number.POSITIVE_INFINITY,
     };
-    if (Symbol.asyncIterator in lines) {
-      for await (const line of lines) if (await this.scanLine(name, line, input)) break;
-      return input.matches;
-    }
-    // `for await` would await every line even of a synchronous iterable.
-    for (const line of lines) {
-      const stop = this.scanLine(name, line, input);
-      if (stop === true || (stop !== false && (await stop))) break;
-    }
+    // A bulk body splits synchronously: a line costs no await unless it is printed.
+    await eachLine(textLines(this.context, source, name, text), (line) =>
+      this.scanLine(name, line, input),
+    );
     return input.matches;
   }
 
@@ -484,9 +484,20 @@ class GrepRunner {
       const printing = this.lines.unselected(name, lineNumber, line);
       return printing === undefined ? false : printing.then(() => false);
     }
+    if (!this.lines.active && !this.invocation.onlyMatching) {
+      const writing = this.lines.selectedAlone(lineNumber, this.formatted(name, lineNumber, line));
+      return writing === undefined ? true : writing.then(() => true);
+    }
     return this.lines
       .selected(lineNumber, name, () => this.writeSelected(name, lineNumber, line, candidate))
       .then(() => true);
+  }
+
+  private formatted(name: string, lineNumber: number, line: string): string {
+    const prefix = `${this.invocation.showName ? `${name}:` : ""}${
+      this.invocation.lineNumbers ? `${lineNumber}:` : ""
+    }`;
+    return `${prefix}${line}${line.endsWith("\n") ? "" : "\n"}`;
   }
 
   private selected(candidate: string): boolean {
@@ -499,14 +510,14 @@ class GrepRunner {
     line: string,
     candidate: string,
   ): Promise<void> {
-    const prefix = `${this.invocation.showName ? `${name}:` : ""}${
-      this.invocation.lineNumbers ? `${lineNumber}:` : ""
-    }`;
     if (!this.invocation.onlyMatching) {
-      await this.output.write(`${prefix}${line}${line.endsWith("\n") ? "" : "\n"}`);
+      await this.output.write(this.formatted(name, lineNumber, line));
       return;
     }
     if (this.invocation.invert) return;
+    const prefix = `${this.invocation.showName ? `${name}:` : ""}${
+      this.invocation.lineNumbers ? `${lineNumber}:` : ""
+    }`;
     for (const part of this.invocation.matcher.parts(candidate)) {
       await this.output.write(`${prefix}${part}\n`);
     }

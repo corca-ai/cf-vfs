@@ -6,7 +6,7 @@ import {
   defineApplet,
   parseAppletOptions,
 } from "./applet.js";
-import { BufferedTextWriter, readWithAbort } from "./helpers.js";
+import { BufferedTextWriter, watchReader } from "./helpers.js";
 
 const TR = {
   name: "tr",
@@ -282,11 +282,12 @@ function decodeChunk(decoder: TextDecoder, chunk?: Uint8Array): string {
 export const trCommand = /* @__PURE__ */ defineApplet(TR, async (context, argv, fds) => {
   const transform = transformer(plan(argv, context));
   const reader = fds[0].getReader();
+  const watched = watchReader(reader, context.signal);
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const output = new BufferedTextWriter(context, fds[1]);
   try {
     while (true) {
-      const read = await readWithAbort(reader, context.signal);
+      const read = await watched.read();
       if (read.done) break;
       context.budget.io(read.value.byteLength);
       await output.write(transform(decodeChunk(decoder, read.value)));
@@ -297,6 +298,7 @@ export const trCommand = /* @__PURE__ */ defineApplet(TR, async (context, argv, 
     await reader.cancel(error).catch(() => undefined);
     throw error;
   } finally {
+    watched.unwatch();
     reader.releaseLock();
     output.abort();
   }

@@ -10,7 +10,7 @@ import {
 import type { AwkFunction, AwkRule as Rule } from "./awk-ast.js";
 import { decodeAwkEscapes, tokenizeAwk } from "./awk-lexer.js";
 import { parseAwkProgram } from "./awk-parser.js";
-import { AwkOutput, bindExecutor, executeRules } from "./awk-program.js";
+import { AwkOutput, bindExecutor, type Control, executeRules } from "./awk-program.js";
 import {
   type AwkValue,
   asString,
@@ -22,7 +22,7 @@ import {
   validateFieldSeparator,
 } from "./awk-runtime.js";
 import { retainAwkVariable } from "./awk-strings.js";
-import { BufferedTextWriter, readFileText, readTextLines } from "./helpers.js";
+import { BufferedTextWriter, eachLine, readFileText, textLines } from "./helpers.js";
 import { inputSources } from "./inputs.js";
 
 const AWK = {
@@ -189,19 +189,26 @@ async function executeInput(
   writer: BufferedTextWriter,
 ): Promise<boolean> {
   const input = fds[0];
+  let exited = false;
+  const exits = (control: Control): boolean => {
+    exited = control.kind === "exit";
+    return exited;
+  };
   for await (const operand of inputSources(state.context, paths, input)) {
     state.filename = operand.name;
     state.fnr = 0;
-    for await (const line of readTextLines(state.context, operand.source, operand.name)) {
+    // A bulk body is read synchronously: a record awaits only a flush.
+    await eachLine(textLines(state.context, operand.source, operand.name), (line) => {
       setField(state, 0, inputValue(line.endsWith("\n") ? line.slice(0, -1) : line));
       state.fields = [];
       state.fieldsValid = false;
       state.fieldSeparator = asString(getVariable(state, "FS"));
       state.nr += 1;
       state.fnr += 1;
-      const control = await executeRules(rules, "record", state, output, writer, fds[2]);
-      if (control.kind === "exit") return true;
-    }
+      const control = executeRules(rules, "record", state, output, writer, fds[2]);
+      return control instanceof Promise ? control.then(exits) : exits(control);
+    });
+    if (exited) return true;
   }
   return false;
 }
