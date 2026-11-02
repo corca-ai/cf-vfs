@@ -1,0 +1,5603 @@
+{
+  "complete": true,
+  "protocol": {
+    "id": "local-group-v1",
+    "pairUnit": "group",
+    "description": "Fresh fixture per arm/group; complete group before switching arms; untimed setup/validation/cleanup; separate SQL replay. No GC trimming."
+  },
+  "trials": 12,
+  "warmups": 2,
+  "orderOffset": 0,
+  "baselineRoot": "/Users/ak/.claude/jobs/58b39da0/tmp/graphs/g-item1",
+  "candidateRoot": "/Users/ak/.claude/jobs/58b39da0/tmp/graphs/g-item2b",
+  "credentials": {
+    "uid": 1000,
+    "gid": 1000
+  },
+  "identityTime": 1700000000000,
+  "limits": {
+    "workspaceId": "benchmark-fixture",
+    "maxEntries": 20000,
+    "maxInlineLogicalBytes": 33554432,
+    "maxInFlightBufferedBytes": 16777216
+  },
+  "fullPlan": false,
+  "groups": [
+    "git:100:true"
+  ],
+  "workloads": [
+    {
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      }
+    },
+    {
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      }
+    }
+  ],
+  "regressions": [],
+  "costRegressions": [
+    {
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "costs": [
+        {
+          "pair": 0,
+          "version": "baseline",
+          "profile": true,
+          "stage": {
+            "group": "git",
+            "operation": "add-all",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "ms": 16.66141700000003,
+          "statements": 3168,
+          "returnedRows": 2165,
+          "verified": 0
+        },
+        {
+          "pair": 0,
+          "version": "candidate",
+          "profile": true,
+          "stage": {
+            "group": "git",
+            "operation": "add-all",
+            "files": 100,
+            "cache": true,
+            "trial": 0
+          },
+          "ms": 16.490416000000096,
+          "statements": 3168,
+          "returnedRows": 2166,
+          "verified": 0
+        }
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7712499999999523,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.018583000000035,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 20.625415999999973,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.7056670000000054,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.912584000000038,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.719333000000006,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4725419999999758,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.5803339999999935,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.0653339999999503,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.37941699999998946,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.3039160000000152,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 4.14383399999997,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.5274579999999673,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.8009999999999877,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.100958999999989,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 19.605458,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.402249999999981,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.72037499999999,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.8460420000000113,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4721670000000131,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.5699170000000322,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.0140830000000278,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.30362499999995407,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.26891699999998764,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.5610419999999863,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.6957909999999856,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7579160000000229,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.891458,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 20.87262499999997,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.3841249999999832,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.5521250000000464,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.5992499999999836,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.45583299999998417,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.5794999999999959,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.0184169999999995,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.3311659999999961,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.27412499999996953,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 4.259166999999991,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.426499999999976,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7989580000000274,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.949374999999975,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 19.185958000000028,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.3890839999999685,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.534667000000013,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.479959000000008,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.40083400000003166,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.5050420000000031,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.8821670000000381,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.27187500000002274,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.24954200000001947,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.3888749999999845,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 1,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 4.055375000000026,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.6980000000000359,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.805416999999977,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 17.480542000000014,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.3937500000000114,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.790124999999989,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.9781659999999874,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4017499999999927,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4697500000000332,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.9128330000000346,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.28141600000003564,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.2616249999999809,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.498458000000028,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.382000000000005,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7493330000000356,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.7700419999999895,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 17.469875000000002,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.3722919999999021,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.5760000000000218,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.480542000000014,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.36608300000000327,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.469916000000012,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.9375,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.6100410000000238,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.260791999999924,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.4156249999999773,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 2,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.3532500000000027,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.737459000000058,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.774874999999952,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 17.431832999999983,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.3511250000000246,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.5271249999999554,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.519125000000031,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.3929999999999154,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4838750000000118,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.9252500000000055,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.3258329999999887,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.2742080000000442,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.756416999999942,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.2378340000000208,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7487919999999804,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.8173329999999623,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 17.33208300000001,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.417041999999924,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.579584000000068,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.4600830000000542,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.3606249999999136,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.45050000000003365,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.8719999999999573,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.3064169999998967,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.2529170000000249,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.3051249999999754,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 3,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.7879590000000007,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.6866250000000491,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.6948750000000246,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 16.900166000000013,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.3073329999999714,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.538583000000017,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.842166999999904,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.3764160000000629,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4942500000000791,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.8442500000001019,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.3115420000000313,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.25549999999998363,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.3616670000000113,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.411416000000031,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7320829999999887,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.7132500000000164,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 17.06341599999996,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.2829169999999976,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.5343750000000682,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.4751249999999345,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.3673750000000382,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4642499999999927,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.9332909999999401,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.2604999999999791,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.2474170000000413,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.978375000000028,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 4,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.303541999999993,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.6916670000000522,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.715167000000065,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 17.135291000000052,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.3190829999999778,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.503041000000053,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.5258750000000418,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.38550000000009277,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4840409999999338,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.9554170000000113,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.2653330000000551,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.249416999999994,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.7643339999999625,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.2441669999999476,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7180409999999711,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.7431249999999636,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 17.793750000000045,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.2565409999999702,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.5235420000000204,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.4163340000000062,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.35341600000003837,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4593330000000151,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.9107499999998936,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.3012499999999818,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.25900000000001455,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.2712920000000167,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 5,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.4297500000000127,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.6868749999999864,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.7676249999999527,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 18.595542000000023,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.2547089999999343,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.5176659999999629,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.490583000000015,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.34399999999993724,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4819589999999607,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.9272079999999505,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.31166700000005676,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.30579099999999926,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.712541999999985,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.3359590000000026,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7673750000000155,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.8865409999999656,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 17.241665999999896,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.2356250000000273,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.4615420000000086,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.4635840000000826,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.36458300000003874,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.41274999999996,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.807207999999946,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.26004199999999855,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.24566599999991467,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.2896670000000086,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 6,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.6703750000000355,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.6973749999999654,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.712791999999922,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 16.272082999999952,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.3507919999999558,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.5738750000000437,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.8381669999999986,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.3344170000000304,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4637920000000122,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.9320830000000342,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.28120799999999235,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.2604999999999791,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.303042000000005,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.3180419999999913,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.72362499999997,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.736582999999996,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 16.728375000000028,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.2507089999999152,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.4753749999999854,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.4354170000000295,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.3687919999999849,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4619999999999891,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.8279580000000806,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.27279199999998127,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.24225000000001273,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 5.68545800000004,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 7,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 6.186416000000008,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7095000000000482,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.7425830000000815,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 16.580083999999943,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.3140419999999722,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.5335000000000036,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.4412499999999682,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.38354100000003655,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4874999999999545,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.9540829999999687,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.30437500000005,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.26787500000000364,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.9375420000000076,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.8584170000000313,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7680830000000469,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.0217910000000074,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 20.48304100000007,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.384999999999991,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.5950409999999238,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.475500000000011,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.34741600000006656,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.44833299999993415,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.8860419999999749,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.24149999999997362,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.26645799999994324,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 4.209374999999909,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 8,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 4.136167,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7883749999999736,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.988375000000019,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 17.787958000000003,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.3242079999999987,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.486250000000041,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.4754590000000007,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.3164160000000038,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4452079999999796,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.8415410000000065,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.2427500000001146,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.23966700000005403,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.2996669999999995,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.262917000000016,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7454589999999826,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.7549589999998716,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 17.650792000000138,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.3350000000000364,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.4568749999998545,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.3841660000000502,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4085419999998976,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.46012500000006185,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.8554579999999987,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.27262500000006185,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.24554199999988668,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.3542079999999714,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 9,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.1855829999999514,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.6827089999999316,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.739834000000201,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 16.432832999999846,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.23237499999982,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.6136249999999563,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.0272079999999733,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.3764169999999467,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4697920000000977,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.8689590000001317,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.2637499999998454,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.2379160000000411,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.2525829999999587,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.2465830000001006,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7504169999999704,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.8277909999999338,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 16.603917000000138,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.2296249999999418,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.4338340000001608,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.4736250000000837,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.3671670000001086,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4712080000001606,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.8282919999999194,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.26483299999995324,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.24604199999998855,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.763916999999992,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 10,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.336084000000028,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.6881249999999,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.6863340000002154,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 17.011124999999993,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.977666999999883,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.6775829999999132,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.49737499999992,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.34683300000006057,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.49474999999983993,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.8708329999999478,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.2640839999999116,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.24387500000011642,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.264167000000043,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "candidate",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.285458999999946,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7335419999999431,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.784332999999833,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 17.005999999999858,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.3027079999999387,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.44012500000008,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.87887499999988,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4137080000000424,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4857919999999467,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7980000000000018,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.2667500000000018,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.2680830000001606,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.217666999999892,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 0
+    },
+    {
+      "pair": 11,
+      "version": "baseline",
+      "profile": false,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.2480420000001686,
+      "statements": 0,
+      "returnedRows": 0,
+      "verified": 100
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7814170000001468,
+      "statements": 144,
+      "returnedRows": 90,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.9329579999998714,
+      "statements": 1111,
+      "returnedRows": 509,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 16.66141700000003,
+      "statements": 3168,
+      "returnedRows": 2165,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.277417000000014,
+      "statements": 136,
+      "returnedRows": 130,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.4312089999998534,
+      "statements": 31,
+      "returnedRows": 150,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.3766250000001037,
+      "statements": 35,
+      "returnedRows": 136,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.33312500000010914,
+      "statements": 18,
+      "returnedRows": 24,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.46291599999995015,
+      "statements": 41,
+      "returnedRows": 32,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.8317920000001777,
+      "statements": 80,
+      "returnedRows": 65,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.25937500000009095,
+      "statements": 20,
+      "returnedRows": 23,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.24633300000004965,
+      "statements": 26,
+      "returnedRows": 16,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 4.1169159999999465,
+      "statements": 268,
+      "returnedRows": 470,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "baseline",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.1548330000000533,
+      "statements": 264,
+      "returnedRows": 456,
+      "verified": 100
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "init",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.7797080000000278,
+      "statements": 144,
+      "returnedRows": 90,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "populate",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 2.885875000000169,
+      "statements": 1111,
+      "returnedRows": 509,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "add-all",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 16.490416000000096,
+      "statements": 3168,
+      "returnedRows": 2166,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "commit",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.293333999999959,
+      "statements": 136,
+      "returnedRows": 130,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "status-clean",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.3886250000000473,
+      "statements": 31,
+      "returnedRows": 150,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "status-change",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 1.380625000000009,
+      "statements": 35,
+      "returnedRows": 136,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "diff",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.34395800000015697,
+      "statements": 18,
+      "returnedRows": 24,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "add-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.4379999999998745,
+      "statements": 41,
+      "returnedRows": 32,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "commit-one",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.8460419999998976,
+      "statements": 80,
+      "returnedRows": 65,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "log",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.2716670000002068,
+      "statements": 20,
+      "returnedRows": 23,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "branch",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 0.239708999999948,
+      "statements": 26,
+      "returnedRows": 16,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-old",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.2605000000000928,
+      "statements": 268,
+      "returnedRows": 470,
+      "verified": 0
+    },
+    {
+      "pair": 0,
+      "version": "candidate",
+      "profile": true,
+      "stage": {
+        "group": "git",
+        "operation": "checkout-main",
+        "files": 100,
+        "cache": true,
+        "trial": 0
+      },
+      "ms": 3.840167000000065,
+      "statements": 264,
+      "returnedRows": 456,
+      "verified": 100
+    }
+  ]
+}

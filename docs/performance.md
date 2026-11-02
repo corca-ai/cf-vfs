@@ -105,8 +105,10 @@ statistics, and cost rejection in the normal verification gate. Existing
 
 ## Stream and storage cost model
 
-Pipeline edges carry `Uint8Array` chunks through a small raw
-`ReadableStream` pump with byte-sized high-water accounting. A writer waits
+Pipeline edges carry `Uint8Array` chunks through a JavaScript queue with
+byte-sized high-water accounting. Commands and the stage input read it
+without the native stream, whose enqueue, read and reader lock each cross
+into the runtime on Workers (`bench/js-pipes-2026-11-02`). A writer waits
 when its downstream queue is full, and cancellation wakes both sides. Stages
 start concurrently; the runtime does not materialize a whole pipeline between
 commands.

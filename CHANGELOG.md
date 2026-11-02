@@ -27,6 +27,14 @@ included.
   pool per execution instead of the shell's buffer, so buffer limits trip
   where reading one file at a time trips them; with read-ahead they could
   trip earlier.
+- Shell pipes keep their queue in JavaScript, and commands and pipeline
+  stage input read it without the native stream, so a chunk no longer crosses
+  into the runtime: `wc -l` over 8,055 files piped to `tail` takes 0.86 of the
+  time on local workerd. `pipeTo`, `Response` and async iteration still read
+  a native stream. On Workers, pipeline stages now interleave as they do in
+  Node, so the order of lines that different stages write to one stderr can
+  differ from before.
+
 ## [0.5.1] — 2026-10-31
 
 - Measuring text as UTF-8 tests for ASCII before encoding, at any length.
