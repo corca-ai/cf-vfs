@@ -259,12 +259,23 @@ function cell(value: SqlStorageValue): unknown {
 }
 
 export class SqlLab extends DurableObject<LabEnv> {
-  private readonly fileSystem: DurableObjectFileSystem;
+  private fileSystem: DurableObjectFileSystem;
 
   constructor(ctx: DurableObjectState, env: LabEnv) {
     super(ctx, env);
-    this.fileSystem = new DurableObjectFileSystem(ctx.storage, { workspaceId: ctx.id.toString() });
+    this.fileSystem = this.openFileSystem();
     ctx.blockConcurrencyWhile(() => this.fileSystem.initialize());
+  }
+
+  private openFileSystem(): DurableObjectFileSystem {
+    return new DurableObjectFileSystem(this.ctx.storage, { workspaceId: this.ctx.id.toString() });
+  }
+
+  /** Drops every row, then a fresh filesystem, so a later request finds a schema. */
+  private async reset(): Promise<void> {
+    await this.ctx.storage.deleteAll();
+    this.fileSystem = this.openFileSystem();
+    await this.fileSystem.initialize();
   }
 
   /** Writes files through the filesystem, so the rows are the library's own. */
@@ -398,11 +409,11 @@ export class SqlLab extends DurableObject<LabEnv> {
 
   async destroy(): Promise<void> {
     await this.ctx.storage.deleteAlarm();
-    await this.ctx.storage.deleteAll();
+    await this.reset();
   }
 
   override async alarm(): Promise<void> {
-    await this.ctx.storage.deleteAll();
+    await this.reset();
   }
 }
 

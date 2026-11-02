@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { awkCommand } from "../src/shell/commands/awk.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { ReadAhead } from "../src/shell/commands/read-ahead.js";
+import { ShellRefusalError } from "../src/shell/errors.js";
 import { Shell } from "../src/shell/shell.js";
 import type { ShellCommandContext } from "../src/shell/types.js";
 import { createTestFileSystem, withoutBulkReads } from "./helpers/node-sql.js";
@@ -93,11 +94,38 @@ it("hands out a body read ahead only while nothing has changed since", async () 
   await new Response(fs.readFile("/c").stream).text();
   expect(fs.changeGeneration()).toBe(generation);
   expect(ahead.take("/a")?.chunks).toEqual([new TextEncoder().encode("/a")]);
+  // A change elsewhere leaves /b's entry as it was, so its body is still current;
+  // the changed /c is not handed out.
   await fs.writeFile("/c", "changed");
   expect(fs.changeGeneration()).not.toBe(generation);
-  expect(ahead.take("/b")).toBeUndefined();
+  expect(ahead.take("/b")?.chunks).toEqual([new TextEncoder().encode("/b")]);
+  expect(ahead.take("/c")).toBeUndefined();
   ahead.fill(["/b", "/c"]);
   expect(ahead.take("/c")?.chunks).toEqual([new TextEncoder().encode("changed")]);
   fs.setMetadata("/b", { mode: 0o600 });
+  expect(ahead.take("/b")).toBeUndefined();
+});
+
+it("leaves a body whose revalidation is refused to the ordinary read", async () => {
+  const fs = createTestFileSystem();
+  await fs.writeFiles(["/a", "/b"].map((path) => ({ path, body: path })));
+  const refusing = new Proxy(fs, {
+    get(inner, property) {
+      if (property === "statMany") {
+        return () => {
+          throw new ShellRefusalError("path is outside the readable roots", "/b");
+        };
+      }
+      const value: unknown = Reflect.get(inner, property);
+      return typeof value === "function" ? value.bind(inner) : value;
+    },
+  });
+  const context = {
+    fileSystem: refusing,
+    budget: { remainingBufferedBytes: () => 1 << 30, buffered: () => () => undefined },
+  } as unknown as ShellCommandContext;
+  const ahead = new ReadAhead(context);
+  ahead.fill(["/a", "/b"]);
+  await fs.writeFile("/a", "changed");
   expect(ahead.take("/b")).toBeUndefined();
 });

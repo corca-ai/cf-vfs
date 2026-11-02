@@ -10,10 +10,12 @@ export class SedText {
   constructor(
     private readonly budget: ShellBudget,
     private readonly maximumCharacters = budget.limits.maxExpansionChars,
+    /** Whether appending is work; text already charged where it was produced is not. */
+    private readonly work = true,
   ) {}
 
   append(value: string): void {
-    this.budget.expansionWork(value.length);
+    if (this.work) this.budget.expansionWork(value.length);
     if (this.value.length + value.length > this.maximumCharacters)
       throw new VfsError("E2BIG", "sed: text expansion limit exceeded");
     const bytes = this.bytes + utf8ByteLength(value);

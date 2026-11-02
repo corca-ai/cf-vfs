@@ -322,12 +322,50 @@ export async function collectStream(
   }
 }
 
+/** Collects bulk-read chunks as text with the checks {@link collectText} applies to a stream. */
+function collectChunkText(
+  context: ShellCommandContext,
+  chunks: readonly Uint8Array[],
+  path: string | undefined,
+  maximumBytes: number,
+): BufferLease<string> {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const parts: string[] = [];
+  let total = 0;
+  let release: () => void = () => undefined;
+  try {
+    for (const chunk of chunks) {
+      if (context.signal.aborted) {
+        throw context.signal.reason ?? new VfsError("ECANCELED", "execution was cancelled");
+      }
+      total += chunk.byteLength;
+      context.budget.read(chunk.byteLength);
+      if (total > maximumBytes)
+        throw new VfsError("E2BIG", "buffered command input limit exceeded");
+      release();
+      release = context.budget.buffered(total);
+      parts.push(decodeUtf8(decoder, chunk, path));
+    }
+    // The stream path checks once more before the read that reports the end.
+    if (context.signal.aborted) {
+      throw context.signal.reason ?? new VfsError("ECANCELED", "execution was cancelled");
+    }
+    parts.push(decodeUtf8(decoder, undefined, path));
+  } catch (error) {
+    release();
+    throw error;
+  }
+  return { value: parts.join(""), release };
+}
+
 export async function collectText(
   context: ShellCommandContext,
-  stream: ReadableStream<Uint8Array>,
+  source: ReadableStream<Uint8Array> | readonly Uint8Array[],
   path?: string,
   maximumBytes = context.budget.limits.maxBufferedBytes,
 ): Promise<BufferLease<string>> {
+  if (Array.isArray(source)) return collectChunkText(context, source, path, maximumBytes);
+  const stream = source as ReadableStream<Uint8Array>;
   const reader = stream.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const chunks: string[] = [];
