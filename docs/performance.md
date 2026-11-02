@@ -602,8 +602,9 @@ pattern — direction, rough size, SQL counts — holds on Workers.
   it is seeded in any case.
 - **Never** retry a failed run or add runs to reach a result; report it.
 
-The deployed full suite and the agent task series (`npm run bench:public`, with
-or without `--task`) run only when the user asks, and the client refuses to
+No large benchmark runs on Cloudflare unless the user explicitly instructs
+it, in any circumstance. The deployed full suite and the agent task series
+(`npm run bench:public`, with or without `--task`) run only then, and the client refuses to
 start without `--user-requested`. Deploy the public benchmark for a release,
 not for a candidate. When a suite run is requested, it keeps the paired
 fixed-reference design below: `npm run bench:assess:paired -- cf.json` reports

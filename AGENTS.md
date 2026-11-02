@@ -29,6 +29,9 @@ with `eval/benchmark-deploy/cloudflare.config.ts`.
 
 ## Performance changes
 
+**Never run a large benchmark on Cloudflare unless the user explicitly
+instructs it, in any circumstance** — not the deployed full suite or task
+series, not a large lab experiment, not to verify a deployment or a release.
 Cloudflare usage is billed, and full-scale runs there cost far more than they
 tell. **Run large workloads (a 10,000-page wiki, the full benchmark plan) only
 locally. On Cloudflare run only small experiments, about 200 pages, whose job
