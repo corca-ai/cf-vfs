@@ -403,20 +403,17 @@ it("reports a missing ls operand and still lists the rest", async () => {
   });
 });
 
-it("allows twenty thousand commands in one execution", async () => {
+it("allows a hundred thousand commands in one execution and bounds an endless loop", async () => {
   const harness = createBashHarness();
   await expect(
-    harness.run("i=0; while [ $i -lt 9000 ]; do i=$((i+1)); done; echo $i"),
+    harness.run("i=0; while [ $i -lt 50000 ]; do i=$((i+1)); done; echo $i"),
   ).resolves.toMatchObject({
     exitCode: 0,
-    stdout: "9000\n",
+    stdout: "50000\n",
   });
-  await expect(
-    harness.run("i=0; while [ $i -lt 11000 ]; do i=$((i+1)); done"),
-  ).resolves.toMatchObject({
-    exitCode: 1,
-    stderr: "shell command limit exceeded\n",
-  });
+  const endless = await harness.run("i=0; while :; do i=$((i+1)); done");
+  expect(endless.exitCode).toBe(1);
+  expect(endless.stderr).toMatch(/^shell work limit exceeded \(shell steps /u);
 });
 
 it("reports a spent I/O budget instead of failing silently", async () => {

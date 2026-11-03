@@ -2,7 +2,9 @@ import { expect, it } from "vitest";
 import { createBashHarness } from "./helpers/bash.js";
 
 it("keeps an in-place source intact when accumulated output exceeds the byte budget", async () => {
-  const { fileSystem, run, readText } = createBashHarness({ limits: { maxBufferedBytes: 256 } });
+  const { fileSystem, run, readText } = createBashHarness({
+    limits: { maxBufferedBytes: 256 },
+  });
   const before = "x\n".repeat(50);
   await fileSystem.writeFile("/input", before);
   const result = await run("sed -i 's/x/xxxxxxxxxx/' /input");

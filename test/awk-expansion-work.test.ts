@@ -8,7 +8,11 @@ async function awk(script: string, input: string, limits: Record<string, number>
   const fileSystem = createTestFileSystem();
   await fileSystem.writeFile("/in", input);
   await fileSystem.writeFile("/few", input.split("\n").slice(0, 100).join("\n"));
-  const shell = new Shell({ fileSystem, commands: [...defaultShellCommands, awkCommand], limits });
+  const shell = new Shell({
+    fileSystem,
+    commands: [...defaultShellCommands, awkCommand],
+    limits,
+  });
   return await shell.executeText({ cwd: "/", script: `${script}; echo "status $?"` });
 }
 

@@ -18,7 +18,7 @@ it.each(workloads)("text processing: $name", async (workload) => {
     const shell = new Shell({
       fileSystem: fs,
       commands: [...defaultShellCommands, awkCommand],
-      limits: { maxSteps: 1_000_000 },
+      limits: { maxWork: 50_000_000 },
     });
     const expected = workload.output.repeat(workload.outputRepeat);
     const execute = async () => {

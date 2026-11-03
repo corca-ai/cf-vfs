@@ -101,32 +101,17 @@ function workspaceFor(request: Request): string {
   return `country-${COUNTRY_PATTERN.test(upper) ? upper : "XX"}`;
 }
 
+/**
+ * A fortieth of the default work (about a quarter second of CPU, what 0.5's
+ * demo expansion limit allowed), an eighth of its memory, half its depth and
+ * 500 changed entries' rows: a public room serves visitors who pay nothing.
+ */
 const SHELL_LIMITS = {
-  maxScriptBytes: MAX_PENDING_SOURCE_BYTES,
-  maxTotalSourceBytes: MAX_PENDING_SOURCE_BYTES,
-  maxAstNodes: 2_048,
-  maxNestingDepth: 48,
-  maxCommands: 1_000,
-  maxSteps: 20_000,
-  maxLoopIterations: 1_000,
-  maxFunctionDepth: 32,
-  maxSourceDepth: 8,
-  maxCommandSubstitutionBytes: 256 * 1024,
-  maxPipelineBytes: 1024 * 1024,
-  maxStdoutBytes: 512 * 1024,
-  maxStderrBytes: 512 * 1024,
-  maxMaterializedOutputBytes: 1024 * 1024,
-  maxTotalIoBytes: 4 * 1024 * 1024,
-  maxBufferedBytes: 2 * 1024 * 1024,
-  maxLineBytes: 256 * 1024,
-  maxBufferedRecords: 10_000,
-  maxGlobMatches: 2_000,
-  maxExpansionWork: 1_000_000,
-  maxExpansionChars: 256 * 1024,
-  maxExpansionFields: 2_000,
-  maxMutations: 500,
   deadlineMs: 10_000,
-  outputIdleTimeoutMs: 5_000,
+  maxWork: 250_000,
+  maxMemoryBytes: 2 * 1024 * 1024,
+  maxDepth: 32,
+  maxRowsWritten: 2_000,
 } as const;
 
 const WELCOME_FILE = `cf-vfs interactive demo
@@ -370,12 +355,12 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
         identityResolver: DEMO_IDENTITY_RESOLVER,
         limits: SHELL_LIMITS,
         network: demoNetwork(),
-        policy: { maxMutations: SHELL_LIMITS.maxMutations, network: "allow" },
+        policy: { maxRowsWritten: SHELL_LIMITS.maxRowsWritten, network: "allow" },
       }),
       input: new InteractiveInputBuffer({
         limits: {
-          maxAstNodes: SHELL_LIMITS.maxAstNodes,
-          maxNestingDepth: SHELL_LIMITS.maxNestingDepth,
+          maxMemoryBytes: SHELL_LIMITS.maxMemoryBytes,
+          maxDepth: SHELL_LIMITS.maxDepth,
         },
       }),
       watching: new Set<string>(),

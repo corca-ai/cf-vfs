@@ -12,9 +12,9 @@ import { createBytePipe } from "./pipe.js";
 import { cloneShellSession } from "./session.js";
 import type {
   ShellBudget,
+  ShellDerivedLimits,
   ShellFileDescriptors,
   ShellFileSystem,
-  ShellLimits,
   ShellPolicy,
   ShellSession,
   ShellSink,
@@ -102,7 +102,7 @@ export interface Runtime {
   budget: ShellBudget;
   policy: ShellPolicy;
   signal: AbortSignal;
-  limits: ShellLimits;
+  limits: ShellDerivedLimits;
   parserBudget: ParserBudget;
   onEvent: ShellEventSink | undefined;
   runScript: ScriptRunner;
@@ -156,7 +156,7 @@ export interface ParserBudget {
 
 export function parseScriptUnit(
   source: string,
-  limits: ShellLimits,
+  limits: ShellDerivedLimits,
   budget: ParserBudget,
   executionBudget: Pick<ShellBudget, "checkDeadline">,
   path?: string,

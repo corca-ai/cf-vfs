@@ -37,7 +37,7 @@ import { ordinaryPath, readBodiesWhere, readStatBatch } from "./batch-stats.js";
 import { writeCheckedBatch } from "./batch-writes.js";
 import { aliasSink, nullSink } from "./device-sinks.js";
 import { localEntryPage } from "./entry-pages.js";
-import type { ShellFileDescriptors, ShellFileSystem, ShellSink } from "./types.js";
+import type { ShellBudget, ShellFileDescriptors, ShellFileSystem, ShellSink } from "./types.js";
 
 /**
  * The device paths this shell answers, and nothing else.
@@ -665,8 +665,9 @@ export function deviceSink(
   device: ShellDevice,
   fds: ShellFileDescriptors,
   path: string,
+  budget: ShellBudget,
 ): ShellSink {
-  if (device === "null") return nullSink();
+  if (device === "null") return nullSink(budget);
   if (device === "stdout") return aliasSink(fds[1].clone());
   if (device === "stderr") return aliasSink(fds[2].clone());
   throw new VfsError("EINVAL", "device is not writable", path);

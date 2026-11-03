@@ -101,7 +101,8 @@ it("charges recursive mutation budgets with a counting query, not a materialized
     }),
   ).toMatchObject({ exitCode: 0, stderr: "" });
 
-  expect(calls.filter((name) => name === "subtreeSummary")).toHaveLength(3);
+  // One each for the copy, the move and the removal, and one for the bytes copied.
+  expect(calls.filter((name) => name === "subtreeSummary")).toHaveLength(4);
   expect(calls).not.toContain("find");
   expect(calls).not.toContain("findPage");
 });
@@ -116,7 +117,7 @@ it("charges the exact recursive mutation count a counting query reports", async 
   const denied = new Shell({
     fileSystem,
     commands: defaultShellCommands,
-    policy: { maxMutations: 3 },
+    policy: { maxRowsWritten: 12 },
   });
   expect(await denied.executeText({ script: "rm -r /tree" })).toMatchObject({ exitCode: 1 });
   expect(fileSystem.stat("/tree/file").kind).toBe("file");
@@ -124,7 +125,7 @@ it("charges the exact recursive mutation count a counting query reports", async 
   const allowed = new Shell({
     fileSystem,
     commands: defaultShellCommands,
-    policy: { maxMutations: 4 },
+    policy: { maxRowsWritten: 16 },
   });
   expect(await allowed.executeText({ script: "rm -r /tree" })).toMatchObject({
     exitCode: 0,
@@ -140,7 +141,7 @@ it("shares glob, record, and recursive mutation budgets across the execution", a
   const shell = new Shell({
     fileSystem,
     commands: defaultShellCommands,
-    policy: { maxMutations: 2 },
+    policy: { maxRowsWritten: 8 },
     limits: { maxGlobMatches: 2, maxBufferedRecords: 2, maxLineBytes: 4 },
   });
   expect(await shell.executeText({ script: "printf '%s\n' /tree/*" })).toMatchObject({
@@ -271,7 +272,7 @@ it("charges every directory created by recursive mkdir before mutating", async (
   const shell = new Shell({
     fileSystem,
     commands: defaultShellCommands,
-    policy: { maxMutations: 1 },
+    policy: { maxRowsWritten: 4 },
   });
   expect(await shell.executeText({ script: "mkdir -p /one/two" })).toMatchObject({ exitCode: 1 });
   expect(() => fileSystem.stat("/one")).toThrowError(expect.objectContaining({ code: "ENOENT" }));

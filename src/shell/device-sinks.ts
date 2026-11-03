@@ -1,18 +1,19 @@
-import type { ShellSink } from "./types.js";
+import type { ShellBudget, ShellSink } from "./types.js";
 
 /**
  * A sink that discards everything written to it.
  *
- * Nothing is buffered, no chunk is retained, and nothing is charged: the bytes
- * were already metered when whatever produced them read or generated them, and
- * charging again would make `cmd > /dev/null` fail budgets that `cmd > file`
- * passes. `close` and `abort` do nothing because there is nothing to publish or
- * undo, which is also what makes it safe to hand the same sink to two
- * descriptors.
+ * Nothing is buffered and no chunk is retained, but what is written is charged
+ * as work, as writing it to a file is: producing output costs the command
+ * whether or not anything keeps it. `close` and `abort` do nothing because
+ * there is nothing to publish or undo, which is also what makes it safe to
+ * hand the same sink to two descriptors.
  */
-export function nullSink(): ShellSink {
+export function nullSink(budget: ShellBudget): ShellSink {
   const sink: ShellSink = {
-    async write(): Promise<void> {},
+    async write(chunk): Promise<void> {
+      budget.io(chunk.byteLength);
+    },
     async close(): Promise<void> {},
     async abort(): Promise<void> {},
     clone: () => sink,

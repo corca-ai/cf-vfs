@@ -163,6 +163,14 @@ export class ScopedFileSystem implements ShellFileSystem {
     return missing;
   }
 
+  private copiedBytes(path: string): number {
+    try {
+      return this.#inner.subtreeSummary(path).inlineBytes;
+    } catch {
+      return 0;
+    }
+  }
+
   private mutationSubtreeCount(path: string, operation: MutationOperation): number {
     return countsMutations(this.#inner)
       ? this.#inner.mutationSubtreeCount(path, operation)
@@ -193,7 +201,10 @@ export class ScopedFileSystem implements ShellFileSystem {
 
   writeFiles(entries: Parameters<VirtualFileSystem["writeFiles"]>[0]) {
     for (const entry of entries) this.write(entry.path);
-    this.#budget.mutation(entries.length);
+    this.#budget.mutation(
+      entries.length,
+      entries.reduce((total, entry) => total + bodyBytes(entry.body), 0),
+    );
     return this.#inner.writeFiles(entries);
   }
 
@@ -318,13 +329,13 @@ export class ScopedFileSystem implements ShellFileSystem {
 
   writeFile(path: string, body: ByteBody, options?: WriteFileOptions): Promise<WriteResult> {
     this.write(path);
-    this.#budget.mutation();
+    this.#budget.mutation(1, bodyBytes(body));
     return this.#inner.writeFile(path, body, options);
   }
 
   appendFile(path: string, body: ByteBody, options?: AppendFileOptions): Promise<WriteResult> {
     this.write(path);
-    this.#budget.mutation();
+    this.#budget.mutation(1, bodyBytes(body));
     return this.#inner.appendFile(path, body, options);
   }
 
@@ -379,6 +390,10 @@ export class ScopedFileSystem implements ShellFileSystem {
     if (options?.dereference === true) this.read(from);
     else this.readLink(from);
     this.writeLink(to);
+    // Copying writes every chunk of the source again, inside SQLite: charge
+    // the bytes as read and their rows as written.
+    const bytes = this.copiedBytes(from);
+    this.#budget.read(bytes);
     this.#budget.mutation(
       Math.max(
         1,
@@ -387,7 +402,15 @@ export class ScopedFileSystem implements ShellFileSystem {
           dereference: options?.dereference === true,
         }),
       ),
+      bytes,
     );
     return this.#inner.copy(from, to, options);
   }
+}
+
+/** A body's length when it is in hand; a stream's bytes are charged as it is moved. */
+function bodyBytes(body: ByteBody): number {
+  if (typeof body === "string") return body.length;
+  if (body instanceof ReadableStream) return 0;
+  return body.byteLength;
 }

@@ -408,7 +408,7 @@ it("honors mutation budgets and cancellation", async () => {
   const shell = new Shell({
     fileSystem: vfs,
     commands: [gitCommand],
-    limits: { maxMutations: 1 },
+    limits: { maxRowsWritten: 4 },
   });
   expect((await shell.executeText({ script: "git init /limited" })).exitCode).not.toBe(0);
   const controller = new AbortController();

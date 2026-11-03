@@ -16,6 +16,28 @@ included.
 
 ## [Unreleased]
 
+- **Breaking:** `ShellLimits` has five limits instead of twenty-seven, each
+  bounding one thing that costs on Cloudflare or that the runtime cannot
+  interrupt: `deadlineMs` (30 s), `maxWork` (10,000,000 units of about a
+  microsecond of local workerd CPU), `maxMemoryBytes` (16 MiB), `maxDepth`
+  (64) and `maxRowsWritten` (50,000). Steps, commands, loop iterations,
+  expansion work, regular-expression steps, `sort` comparisons, bytes read
+  and bytes moved or written all charge `maxWork` at a calibrated cost, so an
+  agent's loop over ten thousand files, five million shell steps or 500 MB
+  read fits, where 20,000 commands or 64 MiB of I/O stopped it; a refusal
+  names what spent the work. A single execution reading more than 500 MB, which
+  1 GiB of read allowance admitted, now stops. Per-structure caps — a line, an expansion, captured output,
+  the records `sort` holds — scale with `maxMemoryBytes` and equal 0.5's at
+  its default, except glob matches and expansion fields, raised to 65,536.
+  Mutations charge `maxRowsWritten` at four rows each and a row per 256 KiB of
+  content, so the default admits about 12,500 changed files where 0.5 admitted
+  10,000 mutations. 0.5's names are still accepted, deprecated, each setting
+  the derived cap of that name (counters can only tighten); any other name is
+  refused with `EINVAL`. `ShellPolicy.maxMutations` is `maxRowsWritten`, a
+  0.5 policy's count taken at four rows each, and `InteractiveInputBuffer`
+  takes `maxMemoryBytes` and `maxDepth`. A derived cap that no longer applies
+  reads as `Number.MAX_SAFE_INTEGER`. `deriveShellLimits` gives the caps a host's limits imply, and
+  `ShellBudget.limits` is the `ShellDerivedLimits` applets read.
 - **Breaking:** `maxBufferedRecords` counts only records a command holds —
   `sort`, `comm`, `join`, `xargs` and awk arrays — not lines a command reads
   and lets go. `grep -c`, `sed -n '$p'`, `awk 'END { print NR }'`, `uniq` and
@@ -30,7 +52,7 @@ included.
   `maxBufferedBytes` until the pipeline settles, so a script of thousands of
   stages, which held over 100 MB uncounted, is refused.
 - **Breaking:** the steps a regular expression in `grep`, `sed` or `awk`
-  takes are charged as expansion work, 64 steps a unit; a literal pattern
+  takes are charged as expansion work, 25 steps a unit; a literal pattern
   takes none. Matching cannot be interrupted by the deadline: a 120-branch
   `grep -E` over a 4 MB file ran 38 s, past Cloudflare's 30 s CPU limit, and
   a `grep -w` search rescanning a 40 KB line ran 36 s; both now stop at the

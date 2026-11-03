@@ -159,7 +159,7 @@ it("bounds an assignment that names many tilde boundaries", async () => {
   // Every boundary copies HOME. Charging before materializing keeps this a
   // budget diagnostic instead of a RangeError escaping the runtime.
   expect(result.exitCode).toBe(1);
-  expect(result.stderr).toContain("expansion work limit exceeded");
+  expect(result.stderr).toContain("shell work limit exceeded (expansion");
 });
 
 it("keeps a substituted home out of pathname expansion", async () => {

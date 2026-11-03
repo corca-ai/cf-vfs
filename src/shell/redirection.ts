@@ -41,6 +41,7 @@ function atomicFileSink(
   const writable = new WritableStream<Uint8Array>({
     write(chunk) {
       total += chunk.byteLength;
+      budget.io(chunk.byteLength);
       if (total > maximumBytes) {
         throw new VfsError("EFBIG", `redirection exceeds the ${maximumBytes}-byte limit`, path);
       }
@@ -210,7 +211,7 @@ class RedirectionState {
             this.budget.limits.maxPipelineBytes,
             this.budget,
           )
-        : deviceSink(device, this.fds, path);
+        : deviceSink(device, this.fds, path, this.budget);
     if (operator === "&>" || operator === "&>>") return await this.#bothOutputs(replacement);
     await this.#oneOutput(replacement, operator.startsWith("2") ? 2 : 1);
   }

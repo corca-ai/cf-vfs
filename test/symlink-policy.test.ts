@@ -98,7 +98,7 @@ it("can replace an escaping symlink without accessing its target", async () => {
 
 it("charges symlink primitives to a custom command's mutation budget", async () => {
   const harness = createBashHarness({
-    limits: { maxMutations: 1 },
+    limits: { maxRowsWritten: 4 },
     extraCommands: [
       defineTestApplet("links", async (context) => {
         context.fileSystem.symlink("/one", "/target");
@@ -115,7 +115,7 @@ it("charges symlink primitives to a custom command's mutation budget", async () 
 });
 
 it("charges a successful ln operation exactly once", async () => {
-  const harness = createBashHarness({ limits: { maxMutations: 1 } });
+  const harness = createBashHarness({ limits: { maxRowsWritten: 4 } });
   const result = await harness.run("ln -s /target /link");
   expect(result.exitCode).toBe(0);
   expect(harness.fileSystem.readlink("/link")).toBe("/target");

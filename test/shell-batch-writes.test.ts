@@ -26,7 +26,7 @@ it.each(["root", "device", "mutations"] as const)(
       fileSystem: vfs,
       commands: [probe],
       ...(boundary === "root" ? { policy: { writeRoots: ["/repo"] } } : {}),
-      ...(boundary === "mutations" ? { limits: { maxMutations: 1 } } : {}),
+      ...(boundary === "mutations" ? { limits: { maxRowsWritten: 4 } } : {}),
     });
     const result = await shell.executeText({ script: "probe" });
     expect(result.exitCode).toBe(boundary === "root" ? 126 : 1);

@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { VfsError } from "../src/core/errors.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { Shell } from "../src/shell/shell.js";
-import type { ShellLimits } from "../src/shell/types.js";
+import type { ShellDerivedLimits } from "../src/shell/types.js";
 import type { VirtualFileSystem } from "../src/vfs/types.js";
 import { createTestFileSystem, withoutBulkReads } from "./helpers/node-sql.js";
 
@@ -162,7 +162,7 @@ it("skips unselectable bulk bodies with the results and failures of reading thei
     "grep -rcF short /long /w",
     "grep -rlF absent /long",
   ];
-  const run = async (bulk: boolean, chunkBytes: number, limits: Partial<ShellLimits>) => {
+  const run = async (bulk: boolean, chunkBytes: number, limits: Partial<ShellDerivedLimits>) => {
     const fs = createTestFileSystem({ chunkBytes });
     for (const [path, body] of Object.entries(files)) {
       await fs.writeFile(path, body, { createParents: true });
@@ -178,7 +178,7 @@ it("skips unselectable bulk bodies with the results and failures of reading thei
     }
     return results;
   };
-  const cases: [number, Partial<ShellLimits>][] = [
+  const cases: [number, Partial<ShellDerivedLimits>][] = [
     [4096, {}],
     [5, {}],
     [5, { maxLineBytes: 40 }],

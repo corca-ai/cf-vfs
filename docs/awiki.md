@@ -56,7 +56,7 @@ parsed once per entry identity and mutation token:
 - `rename` rereads only the pages whose links name the old document, and
   `format` skips a page already known to be formatted at its current token.
 - Limits never depend on the cache: a reused page still charges its bytes to
-  `maxReadBytes`, as a cold read would.
+  `maxWork`, as a cold read would.
 
 The cache lives in memory per filesystem owner, holds up to 16,384 pages, and
 is empty after the object restarts; the first run after that parses every
@@ -70,7 +70,7 @@ shingle sets and each partition of the fingerprint index take a quarter of it,
 and a page that does not fit is fingerprinted again where it is needed, in the
 order that rehashes least. The result is the native one; with the default
 16 MiB budget it is the slowest section on a large wiki, and raising
-`maxBufferedBytes` makes it faster.
+`maxMemoryBytes` makes it faster.
 
 Measurements on the 2,000-page agent-evaluation wiki are in
 [bench/awiki-2026-10-30](../bench/awiki-2026-10-30/report.md).

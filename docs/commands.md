@@ -736,7 +736,7 @@ burn the whole CPU limit. Patterns that would still be large after expansion
 
 `sed` checks replacement text and pattern-space growth before concatenation,
 including text later discarded by `-n` or `d`. Intermediate text respects
-`maxExpansionChars` and `maxBufferedBytes`. Expansion work counts what input
+the expansion-character and buffered-data caps `maxMemoryBytes` sets. Expansion work counts what input
 size does not bound: each attempt of a global or numbered substitution, a
 replacement's growth over the text it replaces, printing beyond what the cycle
 read (`p;p`, `i`, `a`, `=`), the spaces `G`, `H`, `x` and the others copy,
@@ -1069,7 +1069,7 @@ which replaces the file once per run, and `>> file`, which appends; the files
 are published when the program ends, `close(file)` lets a later `>` start the
 file again, and `/dev/stdout` and `/dev/stderr` name the streams. `delete
 array` empties a whole array. Loops charge
-expansion work rather than the shell's loop-iteration limit. `getline`,
+expansion work, a unit an iteration. `getline`,
 `system`, output pipes, assignments after the program,
 and locale-dependent behavior are outside the profile and fail explicitly
 instead of being approximated. The
@@ -1144,10 +1144,11 @@ replacement expands `&` and `\1`…`\9` and writes everything else literally.
 
 `l`, `r`, `R`, `w`, `W`, `e`, and `F` are usage errors: they read or write
 other files, run commands, or print an escaped dump. The pattern space and the
-hold space are each bounded by `maxExpansionChars`, so `N`, `H`, and `G` cannot
-grow either without limit, and a branch back or `D` restart that read no record
-since the last one charges a step, so a branch loop such as `:a;ba` ends at the
-step limit while one that reads as it goes is bounded by its input. Ordinary operation still
+hold space are each bounded by the expansion-character cap, so `N`, `H`, and
+`G` cannot grow either without limit, and a branch back or `D` restart that
+read no record since the last one charges a step, so a branch loop such as
+`:a;ba` ends at the work limit while one that reads as it goes is bounded by
+its input. Ordinary operation still
 streams one record at a time. A selected `q` stops immediately, cancels the current input,
 and never opens later operands. A script containing a `$` address necessarily
 keeps one record of lookahead; scripts without one emit their first record as

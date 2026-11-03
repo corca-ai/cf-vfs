@@ -156,7 +156,8 @@ await measure("buffering-sort-long-line", { sizeBytes: 1024 * 1024 }, async () =
   const shell = new Shell({
     fileSystem: createFileSystem(),
     commands: defaultShellCommands,
-    limits: { maxLineBytes: 1024 * 1024 + 1 },
+    // Twice the default memory admits a line of 2 MiB.
+    limits: { maxMemoryBytes: 32 * 1024 * 1024 },
   });
   const result = await shell.executeText({
     script: "sort | head -c 1",

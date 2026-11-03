@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { createFsAdapter } from "../src/fs/index.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { Shell } from "../src/shell/shell.js";
-import type { ShellLimits } from "../src/shell/types.js";
+import type { ShellDerivedLimits } from "../src/shell/types.js";
 import type { NodeSqlFileSystemOptions } from "../src/testing/node.js";
 import { createTestFileSystem, withoutBulkReads } from "./helpers/node-sql.js";
 
@@ -21,7 +21,7 @@ async function run(
   bulk: boolean,
   script: string,
   layout: Layout,
-  limits: Partial<ShellLimits> = {},
+  limits: Partial<ShellDerivedLimits> = {},
   options: NodeSqlFileSystemOptions = {},
 ) {
   // Chunk queries by entry: one per file read alone, and writes issue the same one.
@@ -54,7 +54,7 @@ async function run(
   return { result, statements };
 }
 
-const CASES: [string, Layout, Partial<ShellLimits>?, NodeSqlFileSystemOptions?][] = [
+const CASES: [string, Layout, Partial<ShellDerivedLimits>?, NodeSqlFileSystemOptions?][] = [
   ["sed -i 's/x/xx/' p*.md", "plain"],
   ["sed -i 's/x/xx/' l1.md p003.md p004.md p003.md", "symlink"],
   ["sed -i 's/x/xx/' p003.md l1.md p004.md l1.md", "hardlink"],

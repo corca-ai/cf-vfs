@@ -128,7 +128,9 @@ it("bounds pattern work, produced characters, and produced fields", async () => 
 
   // The character and field limits bound one result, not a unit's running
   // total: a loop expanding short words holds one at a time.
-  const repeated = createBashHarness({ limits: { maxExpansionChars: 20, maxExpansionFields: 4 } });
+  const repeated = createBashHarness({
+    limits: { maxExpansionChars: 20, maxExpansionFields: 4 },
+  });
   await expect(
     repeated.run(
       "n=0; for i in 1 2 3; do for j in 1 2 3; do X=$i$j; n=$((n+1)); done; done; echo $n",
