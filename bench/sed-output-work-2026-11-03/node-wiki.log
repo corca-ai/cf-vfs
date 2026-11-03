@@ -1,0 +1,11 @@
+Node, NodeSqlFileSystem, the 10,000-page S3 wiki (8,055 pages under /wiki/*/*.md), default limits.
+
+this branch (as committed)
+sed -i 's/owner/OWNER/' /wiki/*/*.md; echo $? => 535 ms exit 0 out 0 err
+grep -c OWNER /wiki/*/*.md | grep -vc ':0$' => 145 ms exit 0 out 6822 err
+sed 's/e/E/g' /wiki/*/*.md > /dev/null; echo $? => 1268 ms exit 0 out 0 err
+
+main (b9283cb)
+sed -i 's/owner/OWNER/' /wiki/*/*.md; echo $? => 269 ms exit 1 out  err sed: /wiki/design/topic-5179.md: shell expansion work limit exceeded
+grep -c OWNER /wiki/*/*.md | grep -vc ':0$' => 127 ms exit 0 out 1654 err
+sed 's/e/E/g' /wiki/*/*.md > /dev/null; echo $? => 186 ms exit 1 out  err shell expansion work limit exceeded

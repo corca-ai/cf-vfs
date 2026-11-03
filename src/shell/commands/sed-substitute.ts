@@ -12,7 +12,15 @@ import { SedText } from "./sed-text.js";
  * part of the record into the output.
  */
 function expandReplacement(replacement: string, match: PosixMatch, budget: ShellBudget): string {
-  const output = new SedText(budget);
+  const output = expanded(replacement, match, budget);
+  // Only growth is work: text no longer than what it replaces is bounded by
+  // the bytes the command reads, and the length limit bounds each result.
+  budget.expansionWork(Math.max(0, output.length - (match.end - match.index)));
+  return output;
+}
+
+function expanded(replacement: string, match: PosixMatch, budget: ShellBudget): string {
+  const output = new SedText(budget, budget.limits.maxExpansionChars, false);
   if (!/[&\\]/u.test(replacement)) {
     output.append(replacement);
     return output.result();
@@ -42,6 +50,16 @@ function expandReplacementEscape(escaped: string, match: PosixMatch): string {
   return escaped;
 }
 
+/**
+ * The record a substitution rebuilds. Its unchanged parts are text the
+ * command read, already bounded by the bytes it reads, and the replacements
+ * were charged as {@link expandReplacement} built them, so assembling them is
+ * not charged again; the length limit still bounds the result.
+ */
+function recordText(budget: ShellBudget): SedText {
+  return new SedText(budget, budget.limits.maxExpansionChars, false);
+}
+
 export function substitute(
   command: Substitute,
   record: string,
@@ -60,7 +78,7 @@ function substituteOnce(
 ): { value: string; changed: boolean } {
   const match = command.pattern.exec(record);
   if (match === undefined) return { value: record, changed: false };
-  const output = new SedText(budget);
+  const output = recordText(budget);
   output.append(record.slice(0, match.index));
   output.append(expandReplacement(command.replacement, match, budget));
   output.append(record.slice(match.end));
@@ -72,7 +90,7 @@ function substituteSelectedMatches(
   record: string,
   budget: ShellBudget,
 ): { value: string; changed: boolean } {
-  const output = new SedText(budget);
+  const output = recordText(budget);
   let last = 0;
   let seen = 0;
   let changed = false;

@@ -1,0 +1,10 @@
+Local workerd SQL lab, 10,000-page S3 wiki, main (b9283cb) and this branch in one lab, one run each.
+
+main: sed 's/a/b/' /wiki/sales/*.md | wc -c
+  {"ms":44,"exit":1,"out":"4973449\n","err":"shell expansion work limit exceeded\n"}
+main: sed 's/e/E/g' /wiki/*/*.md > /dev/null; echo $?
+  {"ms":203,"exit":1,"out":"","err":"shell expansion work limit exceeded\n"}
+this branch: sed 's/a/b/' /wiki/sales/*.md | wc -c
+  {"ms":39,"exit":0,"out":"5189170\n","err":""}
+this branch: sed 's/e/E/g' /wiki/*/*.md > /dev/null; echo $?
+  {"ms":1284,"exit":0,"out":"0\n","err":""}

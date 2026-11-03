@@ -733,9 +733,14 @@ burn the whole CPU limit. Patterns that would still be large after expansion
 
 `sed` checks replacement text and pattern-space growth before concatenation,
 including text later discarded by `-n` or `d`. Intermediate text respects
-`maxExpansionChars` and `maxBufferedBytes`; matching loops and concatenation
-spend the shared step and expansion-work budgets. `-i` also bounds accumulated
-output before publishing, so a failed edit preserves the original file.
+`maxExpansionChars` and `maxBufferedBytes`. Expansion work counts what input
+size does not bound: each attempt of a global or numbered substitution, a
+replacement's growth over the text it replaces, printing beyond what the cycle
+read (`p;p`, `i`, `a`, `=`), the spaces `N`, `G`, `H` and the others build, and
+a branch back or `D` restart that read no record since the last one. Echoing
+what a cycle read, edited or not, is bounded by the bytes read, as `cat`'s
+output is, so a large edit runs to the end. `-i` also bounds accumulated output
+before publishing, so a failed edit preserves the original file.
 
 ### Opaque R2 content
 
@@ -1122,8 +1127,8 @@ replacement expands `&` and `\1`…`\9` and writes everything else literally.
 `l`, `r`, `R`, `w`, `W`, `e`, and `F` are usage errors: they read or write
 other files, run commands, or print an escaped dump. The pattern space and the
 hold space are each bounded by `maxExpansionChars`, so `N`, `H`, and `G` cannot
-grow either without limit, and every executed command charges a step, so a
-branch loop such as `:a;ba` ends at the step limit. Ordinary operation still
+grow either without limit, and every branch back and `D` restart charges a
+step, so a branch loop such as `:a;ba` ends at the step limit. Ordinary operation still
 streams one record at a time. A selected `q` stops immediately, cancels the current input,
 and never opens later operands. A script containing a `$` address necessarily
 keeps one record of lookahead; scripts without one emit their first record as
