@@ -11,8 +11,16 @@ export function checkAwkString(state: AwkRuntimeState, value: AwkValue): AwkValu
   return value;
 }
 
+/**
+ * What a build costs whatever its length, in characters: a few hundred
+ * nanoseconds, so that rebuilding a record of one or two characters many
+ * times is not free.
+ */
+export const BUILD_OVERHEAD = 2;
+
 /** Charges building `length` characters, after the allowance the current record grants. */
-export function chargeAwkBuild(state: AwkRuntimeState, length: number): void {
+export function chargeAwkBuild(state: AwkRuntimeState, built: number): void {
+  const length = built + BUILD_OVERHEAD;
   if (length <= state.buildAllowance) {
     state.buildAllowance -= length;
     return;

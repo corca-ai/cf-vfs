@@ -3,7 +3,7 @@ import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { Shell } from "../src/shell/shell.js";
 import { createTestFileSystem, withoutBulkReads } from "./helpers/node-sql.js";
 
-// cut, uniq and nl take a bulk body's lines synchronously and a stream's a
+// cut, uniq, nl and fold take a bulk body's lines synchronously and a stream's a
 // chunk at a time, writing through a buffer that awaits only its sink; every
 // form of input must print what reading each line in turn printed.
 const SCRIPTS = [
@@ -30,6 +30,12 @@ const SCRIPTS = [
   "uniq -c /x/long.md /x/long.md /x/long.md | wc -c",
   "cut -c1-5 /x/long.md /x/long.md | tail -1",
   "cat /x/long.md /x/long.md | nl | wc -c",
+  "fold -w 4 /w/*.md",
+  "cat /w/*.md | fold -w 3",
+  "fold -w 2 /x/bom.md /x/unterminated.md",
+  "fold -w 7 /x/long.md /x/long.md | tail -2",
+  "fold -w 3 /x/bad.md",
+  "fold -w 5 /x/huge-line.md | wc -l",
 ];
 
 async function run(bulk: boolean, chunkBytes: number) {
@@ -67,6 +73,8 @@ it("prints from bulk bodies and streams what reading each line in turn printed",
     expect(bulk[4]?.stdout).toContain("      2 same line");
     expect(bulk.some((result) => result.stderr.includes("not valid UTF-8"))).toBe(true);
     expect(bulk.some((result) => result.stderr.includes("line byte limit"))).toBe(true);
-    expect(bulk.at(-4)?.stdout).toBe("  9999\trow 1666\n 10000\trow 1666\nstatus 0\n");
+    expect(bulk[SCRIPTS.indexOf("nl /x/long.md /x/long.md | tail -2")]?.stdout).toBe(
+      "  9999\trow 1666\n 10000\trow 1666\nstatus 0\n",
+    );
   }
 });

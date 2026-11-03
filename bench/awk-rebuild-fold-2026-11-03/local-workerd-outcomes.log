@@ -1,0 +1,4 @@
+baseline awk '{ $3 = ""; $4 = ""; print }' /wiki/*/*.md > /dev/null; echo $? => 817 ms exit 1 out  err shell work limit exceeded (expansion 8.5M, file reads 728.7k, pipes and output 704.3k)
+candidate awk '{ $3 = ""; $4 = ""; print }' /wiki/*/*.md > /dev/null; echo $? => 862 ms exit 0 out 0 err 
+baseline awk '{ $2 = "x"; $3 = ""; $4 = ""; $5 = ""; $6 = ""; print }' /wiki/*/*.md > /dev/null; echo $? => 404 ms exit 1 out  err shell work limit exceeded (expansion 9.6M, file reads 205.2k, pipes and output 187.2k)
+candidate awk '{ $2 = "x"; $3 = ""; $4 = ""; $5 = ""; $6 = ""; print }' /wiki/*/*.md > /dev/null; echo $? => 1338 ms exit 0 out 0 err 

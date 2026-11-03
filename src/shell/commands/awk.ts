@@ -22,7 +22,7 @@ import {
   stringValue,
   validateFieldSeparator,
 } from "./awk-runtime.js";
-import { retainAwkVariable } from "./awk-strings.js";
+import { BUILD_OVERHEAD, retainAwkVariable } from "./awk-strings.js";
 import { BufferedTextWriter, eachLine, readFileText, textLines } from "./helpers.js";
 import { inputSources } from "./inputs.js";
 import { regexMeter } from "./regex-meter.js";
@@ -185,6 +185,9 @@ function validateRuntime(state: RuntimeState): void {
   validateFieldSeparator(state, asString(getVariable(state, "FS")));
 }
 
+/** How many times its own length each record read may build free of charge. */
+const BUILDS_PER_RECORD = 4;
+
 async function executeInput(
   rules: readonly Rule[],
   paths: readonly string[],
@@ -205,7 +208,7 @@ async function executeInput(
     // A bulk body is read synchronously: a record awaits only a flush.
     await eachLine(textLines(state.context, operand.source, operand.name), (line) => {
       setField(state, 0, inputValue(line.endsWith("\n") ? line.slice(0, -1) : line));
-      state.buildAllowance = line.length;
+      state.buildAllowance = (line.length + BUILD_OVERHEAD) * BUILDS_PER_RECORD;
       state.fields = [];
       state.fieldsValid = false;
       state.fieldSeparator = asString(getVariable(state, "FS"));
