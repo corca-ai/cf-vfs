@@ -234,8 +234,8 @@ single unit can do with no reference to time at all. They, not the deadline,
 are what makes an uninterrupted synchronous stretch finite.
 
 Steps count work that input size does not bound: shell evaluation, a `sed`
-branch back to an earlier command or a `D` restart, `jq` generators, and
-traversal pages. Work proportional to what a utility reads — decoding records,
+branch back to an earlier command or a `D` restart that read no record since
+the last one, `jq` generators, and traversal pages. Work proportional to what a utility reads — decoding records,
 applying a `sed` script or an `awk` program to each record, matching within a
 record — charges the I/O byte limit and expansion work instead, so a search
 over a large tree is bounded by the bytes it reads rather than refused after a

@@ -1,0 +1,10 @@
+baseline sed -i ':a;N;$!ba;s/\n\n\n*/\n\n/g' /wiki/*/*.md 2>/dev/null; echo $? => 230 ms exit 1 out  err shell expansion work limit exceeded
+candidate sed -i ':a;N;$!ba;s/\n\n\n*/\n\n/g' /wiki/*/*.md 2>/dev/null; echo $? => 503 ms exit 0 out 2 err 
+baseline sed -n '$!N;/owner\n/P;D' /wiki/*/*.md | wc -l => 85 ms exit 1 out 0 err shell expansion work limit exceeded
+candidate sed -n '$!N;/owner\n/P;D' /wiki/*/*.md | wc -l => 317 ms exit 0 out 0 err 
+baseline sed '$!N;P;D' /wiki/sales/*.md | wc -l => 53 ms exit 1 out 62432 err shell expansion work limit exceeded
+candidate sed '$!N;P;D' /wiki/sales/*.md | wc -l => 49 ms exit 0 out 65106 err 
+baseline sed -n ':a;N;$!ba;s/\n/ /g;p' /wiki/legal/topic-0*.md | wc -c => 4 ms exit 1 out 0 err shell expansion work limit exceeded
+candidate sed -n ':a;N;$!ba;s/\n/ /g;p' /wiki/legal/topic-0*.md | wc -c => 5 ms exit 0 out 54516 err 
+baseline sed -n ':a;N;P;$!ba' /wiki/legal/topic-0*.md | wc -c => 4 ms exit 1 out 0 err shell expansion work limit exceeded
+candidate sed -n ':a;N;P;$!ba' /wiki/legal/topic-0*.md | wc -c => 5 ms exit 1 out 0 err shell expansion work limit exceeded

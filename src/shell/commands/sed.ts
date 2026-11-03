@@ -26,6 +26,13 @@ import {
 import { substitute } from "./sed-substitute.js";
 import { SedText } from "./sed-text.js";
 
+/**
+ * How many times each scan in a script — an address or `s` pattern, or the
+ * search of `P` and `D` for the first line — may cover a record read without
+ * charge: alone, and beside the next one in a two-line window (`$!N;P;D`).
+ */
+const SCAN_PASSES = 2;
+
 /** Mutable per-record state for a range selector. */
 interface RangeState {
   active: boolean;
@@ -144,6 +151,15 @@ class SedRunner {
   private echoable = 0;
   /** Whether a record was read since the last branch back or restart. */
   private readSinceLoop = false;
+  /** Characters read so far, records and their newlines. */
+  private readTotal = 0;
+  /**
+   * Per regular expression — two slots per command, its address and its `s`
+   * pattern — the characters it may still scan without charge, and
+   * `readTotal` when it last scanned.
+   */
+  private readonly scanCredit: Float64Array;
+  private readonly scanSeen: Float64Array;
 
   constructor(
     private readonly commands: readonly SedCommand[],
@@ -153,6 +169,8 @@ class SedRunner {
     private readonly output: SedOutput,
   ) {
     this.states = commands.map(() => ({ active: false, ended: false }));
+    this.scanCredit = new Float64Array(commands.length * 2);
+    this.scanSeen = new Float64Array(commands.length * 2);
   }
 
   /** Returns whether `q` or `Q` ended the run. */
@@ -168,7 +186,6 @@ class SedRunner {
       this.output.beginCycle();
       let outcome = yield* this.cycle();
       while (outcome === "restart") {
-        this.budget.step();
         this.chargeLoop();
         outcome = yield* this.cycle();
       }
@@ -194,6 +211,7 @@ class SedRunner {
     this.line += 1;
     this.lastTerminated = record.terminated;
     this.echoable += record.value.length + 1;
+    this.readTotal += record.value.length + 1;
     this.readSinceLoop = true;
     return record;
   }
@@ -207,11 +225,8 @@ class SedRunner {
       if (action === undefined) pc += 1;
       else if ("jump" in action) {
         // A forward pass is bounded by the script and the input; only a
-        // branch back can repeat, so only that charges a step.
-        if (action.jump <= pc) {
-          this.budget.step();
-          this.chargeLoop();
-        }
+        // branch back can repeat, so only that is charged.
+        if (action.jump <= pc) this.chargeLoop();
         pc = action.jump;
       } else return yield* this.finishCycle(action);
     }
@@ -224,7 +239,7 @@ class SedRunner {
   private *step(command: SedCommand, pc: number): Steps<SedAction> {
     const selecting = this.selects(command, pc);
     const selected = selecting instanceof Promise ? ((yield selecting) as boolean) : selecting;
-    if (selected) return yield* this.execute(command);
+    if (selected) return yield* this.execute(command, pc);
     return command.kind === "{" ? { jump: command.end + 1 } : undefined;
   }
 
@@ -250,6 +265,7 @@ class SedRunner {
   }
 
   private selectsWith(selector: Selector, pc: number, last: boolean, negated: boolean): boolean {
+    if (selector.start.kind === "regex" || selector.end?.kind === "regex") this.scan(pc * 2);
     const state = this.states[pc] ?? { active: false, ended: false };
     const value = selectsWithSelector(selector, state, this.space, this.line, last);
     return negated ? !value : value;
@@ -278,15 +294,37 @@ class SedRunner {
   }
 
   /**
-   * A branch back, or a `D` restart, runs the script over the pattern space
-   * again; when no record was read since the last one, that pass is charged as
-   * expansion work. A loop that reads as it goes (`:a;N;$!ba`) is bounded by
-   * its input instead, and one that does not (`:a;s/x/x/;ta`, `:a;p;ba`)
-   * would otherwise rescan the space on a step each.
+   * A branch back, or a `D` restart, runs the script again; when no record was
+   * read since the last one, that pass is charged a step. A loop that reads as
+   * it goes (`:a;N;$!ba`, `$!N;P;D`) is bounded by its input, as a forward
+   * pass is. What a pass does to the space is charged where it is done: a
+   * regular expression's scan by `scan`, printing by `emit`, `x`, `G` and the
+   * others by `checkSpaces`.
    */
   private chargeLoop(): void {
-    if (!this.readSinceLoop) this.budget.expansionWork(this.space.length);
+    if (!this.readSinceLoop) this.budget.step();
     this.readSinceLoop = false;
+  }
+
+  /**
+   * A scan of the pattern space at `slot`: a regular expression, or `P` or
+   * `D` finding the first line, which reads a space `N` built. Each record
+   * read lets each scan cover it {@link SCAN_PASSES} times without charge,
+   * credited when it next runs, so one that never runs adds nothing; a space scanned again as it grows across records, as in
+   * `:a;N;/end/!ba`, or with nothing read, as in `:a;s/x/x/;ta`, is charged
+   * for what it scans beyond that.
+   */
+  private scan(slot: number): void {
+    const length = this.space.length;
+    let credit =
+      (this.scanCredit[slot] ?? 0) + (this.readTotal - (this.scanSeen[slot] ?? 0)) * SCAN_PASSES;
+    this.scanSeen[slot] = this.readTotal;
+    if (length <= credit) credit -= length;
+    else {
+      this.budget.expansionWork(length - credit);
+      credit = 0;
+    }
+    this.scanCredit[slot] = credit;
   }
 
   private *flushAppended(): Steps<void> {
@@ -297,10 +335,10 @@ class SedRunner {
     this.appended = [];
   }
 
-  private *execute(command: SedCommand): Steps<SedAction> {
+  private *execute(command: SedCommand, pc: number): Steps<SedAction> {
     switch (command.kind) {
       case "s":
-        return yield* this.substitute(command);
+        return yield* this.substitute(command, pc);
       case "b":
         return { jump: command.target };
       case "t":
@@ -316,11 +354,12 @@ class SedRunner {
       case "N":
         return yield* this.nextLine(command.kind === "N");
       default:
-        return yield* this.text(command, () => this.spaces(command));
+        return yield* this.text(command, pc, () => this.spaces(command));
     }
   }
 
-  private *substitute(command: SedSubstitute): Steps<SedAction> {
+  private *substitute(command: SedSubstitute, pc: number): Steps<SedAction> {
+    this.scan(pc * 2 + 1);
     const result = substitute(command, this.space, this.budget);
     this.space = result.value;
     if (result.changed) {
@@ -341,13 +380,15 @@ class SedRunner {
     if (record === undefined) return { quit: append ? "print" : "silent" };
     this.space = append ? `${this.space}\n${record.value}` : record.value;
     this.substituted = false;
-    this.checkSpaces();
+    // Appending what was read is bounded by the input; scanning the space
+    // it builds is charged by `scan`.
+    this.limitSpaces();
     return undefined;
   }
 
   /** Commands that write text or end the cycle; anything else edits the spaces. */
-  private *text(command: SedCommand, otherwise: () => SedAction): Steps<SedAction> {
-    const writing = this.printed(command);
+  private *text(command: SedCommand, pc: number, otherwise: () => SedAction): Steps<SedAction> {
+    const writing = this.printed(command, pc);
     if (writing !== null) {
       if (writing !== undefined) yield writing;
       return undefined;
@@ -361,7 +402,7 @@ class SedRunner {
       case "d":
         return { end: "delete" };
       case "D":
-        return this.deleteFirstLine();
+        return this.deleteFirstLine(pc);
       case "q":
         return { quit: "print" };
       case "Q":
@@ -372,11 +413,12 @@ class SedRunner {
   }
 
   /** What `p`, `P`, `=` and `i` write; `null` for any other command. */
-  private printed(command: SedCommand): Promise<void> | undefined | null {
+  private printed(command: SedCommand, pc: number): Promise<void> | undefined | null {
     switch (command.kind) {
       case "p":
         return this.emit(`${this.space}\n`, true);
       case "P": {
+        this.scan(pc * 2 + 1);
         const newline = this.space.indexOf("\n");
         return this.emit(`${newline < 0 ? this.space : this.space.slice(0, newline)}\n`);
       }
@@ -399,7 +441,9 @@ class SedRunner {
     return { end: "delete" };
   }
 
-  private deleteFirstLine(): SedAction {
+  /** Finding the first line, as `P` does, reads a space `N` built: a scan. */
+  private deleteFirstLine(pc: number): SedAction {
+    this.scan(pc * 2 + 1);
     const newline = this.space.indexOf("\n");
     if (newline < 0) return { end: "delete" };
     this.space = this.space.slice(newline + 1);
@@ -425,6 +469,10 @@ class SedRunner {
   /** Both spaces can grow across records (`N`, `H`, `G`), so both are bounded. */
   private checkSpaces(): void {
     this.budget.expansionWork(this.space.length);
+    this.limitSpaces();
+  }
+
+  private limitSpaces(): void {
     const limit = this.budget.limits.maxExpansionChars;
     if (this.space.length > limit || this.hold.length > limit) {
       throw new VfsError("E2BIG", "sed: text expansion limit exceeded");
