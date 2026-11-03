@@ -16,6 +16,10 @@ included.
 
 ## [Unreleased]
 
+- `grep`, `awk` and `sed` reading a pipe or stdin take a chunk's lines
+  synchronously, awaiting once per chunk instead of once per line: `cat dir |
+  sed s/x/y/` takes 0.84 of the time on local workerd, `cat dir | grep -c`
+  0.86. Line lengths are measured only when they could exceed the limit.
 - `VfsDurableObject`'s constructor takes an optional fourth argument, the
   storage its filesystem uses, so a subclass can pass a wrapper over
   `ctx.storage` — one that meters rows read and written, for instance.

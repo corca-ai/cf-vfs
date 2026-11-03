@@ -5,7 +5,7 @@
  * machine itself.
  */
 import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
-import { textLines } from "./helpers.js";
+import { type TextLines, textLines } from "./helpers.js";
 import { inputSources } from "./inputs.js";
 
 export interface SedRecord {
@@ -22,19 +22,19 @@ export interface RecordSource {
   close(): Promise<void>;
 }
 
-type Lines = Iterable<string> | AsyncIterable<string>;
-
 /**
  * Records from each input's lines in turn. A body read in bulk yields its
- * records synchronously; only a stream, or moving on to the next input, has
- * to be awaited.
+ * records synchronously, and a stream a chunk's worth at a time; only the
+ * next chunk, or moving on to the next input, has to be awaited.
  */
 export class LineSource implements RecordSource {
-  #lines: Iterator<string> | AsyncIterator<string> | undefined;
-  #sync = false;
+  /** The lines at hand: a bulk body's, or the current chunk's of a stream. */
+  #lines: Iterator<string> | undefined;
+  /** A stream input's chunks, while it has more. */
+  #runs: AsyncIterator<Iterable<string>> | undefined;
   #peeked: SedRecord | undefined | null = null;
 
-  constructor(private readonly inputs: AsyncIterator<Lines>) {}
+  constructor(private readonly inputs: AsyncIterator<TextLines>) {}
 
   next(): SedRecord | undefined | Promise<SedRecord | undefined> {
     if (this.#peeked === null) return this.#pull();
@@ -57,8 +57,8 @@ export class LineSource implements RecordSource {
   }
 
   #pull(): SedRecord | undefined | Promise<SedRecord | undefined> {
-    if (this.#lines !== undefined && this.#sync) {
-      const step = (this.#lines as Iterator<string>).next();
+    if (this.#lines !== undefined) {
+      const step = this.#lines.next();
       if (!step.done) return toRecord(step.value);
       this.#lines = undefined;
     }
@@ -67,27 +67,36 @@ export class LineSource implements RecordSource {
 
   async #pullAsync(): Promise<SedRecord | undefined> {
     for (;;) {
-      if (this.#lines === undefined) {
-        const input = await this.inputs.next();
-        if (input.done) return undefined;
-        this.#sync = !(Symbol.asyncIterator in input.value);
-        this.#lines = this.#sync
-          ? (input.value as Iterable<string>)[Symbol.iterator]()
-          : (input.value as AsyncIterable<string>)[Symbol.asyncIterator]();
+      if (this.#lines !== undefined) {
+        const step = this.#lines.next();
+        if (!step.done) return toRecord(step.value);
+        this.#lines = undefined;
       }
-      const step = this.#sync
-        ? (this.#lines as Iterator<string>).next()
-        : await (this.#lines as AsyncIterator<string>).next();
-      if (!step.done) return toRecord(step.value);
-      this.#lines = undefined;
+      if (this.#runs !== undefined) {
+        const run = await this.#runs.next();
+        if (run.done) this.#runs = undefined;
+        else this.#lines = run.value[Symbol.iterator]();
+        continue;
+      }
+      const input = await this.inputs.next();
+      if (input.done) return undefined;
+      if (Symbol.asyncIterator in input.value) {
+        this.#runs = input.value[Symbol.asyncIterator]();
+      } else this.#lines = input.value[Symbol.iterator]();
     }
   }
 
   async close(): Promise<void> {
     const lines = this.#lines;
+    const runs = this.#runs;
     this.#lines = undefined;
+    this.#runs = undefined;
     try {
-      await lines?.return?.(undefined);
+      try {
+        lines?.return?.(undefined);
+      } finally {
+        await runs?.return?.(undefined);
+      }
     } finally {
       // The inputs are released even when closing the current one fails.
       await this.inputs.return?.(undefined);
@@ -104,7 +113,7 @@ export async function* inputLines(
   context: ShellCommandContext,
   operands: readonly string[],
   stdin: ShellFileDescriptors[0],
-): AsyncGenerator<Lines> {
+): AsyncGenerator<TextLines> {
   // Numbering and `$` span the operands as one stream, the way `sed` reads
   // them: `$` is the last record of the last file, not of each file.
   for await (const input of inputSources(context, operands, stdin)) {
@@ -123,7 +132,7 @@ export function* splitLines(text: string): Generator<string> {
   }
 }
 
-export async function* oneInput(lines: Lines): AsyncGenerator<Lines> {
+export async function* oneInput(lines: TextLines): AsyncGenerator<TextLines> {
   yield lines;
 }
 
