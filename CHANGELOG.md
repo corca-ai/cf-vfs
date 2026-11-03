@@ -16,6 +16,8 @@ included.
 
 ## [Unreleased]
 
+## [0.5.4] — 2026-11-03
+
 - `cut`, `uniq` and `nl` take a bulk body's lines synchronously and a pipe's a
   chunk at a time, awaiting only output that must reach its sink: over the
   10,000-page wiki on local workerd `nl` takes 0.73 of the time, `cut` 0.77–0.81,
@@ -762,7 +764,8 @@ to the release, so the package can be installed by a consumer that pins
 [`a335bd1`]: https://github.com/corca-ai/cf-vfs/commit/a335bd1
 [`1a4447d`]: https://github.com/corca-ai/cf-vfs/commit/1a4447d
 [`32a2c15`]: https://github.com/corca-ai/cf-vfs/commit/32a2c15
-[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/corca-ai/cf-vfs/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/corca-ai/cf-vfs/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/corca-ai/cf-vfs/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/corca-ai/cf-vfs/compare/v0.5.0...v0.5.1
