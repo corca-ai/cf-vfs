@@ -2,13 +2,17 @@ import { expect, it } from "vitest";
 import { awkCommand } from "../src/shell/commands/awk.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { Shell } from "../src/shell/shell.js";
-import type { ShellLimits } from "../src/shell/types.js";
+import type { ShellDerivedLimits } from "../src/shell/types.js";
 import { createTestFileSystem } from "./helpers/node-sql.js";
 
-async function shellWith(files: Record<string, string>, limits: Partial<ShellLimits> = {}) {
+async function shellWith(files: Record<string, string>, limits: Partial<ShellDerivedLimits> = {}) {
   const fileSystem = createTestFileSystem();
   for (const [path, body] of Object.entries(files)) await fileSystem.writeFile(path, body);
-  return new Shell({ fileSystem, commands: [...defaultShellCommands, awkCommand], limits });
+  return new Shell({
+    fileSystem,
+    commands: [...defaultShellCommands, awkCommand],
+    limits,
+  });
 }
 
 const run = (shell: Shell, script: string) =>

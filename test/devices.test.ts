@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SHELL_LIMITS, ExecutionBudget } from "../src/shell/budget.js";
+import { ExecutionBudget, resolveShellLimits } from "../src/shell/budget.js";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { ReservedPathFileSystem, shellDevice } from "../src/shell/devices.js";
 import { ScopedFileSystem } from "../src/shell/policy.js";
@@ -11,7 +11,7 @@ import { createTestFileSystem } from "./helpers/node-sql.js";
 describe("reserved paths carry no entry identity", () => {
   it("reports the sentinel for every path answered above the namespace", () => {
     const inner = createTestFileSystem();
-    const budget = new ExecutionBudget(DEFAULT_SHELL_LIMITS, () => 0);
+    const budget = new ExecutionBudget(resolveShellLimits(), () => 0);
     const fileSystem = new ReservedPathFileSystem(new ScopedFileSystem(inner, {}, budget), {
       applets: { directories: ["/bin", "/usr/bin"], names: ["cat"] },
     });
@@ -186,6 +186,9 @@ it("survives a consumer that stops reading early", async () => {
 it("stops an active device-writing loop when execution is cancelled", async () => {
   const started = Promise.withResolvers<void>();
   const harness = createBashHarness({
+    // Cancellation is what should stop the loop; a small work limit keeps the
+    // test quick if it does not.
+    limits: { maxWork: 2_000_000 },
     onEvent(event) {
       if (event.type === "shell.command" && event.name === "echo") started.resolve();
     },
@@ -194,10 +197,9 @@ it("stops an active device-writing loop when execution is cancelled", async () =
   // Cancelled while bytes are actually moving into the device, which a sleep
   // in front of one would never exercise. Observing the first completed echo
   // makes the synchronization independent of machine speed.
-  const running = harness.run(
-    "i=0; while [ $i -lt 200000 ]; do echo x; i=$((i+1)); done > /dev/null; echo finished",
-    { signal: controller.signal },
-  );
+  const running = harness.run("while :; do echo x; done > /dev/null; echo finished", {
+    signal: controller.signal,
+  });
   await started.promise;
   controller.abort();
   const result = await running;
@@ -313,7 +315,7 @@ it("returns every root entry exactly once when the listing is paged", async () =
   // No applet directories here: this is about placing a synthetic entry in a
   // paged listing, and `/dev` alone shows that without 57 more names.
   const view = new ReservedPathFileSystem(
-    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
+    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(resolveShellLimits(), Date.now)),
   );
 
   // Walked one entry at a time, so the synthetic entry has to land in exactly
@@ -337,7 +339,7 @@ it("keeps reserved root entries within a find result limit", async () => {
   const fileSystem = createTestFileSystem();
   await fileSystem.mkdir("/zeta");
   const view = new ReservedPathFileSystem(
-    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
+    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(resolveShellLimits(), Date.now)),
   );
 
   expect(view.find({ path: "/", maxDepth: 1, limit: 1 })).toHaveLength(1);
@@ -347,7 +349,7 @@ it("does not repeat a reserved root while filtered pages advance", async () => {
   const fileSystem = createTestFileSystem();
   for (const name of ["alpha", "beta", "zeta"]) await fileSystem.mkdir(`/${name}`);
   const view = new ReservedPathFileSystem(
-    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
+    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(resolveShellLimits(), Date.now)),
   );
   const seen: string[] = [];
   let cursor: string | undefined;
@@ -370,7 +372,7 @@ it("does not repeat a reserved root while filtered pages advance", async () => {
 it("honors page limits and cursors inside a reserved directory", () => {
   const fileSystem = createTestFileSystem();
   const view = new ReservedPathFileSystem(
-    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
+    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(resolveShellLimits(), Date.now)),
   );
   const expected = view.list("/dev").map((entry) => entry.path);
   const seen: string[] = [];
@@ -393,7 +395,7 @@ it("honors page limits and cursors inside a reserved directory", () => {
 it("honors find-page limits and cursors inside a reserved directory", () => {
   const fileSystem = createTestFileSystem();
   const view = new ReservedPathFileSystem(
-    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
+    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(resolveShellLimits(), Date.now)),
   );
   const options = { path: "/dev", type: "file" as const };
   const expected = view.find(options).map((entry) => entry.path);
@@ -418,7 +420,7 @@ it("honors find-page limits and cursors inside a reserved directory", () => {
 it("applies depth and path filters inside a reserved directory", () => {
   const fileSystem = createTestFileSystem();
   const view = new ReservedPathFileSystem(
-    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
+    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(resolveShellLimits(), Date.now)),
   );
 
   expect(
@@ -432,7 +434,7 @@ it("applies depth and path filters inside a reserved directory", () => {
 it("summarizes nested entries in a reserved subtree", () => {
   const fileSystem = createTestFileSystem();
   const view = new ReservedPathFileSystem(
-    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
+    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(resolveShellLimits(), Date.now)),
   );
 
   expect(view.subtreeSummary("/dev")).toEqual({
@@ -445,7 +447,7 @@ it("summarizes nested entries in a reserved subtree", () => {
 it("honors find limits and starting cursors inside a reserved directory", () => {
   const fileSystem = createTestFileSystem();
   const view = new ReservedPathFileSystem(
-    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(DEFAULT_SHELL_LIMITS, Date.now)),
+    new ScopedFileSystem(fileSystem, {}, new ExecutionBudget(resolveShellLimits(), Date.now)),
   );
 
   const first = view.find({ path: "/dev", type: "file", limit: 1 });

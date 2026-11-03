@@ -133,7 +133,7 @@ it.each([1, 2])("rechecks queued targets with a mutation budget of %i", async (m
     fileSystem: view,
     commands: [probe],
     limits: { maxTotalIoBytes: 12, maxBufferedBytes: 12 },
-    policy: { maxMutations: mutations },
+    policy: { maxRowsWritten: mutations * 4 },
   });
   const result = await shell.executeText({ script: "probe" });
   expect(result.exitCode, result.stderr).toBe(0);
@@ -319,7 +319,7 @@ it.each([
   const shell = new Shell({
     fileSystem: raw,
     commands: [probe],
-    policy: { maxMutations: limits.mutations },
+    policy: { maxRowsWritten: limits.mutations * 4 },
     limits: { maxTotalIoBytes: limits.io, maxBufferedBytes: limits.buffer },
   });
   const result = await shell.executeText({ script: "probe" });

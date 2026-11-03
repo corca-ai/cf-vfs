@@ -3,7 +3,7 @@ import { normalizePath } from "../core/path.js";
 import { supportsPosixCredentials } from "../vfs/capabilities.js";
 import { bodyToStream, readAllBytes } from "../vfs/streams.js";
 import type { VirtualFileSystem } from "../vfs/types.js";
-import { ExecutionBudget, resolveShellLimits } from "./budget.js";
+import { DEFAULT_SHELL_LIMITS, ExecutionBudget, resolveShellLimits } from "./budget.js";
 import {
   APPLET_DIRECTORIES,
   type AppletRegistry,
@@ -25,9 +25,9 @@ import type {
   ExecuteTextOptions,
   ExecuteTextResult,
   ShellCommandDescription,
+  ShellDerivedLimits,
   ShellExecution,
   ShellFileSystem,
-  ShellLimits,
   ShellOptions,
   ShellPolicy,
   ShellSession,
@@ -42,7 +42,7 @@ export class Shell {
   private readonly content: ShellContentReader | undefined;
   private readonly network: ShellNetwork | undefined;
   private readonly identityResolver: ShellIdentityResolver | undefined;
-  private readonly limits: ShellLimits;
+  private readonly limits: ShellDerivedLimits;
   private readonly now: () => number;
   private readonly onEvent: ShellEventSink | undefined;
 
@@ -71,16 +71,24 @@ export class Shell {
       ...(options.policy?.allowedCommands === undefined
         ? {}
         : { allowedCommands: Object.freeze([...options.policy.allowedCommands]) }),
-      ...(options.policy?.maxMutations === undefined
+      ...(options.policy?.maxRowsWritten === undefined
         ? {}
-        : { maxMutations: options.policy.maxMutations }),
+        : { maxRowsWritten: options.policy.maxRowsWritten }),
     });
+    // 0.5's `maxMutations` counted entries; four rows each is what one costs now.
+    const legacy = Reflect.get(options.policy ?? {}, "maxMutations") as number | undefined;
+    const rows = options.policy?.maxRowsWritten ?? (legacy === undefined ? undefined : legacy * 4);
     this.limits = Object.freeze(
       resolveShellLimits({
         ...options.limits,
-        ...(options.policy?.maxMutations === undefined
+        ...(rows === undefined
           ? {}
-          : { maxMutations: options.policy.maxMutations }),
+          : {
+              maxRowsWritten: Math.min(
+                rows,
+                options.limits?.maxRowsWritten ?? DEFAULT_SHELL_LIMITS.maxRowsWritten,
+              ),
+            }),
       }),
     );
     this.now = options.now ?? Date.now;

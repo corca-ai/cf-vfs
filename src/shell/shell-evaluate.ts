@@ -49,6 +49,11 @@ async function runLoopBody(
   context: EvaluationContext,
 ): Promise<{ result: EvaluationResult; action: "break" | "continue" | "propagate" | "none" }> {
   runtime.budget.loop();
+  const pause = runtime.budget.pause();
+  if (pause !== undefined) {
+    await pause;
+    if (runtime.signal.aborted) throw runtime.signal.reason;
+  }
   const result = await runScript(body, session, fds, runtime, context);
   return { result, action: consumeLoopFlow(session) };
 }
@@ -288,6 +293,11 @@ export async function runCommandNode(
   const expansion = expansionRuntime(initialFds, runtime);
   try {
     runtime.budget.command();
+    const pause = runtime.budget.pause();
+    if (pause !== undefined) {
+      await pause;
+      if (runtime.signal.aborted) throw runtime.signal.reason;
+    }
     let prepared =
       node.type === "command"
         ? await prepareSimpleCommand(node, session, runtime, expansion)

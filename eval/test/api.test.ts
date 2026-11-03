@@ -141,7 +141,8 @@ it("returns only shell output and logs the measurements", async () => {
 });
 
 it("records an execution limit as a failure code", async () => {
-  const { id } = await create();
+  // A fiftieth of the default work, so the endless loop ends in a fraction of a second.
+  const { id } = await create({ scale: 0.02 });
   const result = await exec(id, "while true; do :; done");
   expect(result.exitCode).not.toBe(0);
   const [entry] = await log(id);
@@ -208,15 +209,15 @@ it("expires instances and finishes interrupted transitions from the alarm", asyn
 });
 
 it("scales the limits that grow with the wiki", async () => {
-  const script = "set -- $(seq 2500); echo $#";
+  const script = "set -- $(seq 20000); echo $#";
   const full = await create();
-  expect((await exec(full.id, script)).stdout).toBe("2500\n");
+  expect((await exec(full.id, script)).stdout).toBe("20000\n");
   const scaled = await create({ scale: 0.2 });
   const result = await exec(scaled.id, script);
   expect(result.exitCode).not.toBe(0);
   expect(result.stderr).toContain("expansion");
   const entry = (await log(scaled.id)).at(-1);
-  expect(entry?.limits.some((limit) => limit.max === 2000)).toBe(true);
+  expect(entry?.limits.some((limit) => limit.max === 13_107)).toBe(true);
   for (const scale of [0, 1.5, "half"]) {
     const refused = await api("/api/instances", {
       method: "POST",

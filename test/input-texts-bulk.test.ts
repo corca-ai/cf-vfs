@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { Shell } from "../src/shell/shell.js";
-import type { ShellLimits } from "../src/shell/types.js";
+import type { ShellDerivedLimits } from "../src/shell/types.js";
 import { createTestFileSystem, withoutBulkReads } from "./helpers/node-sql.js";
 
 // Commands that read every input before they start take file operands read
@@ -26,7 +26,7 @@ const SCRIPTS = [
 
 // Limits that trip at a file read in bulk, after standard input or earlier
 // files: the error names that file as reading it alone does.
-const LIMITED: [string, Partial<ShellLimits>][] = [
+const LIMITED: [string, Partial<ShellDerivedLimits>][] = [
   ["sort /m/*", { maxReadBytes: 950 }],
   ["paste /m/*", { maxReadBytes: 1000 }],
   ["tail -n 1 /m/*", { maxReadBytes: 950 }],
@@ -56,7 +56,7 @@ async function run(bulk: boolean, chunkBytes: number) {
   });
   await fs.mkdir("/x");
   await fs.writeFile("/x/bad.json", "{ not json\n");
-  const shell = (limits: Partial<ShellLimits> = {}) =>
+  const shell = (limits: Partial<ShellDerivedLimits> = {}) =>
     new Shell({
       fileSystem: bulk ? fs : withoutBulkReads(fs),
       commands: defaultShellCommands,

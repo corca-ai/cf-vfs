@@ -1,0 +1,12 @@
+{
+ "steps: arithmetic loop": "i=0; while [ $i -lt 9000 ]; do i=$((i+1)); done",
+ "commands: true loop": "i=0; while [ $i -lt 3500 ]; do true; true; true; i=$((i+1)); done",
+ "read: cat glob to null": "cat /wiki/*/*.md > /dev/null",
+ "io: cat through three pipes": "cat /wiki/sales/*.md /wiki/legal/*.md | cat | cat | cat > /dev/null",
+ "expansion: awk doubling": "awk 'BEGIN { s = \"x\"; for (r = 0; r < 4; r++) { s = \"x\"; for (i = 0; i < 20; i++) s = s s } }'",
+ "regex: heavy pattern": "grep -cE 'y{0,3}x0|y{0,3}x1|y{0,3}x2|y{0,3}x3|y{0,3}x4|y{0,3}x5|y{0,3}x6|y{0,3}x7|y{0,3}x8|y{0,3}x9|y{0,3}xa|y{0,3}xb|y{0,3}xc|y{0,3}xd|y{0,3}xe|y{0,3}xf' /wiki/legal/topic-0*.md | tail -1",
+ "grep: plain over glob": "grep -c owner /wiki/*/*.md | tail -1",
+ "sed: global sub over sales": "sed 's/e/E/g' /wiki/sales/*.md > /dev/null",
+ "sort: sales lines": "sort /wiki/sales/*.md > /dev/null",
+ "parse: long script": "eval \"$(i=0; while [ $i -lt 2000 ]; do echo 'x=1; y=2; z=3'; i=$((i+1)); done)\""
+}

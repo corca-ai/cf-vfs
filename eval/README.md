@@ -85,10 +85,9 @@ failures and cost.
 ## Smaller wikis with scaled limits
 
 `scale` (greater than 0, at most 1, default 1) multiplies the shell limits
-that grow with the data an execution works over: counts of commands, loop
-iterations, matches, fields and records, the byte limits for reads, I/O,
-pipes, output and buffering, and the deadline. Limits on one script, one
-line or one nesting level stay as they are. A 2,000-page wiki at `scale:
+that grow with the data an execution works over: `maxWork`, `maxMemoryBytes`
+(and with it every per-structure cap, including one script's and one line's
+bytes), `maxRowsWritten` and the deadline. `maxDepth` stays as it is. A 2,000-page wiki at `scale:
 0.2` meets its limits where a 10,000-page wiki meets the defaults, at a fifth
 of the seeding, reading and agent-token cost. The agent sees the same
 diagnostics either way.

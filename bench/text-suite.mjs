@@ -22,11 +22,14 @@ export async function createTextSuite(root) {
       returnedRows += count;
     },
   });
-  const shell = new Shell({
-    fileSystem: fs,
-    commands: [...defaultShellCommands, awkCommand],
-    limits: { maxSteps: 1_000_000 },
-  });
+  // The version compared may predate 0.6's five limits, which refuse 0.5's names.
+  const options = { fileSystem: fs, commands: [...defaultShellCommands, awkCommand] };
+  let shell;
+  try {
+    shell = new Shell({ ...options, limits: { maxWork: 50_000_000 } });
+  } catch {
+    shell = new Shell({ ...options, limits: { maxSteps: 1_000_000 } });
+  }
   return {
     async prepare(name) {
       const workload = workloads.find((workload) => workload.name === name);

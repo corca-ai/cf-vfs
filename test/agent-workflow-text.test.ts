@@ -131,7 +131,7 @@ describe("sed programs", () => {
       name: "bounds an endless branch loop",
       script: "printf 'x\\n' | sed ':a;ba'",
       exitCode: 1,
-      stderrIncludes: "step limit exceeded",
+      stderrIncludes: "work limit exceeded",
     },
     {
       name: "refuses a missing label",

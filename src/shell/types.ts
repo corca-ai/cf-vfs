@@ -137,10 +137,50 @@ export interface ShellPolicy {
    * matches nothing and denies everything it was meant to allow.
    */
   readonly allowedCommands?: readonly string[];
-  readonly maxMutations?: number;
+  /** Tightens `maxRowsWritten` for this session; it cannot raise it. */
+  readonly maxRowsWritten?: number;
 }
 
+/**
+ * The five limits a host sets on one execution.
+ *
+ * Each bounds one thing that costs on Cloudflare or that the runtime cannot
+ * interrupt: wall-clock time, synchronous CPU, memory held at once, stack
+ * depth, and the SQLite rows written, which are billed at a thousand times
+ * the rows read. Every narrower cap the shell checks — a line's length, an
+ * expansion's fields, the records `sort` holds — is derived from these
+ * ({@link ShellDerivedLimits}).
+ */
 export interface ShellLimits {
+  /**
+   * Wall-clock bound on one execution. On Workers the clock does not advance
+   * during synchronous work, so this bounds waiting — R2, the network, a slow
+   * consumer — while `maxWork` bounds computing.
+   */
+  deadlineMs: number;
+  /**
+   * Synchronous work, in units of about a microsecond of local workerd CPU:
+   * shell steps and commands, expansion and regular-expression matching, and
+   * the bytes read from files or moved through pipes and output. The default
+   * is about ten seconds, under Cloudflare's 30-second CPU limit per request.
+   */
+  maxWork: number;
+  /** Data an execution holds at once; every per-structure cap scales with it. */
+  maxMemoryBytes: number;
+  /** Nesting of syntax and of function calls; sourced files and scripts get a quarter and an eighth. */
+  maxDepth: number;
+  /** SQLite rows an execution may write, estimated at four per changed entry. */
+  maxRowsWritten: number;
+}
+
+/**
+ * The caps the shell and applets check, derived from {@link ShellLimits} by
+ * `deriveShellLimits`. At the default `maxMemoryBytes` each memory cap is the
+ * value it had in 0.5; the step, command, loop, expansion, read, I/O and
+ * mutation caps are unlimited and those charges are bounded by `maxWork` and
+ * `maxRowsWritten`.
+ */
+export interface ShellDerivedLimits extends ShellLimits {
   maxScriptBytes: number;
   maxTotalSourceBytes: number;
   maxAstNodes: number;
@@ -169,7 +209,6 @@ export interface ShellLimits {
   maxExpansionChars: number;
   maxExpansionFields: number;
   maxMutations: number;
-  deadlineMs: number;
   outputIdleTimeoutMs: number;
 }
 
@@ -391,7 +430,11 @@ export interface ShellOptions {
    */
   commandResolution?: "registry" | "path";
   policy?: ShellPolicy;
-  limits?: Partial<ShellLimits>;
+  /**
+   * The five {@link ShellLimits}. 0.5's names are accepted, deprecated, and
+   * each sets the derived cap of that name.
+   */
+  limits?: Partial<ShellLimits> | Partial<ShellDerivedLimits>;
   now?: () => number;
   /**
    * Observes bounded-execution events. Never invoked when omitted, and a
@@ -401,14 +444,17 @@ export interface ShellOptions {
 }
 
 export interface ShellBudget {
-  readonly limits: ShellLimits;
+  readonly limits: ShellDerivedLimits;
   step(count?: number): void;
   command(): void;
   loop(): void;
   io(bytes: number): void;
   /** Charges bytes read from a file body against `maxReadBytes`. */
   read(bytes: number): void;
-  mutation(count?: number): void;
+  /** Charges changed entries and, when known, the bytes of content they write. */
+  mutation(count?: number, bytes?: number): void;
+  /** Now and then, a promise that lets the event loop run; await it when given. */
+  pause(): Promise<void> | undefined;
   glob(count?: number): void;
   expansionWork(count?: number): void;
   checkExpansionOutput(characters: number, fields?: number): void;

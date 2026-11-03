@@ -1,5 +1,5 @@
 import { VfsError } from "../core/errors.js";
-import { DEFAULT_SHELL_LIMITS } from "./budget.js";
+import { DEFAULT_SHELL_LIMITS, deriveShellLimits } from "./budget.js";
 import { type CompletionLimits, type CompletionResult, completeShellLine } from "./completion.js";
 import { isIncompleteShellSyntaxError, parseShellScript } from "./parser.js";
 import {
@@ -196,7 +196,8 @@ export class InteractiveShell extends Shell {
 }
 
 export interface InteractiveInputBufferOptions {
-  limits?: Partial<Pick<ShellLimits, "maxAstNodes" | "maxNestingDepth">>;
+  /** The limits the session runs under; a pending command is parsed under the same caps. */
+  limits?: Partial<Pick<ShellLimits, "maxMemoryBytes" | "maxDepth">>;
 }
 
 export type InteractiveInputResult =
@@ -263,8 +264,9 @@ export class InteractiveInputBuffer {
   private source = "";
 
   constructor(options: InteractiveInputBufferOptions = {}) {
-    this.maximumNodes = options.limits?.maxAstNodes ?? DEFAULT_SHELL_LIMITS.maxAstNodes;
-    this.maximumDepth = options.limits?.maxNestingDepth ?? DEFAULT_SHELL_LIMITS.maxNestingDepth;
+    const derived = deriveShellLimits({ ...DEFAULT_SHELL_LIMITS, ...options.limits });
+    this.maximumNodes = derived.maxAstNodes;
+    this.maximumDepth = derived.maxNestingDepth;
   }
 
   get hasPendingSource(): boolean {

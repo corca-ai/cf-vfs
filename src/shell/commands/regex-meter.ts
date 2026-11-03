@@ -2,11 +2,11 @@ import type { PosixRegexMeter } from "../../core/posix-regex.js";
 import type { ShellBudget } from "../types.js";
 
 /**
- * Regular-expression steps per unit of expansion work: about 10 ns each on
- * local workerd against an expansion unit's 0.1–0.6 µs, so the default
- * expansion-work limit admits several seconds of matching.
+ * Regular-expression steps per unit of expansion work: a step takes 5–10 ns
+ * and a unit is costed at 0.25 µs of `maxWork`, so the default limits admit
+ * some ten seconds of matching.
  */
-const STEPS_PER_UNIT = 64;
+const STEPS_PER_UNIT = 25;
 
 /** Units charged at once, so a search per line does not call the budget each time. */
 const BATCH_UNITS = 1024;

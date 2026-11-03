@@ -110,28 +110,13 @@ export async function seedEvalWorkspace(
 }
 
 /**
- * The limits that grow with the wiki an execution works over: counts of
- * commands, matches, fields and records, bytes moved or held, and the
- * deadline. Limits on one script, one line or one nesting stay as they are.
+ * The limits that grow with the wiki an execution works over: work, memory,
+ * rows written and the deadline. Nesting stays as it is.
  */
 const SCALED_LIMITS = [
-  "maxCommands",
-  "maxSteps",
-  "maxLoopIterations",
-  "maxCommandSubstitutionBytes",
-  "maxPipelineBytes",
-  "maxStdoutBytes",
-  "maxStderrBytes",
-  "maxMaterializedOutputBytes",
-  "maxTotalIoBytes",
-  "maxReadBytes",
-  "maxBufferedBytes",
-  "maxBufferedRecords",
-  "maxGlobMatches",
-  "maxExpansionWork",
-  "maxExpansionChars",
-  "maxExpansionFields",
-  "maxMutations",
+  "maxWork",
+  "maxMemoryBytes",
+  "maxRowsWritten",
   "deadlineMs",
 ] as const satisfies readonly (keyof ShellLimits)[];
 

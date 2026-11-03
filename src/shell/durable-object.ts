@@ -16,6 +16,7 @@ import type {
   ExecuteTextResult,
   RemoteExecuteTextOptions,
   ShellCommand,
+  ShellDerivedLimits,
   ShellLimits,
   ShellPolicy,
 } from "./types.js";
@@ -47,7 +48,7 @@ export interface ShellDurableObjectOptions extends Omit<DurableObjectFileSystemO
    */
   network?: ShellNetwork;
   policy?: ShellPolicy;
-  limits?: Partial<ShellLimits>;
+  limits?: Partial<ShellLimits> | Partial<ShellDerivedLimits>;
   /** Observes storage and execution events from this object's single hook. */
   onEvent?: (event: VfsEvent | ShellEvent) => void;
 }

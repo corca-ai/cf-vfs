@@ -19,7 +19,7 @@ const shell = new Shell({
     readRoots: ["/input"],
     writeRoots: ["/output"],
     allowedCommands: ["cat", "grep", "find"],
-    maxMutations: 100,
+    maxRowsWritten: 400,
   },
 });
 ```
@@ -129,52 +129,85 @@ host is not a decision about every session running there.
 
 ## Execution budgets
 
-Every execution owns one shared budget across all pipeline stages. Defaults:
+Every execution owns one shared budget across all pipeline stages, set by
+five limits. Each bounds something that costs on Cloudflare or that the
+runtime cannot interrupt:
 
-| Limit | Default |
+| Limit | Default | What it bounds |
+| --- | ---: | --- |
+| `deadlineMs` | 30 s | wall-clock time: waiting on R2, the network, a slow consumer |
+| `maxWork` | 10,000,000 | synchronous work, in units of about 1 µs of local workerd CPU |
+| `maxMemoryBytes` | 16 MiB | data held at once; every per-structure cap scales with it |
+| `maxDepth` | 64 | nesting of syntax and calls; sourced files a quarter, scripts an eighth |
+| `maxRowsWritten` | 50,000 | SQLite rows written, estimated at four per changed entry |
+
+Lower these per workload; a policy's `maxRowsWritten` can only tighten the
+limit. 0.5's twenty-seven names are still accepted, deprecated, and each sets
+the derived cap of that name: a structure's cap replaces the one
+`maxMemoryBytes` implies, while a counter's — steps, commands, expansion work,
+bytes read or moved, mutations — can only tighten, since `maxWork` and
+`maxRowsWritten` still apply. `outputIdleTimeoutMs`, how long output may wait
+for a consumer, is the lesser of 5 s and the deadline. Any other name is
+refused.
+
+**Work.** On Workers `Date.now()` does not advance during synchronous work,
+and inline SQLite reads never yield to the event loop, so the deadline cannot
+stop a computation; `maxWork` does. Every kind of work charges it at a cost
+measured on local workerd (`bench/limits-calibration-2026-11-03/`) and taken at
+the high end: a shell step 2 units, a command 4 more, a unit of expansion work
+0.25, and a byte read from a file body or moved through a pipe, standard
+input, a command substitution, a file or `/dev/null` 0.02 — reading or moving
+a byte costs a few nanoseconds, and what a command does with it, `sort -n`
+parsing it or `od` formatting it, the rest. Regular-expression matching
+charges its steps as expansion work, 25 steps a unit, and `sort` its
+comparisons, ten a unit; a literal pattern is found with a string search and
+takes no steps. `cp` charges the bytes it copies as read. So the default
+admits some ten seconds of CPU, under Cloudflare's 30 s per request, in any
+mix: about five million shell steps, 500 MB read or moved, or a billion
+matcher steps. When it
+refuses, the error names what spent most of it — `shell work limit exceeded
+(file reads 5.1M, shell steps 2.0M, expansion 1.1M)` — and the `shell.limit`
+event carries the same breakdown.
+
+**Memory.** What one structure may hold scales with `maxMemoryBytes`; at the
+default each is what 0.5 set it to, except glob matches and expansion fields,
+raised from 10,000. Captured output, a command substitution and a redirection
+are capped beside the buffered data rather than within it, so an execution
+can hold two or three times `maxMemoryBytes` at its peak; keep that well
+under the isolate's 128 MB when raising it.
+
+| Structure | At 16 MiB |
 | --- | ---: |
+| data commands buffer at once (sort, jq, captured output, read-ahead) | 16 MiB |
 | one submitted or sourced unit / cumulative source bytes | 1 MiB / 4 MiB |
-| AST nodes / nesting depth | 10,000 / 64 |
-| commands / steps / loop iterations | 20,000 / 100,000 / 20,000 |
-| function depth / source depth / script depth | 64 / 16 / 8 |
-| one command-substitution output | 1 MiB |
-| expansion work / characters / fields of one expansion | 10,000,000 / 1 MiB / 10,000 |
-| output a redirection buffers before publishing a file | 8 MiB |
-| stdout / stderr | 8 MiB each |
-| materialized stdout + stderr | 8 MiB |
-| total I/O through pipes, standard input and command substitutions | 64 MiB |
-| bytes read from file bodies | 1 GiB |
-| simultaneously buffered semantic data | 16 MiB |
+| AST nodes | 10,000 |
 | one decoded line / records a command holds | 1 MiB / 100,000 |
-| glob matches of one expansion or `tree` / mutations | 10,000 / 10,000 |
-| deadline / no-output-consumer timeout | 30 s / 5 s |
+| characters / fields of one expansion | 1 MiB / 65,536 |
+| glob matches of one expansion or `tree` | 65,536 |
+| one command-substitution output | 1 MiB |
+| stdout / stderr / materialized stdout + stderr | 8 MiB each |
+| output a redirection buffers before publishing a file | 8 MiB (at most) |
 
-Lower these per workload. A policy mutation limit can only tighten the runtime
-limit. Reading a file body counts against the read limit rather than total
-I/O: a rereading pass holds nothing and the deadline bounds its time, so an
-agent can search a 10 MB tree a hundred times in one execution, while data
-moving between commands keeps the tighter bound. `find` and `grep -r` hold no
-matches while they walk, so their walks charge expansion work for each entry
-scanned rather than the per-expansion match limit: `find` over a
-10,000-page wiki is an ordinary command. Script depth is counted separately from source depth, so a script that
-sources a file that runs a script is bounded by both. A pipe holds at most
-64 KiB and what passes through it is total I/O; each pipeline stage after the
-first holds 96 KiB of the buffered-data limit until the pipeline settles, for
-its session and its pipe. Lines a command reads and lets go — `grep`, `sed`,
-`awk`, `uniq` over a file of any number of lines — are bounded by the line,
-read and total I/O limits; the record limit counts only records a command holds, as `sort`,
-`comm`, `join`, `xargs` and awk arrays do. Every step a regular expression's
-searches take is charged as expansion work, 64 steps a unit: matching is
-synchronous, so a pattern of many branches, many patterns, or searches that
-rescan a line are bounded by that count rather than the deadline. A literal
-pattern is found with a string search and takes no steps. Glob scans, traversal, decoded records, and output all charge their
-specific limit as well as relevant shared work/I/O limits.
+A pipe holds at most 64 KiB; each pipeline stage after the first holds
+96 KiB of the buffered data until the pipeline settles, for its session and
+its pipe. Lines a command reads and lets go — `grep`, `sed`, `awk`, `uniq`
+over a file of any number of lines — hold one line at a time; only records a
+command keeps, as `sort`, `comm`, `join`, `xargs` and awk arrays do, count
+against the record cap. `find` and `grep -r` hold no matches while they walk,
+so their walks charge work for each entry scanned rather than the match cap.
+
+**Rows written.** Writes are billed at a thousand times reads. Each changed
+entry is charged four rows (measured at one to four on SQLite; Cloudflare also
+bills the index rows), and content written or copied a row per 256 KiB chunk,
+so the default admits about 12,500 changed small files — some $0.05 — per
+execution. Storage itself is bounded by the filesystem's
+`maxInlineLogicalBytes` and `maxEntries`.
 
 Nested scripts, sourced units, pipelines, functions, loops, and command
 substitutions consume the same execution budget. Sourced units additionally
 share cumulative source-byte and AST-node allowances. Command substitutions
-also charge total I/O and their dedicated output limit; neither construct
-creates a fresh allowance.
+also charge the bytes they capture as work and against their output cap;
+neither construct creates a fresh allowance.
 
 Parameter-pattern expansion uses a dynamic-programming matcher rather than a
 regular expression. Candidate matching, removal, and replacement charge the
@@ -237,20 +270,22 @@ such an execution then passes regardless of how long it has actually taken.
 Two mechanisms carry the guarantee instead. A `setTimeout` armed for the
 remaining deadline aborts the execution on real elapsed time, independently of
 what `Date.now()` reports; it needs the execution to reach a suspension point,
-which ordinary command, pipeline, and stream work provides. Underneath that,
-the count-based limits — steps, commands, loop iterations, AST nodes, nesting
-depth, expansion work, glob matches, and every byte budget — bound the work a
-single unit can do with no reference to time at all. They, not the deadline,
-are what makes an uninterrupted synchronous stretch finite.
+which ordinary command, pipeline, and stream work provides — though inline
+SQLite reads never reach one, so every 32,768 commands or loop iterations the
+shell yields to the event loop, which lets the timer, a cancellation and the
+object's other requests run. Underneath that, `maxWork` and the memory and
+depth caps bound the work a single unit can do with no reference to time at
+all. They, not the deadline, are what makes an uninterrupted synchronous
+stretch finite.
 
-Steps count work that input size does not bound: shell evaluation, a `sed`
+Shell steps are what input size does not bound: shell evaluation, a `sed`
 branch back to an earlier command or a `D` restart that read no record since
-the last one, `jq` generators, and traversal pages. Work proportional to what a utility reads — decoding records,
-applying a `sed` script or an `awk` program to each record, matching within a
-record — charges the I/O byte limit and expansion work instead, so a search
-over a large tree is bounded by the bytes it reads rather than refused after a
-hundred thousand lines. `awk` loops charge expansion work, one unit per iteration, rather than the
-loop-iteration limit.
+the last one, `jq` generators, and traversal pages. Work proportional to what a
+utility reads — decoding records, applying a `sed` script or an `awk` program
+to each record, matching within a record — is charged by the bytes read and
+the expansion work, so a search over a large tree is bounded by its size rather
+than refused after a hundred thousand lines. `awk` loops charge expansion
+work, one unit per iteration.
 
 Treat the deadline as a bound on wall-clock latency, not as the primitive that
 makes execution finite. Supply `now` in `ShellOptions` when the application has
@@ -335,14 +370,15 @@ export class WorkspaceFiles extends ShellDurableObject<Env> {
 | `vfs.mutation` | a namespace change committed | `op`, `path`, optional `mutationToken`/`subtree` |
 | `vfs.opaque-upload` | a session reached `begin`, `commit`, `abort`, `expire`, or `reject` | `uploadId`, `objectKey`, `path`, optional `reason` |
 | `vfs.garbage` | a GC batch settled | `deleted`, `remaining`, `failed` |
-| `shell.limit` | an execution limit refused work | `limit`, `used`, `max` |
+| `shell.limit` | an execution limit refused work | `limit`, `used`, `max`, optional `breakdown` |
 | `shell.command` | a utility or function finished | `name`, `exitCode` |
 | `shell.execution` | a submitted unit finished | `exitCode`, `durationMs`, optional `failureCode` |
 
-`shell.limit` covers every limit `ExecutionBudget` owns — steps, commands, loop
-iterations, total I/O, mutations, glob matches, expansion work, expansion
-characters and fields, buffered bytes, and the deadline — plus the output idle
-timeout. Limits enforced by the parser and the output pipes do not emit a
+`shell.limit` covers every limit `ExecutionBudget` owns — `maxWork`,
+`maxRowsWritten`, `maxMemoryBytes` for buffered data, the deadline, and the
+derived caps on glob matches and expansion characters and fields — plus the
+output idle timeout. When `maxWork` refuses, `breakdown` lists the kinds of
+work that spent most of it with their units. Limits enforced by the parser and the output pipes do not emit a
 per-limit event; they surface through `shell.execution.failureCode` instead.
 
 Three properties are contractual. The sink is never invoked when omitted, and

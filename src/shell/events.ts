@@ -1,18 +1,24 @@
 import type { VfsErrorCode } from "../core/errors.js";
-import type { ShellLimits } from "./types.js";
+import type { ShellDerivedLimits } from "./types.js";
+
+/** One kind of work and the units of `maxWork` it took. */
+export interface ShellLimitConsumer {
+  readonly consumer: string;
+  readonly amount: number;
+}
 
 export type ShellEvent =
   /**
-   * A bounded execution reached a limit and is about to fail. Covers every
-   * limit `ExecutionBudget` owns — steps, commands, loop iterations, total
-   * I/O, mutations, glob matches, expansion work/characters/fields, buffered
-   * bytes, and the execution deadline — plus the output idle timeout.
+   * A bounded execution reached a limit and is about to fail: one of the five
+   * `ShellLimits`, or a cap derived from them. When `maxWork` refused,
+   * `breakdown` names what spent most of it.
    */
   | {
       readonly type: "shell.limit";
-      readonly limit: keyof ShellLimits;
+      readonly limit: keyof ShellDerivedLimits;
       readonly used: number;
       readonly max: number;
+      readonly breakdown?: readonly ShellLimitConsumer[];
     }
   /** One utility or function finished. High volume; sample if needed. */
   | {

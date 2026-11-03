@@ -34,7 +34,7 @@ describe("Bash v4 brace expansion and backtick substitution", () => {
       name: "bounds a range against the expansion budget",
       script: "printf '%s' {1..2000000000}",
       exitCode: 1,
-      stderrIncludes: ["shell expansion work limit exceeded"],
+      stderrIncludes: ["shell work limit exceeded (expansion"],
     },
     {
       name: "leaves mixed and non-ASCII brace range endpoints literal like Bash",

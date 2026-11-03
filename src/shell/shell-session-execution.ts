@@ -20,10 +20,10 @@ import {
 } from "./shell-runtime.js";
 import type {
   ExecuteStreamOptions,
+  ShellDerivedLimits,
   ShellExecution,
   ShellFileDescriptors,
   ShellFileSystem,
-  ShellLimits,
   ShellPolicy,
   ShellSession,
 } from "./types.js";
@@ -36,7 +36,7 @@ export interface ShellExecutionServices {
   readonly content: ShellContentReader | undefined;
   readonly network: ShellNetwork | undefined;
   readonly identityResolver: ShellIdentityResolver | undefined;
-  readonly limits: ShellLimits;
+  readonly limits: ShellDerivedLimits;
   readonly policy: ShellPolicy;
   readonly onEvent: ShellEventSink | undefined;
 }

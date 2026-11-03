@@ -1,4 +1,5 @@
 import { compareUtf8 } from "../../core/path.js";
+import type { ShellBudget } from "../types.js";
 import {
   type AppletSpecWithOptions,
   appletUsageError,
@@ -297,9 +298,23 @@ function firstDisorder(
   return undefined;
 }
 
-function sortedRecords(lines: readonly string[], invocation: SortInvocation): SortRecord[] {
+/** Comparisons per unit of expansion work: one takes some 25 ns, numeric keys included. */
+const COMPARISONS_PER_UNIT = 10;
+
+function sortedRecords(
+  lines: readonly string[],
+  invocation: SortInvocation,
+  budget: ShellBudget,
+): SortRecord[] {
   let records = sortRecords(lines, invocation);
-  records.sort((left, right) => compareRecords(left, right, invocation));
+  let comparisons = 0;
+  records.sort((left, right) => {
+    comparisons += 1;
+    return compareRecords(left, right, invocation);
+  });
+  // Charged once sorted: the sort is synchronous and n log n comparisons of
+  // records already bounded by the record cap.
+  budget.expansionWork(Math.ceil(comparisons / COMPARISONS_PER_UNIT));
   if (invocation.unique) {
     records = records.filter(
       (record, index) =>
@@ -331,7 +346,7 @@ export const sortCommand = /* @__PURE__ */ defineApplet(SORT, async (context, ar
       }
       return 1;
     }
-    const records = sortedRecords(lines, invocation);
+    const records = sortedRecords(lines, invocation, context.budget);
     await writeText(fds[1], records.map((record) => `${record.value}\n`).join(""));
     return 0;
   } finally {
