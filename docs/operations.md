@@ -139,13 +139,13 @@ Every execution owns one shared budget across all pipeline stages. Defaults:
 | function depth / source depth / script depth | 64 / 16 / 8 |
 | one command-substitution output | 1 MiB |
 | expansion work / characters / fields of one expansion | 10,000,000 / 1 MiB / 10,000 |
-| pipeline bytes | 8 MiB |
+| output a redirection buffers before publishing a file | 8 MiB |
 | stdout / stderr | 8 MiB each |
 | materialized stdout + stderr | 8 MiB |
 | total I/O through pipes, standard input and command substitutions | 64 MiB |
 | bytes read from file bodies | 1 GiB |
 | simultaneously buffered semantic data | 16 MiB |
-| one decoded line / buffered records | 1 MiB / 100,000 |
+| one decoded line / records a command holds | 1 MiB / 100,000 |
 | glob matches of one expansion or `tree` / mutations | 10,000 / 10,000 |
 | deadline / no-output-consumer timeout | 30 s / 5 s |
 
@@ -157,7 +157,17 @@ moving between commands keeps the tighter bound. `find` and `grep -r` hold no
 matches while they walk, so their walks charge expansion work for each entry
 scanned rather than the per-expansion match limit: `find` over a
 10,000-page wiki is an ordinary command. Script depth is counted separately from source depth, so a script that
-sources a file that runs a script is bounded by both. Glob scans, traversal, decoded records, and output all charge their
+sources a file that runs a script is bounded by both. A pipe holds at most
+64 KiB and what passes through it is total I/O; each pipeline stage after the
+first holds 96 KiB of the buffered-data limit until the pipeline settles, for
+its session and its pipe. Lines a command reads and lets go — `grep`, `sed`,
+`awk`, `uniq` over a file of any number of lines — are bounded by the line,
+read and total I/O limits; the record limit counts only records a command holds, as `sort`,
+`comm`, `join`, `xargs` and awk arrays do. Every step a regular expression's
+searches take is charged as expansion work, 64 steps a unit: matching is
+synchronous, so a pattern of many branches, many patterns, or searches that
+rescan a line are bounded by that count rather than the deadline. A literal
+pattern is found with a string search and takes no steps. Glob scans, traversal, decoded records, and output all charge their
 specific limit as well as relevant shared work/I/O limits.
 
 Nested scripts, sourced units, pipelines, functions, loops, and command

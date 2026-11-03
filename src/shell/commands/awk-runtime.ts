@@ -1,6 +1,10 @@
 import { VfsError } from "../../core/errors.js";
 import { compareUtf8 } from "../../core/path.js";
-import { compilePosixRegex, type PosixRegex } from "../../core/posix-regex.js";
+import {
+  compilePosixRegex,
+  type PosixRegex,
+  type PosixRegexMeter,
+} from "../../core/posix-regex.js";
 import { utf8ByteLength } from "../../core/unicode.js";
 import type { ShellCommandContext } from "../types.js";
 import type { AwkFunction, AwkRule, Expression } from "./awk-ast.js";
@@ -28,6 +32,8 @@ export type AwkFrameEntry =
 
 export interface AwkRuntimeState {
   readonly context: ShellCommandContext;
+  /** Charges what the program's regular expressions cost beyond their input. */
+  readonly regexMeter: PosixRegexMeter;
   readonly functions: ReadonlyMap<string, AwkFunction>;
   /** Parameter scopes of the user functions being run, innermost last. */
   readonly frames: Map<string, AwkFrameEntry>[];
@@ -307,7 +313,9 @@ export function setField(state: AwkRuntimeState, index: number, value: AwkValue)
 export function compiledRegex(state: AwkRuntimeState, source: string): PosixRegex {
   const cached = state.regexCache.get(source);
   if (cached !== undefined) return cached;
-  const pattern = compilePosixRegex(awkRegexSource(source), "extended", "awk");
+  const pattern = compilePosixRegex(awkRegexSource(source), "extended", "awk", {
+    meter: state.regexMeter,
+  });
   state.regexCache.set(source, pattern);
   return pattern;
 }

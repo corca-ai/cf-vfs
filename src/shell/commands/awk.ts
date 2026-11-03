@@ -1,4 +1,5 @@
 import { VfsError } from "../../core/errors.js";
+import type { PosixRegexMeter } from "../../core/posix-regex.js";
 import { utf8ByteLength } from "../../core/unicode.js";
 import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import {
@@ -24,6 +25,7 @@ import {
 import { retainAwkVariable } from "./awk-strings.js";
 import { BufferedTextWriter, eachLine, readFileText, textLines } from "./helpers.js";
 import { inputSources } from "./inputs.js";
+import { regexMeter } from "./regex-meter.js";
 
 const AWK = {
   name: "awk",
@@ -137,9 +139,11 @@ function runtimeState(
   context: ShellCommandContext,
   variables: Map<string, AwkValue>,
   functions: ReadonlyMap<string, AwkFunction>,
+  regexMeter: PosixRegexMeter,
 ): RuntimeState {
   return {
     context,
+    regexMeter,
     functions,
     frames: [],
     callFunction: () => {
@@ -231,13 +235,15 @@ export const awkCommand = /* @__PURE__ */ defineApplet(AWK, async (context, argv
   const operands = [...parsed.operands];
   const source = await programSource(context, programFiles, operands);
   validateProgram(source, operands, context);
+  const meter = regexMeter(context.budget);
   const program = parseAwkProgram(
     tokenizeAwk(source),
     context.budget.limits.maxAstNodes,
     context.budget.limits.maxNestingDepth,
+    meter,
   );
   const { rules } = program;
-  const state = runtimeState(context, initialVariables(parsed.options), program.functions);
+  const state = runtimeState(context, initialVariables(parsed.options), program.functions, meter);
   validateRuntime(state);
   const writer = new BufferedTextWriter(context, fds[1]);
   const output = new AwkOutput(context);

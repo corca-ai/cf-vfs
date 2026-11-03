@@ -32,7 +32,7 @@ it("snapshots bytes once before a pipeline or redirection accepts them", async (
   expect([...(await readAllBytes(fileSystem.readFile("/output").stream, 1024))]).toEqual([4, 5, 6]);
 });
 
-it("keeps the per-edge pipeline limit at or below 8 MiB", () => {
+it("keeps the redirection buffer limit at or below 8 MiB", () => {
   expect(
     () =>
       new Shell({

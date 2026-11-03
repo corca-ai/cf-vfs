@@ -1,6 +1,6 @@
 /**
  * Splitting a command's input into lines — bulk-read bodies synchronously,
- * streams a chunk at a time — with the read, line and record limits charged
+ * streams a chunk at a time — with the read and line limits charged
  * where reading the input line by line would charge them.
  */
 
@@ -30,20 +30,12 @@ export function decodeUtf8(
   }
 }
 
+/**
+ * A stream's undelivered text. Lines are not counted: a reader holds one at a
+ * time, the line byte limit bounds each, and the bytes read bound them all.
+ */
 interface TextLineState {
   pending: string;
-  records: number;
-}
-
-/**
- * Counts one decoded record. It charges no step: reading is bounded by the
- * I/O byte limit, and steps are kept for work input size does not bound.
- */
-function accountRecord(state: TextLineState, context: ShellCommandContext, path?: string): void {
-  state.records += 1;
-  if (state.records > context.budget.limits.maxBufferedRecords) {
-    throw new VfsError("E2BIG", "input record limit exceeded", path);
-  }
 }
 
 function takeTextLine(
@@ -58,7 +50,6 @@ function takeTextLine(
   if (exceedsLine(line, context.budget.limits.maxLineBytes)) {
     throw new VfsError("E2BIG", "line byte limit exceeded", path);
   }
-  accountRecord(state, context, path);
   return line;
 }
 
@@ -77,7 +68,7 @@ function* chunkTextLines(
   decoded?: string,
 ): Generator<string> {
   const decoder = new TextDecoder("utf-8", { fatal: true });
-  const state: TextLineState = { pending: "", records: 0 };
+  const state: TextLineState = { pending: "" };
   const whole = chunks.length === 1 ? decoded : undefined;
   for (const chunk of chunks) {
     if (context.signal.aborted) throw cancellation(context.signal);
@@ -94,7 +85,6 @@ function* chunkTextLines(
   }
   state.pending += decodeUtf8(decoder, undefined, path);
   if (state.pending.length > 0) {
-    accountRecord(state, context, path);
     yield state.pending;
   }
 }
@@ -102,7 +92,7 @@ function* chunkTextLines(
 /**
  * Consumes bulk-read chunks whose lines a caller will not use, with the charges
  * and failures splitting them would have had. A valid UTF-8 body no larger than
- * the line and record limits can exceed neither, so only its reads are charged.
+ * the line limit cannot exceed it, so only its reads are charged.
  */
 export function skipTextLines(
   context: ShellCommandContext,
@@ -112,7 +102,7 @@ export function skipTextLines(
 ): void {
   const { limits } = context.budget;
   const bytes = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
-  if (!validText || bytes > Math.min(limits.maxLineBytes, limits.maxBufferedRecords)) {
+  if (!validText || bytes > limits.maxLineBytes) {
     const lines = chunkTextLines(context, chunks, path);
     while (lines.next().done !== true);
     return;
@@ -190,7 +180,7 @@ export async function* readTextLines(
   const reader = stream.getReader();
   const watched = watchReader(reader, context.signal);
   const decoder = new TextDecoder("utf-8", { fatal: true });
-  const state: TextLineState = { pending: "", records: 0 };
+  const state: TextLineState = { pending: "" };
   let finished = false;
   try {
     for (;;) {
@@ -212,7 +202,6 @@ export async function* readTextLines(
       }
     }
     if (state.pending.length > 0) {
-      accountRecord(state, context, path);
       yield state.pending;
     }
   } catch (error) {
@@ -230,8 +219,8 @@ export async function* readTextLines(
 
 /**
  * A stream's lines, a run per chunk read: each run hands out that chunk's
- * lines synchronously, taking each — and checking it against the line and
- * record limits — only when it is asked for, where {@link chunkTextLines}
+ * lines synchronously, taking each — and checking it against the line limit
+ * — only when it is asked for, where {@link chunkTextLines}
  * takes it for a bulk body. A caller awaits once per chunk rather than once
  * per line. A caller should drain each run before asking for the next; one
  * that does not loses nothing, as lines a run left behind are the next run's
@@ -245,7 +234,7 @@ async function* streamLineRuns(
   const reader = stream.getReader();
   const watched = watchReader(reader, context.signal);
   const decoder = new TextDecoder("utf-8", { fatal: true });
-  const state: TextLineState = { pending: "", records: 0 };
+  const state: TextLineState = { pending: "" };
   // A limit a run trips is the stream's failure: it ends the stream, which is
   // cancelled with it rather than as a consumer that stopped early.
   const failure: { error?: unknown } = {};
@@ -300,7 +289,6 @@ function* takenLines(
     }
     if (last) {
       if (state.pending.length === 0) return;
-      accountRecord(state, context, path);
       const line = state.pending;
       state.pending = "";
       yield line;

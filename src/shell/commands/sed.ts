@@ -5,6 +5,7 @@ import type { ShellBudget, ShellCommandContext, ShellFileDescriptors } from "../
 import { appletUsageError, defineApplet, parseAppletOptions } from "./applet.js";
 import { BufferedTextWriter, collectText, commandPath, writeText } from "./helpers.js";
 import { OperandReader } from "./inputs.js";
+import { regexMeter } from "./regex-meter.js";
 import {
   type SedAddress as Address,
   parseSedScript,
@@ -498,7 +499,7 @@ function parseInvocation(argv: readonly string[], budget: ShellBudget): SedInvoc
   }
   if (inPlace && operands.length === 0) throw appletUsageError(SED, "-i requires a file operand");
   return {
-    commands: parseSedScript(expressions.join("\n"), dialect),
+    commands: parseSedScript(expressions.join("\n"), dialect, regexMeter(budget)),
     operands,
     quiet,
     inPlace,

@@ -358,6 +358,13 @@ interface PipelineStage {
   readonly context: EvaluationContext;
 }
 
+/**
+ * What a pipeline stage beyond the first is charged to the buffered-byte
+ * limit while it runs: its cloned session and its pipe's queue of up to
+ * 64 KiB: some 27 KiB idle on Node, and the queue.
+ */
+const PIPELINE_STAGE_BYTES = 96 * 1024;
+
 function buildPipelineStages(
   pipeline: PipelineNode,
   session: ShellSession,
@@ -372,7 +379,8 @@ function buildPipelineStages(
     const pipe = last
       ? undefined
       : createBytePipe({
-          maximumBytes: runtime.limits.maxPipelineBytes,
+          // An edge holds at most 64 KiB; what passes through it is total I/O.
+          maximumBytes: Number.POSITIVE_INFINITY,
           signal: runtime.signal,
           name: `pipeline edge ${index + 1}`,
           account: (bytes) => runtime.budget.io(bytes),
@@ -431,11 +439,22 @@ async function runPipeline(
   context: EvaluationContext,
 ): Promise<EvaluationResult> {
   const pipelineContext = pipeline.negated ? suppressErrexit(context) : context;
-  const stages = buildPipelineStages(pipeline, session, outerFds, runtime, pipelineContext);
-  const isolated =
-    pipeline.commands.length > 1 ||
-    (pipeline.commands[0]?.type === "group" && pipeline.commands[0].subshell);
-  const results = await runPipelineStages(stages, isolated, outerFds[2], runtime);
+  // Each further stage holds a session and a pipe's queue while it runs;
+  // a script of thousands of stages would otherwise hold them uncounted.
+  const releaseStages =
+    pipeline.commands.length > 1
+      ? runtime.budget.buffered((pipeline.commands.length - 1) * PIPELINE_STAGE_BYTES)
+      : undefined;
+  let results: EvaluationResult[];
+  try {
+    const stages = buildPipelineStages(pipeline, session, outerFds, runtime, pipelineContext);
+    const isolated =
+      pipeline.commands.length > 1 ||
+      (pipeline.commands[0]?.type === "group" && pipeline.commands[0].subshell);
+    results = await runPipelineStages(stages, isolated, outerFds[2], runtime);
+  } finally {
+    releaseStages?.();
+  }
   const selected = selectPipelineResult(results, session.pipefail);
   const status = pipeline.negated ? (selected.status === 0 ? 1 : 0) : selected.status;
   const result = evaluationResult(

@@ -16,6 +16,25 @@ included.
 
 ## [Unreleased]
 
+- **Breaking:** `maxBufferedRecords` counts only records a command holds —
+  `sort`, `comm`, `join`, `xargs` and awk arrays — not lines a command reads
+  and lets go. `grep -c`, `sed -n '$p'`, `awk 'END { print NR }'`, `uniq` and
+  `head -n 120000` over a file of more than 100,000 lines stopped with "input
+  record limit exceeded"; they now finish, bounded by the line, read and I/O
+  limits.
+- **Breaking:** a pipeline edge no longer stops after 8 MiB has passed through
+  it: it holds at most 64 KiB, and what it carries counts as total I/O, so
+  `grep -E 'a|b' /wiki/*/*.md | wc -l` over the 8,055-page wiki finishes.
+  `maxPipelineBytes` now bounds only what a redirection buffers before
+  publishing a file. Each pipeline stage after the first holds 96 KiB of
+  `maxBufferedBytes` until the pipeline settles, so a script of thousands of
+  stages, which held over 100 MB uncounted, is refused.
+- **Breaking:** the steps a regular expression in `grep`, `sed` or `awk`
+  takes are charged as expansion work, 64 steps a unit; a literal pattern
+  takes none. Matching cannot be interrupted by the deadline: a 120-branch
+  `grep -E` over a 4 MB file ran 38 s, past Cloudflare's 30 s CPU limit, and
+  a `grep -w` search rescanning a 40 KB line ran 36 s; both now stop at the
+  limit. `compilePosixRegex` takes a `meter` option.
 ## [0.5.4] — 2026-11-03
 
 - `cut`, `uniq` and `nl` take a bulk body's lines synchronously and a pipe's a

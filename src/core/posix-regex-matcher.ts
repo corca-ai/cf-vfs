@@ -3,6 +3,14 @@ import { inPosixSet, type PosixCharSet } from "./posix-regex-charset.js";
 
 const MAX_STEPS = 20_000_000;
 
+/**
+ * Told the steps each search took. A search costs a step or two per position
+ * for a simple pattern and up to twice the program's size for one of many
+ * branches, and searches repeated over one line can rescan it, so a caller
+ * that must bound synchronous work counts them all.
+ */
+export type PosixRegexMeter = (steps: number) => void;
+
 export type PosixRegexInstruction =
   | { readonly op: "set"; readonly set: PosixCharSet }
   | { readonly op: "any" }
@@ -102,6 +110,7 @@ class Matcher {
     private readonly command: string,
     private readonly capture: boolean,
     private readonly prefix: string,
+    private readonly meter: PosixRegexMeter | undefined,
   ) {
     this.seen = new Int32Array(program.length).fill(-1);
   }
@@ -197,7 +206,14 @@ class Matcher {
     return this.text.indexOf(this.prefix, position);
   }
 
+  /** Searches from `from`, then tells the meter the steps the search took. */
   run(from: number, slots: number): readonly number[] | undefined {
+    const found = this.search(from, slots);
+    if (this.meter !== undefined && this.steps > 0) this.meter(this.steps);
+    return found;
+  }
+
+  private search(from: number, slots: number): readonly number[] | undefined {
     const empty = new Array<number>(slots).fill(-1);
     let currentMark = 0;
     let matched: readonly number[] | undefined;
@@ -229,6 +245,7 @@ export function runPosixRegex(
   slots: number,
   command: string,
   prefix = "",
+  meter?: PosixRegexMeter,
 ): readonly number[] | undefined {
-  return new Matcher(program, text, command, slots > 0, prefix).run(from, slots);
+  return new Matcher(program, text, command, slots > 0, prefix, meter).run(from, slots);
 }

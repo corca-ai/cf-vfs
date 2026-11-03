@@ -17,6 +17,7 @@ import {
   writeText,
 } from "./helpers.js";
 import { type CommandInput, operandInputs, recursiveInputs } from "./recursive-inputs.js";
+import { regexMeter } from "./regex-meter.js";
 import { GrepMatcher } from "./text-search-match.js";
 
 type GrepOption =
@@ -246,6 +247,7 @@ async function parseGrepInvocation(
     ignoreCase: has("ignore-case"),
     line: has("line-regexp"),
     word: has("word-regexp"),
+    meter: regexMeter(context.budget),
   });
   const several =
     paths.length > 1 ||
