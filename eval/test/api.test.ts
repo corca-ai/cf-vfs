@@ -141,7 +141,8 @@ it("returns only shell output and logs the measurements", async () => {
 });
 
 it("records an execution limit as a failure code", async () => {
-  const { id } = await create();
+  // A fiftieth of the default work, so the endless loop ends in a fraction of a second.
+  const { id } = await create({ scale: 0.02 });
   const result = await exec(id, "while true; do :; done");
   expect(result.exitCode).not.toBe(0);
   const [entry] = await log(id);
