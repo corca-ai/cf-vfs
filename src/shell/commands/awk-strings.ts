@@ -11,6 +11,16 @@ export function checkAwkString(state: AwkRuntimeState, value: AwkValue): AwkValu
   return value;
 }
 
+/** Charges building `length` characters, after the allowance the current record grants. */
+export function chargeAwkBuild(state: AwkRuntimeState, length: number): void {
+  if (length <= state.buildAllowance) {
+    state.buildAllowance -= length;
+    return;
+  }
+  state.context.budget.expansionWork(length - state.buildAllowance);
+  state.buildAllowance = 0;
+}
+
 /** Check the result before join can allocate an amplified string. */
 export function joinAwkStrings(
   state: AwkRuntimeState,
@@ -29,7 +39,7 @@ export function joinAwkStrings(
     length > state.context.budget.limits.maxBufferedBytes
   )
     throw new VfsError("E2BIG", "awk: string expansion limit exceeded");
-  if (work) state.context.budget.expansionWork(length);
+  if (work) chargeAwkBuild(state, length);
   const result = values.join(separator);
   checkAwkString(state, { kind: "string", value: result, numeric: false });
   return result;

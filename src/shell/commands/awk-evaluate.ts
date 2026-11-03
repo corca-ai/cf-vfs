@@ -27,7 +27,7 @@ import {
   truth,
   validateFieldSeparator,
 } from "./awk-runtime.js";
-import { checkAwkString, joinAwkStrings } from "./awk-strings.js";
+import { chargeAwkBuild, checkAwkString, joinAwkStrings } from "./awk-strings.js";
 
 export function arrayKey(indices: readonly Expression[], state: RuntimeState): string {
   const separator = asString(getVariable(state, "SUBSEP"));
@@ -148,7 +148,7 @@ function substitute(
     offset = match.end + character.length;
   }
   append(source.slice(offset));
-  state.context.budget.expansionWork(output.length);
+  chargeAwkBuild(state, output.length);
   return { value: output, count };
 }
 
@@ -336,7 +336,7 @@ function builtinSprintf(arguments_: readonly AwkValue[], state: RuntimeState): A
     arguments_.slice(1),
     state.context.budget.limits.maxExpansionChars,
   );
-  state.context.budget.expansionWork(formatted.length);
+  chargeAwkBuild(state, formatted.length);
   return stringValue(formatted);
 }
 

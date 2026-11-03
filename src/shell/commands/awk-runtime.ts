@@ -46,6 +46,12 @@ export interface AwkRuntimeState {
   arrayBytes: number;
   arrayRelease: () => void;
   record: string;
+  /**
+   * Characters of text the program may build without charging expansion
+   * work: the length of the record just read. Editing or copying a record
+   * costs no more than reading it did; building beyond that is charged.
+   */
+  buildAllowance: number;
   fields: AwkString[];
   fieldsValid: boolean;
   fieldSeparator: string;

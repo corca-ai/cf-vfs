@@ -1,0 +1,16 @@
+baseline awk '{ gsub(/e/, "E"); print }' /wiki/*/*.md | wc -c => 339 ms exit 1 out  err pipeline edge 1 exceeds the 8388608-byte limit
+candidate awk '{ gsub(/e/, "E"); print }' /wiki/*/*.md | wc -c => 329 ms exit 1 out  err pipeline edge 1 exceeds the 8388608-byte limit
+baseline awk '{ n += gsub(/a/, "a") } END { print n }' /wiki/*/*.md => 258 ms exit 1 out  err shell expansion work limit exceeded
+candidate awk '{ n += gsub(/a/, "a") } END { print n }' /wiki/*/*.md => 883 ms exit 0 out 2738268 err 
+baseline awk '{ $1 = $1; print }' /wiki/*/*.md | wc -l => 207 ms exit 1 out  err pipeline edge 1 exceeds the 8388608-byte limit
+candidate awk '{ $1 = $1; print }' /wiki/*/*.md | wc -l => 219 ms exit 1 out  err pipeline edge 1 exceeds the 8388608-byte limit
+baseline awk '{ x = $0 "!" } END { print NR }' /wiki/*/*.md => 120 ms exit 1 out  err shell expansion work limit exceeded
+candidate awk '{ x = $0 "!" } END { print NR }' /wiki/*/*.md => 347 ms exit 0 out 504249 err 
+baseline awk '{ gsub(/e/, "E"); print }' /wiki/*/*.md > /dev/null; echo $? => 331 ms exit 1 out  err shell expansion work limit exceeded
+candidate awk '{ gsub(/e/, "E"); print }' /wiki/*/*.md > /dev/null; echo $? => 1216 ms exit 0 out 0 err 
+baseline awk '{ $1 = $1; print }' /wiki/*/*.md > /dev/null; echo $? => 201 ms exit 1 out  err shell expansion work limit exceeded
+candidate awk '{ $1 = $1; print }' /wiki/*/*.md > /dev/null; echo $? => 668 ms exit 0 out 0 err 
+baseline awk '{ n += gsub(/owner/, "x") } END { print n }' /wiki/sales/*.md => 52 ms exit 0 out 870 err 
+candidate awk '{ n += gsub(/owner/, "x") } END { print n }' /wiki/sales/*.md => 53 ms exit 0 out 870 err 
+baseline awk '{ gsub(/owner/, "OWNER"); print }' /wiki/legal/*.md | wc -l => 65 ms exit 0 out 59996 err 
+candidate awk '{ gsub(/owner/, "OWNER"); print }' /wiki/legal/*.md | wc -l => 62 ms exit 0 out 59996 err 
