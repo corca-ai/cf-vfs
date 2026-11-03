@@ -1,3 +1,4 @@
+import type { PosixRegexMeter } from "../../core/posix-regex.js";
 import {
   AWK_BUILTINS,
   type AwkFunction,
@@ -342,9 +343,11 @@ export function parseAwkProgram(
   tokens: readonly AwkToken[],
   maximumNodes: number,
   maximumDepth: number,
+  regexMeter?: PosixRegexMeter,
 ): AwkProgram {
   const parser = new Parser(tokens, maximumNodes, maximumDepth);
   parser.userFunctions = functionNames(tokens);
+  parser.regexMeter = regexMeter;
   const rules = parser.parse();
   validateTreeDepth(rules, 0, maximumDepth);
   validateTreeDepth(

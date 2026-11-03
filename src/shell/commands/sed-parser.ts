@@ -2,6 +2,7 @@ import {
   compilePosixRegex,
   type PosixRegex,
   type PosixRegexDialect,
+  type PosixRegexMeter,
 } from "../../core/posix-regex.js";
 import { type AppletSpecWithOptions, appletUsageError } from "./applet.js";
 
@@ -128,13 +129,17 @@ function parseAddress(
   script: string,
   start: number,
   dialect: PosixRegexDialect,
+  meter: PosixRegexMeter | undefined,
 ): [SedAddress, number] {
   const character = script[start] ?? "";
   if (character === "$") return [{ kind: "last" }, start + 1];
   if (character === "/") {
     const [pattern, next] = readDelimited(script, start + 1, "/");
     return [
-      { kind: "regex", pattern: compilePosixRegex(sedPattern(pattern), dialect, SED.name) },
+      {
+        kind: "regex",
+        pattern: compilePosixRegex(sedPattern(pattern), dialect, SED.name, { meter }),
+      },
       next,
     ];
   }
@@ -180,6 +185,7 @@ class SedScriptParser {
   constructor(
     private readonly script: string,
     private readonly dialect: PosixRegexDialect,
+    private readonly meter: PosixRegexMeter | undefined,
   ) {}
 
   parse(): SedCommand[] {
@@ -226,10 +232,10 @@ class SedScriptParser {
 
   private selector(): SedSelector | undefined {
     if (!ADDRESS_START.test(this.script.slice(this.index))) return undefined;
-    const [start, afterStart] = parseAddress(this.script, this.index, this.dialect);
+    const [start, afterStart] = parseAddress(this.script, this.index, this.dialect, this.meter);
     this.index = afterStart;
     if (this.script[this.index] !== ",") return { start };
-    const [end, afterEnd] = parseAddress(this.script, this.index + 1, this.dialect);
+    const [end, afterEnd] = parseAddress(this.script, this.index + 1, this.dialect, this.meter);
     this.index = afterEnd;
     return { start, end };
   }
@@ -368,6 +374,7 @@ class SedScriptParser {
       kind: "s",
       pattern: compilePosixRegex(sedPattern(pattern), this.dialect, SED.name, {
         ...(flags.ignoreCase ? { ignoreCase: true } : {}),
+        meter: this.meter,
       }),
       replacement,
       global: flags.global,
@@ -402,6 +409,10 @@ class SedScriptParser {
   }
 }
 
-export function parseSedScript(script: string, dialect: PosixRegexDialect): SedCommand[] {
-  return new SedScriptParser(script, dialect).parse();
+export function parseSedScript(
+  script: string,
+  dialect: PosixRegexDialect,
+  meter?: PosixRegexMeter,
+): SedCommand[] {
+  return new SedScriptParser(script, dialect, meter).parse();
 }

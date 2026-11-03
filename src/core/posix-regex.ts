@@ -6,6 +6,7 @@ import {
 } from "./posix-regex-charset.js";
 import {
   type PosixRegexInstruction as Instruction,
+  type PosixRegexMeter,
   posixLiteral,
   posixLiteralPrefix,
   runPosixRegex,
@@ -459,6 +460,7 @@ export class PosixRegex {
     private readonly program: readonly Instruction[],
     groups: number,
     private readonly command: string,
+    private readonly meter?: PosixRegexMeter,
   ) {
     this.slots = (groups + 1) * 2;
     this.literal = groups === 0 ? posixLiteral(program) : undefined;
@@ -467,7 +469,9 @@ export class PosixRegex {
 
   test(text: string): boolean {
     if (this.literal !== undefined) return text.includes(this.literal);
-    return runPosixRegex(this.program, text, 0, 0, this.command, this.prefix) !== undefined;
+    return (
+      runPosixRegex(this.program, text, 0, 0, this.command, this.prefix, this.meter) !== undefined
+    );
   }
 
   /** Finds the leftmost match at or after the string offset `from`. */
@@ -483,11 +487,28 @@ export class PosixRegex {
         ? undefined
         : { index, end: index + this.literal.length, groups: [this.literal] };
     }
-    const found = runPosixRegex(this.program, text, start, this.slots, this.command, this.prefix);
+    const found = runPosixRegex(
+      this.program,
+      text,
+      start,
+      this.slots,
+      this.command,
+      this.prefix,
+      this.meter,
+    );
     if (found === undefined) return undefined;
     const groups = capturedGroups(text, found, this.slots);
     return { index: found[0] ?? 0, end: found[1] ?? 0, groups };
   }
+}
+
+export type { PosixRegexMeter } from "./posix-regex-matcher.js";
+
+/** Options for {@link compilePosixRegex}. */
+export interface PosixRegexOptions {
+  readonly ignoreCase?: boolean;
+  /** Told the steps each search takes, so a caller can charge matching. */
+  readonly meter?: PosixRegexMeter | undefined;
 }
 
 /**
@@ -501,9 +522,9 @@ export function compilePosixRegex(
   pattern: string,
   dialect: PosixRegexDialect,
   command: string,
-  options: { readonly ignoreCase?: boolean } = {},
+  options: PosixRegexOptions = {},
 ): PosixRegex {
   const parser = new Parser(pattern, dialect === "extended", command, options.ignoreCase === true);
   const parsed = parser.parse();
-  return new PosixRegex(compile(parsed.node, command), parsed.groups, command);
+  return new PosixRegex(compile(parsed.node, command), parsed.groups, command, options.meter);
 }

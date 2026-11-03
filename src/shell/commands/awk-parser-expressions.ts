@@ -1,4 +1,4 @@
-import { compilePosixRegex } from "../../core/posix-regex.js";
+import { compilePosixRegex, type PosixRegexMeter } from "../../core/posix-regex.js";
 import {
   ADDITIVE_OPERATORS,
   ASSIGNMENT_OPERATORS,
@@ -15,6 +15,8 @@ import { AwkParserCursor } from "./awk-parser-cursor.js";
 export class AwkExpressionParser extends AwkParserCursor {
   /** Names declared with `function`, which a call may use before the definition. */
   userFunctions = new Set<string>();
+  /** Charges what the program's regular expressions cost beyond their input. */
+  regexMeter: PosixRegexMeter | undefined;
 
   protected expression(): Expression {
     return this.assignment();
@@ -255,7 +257,9 @@ export class AwkExpressionParser extends AwkParserCursor {
     if (token.kind === "regex") {
       return this.node({
         kind: "regex",
-        pattern: compilePosixRegex(awkRegexSource(token.value), "extended", "awk"),
+        pattern: compilePosixRegex(awkRegexSource(token.value), "extended", "awk", {
+          meter: this.regexMeter,
+        }),
       });
     }
     if (token.kind === "identifier") return this.identifierExpression(token);

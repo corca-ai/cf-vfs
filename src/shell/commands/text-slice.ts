@@ -85,7 +85,6 @@ async function writeHeader(sink: ShellSink, name: string, first: boolean): Promi
 
 class HeadLineAccount {
   private currentLineBytes = 0;
-  private records = 0;
 
   constructor(
     private readonly context: ShellCommandContext,
@@ -98,19 +97,7 @@ class HeadLineAccount {
       if (this.currentLineBytes > this.context.budget.limits.maxLineBytes) {
         throw new VfsError("E2BIG", "line byte limit exceeded", this.path);
       }
-      if (byte === 0x0a) this.completeRecord();
-    }
-  }
-
-  finish(): void {
-    if (this.currentLineBytes > 0) this.completeRecord();
-  }
-
-  private completeRecord(): void {
-    this.currentLineBytes = 0;
-    this.records += 1;
-    if (this.records > this.context.budget.limits.maxBufferedRecords) {
-      throw new VfsError("E2BIG", "input record limit exceeded", this.path);
+      if (byte === 0x0a) this.currentLineBytes = 0;
     }
   }
 }
@@ -201,7 +188,6 @@ async function headLines(
     while (remaining > 0) {
       const result = await watched.read();
       if (result.done) {
-        account.finish();
         await writeText(sink, decodeHead(decoder, undefined, false, path));
         finished = true;
         break;

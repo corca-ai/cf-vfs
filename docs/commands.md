@@ -693,6 +693,9 @@ extended ones. Patterns are parsed and matched here rather than handed to the
 JavaScript engine, so no JavaScript-only construct can mean something here that
 it does not mean in `grep`: `a+` repeats in an extended expression and is a
 literal plus in a basic one, and `(?:a)` does not open a non-capturing group.
+Matching is synchronous and costs up to the program's size per position, so
+its steps are charged as expansion work
+([operations](operations.md#execution-budgets)).
 
 `grep -P` takes the part of PCRE that means the same in the extended dialect
 and translates it: `\d`, `\w`, `\s` and their negations, `\t`, `\r`, `\n`,
@@ -1039,9 +1042,11 @@ other streaming utilities.
 Records stream and fields are split lazily: a program that tests a regular
 expression against `$0` never allocates a field array. The separator in effect
 when a record is read is retained for that record, matching AWK when `FS`
-changes inside an action. Program bytes, AST nodes, nesting, records, regex
-work, loop iterations, execution steps, associative-array entries and bytes,
-buffered output, and total I/O all use existing shell limits. Scalar variables
+changes inside an action. Program bytes, AST nodes, nesting, loop iterations,
+execution steps, associative-array entries and bytes, buffered output, and
+total I/O all use existing shell limits; regular expressions charge expansion
+work for the steps their searches take
+([operations](operations.md#execution-budgets)). Scalar variables
 and the current record also hold buffered-byte reservations. String concatenation,
 field rebuilding, and composite keys check expansion sizes before joining,
 including results that are never printed. Expansion work counts the text an

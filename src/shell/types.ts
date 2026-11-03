@@ -152,6 +152,7 @@ export interface ShellLimits {
   maxSourceDepth: number;
   maxScriptDepth: number;
   maxCommandSubstitutionBytes: number;
+  /** What a redirection buffers before it publishes a file; a pipe holds at most 64 KiB. */
   maxPipelineBytes: number;
   maxStdoutBytes: number;
   maxStderrBytes: number;

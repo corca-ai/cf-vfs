@@ -1,5 +1,9 @@
 import { VfsError } from "../../core/errors.js";
-import { compilePosixRegex, type PosixRegex } from "../../core/posix-regex.js";
+import {
+  compilePosixRegex,
+  type PosixRegex,
+  type PosixRegexMeter,
+} from "../../core/posix-regex.js";
 import { utf8ByteLength } from "../../core/unicode.js";
 import { perlPattern } from "./text-search-pcre.js";
 
@@ -15,6 +19,8 @@ export interface GrepMatchOptions {
   readonly line: boolean;
   /** `-w`: a match must not touch a word character on either side. */
   readonly word: boolean;
+  /** Charges what a pattern's searches cost beyond their input. */
+  readonly meter?: PosixRegexMeter;
 }
 
 interface Span {
@@ -126,6 +132,7 @@ export class GrepMatcher {
     return {
       regex: compilePosixRegex(source, extended ? "extended" : "basic", "grep", {
         ...(ignoreCase ? { ignoreCase: true } : {}),
+        meter: this.options.meter,
       }),
       needle: pattern,
     };
