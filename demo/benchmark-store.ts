@@ -6,7 +6,6 @@ export const RESULT_PATH = "/benchmarks/latest.json";
 const HISTORY_PATH = "/benchmarks/trends.json";
 const JOB_PATH = "/benchmarks/job.json";
 const RUN_PATH = "/benchmarks/run.json";
-export const BENCHMARK_TTL_MS = 10 * 60 * 1000;
 const RUN_LEASE_MS = 5 * 60 * 1000;
 export const MAX_RUNS_PER_COMMIT = 12;
 
@@ -87,6 +86,8 @@ export interface BenchmarkJob {
 
 interface RunRecord {
   id: string;
+  /** The build the run measures; a public request runs each build once. */
+  buildId?: string;
   startedAt: number;
   leaseUntil: number;
   status: "running" | "failed" | "completed";
@@ -243,7 +244,13 @@ export interface BenchmarkSnapshot {
   result: PublicBenchmarkResult | null;
   history: BenchmarkHistoryPoint[];
   modifiedAt: number | null;
-  nextRunAt: number | null;
+  /**
+   * Whether a request without the developer token would start a run: only
+   * when nothing has run for this build yet, so each public endpoint (the
+   * suite and the agent task) costs at most one Cloudflare run per
+   * deployment, however often it is asked.
+   */
+  eligible: boolean;
   error: string | null;
 }
 
@@ -328,42 +335,54 @@ export class BenchmarkStore {
     return next;
   }
 
-  private async snapshot(includeHistory = true): Promise<BenchmarkSnapshot> {
+  private async snapshot(includeHistory = true, build?: string): Promise<BenchmarkSnapshot> {
     const saved = await this.read<PublicBenchmarkResult>(RESULT_PATH);
     const run = (await this.read<RunRecord>(RUN_PATH))?.value;
     const running = run?.status === "running" && run.leaseUntil > this.now();
     const failed = run?.status === "failed" || (run?.status === "running" && !running);
-    const resultNext = saved === null ? null : saved.modifiedAt + BENCHMARK_TTL_MS;
+    const attempted =
+      build !== undefined && (run?.buildId === build || saved?.value.buildId === build);
     return {
       status: running ? "running" : failed ? "failed" : saved === null ? "empty" : "ready",
       result: saved?.value ?? null,
       history: includeHistory ? await this.history(saved?.value ?? null) : [],
       modifiedAt: saved?.modifiedAt ?? null,
-      nextRunAt: resultNext,
-      error: failed
-        ? (run?.error ?? "The previous run was interrupted. Please request it again.")
-        : null,
+      eligible: !running && build !== undefined && !attempted,
+      error: failed ? (run?.error ?? "The previous run was interrupted.") : null,
     };
   }
 
-  get(includeHistory = true): Promise<BenchmarkSnapshot> {
-    return this.serial(() => this.snapshot(includeHistory));
+  /** `build`, the deployed build, decides whether a public request may run. */
+  get(includeHistory = true, build?: string): Promise<BenchmarkSnapshot> {
+    return this.serial(() => this.snapshot(includeHistory, build));
   }
 
-  claim(force = false): Promise<{ runId: string | null; snapshot: BenchmarkSnapshot }> {
+  /**
+   * Starts a run unless one is running. Without `force` — a request without
+   * the developer token — it starts one only when nothing has run for `build`
+   * yet, finished or not, so neither repeated requests nor a run that fails
+   * can make the public page run the benchmark again on the same deployment.
+   */
+  claim(
+    build: string,
+    force = false,
+  ): Promise<{ runId: string | null; snapshot: BenchmarkSnapshot }> {
     return this.serial(async () => {
-      const snapshot = await this.snapshot();
-      if (snapshot.status === "running" || (!force && (snapshot.nextRunAt ?? 0) > this.now())) {
+      // Without history: deciding needs none, and a refused request is
+      // answered from the cached full snapshot instead.
+      const snapshot = await this.snapshot(false, build);
+      if (snapshot.status === "running" || (!force && !snapshot.eligible)) {
         return { runId: null, snapshot };
       }
       const record: RunRecord = {
         id: crypto.randomUUID(),
+        buildId: build,
         startedAt: this.now(),
         leaseUntil: this.now() + RUN_LEASE_MS,
         status: "running",
       };
       await this.fs.writeFile(RUN_PATH, JSON.stringify(record));
-      return { runId: record.id, snapshot: await this.snapshot() };
+      return { runId: record.id, snapshot: await this.snapshot(false, build) };
     });
   }
 
@@ -399,8 +418,9 @@ export class BenchmarkStore {
       if (run?.id !== result.runId || run.status !== "running" || run.leaseUntil <= this.now()) {
         throw new Error("Benchmark run is no longer active");
       }
-      // One transaction publishes result and completion together. Freshness
-      // uses the result file's actual mtime, never a client-supplied timestamp.
+      // One transaction publishes result and completion together; the result
+      // carries the build it measured, which decides whether a public request
+      // may run again.
       validatePairedResult(result);
       const historyPoints = updateHistory(await this.history(null), historyPoint(result));
       this.fs.mkdir("/benchmarks/history", true);

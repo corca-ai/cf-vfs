@@ -45,15 +45,19 @@ export default defineConfig({
         worker: "cf-vfs-benchmark",
         exportName: "DemoWorkspace",
       }),
+      DEMO_BUDGET: bindings.durableObject({ worker: "cf-vfs-benchmark", exportName: "DemoBudget" }),
       VERSION_METADATA: bindings.versionMetadata(),
       ASSETS: bindings.assets(),
     },
-    // Every class was introduced through `new_sqlite_classes` (migrations v1–v4).
+    // The first four classes came from `new_sqlite_classes` (migrations v1–v4);
+    // `wrangler.benchmark.jsonc` lists DemoBudget as v5 for local tooling.
     exports: {
       VfsBenchmark: exports.durableObject({ storage: "sqlite" }),
       DemoWorkspace: exports.durableObject({ storage: "sqlite" }),
       PublicBenchmarks: exports.durableObject({ storage: "sqlite" }),
       BenchmarkWorkspace: exports.durableObject({ storage: "sqlite" }),
+      // Added after the migrations; new namespaces come from `exports` alone.
+      DemoBudget: exports.durableObject({ storage: "sqlite" }),
     },
   },
 });

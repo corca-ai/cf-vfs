@@ -1,3 +1,4 @@
+import { meterSqlStorage, type SqlMeter } from "../bench/metered-sql.js";
 import { CollaborativeFileSystem } from "../src/collab/index.js";
 import { VfsError } from "../src/core/errors.js";
 import { curlCommand } from "../src/shell/commands/curl.js";
@@ -12,6 +13,7 @@ import {
 import type { ShellExecution } from "../src/shell/types.js";
 import { VfsDurableObject } from "../src/vfs/durable-object.js";
 import type { VfsStat } from "../src/vfs/types.js";
+import { DEMO_BUDGET_NAME } from "./demo-budget.js";
 import { DemoDocuments, type DocumentNotice } from "./document.js";
 import {
   DEMO_CREDENTIALS,
@@ -22,9 +24,15 @@ import {
 } from "./identity.js";
 import { demoNetwork } from "./network.js";
 import { MAX_MESSAGE_BYTES, parseClientMessage, type ServerMessage } from "./protocol.js";
+import { addressKey, COST, RoomBudget } from "./room-budget.js";
 import { WorkspaceOperations } from "./workspace-operations.js";
 
 interface TerminalSession {
+  /** The visitor's address (an IPv6 /64), which budgets and session caps count by. */
+  readonly address: string;
+  /** Messages the session may still send before it is closed for flooding. */
+  tokens: number;
+  tokensAt: number;
   readonly shell: InteractiveShell;
   readonly input: InteractiveInputBuffer;
   /** Documents this socket has open, so a change reaches only who is looking. */
@@ -32,12 +40,42 @@ interface TerminalSession {
   pendingSourceBytes: number;
   execution: ShellExecution | undefined;
   pending: AbortController | undefined;
+  /** Closes the session once nobody has typed for {@link IDLE_SESSION_MS}. */
+  idle: ReturnType<typeof setTimeout> | undefined;
+  /** Closes the session at the end of {@link MAX_SESSION_MS}. */
+  expiry: ReturnType<typeof setTimeout> | undefined;
 }
 
 const DEMO_HOME = `/home/${DEMO_USER}`;
 const DEMO_IDENTITY_VERSION = 1;
 const DEMO_IDENTITY_VERSION_KEY = "demo:identity-version";
 const MAX_PENDING_SOURCE_BYTES = 128 * 1024;
+/**
+ * How long a session may go without input before it is closed. An open
+ * socket keeps the room's Durable Object running, and the page's keepalive
+ * would keep a forgotten tab open indefinitely; the page reconnects on the
+ * next key instead. Files are durable and survive; the session is not.
+ */
+const IDLE_SESSION_MS = 10 * 60 * 1000;
+/** However busy, a session ends after an hour; the page reconnects on the next key. */
+const MAX_SESSION_MS = 60 * 60 * 1000;
+/**
+ * Close codes the page understands. It reconnects only on the visitor's next
+ * key after any of them, never on its own, so none of them becomes a loop.
+ */
+const CLOSE = {
+  idle: 4000,
+  roomFull: 4001,
+  tooManySessions: 4002,
+  budget: 4003,
+  expired: 4004,
+} as const;
+/** Sessions one room holds at once, and sessions one address may hold in it. */
+const MAX_ROOM_SESSIONS = 32;
+const MAX_ADDRESS_SESSIONS = 4;
+/** Messages a session may send: a burst, refilled at a steady rate. */
+const MESSAGE_BURST = 100;
+const MESSAGES_PER_SECOND = 20;
 /**
  * How many candidates one completion answer carries.
  *
@@ -207,28 +245,45 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
    * text that has not been written back yet.
    */
   private readonly editable: CollaborativeFileSystem;
+  /** The room's share of the public demo's daily budget. */
+  private readonly budget: RoomBudget;
+  /** Rows the room's storage has read and written, to charge to the budget. */
+  private readonly meter: SqlMeter;
+  private charged = { rowsRead: 0, rowsWritten: 0, at: Date.now() };
 
   constructor(ctx: DurableObjectState, env: VfsBenchmarkEnv) {
     // Built before `super()` because the filesystem takes it as an event sink,
     // which is how a document follows a `mv` or an `rm` typed in the terminal.
     // Legal only because nothing here touches `this`.
     const documents = new DemoDocuments();
-    super(ctx, env, {
-      workspaceId: ctx.id.toString(),
-      onEvent: (event) => documents.observe(event),
-      // A room shared by a whole country, so it is deliberately small: a
-      // visitor who fills it can only have written fifty kilobytes, and
-      // whoever arrives next can free it by deleting something. The welcome
-      // file and the profile's directories account for well under a kilobyte
-      // of that.
-      maxInlineFileBytes: 16 * 1024,
-      maxInlineLogicalBytes: 50 * 1024,
-      maxEntries: 256,
-      maxInFlightBufferedBytes: 2 * 1024 * 1024,
-    });
+    // The filesystem's storage is metered, so what the room costs is counted
+    // from the rows SQLite reports rather than estimated from commands.
+    const meter = meterSqlStorage(ctx.storage);
+    super(
+      ctx,
+      env,
+      {
+        workspaceId: ctx.id.toString(),
+        onEvent: (event) => documents.observe(event),
+        // A room shared by a whole country, so it is deliberately small: a
+        // visitor who fills it can only have written fifty kilobytes, and
+        // whoever arrives next can free it by deleting something. The welcome
+        // file and the profile's directories account for well under a kilobyte
+        // of that.
+        maxInlineFileBytes: 16 * 1024,
+        maxInlineLogicalBytes: 50 * 1024,
+        maxEntries: 256,
+        maxInFlightBufferedBytes: 2 * 1024 * 1024,
+      },
+      meter.storage,
+    );
     // `getByName` keeps the name on the identifier, which is the room's label.
     this.workspaceName = ctx.id.name ?? "country-XX";
     this.documents = documents;
+    this.meter = meter;
+    this.budget = new RoomBudget((day, units) =>
+      env.DEMO_BUDGET.getByName(DEMO_BUDGET_NAME).reserve(day, units),
+    );
     this.editable = new CollaborativeFileSystem(this.fileSystem, documents.registry);
     documents.attach(
       this.editable,
@@ -270,12 +325,33 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       return new Response("Expected a WebSocket upgrade", { status: 426 });
     }
 
+    const address = addressKey(request.headers.get("CF-Connecting-IP"));
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
     server.accept();
+    // An open socket keeps the room running and each session holds a shell,
+    // so a room and an address may only hold so many, and none once today's
+    // budget is spent. A refusal is a close code the page will not retry by
+    // itself, where a failed upgrade would be retried every few seconds.
+    let held = 0;
+    for (const open of this.sessions.values()) if (open.address === address) held += 1;
+    const refusal = this.budget.exhausted
+      ? CLOSE.budget
+      : this.sessions.size >= MAX_ROOM_SESSIONS
+        ? CLOSE.roomFull
+        : held >= MAX_ADDRESS_SESSIONS
+          ? CLOSE.tooManySessions
+          : undefined;
+    if (refusal !== undefined) {
+      server.close(refusal, "refused");
+      return new Response(null, { status: 101, webSocket: client });
+    }
 
     const session: TerminalSession = {
+      address,
+      tokens: MESSAGE_BURST,
+      tokensAt: Date.now(),
       shell: new InteractiveShell({
         fileSystem: this.editable,
         commands: [...defaultShellCommands, curlCommand, gitCommand],
@@ -306,17 +382,26 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       pendingSourceBytes: 0,
       execution: undefined,
       pending: undefined,
+      idle: undefined,
+      expiry: undefined,
     };
+    this.chargeUsage();
     this.sessions.set(server, session);
+    this.keepAlive(server, session);
+    session.expiry = setTimeout(() => this.endSession(server, CLOSE.expired), MAX_SESSION_MS);
 
     server.addEventListener("message", (event) => {
       void this.handleMessage(server, event.data).catch((error: unknown) => {
-        console.error(
-          JSON.stringify({
-            message: "terminal WebSocket message failed",
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        );
+        // A visitor's own mistakes are answered, not logged: logged events are
+        // billed, and a client could send malformed messages without end.
+        if (!(error instanceof VfsError)) {
+          console.error(
+            JSON.stringify({
+              message: "terminal WebSocket message failed",
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          );
+        }
         send(server, {
           type: "error",
           message: error instanceof VfsError ? error.message : "Terminal request failed",
@@ -347,8 +432,65 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  /**
+   * Restarts the idle timer, which only a command or an edit does: a keepalive,
+   * a resize or a completion request does not keep a room running. A command
+   * still running defers the close.
+   */
+  private keepAlive(socket: WebSocket, session: TerminalSession): void {
+    clearTimeout(session.idle);
+    session.idle = setTimeout(() => {
+      if (session.execution !== undefined || session.pending !== undefined) {
+        this.keepAlive(socket, session);
+        return;
+      }
+      this.endSession(socket, CLOSE.idle);
+    }, IDLE_SESSION_MS);
+  }
+
+  private endSession(socket: WebSocket, code: number): void {
+    if (socketIsOpen(socket)) socket.close(code, "ended");
+    this.removeSession(socket);
+  }
+
+  /**
+   * Charges what the room has cost since the last charge — rows its storage
+   * read and wrote, and the time open sessions kept it running — to the
+   * budget, and to `address` when that work was its.
+   */
+  private chargeUsage(address?: string): void {
+    const now = Date.now();
+    const { rowsRead, rowsWritten } = this.meter;
+    const units =
+      (rowsWritten - this.charged.rowsWritten) * COST.rowWritten +
+      (rowsRead - this.charged.rowsRead) * COST.rowRead +
+      (this.sessions.size > 0 ? ((now - this.charged.at) / 1000) * COST.awakeSecond : 0);
+    this.charged = { rowsRead, rowsWritten, at: now };
+    this.budget.charge(units, address);
+  }
+
+  /** Whether `session` may send another message; a flood closes it. */
+  private admits(socket: WebSocket, session: TerminalSession): boolean {
+    const now = Date.now();
+    session.tokens = Math.min(
+      MESSAGE_BURST,
+      session.tokens + ((now - session.tokensAt) / 1000) * MESSAGES_PER_SECOND,
+    );
+    session.tokensAt = now;
+    if (session.tokens < 1) {
+      if (socketIsOpen(socket)) socket.close(1008, "too many messages");
+      this.removeSession(socket);
+      return false;
+    }
+    session.tokens -= 1;
+    return true;
+  }
+
   private removeSession(socket: WebSocket): void {
     const session = this.sessions.get(socket);
+    if (session !== undefined) this.chargeUsage();
+    clearTimeout(session?.idle);
+    clearTimeout(session?.expiry);
     session?.pending?.abort();
     session?.execution?.cancel();
     this.sessions.delete(socket);
@@ -416,6 +558,7 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
   private async handleMessage(socket: WebSocket, rawMessage: string | ArrayBuffer): Promise<void> {
     const session = this.sessions.get(socket);
     if (session === undefined) return;
+    if (!this.admits(socket, session)) return;
     const message = parseClientMessage(rawMessage);
 
     if (message.type === "ping") {
@@ -475,6 +618,10 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
           return;
         }
         if (message.type === "doc-edit") {
+          const refused = await this.budget.refusal(session.address);
+          if (refused !== undefined) throw new VfsError("ENOSPC", refused);
+          this.keepAlive(socket, session);
+          this.chargeUsage(session.address);
           session.watching.add(message.path);
           const applied = this.documents.applyClientText(message.path, message.base, message.text);
           const document = this.documents.get(message.path);
@@ -546,6 +693,13 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       return;
     }
     session.pendingSourceBytes = 0;
+    this.keepAlive(socket, session);
+    if (this.budget.exhausted) {
+      throw new VfsError(
+        "ENOSPC",
+        "the public demo has used today's budget; it resets at 00:00 UTC",
+      );
+    }
     const pending = new AbortController();
     session.pending = pending;
     send(socket, { type: "running" });
@@ -553,8 +707,21 @@ export class DemoWorkspace extends VfsDurableObject<VfsBenchmarkEnv> {
       await this.operations.run(async () => {
         if (pending.signal.aborted || this.sessions.get(socket) !== session) return;
         await this.documents.flush();
-        if (!pending.signal.aborted)
+        this.chargeUsage();
+        if (pending.signal.aborted) return;
+        // Checked here, at its turn, so commands queued before the budget ran
+        // out do not run after it.
+        const refused = await this.budget.refusal(session.address);
+        if (refused !== undefined) {
+          send(socket, { type: "error", message: refused });
+          prompt(socket, session);
+          return;
+        }
+        try {
           await this.execute(socket, session, submitted.source, pending.signal);
+        } finally {
+          this.chargeUsage(session.address);
+        }
       });
     } finally {
       if (session.pending === pending) session.pending = undefined;

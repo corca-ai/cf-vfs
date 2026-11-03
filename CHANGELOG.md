@@ -16,6 +16,9 @@ included.
 
 ## [Unreleased]
 
+- `VfsDurableObject`'s constructor takes an optional fourth argument, the
+  storage its filesystem uses, so a subclass can pass a wrapper over
+  `ctx.storage` — one that meters rows read and written, for instance.
 - `sed` runs its script without an `await` per step: records of bodies read
   in bulk are taken synchronously and output awaits only when it reaches its
   sink. Over 8,055 files it takes 0.50–0.57 of the time on local workerd, a

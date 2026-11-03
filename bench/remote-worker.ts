@@ -13,6 +13,7 @@ import {
   runRemoteBenchmark,
 } from "./remote-suite.js";
 
+export { DemoBudget } from "../demo/demo-budget.js";
 export { DemoWorkspace };
 
 interface BenchmarkResponse extends RemoteBenchmarkResult {
@@ -82,7 +83,9 @@ async function asset(request: Request, env: VfsBenchmarkEnv): Promise<Response> 
   });
 }
 
-async function authorized(request: Request, expected: string): Promise<boolean> {
+async function authorized(request: Request, expected: string | undefined): Promise<boolean> {
+  // A missing or empty secret must not let an empty bearer token through.
+  if (expected === undefined || expected === "") return false;
   const authorization = request.headers.get("Authorization") ?? "";
   const provided = authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
   const encoder = new TextEncoder();

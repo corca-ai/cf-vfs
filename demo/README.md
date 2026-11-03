@@ -34,6 +34,18 @@ functions, and options live for that connection. The browser sends a bounded
 keepalive while the tab is open. Files live in the Durable Object's SQLite
 storage and survive reconnects, Worker isolate eviction, and page reloads.
 
+A public room costs what its storage reads and writes and the time open
+sockets keep its Durable Object running, so rooms are bounded together. Every
+room meters the rows its SQLite storage reports and the seconds it is awake,
+and charges them to one daily budget for the whole demo, about $20 a month
+(`demo/demo-budget.ts`, taken in blocks by `demo/room-budget.ts`). Once it is
+spent, new commands, edits and sessions are refused until 00:00 UTC, and one
+address (an IPv6 /64) may spend at most $0.03 a day in a room. A session ends
+after ten minutes without a command or edit or after an hour, a room holds 32
+sessions and an address 4, and a session sending more than 20 messages a
+second is closed. Each refusal closes the socket with its own code, and the
+page reconnects only on the visitor's next key.
+
 The shell executes as numeric account `1000:1000`; `demo/identity.ts` is the
 host-owned account directory that resolves those IDs as `demo:demo`. Existing
 rooms created before credential-bound execution transfer their persisted tree
@@ -59,9 +71,10 @@ only an explicit POST to `/api/benchmarks` requests a run. The existing private
 `/benchmark` endpoint retains its bearer authentication.
 
 `PublicBenchmarks` owns an isolated VFS. `/benchmarks/latest.json` contains the
-last successful result, and its VFS `modifiedAtMs` controls freshness: requests
-before `mtime + 600_000` reuse it; at or after that boundary a request can claim
-a new run. `GET` never claims one. The shared deterministic object name bounds
+last successful result. A request without the developer token starts a run only
+when nothing has run for the deployed build yet — no saved result and no run
+record, finished or failed, for that build — so each public endpoint costs at
+most one Cloudflare run per deployment. `GET` never claims one. The shared deterministic object name bounds
 this public workload to one coordinator, separate from terminal workspaces.
 
 A VFS run record coalesces concurrent requests. A VFS checkpoint records each
@@ -71,8 +84,8 @@ not cancel the run. Owner restart can recover a persisted job; a group that
 was interrupted restarts from its fixture setup, and only a fully checked
 result is published. Checkpoints renew a five-minute lease. A stale runner
 cannot checkpoint, publish, or delete a newer run's scratch tree. Failures keep
-the previous successful result and permit another explicit request when that
-result is eligible; there is no automatic periodic benchmark.
+the previous successful result; the page does not run that build again, and
+there is no automatic periodic benchmark.
 
 `BenchmarkRunner` is a named Worker entrypoint bound to this same Worker via a
 service binding. It measures each DO RPC from outside the DO: production
@@ -134,9 +147,9 @@ Collect at least three full runs per version; the assessment separates fixed-ref
 and previous-commit comparisons with run-cluster confidence intervals. The legacy
 `--baseline` option remains descriptive only. See the
 [measurement protocol](../docs/performance.md#fixed-reference-paired-production-measurement)
-for reference pinning, A/A calibration, retention and uncertainty. The public page still uses the
-10-minute mtime rule. The separately authenticated POST `/api/benchmarks/developer` bypasses
-freshness but never starts a second concurrent run. Secrets stay out of the UI.
+for reference pinning, A/A calibration, retention and uncertainty. The public page runs each
+deployed build once. The separately authenticated POST `/api/benchmarks/developer` reruns a
+measured build but never starts a second concurrent run. Secrets stay out of the UI.
 Successful results include the CF deployment ID and the raw runs retained by the ten-commit history, plus the latest 20, remain at
 `/benchmarks/history/<run-id>.json` in the VFS. A deployment change interrupts an
 active old-version run rather than publishing mixed-version samples. The CLI
