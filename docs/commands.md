@@ -1051,10 +1051,11 @@ and the current record also hold buffered-byte reservations. String concatenatio
 field rebuilding, and composite keys check expansion sizes before joining,
 including results that are never printed. Expansion work counts the text an
 action builds beyond the record it read: concatenation, field rebuilding,
-array keys, `sub`/`gsub` results and `sprintf` share an allowance of the
-record's length and its newline, renewed for each record read and not carried
-forward. Text built beyond it — in `BEGIN` or `END`, in a loop, or by a second
-rebuild of the same record — is charged, as is each loop iteration; what
+array keys, `sub`/`gsub` results and `sprintf` share an allowance of four
+times the record and its newline, renewed for each record read and not
+carried forward; each build also costs two characters whatever its length,
+and padding fields to assign one beyond `NF` costs a unit a field. Text built beyond it — in `BEGIN` or `END`, in a loop, or by
+a fifth rebuild of the same record — is charged, as is each loop iteration; what
 `print` and `printf` write counts against the output and I/O limits instead.
 An ordinary per-record edit, such as `gsub(/e/, "E"); print` or `$1 = $1`,
 therefore runs over any input the file-read limit admits. The complete

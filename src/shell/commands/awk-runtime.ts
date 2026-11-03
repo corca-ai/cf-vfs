@@ -54,8 +54,9 @@ export interface AwkRuntimeState {
   record: string;
   /**
    * Characters of text the program may build without charging expansion
-   * work: the length of the record just read. Editing or copying a record
-   * costs no more than reading it did; building beyond that is charged.
+   * work: four times the record just read, so a few edits of it — two field
+   * assignments, two substitutions — cost no more than reading it did, and
+   * what is built beyond that, as rebuilding it in a loop does, is charged.
    */
   buildAllowance: number;
   fields: AwkString[];
@@ -303,6 +304,9 @@ export function setField(state: AwkRuntimeState, index: number, value: AwkValue)
     throw new VfsError("E2BIG", "awk: field limit exceeded");
   }
   ensureFields(state);
+  // Padding fields costs a field each even when OFS is empty and the record
+  // it rebuilds is not longer.
+  if (index > state.fields.length) state.context.budget.expansionWork(index - state.fields.length);
   while (state.fields.length < index) state.fields.push(inputValue(""));
   state.fields[index - 1] = stringValue(asString(value), numericComparable(value));
   const record = rebuiltRecord(state, asString(getVariable(state, "OFS")));

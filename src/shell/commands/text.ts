@@ -13,7 +13,6 @@ import {
   commandPath,
   eachLine,
   parseInteger,
-  readTextLines,
   textLines,
   writeBytes,
   writeText,
@@ -381,15 +380,31 @@ function numberedLine(line: string, lineNumber: number): { text: string; next: n
     : { text: `${String(lineNumber).padStart(6)}\t${line}`, next: lineNumber + 1 };
 }
 
-async function writeFoldedLine(
+/**
+ * Writes `line` broken every `width` characters from offset `from`, a piece
+ * at a time and in linear time: no array of its characters is built, so a
+ * line of a megabyte holds only the writer's buffer. Returns a promise only
+ * when a piece had to reach the sink.
+ */
+function putFolded(
   output: BufferedTextWriter,
   line: string,
   width: number,
-): Promise<void> {
-  const newline = line.endsWith("\n");
-  const characters = [...(newline ? line.slice(0, -1) : line)];
-  while (characters.length > width) await output.write(`${characters.splice(0, width).join("")}\n`);
-  await output.write(`${characters.join("")}${newline ? "\n" : ""}`);
+  from = 0,
+): Promise<void> | undefined {
+  const end = line.endsWith("\n") ? line.length - 1 : line.length;
+  let at = from;
+  for (;;) {
+    let cut = at;
+    for (let count = 0; cut < end && count < width; count += 1) {
+      cut += (line.codePointAt(cut) ?? 0) > 0xffff ? 2 : 1;
+    }
+    const last = cut >= end;
+    const writing = output.put(`${line.slice(at, cut)}${last ? line.slice(end) : "\n"}`);
+    at = cut;
+    if (last) return writing;
+    if (writing !== undefined) return writing.then(() => putFolded(output, line, width, at));
+  }
 }
 
 export const foldCommand = /* @__PURE__ */ defineApplet(FOLD, async (context, argv, fds) => {
@@ -403,9 +418,9 @@ export const foldCommand = /* @__PURE__ */ defineApplet(FOLD, async (context, ar
   const output = new BufferedTextWriter(context, fds[1]);
   try {
     for await (const input of inputSources(context, parsed.operands, fds[0])) {
-      for await (const line of readTextLines(context, input.source, input.name)) {
-        await writeFoldedLine(output, line, width);
-      }
+      await eachLine(textLines(context, input.source, input.name), (line) =>
+        continuing(putFolded(output, line, width)),
+      );
     }
     await output.flush();
   } finally {

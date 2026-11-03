@@ -16,6 +16,14 @@ included.
 
 ## [Unreleased]
 
+- `awk` grants each record read an allowance of four times its length for
+  building text, not one: up to four field assignments or substitutions of a
+  record are free, and a fifth, or a loop rebuilding it, is charged. Over the
+  10,000-page wiki `awk '{ $3 = ""; $4 = ""; print }' /wiki/*/*.md` stopped at
+  the work limit and now finishes.
+- `fold` takes a bulk body's lines synchronously and a pipe's a chunk at a
+  time, as `cut`, `uniq` and `nl` do, and folds a long line in linear time:
+  over `/wiki/sales` on local workerd it takes 0.77–0.79 of the time.
 - **Breaking:** `ShellLimits` has five limits instead of twenty-seven, each
   bounding one thing that costs on Cloudflare or that the runtime cannot
   interrupt: `deadlineMs` (30 s), `maxWork` (10,000,000 units of about a
