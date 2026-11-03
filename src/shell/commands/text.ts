@@ -11,8 +11,10 @@ import {
   BufferedTextWriter,
   collectStream,
   commandPath,
+  eachLine,
   parseInteger,
   readTextLines,
+  textLines,
   writeBytes,
   writeText,
 } from "./helpers.js";
@@ -30,6 +32,14 @@ export { headCommand, tailCommand } from "./text-slice.js";
 export { sortCommand } from "./text-sort.js";
 export { trCommand } from "./text-tr.js";
 export { wcCommand } from "./text-wc.js";
+
+/**
+ * An `eachLine` visitor's answer to keep going once `writing` — a buffered
+ * write that had to reach its sink, or none — is done.
+ */
+function continuing(writing: Promise<void> | undefined): boolean | Promise<boolean> {
+  return writing === undefined ? false : writing.then(() => false);
+}
 
 const TEE = {
   name: "tee",
@@ -162,25 +172,26 @@ export const uniqCommand = /* @__PURE__ */ defineApplet(UNIQ, async (context, ar
   const output = new BufferedTextWriter(context, fds[1]);
   let previous: { value: string; key: string } | undefined;
   let repeats = 0;
-  const emit = async (): Promise<void> => {
-    if (previous === undefined) return;
-    if ((repeated && repeats < 2) || (unique && repeats > 1)) return;
-    await output.write(`${count ? `${String(repeats).padStart(7)} ` : ""}${previous.value}\n`);
+  const emit = (): Promise<void> | undefined => {
+    if (previous === undefined) return undefined;
+    if ((repeated && repeats < 2) || (unique && repeats > 1)) return undefined;
+    return output.put(`${count ? `${String(repeats).padStart(7)} ` : ""}${previous.value}\n`);
   };
   try {
     for await (const input of inputSources(context, parsed.operands, fds[0])) {
-      for await (const line of readTextLines(context, input.source, input.name)) {
+      await eachLine(textLines(context, input.source, input.name), (line) => {
         const value = line.endsWith("\n") ? line.slice(0, -1) : line;
         const current = uniqKey(value, key);
         // A group keeps its first record, as GNU prints it.
         if (previous !== undefined && previous.key === current) {
           repeats += 1;
-          continue;
+          return false;
         }
-        await emit();
+        const writing = emit();
         previous = { value, key: current };
         repeats = 1;
-      }
+        return continuing(writing);
+      });
     }
     await emit();
     await output.flush();
@@ -327,10 +338,10 @@ export const cutCommand = /* @__PURE__ */ defineApplet(CUT, async (context, argv
   const output = new BufferedTextWriter(context, fds[1]);
   try {
     for await (const input of inputSources(context, invocation.operands, fds[0])) {
-      for await (const line of readTextLines(context, input.source, input.name)) {
+      await eachLine(textLines(context, input.source, input.name), (line) => {
         const rendered = cutLine(line, invocation);
-        if (rendered !== undefined) await output.write(rendered);
-      }
+        return rendered === undefined ? false : continuing(output.put(rendered));
+      });
     }
     await output.flush();
   } finally {
@@ -349,11 +360,11 @@ export const nlCommand = /* @__PURE__ */ defineApplet(NL, async (context, argv, 
   const output = new BufferedTextWriter(context, fds[1]);
   try {
     for await (const input of inputSources(context, argv, fds[0])) {
-      for await (const line of readTextLines(context, input.source, input.name)) {
+      await eachLine(textLines(context, input.source, input.name), (line) => {
         const rendered = numberedLine(line, lineNumber);
-        await output.write(rendered.text);
         lineNumber = rendered.next;
-      }
+        return continuing(output.put(rendered.text));
+      });
     }
     await output.flush();
   } finally {
