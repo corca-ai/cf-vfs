@@ -260,6 +260,7 @@ so buffer limits trip where reading one file at a time would trip them.
 Reading ahead awaits less often than a stream, so a concurrently running
 stage may interleave differently; each outcome is one a reader could see.
 `grep`, `cat`, `wc`, `sed` (including `-i`), `awk` and the other operand
-utilities, `grep -r` and `awiki` read this way. On Workers a stream per file costs about 0.15 ms
+utilities, the commands that read every input before they start (`jq`, `sort`,
+`paste`, `diff`, `comm`, `join`, `tail`), `grep -r` and `awiki` read this way. On Workers a stream per file costs about 0.15 ms
 and dominates a walk over many small files; bulk bodies are consumed without
 one ([measurements](../bench/sql-lab/report-2026-10-30.md)).
