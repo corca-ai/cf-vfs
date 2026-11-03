@@ -46,6 +46,14 @@ sessions and an address 4, and a session sending more than 20 messages a
 second is closed. Each refusal closes the socket with its own code, and the
 page reconnects only on the visitor's next key.
 
+Static files are served without invoking the Worker (`run_worker_first`
+lists only the API, terminal and health routes), and `demo/public/_headers`
+gives them the security headers the Worker gives its responses. The Worker
+logs failures and completed runs but not a record of every request. A zone
+rate-limiting rule blocks a client for ten seconds after more than 30 requests
+in ten seconds to `/ws` or `/api/benchmarks` on `vfs.borca.ai`; the pages poll
+every five seconds.
+
 The shell executes as numeric account `1000:1000`; `demo/identity.ts` is the
 host-owned account directory that resolves those IDs as `demo:demo`. Existing
 rooms created before credential-bound execution transfer their persisted tree
