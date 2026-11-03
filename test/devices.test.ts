@@ -186,6 +186,9 @@ it("survives a consumer that stops reading early", async () => {
 it("stops an active device-writing loop when execution is cancelled", async () => {
   const started = Promise.withResolvers<void>();
   const harness = createBashHarness({
+    // Cancellation is what should stop the loop; a small work limit keeps the
+    // test quick if it does not.
+    limits: { maxWork: 2_000_000 },
     onEvent(event) {
       if (event.type === "shell.command" && event.name === "echo") started.resolve();
     },

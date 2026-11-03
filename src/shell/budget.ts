@@ -43,6 +43,9 @@ const ROWS_PER_MUTATION = 4;
 
 const UNLIMITED = Number.MAX_SAFE_INTEGER;
 
+/** Commands and loop iterations between turns of the event loop. */
+const COMMANDS_PER_PAUSE = 32_768;
+
 function positive(value: number, name: string): number {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new VfsError("EINVAL", `${name} must be a positive safe integer`);
@@ -156,6 +159,7 @@ export class ExecutionBudget implements ShellBudget {
   private expansionWorkUnits = 0;
   private bufferedBytes = 0;
   private work = 0;
+  private sincePause = 0;
   private readonly workByKind = Object.fromEntries(WORK_KINDS.map((kind) => [kind, 0])) as Record<
     WorkKind,
     number
@@ -211,6 +215,20 @@ export class ExecutionBudget implements ShellBudget {
       `shell work limit exceeded (${spent.join(", ")})`,
       breakdown,
     );
+  }
+
+  /**
+   * Every 32,768 commands or loop iterations, a promise that lets the event
+   * loop run. Workers freeze the clock and inline reads never yield, so
+   * without a turn neither the deadline's timer nor a cancellation can stop a
+   * shell loop before `maxWork` does, and nothing else the object serves runs
+   * meanwhile.
+   */
+  pause(): Promise<void> | undefined {
+    this.sincePause += 1;
+    if (this.sincePause < COMMANDS_PER_PAUSE) return undefined;
+    this.sincePause = 0;
+    return new Promise((resolve) => setTimeout(resolve, 0));
   }
 
   elapsedMs(): number {

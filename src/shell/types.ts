@@ -453,6 +453,8 @@ export interface ShellBudget {
   read(bytes: number): void;
   /** Charges changed entries and, when known, the bytes of content they write. */
   mutation(count?: number, bytes?: number): void;
+  /** Now and then, a promise that lets the event loop run; await it when given. */
+  pause(): Promise<void> | undefined;
   glob(count?: number): void;
   expansionWork(count?: number): void;
   checkExpansionOutput(characters: number, fields?: number): void;

@@ -36,7 +36,11 @@ included.
   refused with `EINVAL`. `ShellPolicy.maxMutations` is `maxRowsWritten`, a
   0.5 policy's count taken at four rows each, and `InteractiveInputBuffer`
   takes `maxMemoryBytes` and `maxDepth`. A derived cap that no longer applies
-  reads as `Number.MAX_SAFE_INTEGER`. `deriveShellLimits` gives the caps a host's limits imply, and
+  reads as `Number.MAX_SAFE_INTEGER`. Every 32,768 commands or loop iterations
+  the shell yields to the event loop: a loop of inline work never reaches a
+  timer, so with 0.5's 20,000-command limit gone a cancellation or the
+  deadline could not stop one before `maxWork` (about 4 s on Node); it now
+  stops within a few hundred milliseconds. `deriveShellLimits` gives the caps a host's limits imply, and
   `ShellBudget.limits` is the `ShellDerivedLimits` applets read.
 - **Breaking:** `maxBufferedRecords` counts only records a command holds —
   `sort`, `comm`, `join`, `xargs` and awk arrays — not lines a command reads

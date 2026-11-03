@@ -168,3 +168,18 @@ it("takes a 0.5 policy's maxMutations at four rows each", async () => {
   const legacy = await shell({}, [], { maxMutations: 20 });
   expect((await legacy.executeText({ script: writes })).stderr).toContain("row-write limit");
 });
+
+it("lets a cancellation stop a shell loop that never yields on its own", async () => {
+  const looping = await shell({ maxWork: 1_000_000_000 });
+  const controller = new AbortController();
+  const started = performance.now();
+  const running = looping.executeText({
+    script: "i=0; while :; do i=$((i+1)); done",
+    signal: controller.signal,
+  });
+  setTimeout(() => controller.abort(), 20);
+  const result = await running;
+  expect(result.exitCode).not.toBe(0);
+  // The loop alone would run for minutes before the work limit.
+  expect(performance.now() - started).toBeLessThan(2_000);
+});

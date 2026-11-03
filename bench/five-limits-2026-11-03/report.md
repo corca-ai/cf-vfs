@@ -28,6 +28,15 @@ any of these: 20,000 commands, 64 MiB of I/O, 10,000 glob matches.
   frozen benchmark workload passes `maxTotalIoBytes` and is hash-pinned, so
   refusing them would have restarted the public series. Other names are
   refused. A 0.5 policy's `maxMutations` is taken at four rows each.
+- Every 32,768 commands or loop iterations the shell yields to the event loop
+  (`ExecutionBudget.pause`). A loop of inline work only ever queues
+  microtasks, so neither the deadline's timer nor a cancellation could run:
+  with the 20,000-command limit gone, an aborted `while :; do :; done` ran
+  4.3 s on Node until `maxWork` stopped it; it now stops within a few hundred milliseconds. At 8,192 it stopped in 55 ms,
+  but each turn costs about 1.5 ms on local workerd and a loop of 8,000
+  iterations measured 1.076 (`local-workerd-pairs-pause.jsonl`); at 32,768 a
+  turn comes every 100–250 ms of loop work, about 1%, and that loop reaches
+  none.
 - The public demo runs at a fortieth of the default work (about a quarter
   second, what its 0.5 expansion limit allowed), 2 MiB of memory, depth 32 and
   2,000 rows; eval's scaled wikis scale work, memory, rows and the deadline.
@@ -93,5 +102,5 @@ alone gave 5–10 ns a step, which the 25 steps a unit match.
 ## Bundle size
 
 Four presets went over their budgets and were raised to their measured size
-rounded up to 128 bytes: shell 263,168 (+4,224), interactive 272,896 (+4,096), default-registry 653,056 (+4,352), linux-profile 864,640 (+4,352). Most of it is `budget.ts`: the
+rounded up to 128 bytes: shell 264,064 (+5,120), interactive 273,792 (+4,992), default-registry 653,952 (+5,248), linux-profile 865,536 (+5,248). Most of it is `budget.ts`: the
 derived caps, the work breakdown and the legacy names.

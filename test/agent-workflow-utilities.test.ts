@@ -411,7 +411,10 @@ it("allows a hundred thousand commands in one execution and bounds an endless lo
     exitCode: 0,
     stdout: "50000\n",
   });
-  const endless = await harness.run("i=0; while :; do i=$((i+1)); done");
+  // A smaller budget than the default's ten seconds, so the test is quick.
+  const endless = await createBashHarness({ limits: { maxWork: 200_000 } }).run(
+    "i=0; while :; do i=$((i+1)); done",
+  );
   expect(endless.exitCode).toBe(1);
   expect(endless.stderr).toMatch(/^shell work limit exceeded \(shell steps /u);
 });

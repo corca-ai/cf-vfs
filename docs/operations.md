@@ -271,7 +271,9 @@ Two mechanisms carry the guarantee instead. A `setTimeout` armed for the
 remaining deadline aborts the execution on real elapsed time, independently of
 what `Date.now()` reports; it needs the execution to reach a suspension point,
 which ordinary command, pipeline, and stream work provides — though inline
-SQLite reads never reach one. Underneath that, `maxWork` and the memory and
+SQLite reads never reach one, so every 32,768 commands or loop iterations the
+shell yields to the event loop, which lets the timer, a cancellation and the
+object's other requests run. Underneath that, `maxWork` and the memory and
 depth caps bound the work a single unit can do with no reference to time at
 all. They, not the deadline, are what makes an uninterrupted synchronous
 stretch finite.
