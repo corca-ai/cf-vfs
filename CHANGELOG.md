@@ -16,6 +16,10 @@ included.
 
 ## [Unreleased]
 
+- `jq`, `sort`, `paste`, `diff`, `comm`, `join` and `tail` take file operands
+  read ahead in bulk, as `cat` and `grep` do, instead of opening a stream per
+  file: `jq -r .title` over 2,000 JSON files takes 0.43 of the time on local
+  workerd, `sort` over them 0.61.
 - `sed` no longer charges expansion work for text it only copies — echoing
   what a cycle read, and the unchanged parts of a record a substitution
   rebuilds — only for growth, printing beyond what was read, and loops that

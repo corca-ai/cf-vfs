@@ -9,7 +9,8 @@ import {
   defineApplet,
   parseAppletOptions,
 } from "./applet.js";
-import { BufferedTextWriter, inputTexts, readFileText, writeText } from "./helpers.js";
+import { BufferedTextWriter, readFileText, writeText } from "./helpers.js";
+import { inputTexts } from "./inputs.js";
 import type { ParsedUtilityOptions } from "./options.js";
 
 type JqOption =

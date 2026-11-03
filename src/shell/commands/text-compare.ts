@@ -7,7 +7,8 @@ import {
   defineApplet,
   parseAppletOptions,
 } from "./applet.js";
-import { BufferedTextWriter, inputTexts, parseInteger } from "./helpers.js";
+import { BufferedTextWriter, parseInteger } from "./helpers.js";
+import { inputTexts } from "./inputs.js";
 import type { ParsedUtilityOption } from "./options.js";
 import { checkedTextLines } from "./text-lines.js";
 

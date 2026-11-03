@@ -11,10 +11,10 @@ import {
   type BufferLease,
   collectStream,
   commandPath,
-  inputTexts,
   readFileBytes,
   writeText,
 } from "./helpers.js";
+import { inputTexts } from "./inputs.js";
 
 const CMP = {
   name: "cmp",

@@ -5,7 +5,8 @@ import {
   defineApplet,
   parseAppletOptions,
 } from "./applet.js";
-import { inputTexts, writeText } from "./helpers.js";
+import { writeText } from "./helpers.js";
+import { inputTexts } from "./inputs.js";
 import { checkedTextLines } from "./text-lines.js";
 
 const SORT = {

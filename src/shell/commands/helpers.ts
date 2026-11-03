@@ -283,15 +283,17 @@ export async function readFileBytes(
   return await collectStream(context, read.stream);
 }
 
+/** A file's text; `chunks`, its body read in bulk, is decoded in place of its stream. */
 export async function readFileText(
   context: ShellCommandContext,
   path: string,
   maximumBytes?: number,
+  chunks?: readonly Uint8Array[],
 ): Promise<BufferLease<string>> {
   const normalized = commandPath(context, path);
-  const read = context.fileSystem.readFile(normalized);
+  const source = chunks ?? fileBody(context.fileSystem.readFile(normalized).stream);
   try {
-    return await collectText(context, fileBody(read.stream), normalized, maximumBytes);
+    return await collectText(context, source, normalized, maximumBytes);
   } catch (error) {
     if (error instanceof VfsError && error.path === undefined) {
       throw new VfsError(error.code, error.message, normalized);
@@ -337,34 +339,4 @@ export function parseInteger(value: string, name: string, minimum = 0): number {
 
 export function splitLines(value: string): string[] {
   return splitLinesPreservingEndings(value);
-}
-
-export async function inputTexts(
-  context: ShellCommandContext,
-  argv: readonly string[],
-  stdin: ReadableStream<Uint8Array>,
-): Promise<BufferLease<Array<{ name: string; text: string }>>> {
-  if (argv.length === 0) {
-    const collected = await collectText(context, stdin);
-    return { value: [{ name: "-", text: collected.value }], release: collected.release };
-  }
-  const output: Array<{ name: string; text: string }> = [];
-  const releases: Array<() => void> = [];
-  try {
-    for (const path of argv) {
-      const collected =
-        path === "-" ? await collectText(context, stdin) : await readFileText(context, path);
-      output.push({ name: path, text: collected.value });
-      releases.push(collected.release);
-    }
-  } catch (error) {
-    for (const release of releases) release();
-    throw error;
-  }
-  return {
-    value: output,
-    release: () => {
-      for (const release of releases) release();
-    },
-  };
 }

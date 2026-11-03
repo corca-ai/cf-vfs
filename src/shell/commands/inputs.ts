@@ -3,7 +3,7 @@ import { streamFromOwnedChunks } from "../../vfs/streams.js";
 import type { ByteRange, InlineFileBody } from "../../vfs/types.js";
 import { fileBody, openContent } from "../content.js";
 import type { ShellCommandContext } from "../types.js";
-import { commandPath } from "./helpers.js";
+import { type BufferLease, collectText, commandPath, readFileText } from "./helpers.js";
 import { ReadAhead } from "./read-ahead.js";
 
 /**
@@ -148,4 +148,49 @@ export async function* inputStreams(
     }
     yield { name: path, stream: await openInput(context, path, range) };
   }
+}
+
+/**
+ * The whole text of each input, in order: standard input for none or `-`,
+ * and each file, read ahead in bulk where it can be — a command that needs
+ * every input before it starts (`jq`, `sort`, `paste`) then pays no stream
+ * per file. A body read in bulk is decoded with the checks, and reported with
+ * the path, that reading its stream would give; anything else is read as it
+ * was. An operand that fails stops the command after one read-ahead window
+ * may have read the operands after it.
+ */
+export async function inputTexts(
+  context: ShellCommandContext,
+  argv: readonly string[],
+  stdin: ReadableStream<Uint8Array>,
+): Promise<BufferLease<Array<{ name: string; text: string }>>> {
+  if (argv.length === 0) {
+    const collected = await collectText(context, stdin);
+    return { value: [{ name: "-", text: collected.value }], release: collected.release };
+  }
+  const output: Array<{ name: string; text: string }> = [];
+  const releases: Array<() => void> = [];
+  const operands = new OperandReader(context, argv);
+  try {
+    for (const [index, path] of argv.entries()) {
+      const chunks = operands.take(index);
+      const collected =
+        path === "-"
+          ? await collectText(context, stdin)
+          : await readFileText(context, path, undefined, chunks);
+      output.push({ name: path, text: collected.value });
+      releases.push(collected.release);
+    }
+  } catch (error) {
+    for (const release of releases) release();
+    throw error;
+  } finally {
+    operands.release();
+  }
+  return {
+    value: output,
+    release: () => {
+      for (const release of releases) release();
+    },
+  };
 }

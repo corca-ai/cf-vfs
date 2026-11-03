@@ -1,5 +1,6 @@
 import { type AppletSpecWithOptions, defineApplet, parseAppletOptions } from "./applet.js";
-import { inputTexts, splitLines, writeText } from "./helpers.js";
+import { splitLines, writeText } from "./helpers.js";
+import { inputTexts } from "./inputs.js";
 
 const PASTE = {
   name: "paste",
