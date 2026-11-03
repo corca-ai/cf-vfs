@@ -16,6 +16,11 @@ included.
 
 ## [Unreleased]
 
+- `cut`, `uniq` and `nl` take a bulk body's lines synchronously and a pipe's a
+  chunk at a time, awaiting only output that must reach its sink: over the
+  10,000-page wiki on local workerd `nl` takes 0.73 of the time, `cut` 0.77–0.81,
+  `uniq` 0.81–0.82 and piped input 0.84–0.90. Concurrent pipeline stages can
+  interleave differently.
 - `sed` no longer charges `n` and `N` for the pattern space they build;
   instead a regular expression — an address or an `s` pattern — that scans
   more of the space than the records read allow (two scans of each record
