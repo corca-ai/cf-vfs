@@ -239,7 +239,8 @@ traversal pages. Work proportional to what a utility reads — decoding records,
 applying a `sed` script or an `awk` program to each record, matching within a
 record — charges the I/O byte limit and expansion work instead, so a search
 over a large tree is bounded by the bytes it reads rather than refused after a
-hundred thousand lines. `awk` loops charge the loop-iteration limit.
+hundred thousand lines. `awk` loops charge expansion work, one unit per iteration, rather than the
+loop-iteration limit.
 
 Treat the deadline as a bound on wall-clock latency, not as the primitive that
 makes execution finite. Supply `now` in `ShellOptions` when the application has

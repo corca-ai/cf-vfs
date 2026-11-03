@@ -157,6 +157,7 @@ function runtimeState(
     arrayBytes: 0,
     arrayRelease: () => undefined,
     record: "",
+    buildAllowance: 0,
     fields: [],
     fieldsValid: false,
     fieldSeparator: " ",
@@ -200,6 +201,7 @@ async function executeInput(
     // A bulk body is read synchronously: a record awaits only a flush.
     await eachLine(textLines(state.context, operand.source, operand.name), (line) => {
       setField(state, 0, inputValue(line.endsWith("\n") ? line.slice(0, -1) : line));
+      state.buildAllowance = line.length;
       state.fields = [];
       state.fieldsValid = false;
       state.fieldSeparator = asString(getVariable(state, "FS"));
@@ -247,6 +249,8 @@ export const awkCommand = /* @__PURE__ */ defineApplet(AWK, async (context, argv
     if (begin.kind === "next") throw new VfsError("EINVAL", "awk: next is not valid in BEGIN");
     if (begin.kind !== "exit" && needsInput)
       await executeInput(rules, operands, state, fds, output, writer);
+    // END reads no record, so it builds as BEGIN does.
+    state.buildAllowance = 0;
     const end = await executeRules(rules, "end", state, output, writer, fds[2]);
     if (end.kind === "next") throw new VfsError("EINVAL", "awk: next is not valid in END");
     await writer.flush();

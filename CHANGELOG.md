@@ -16,6 +16,13 @@ included.
 
 ## [Unreleased]
 
+- `awk` no longer charges expansion work for text an action builds within the
+  length of the record it read — a `sub`/`gsub` result, a rebuilt `$0`, a
+  concatenation, an array key, `sprintf` — only for text beyond it, as `sed`
+  does since 0.5.3. Over the 8,055-page wiki, `awk '{ gsub(/e/, "E"); print }'`
+  and `awk '{ $1 = $1; print }'` stopped at the expansion-work limit; they now
+  finish.
+
 ## [0.5.3] — 2026-11-03
 
 - `jq`, `sort`, `paste`, `diff`, `comm`, `join` and `tail` take file operands
