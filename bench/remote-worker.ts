@@ -70,6 +70,11 @@ function json(value: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(value), { ...init, headers });
 }
 
+/**
+ * A path no route or static file answers — the asset server invokes the
+ * Worker only for those and the routes in `run_worker_first` — with the
+ * headers `demo/public/_headers` gives every static file.
+ */
 async function asset(request: Request, env: VfsBenchmarkEnv): Promise<Response> {
   const response = await env.ASSETS.fetch(request);
   const headers = new Headers(response.headers);

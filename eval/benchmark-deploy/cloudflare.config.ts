@@ -19,10 +19,14 @@ export default defineConfig({
     workersDev: false,
     observability: {
       enabled: true,
-      logs: { enabled: true, headSamplingRate: 1 },
+      // What the Worker logs (failures, completed benchmark runs) is kept in
+      // full; the record of every request, which is billed per event, is not.
+      logs: { enabled: true, headSamplingRate: 1, invocationLogs: false },
       traces: { enabled: true, headSamplingRate: 0.01 },
     },
-    assets: { runWorkerFirst: true },
+    // Static files are served without invoking the Worker, which is billed per
+    // request; `demo/public/_headers` gives them their security headers.
+    assets: { runWorkerFirst: ["/api/*", "/ws", "/health", "/benchmark"] },
     domains: ["vfs.borca.ai"],
     env: {
       BENCHMARK_TOKEN: bindings.secret(),
