@@ -16,6 +16,8 @@ included.
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-11-03
+
 - `jq`, `sort`, `paste`, `diff`, `comm`, `join` and `tail` take file operands
   read ahead in bulk, as `cat` and `grep` do, instead of opening a stream per
   file: `jq -r .title` over 2,000 JSON files takes 0.43 of the time on local
@@ -738,7 +740,8 @@ to the release, so the package can be installed by a consumer that pins
 [`a335bd1`]: https://github.com/corca-ai/cf-vfs/commit/a335bd1
 [`1a4447d`]: https://github.com/corca-ai/cf-vfs/commit/1a4447d
 [`32a2c15`]: https://github.com/corca-ai/cf-vfs/commit/32a2c15
-[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/corca-ai/cf-vfs/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/corca-ai/cf-vfs/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/corca-ai/cf-vfs/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/corca-ai/cf-vfs/compare/v0.4.2...v0.5.0
