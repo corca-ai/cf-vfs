@@ -140,6 +140,10 @@ class SedRunner {
   private substituted = false;
   private appended: string[] = [];
   private lastTerminated = true;
+  /** Characters read this cycle that printing may echo without charge. */
+  private echoable = 0;
+  /** Whether a record was read since the last branch back or restart. */
+  private readSinceLoop = false;
 
   constructor(
     private readonly commands: readonly SedCommand[],
@@ -165,6 +169,7 @@ class SedRunner {
       let outcome = yield* this.cycle();
       while (outcome === "restart") {
         this.budget.step();
+        this.chargeLoop();
         outcome = yield* this.cycle();
       }
       if (this.appended.length > 0) yield* this.flushAppended();
@@ -173,6 +178,7 @@ class SedRunner {
         if (finishing !== undefined) yield finishing;
         return true;
       }
+      this.echoable = 0;
       record = yield* this.read();
     }
     // An unterminated final record stays unterminated.
@@ -187,6 +193,8 @@ class SedRunner {
     if (record === undefined) return undefined;
     this.line += 1;
     this.lastTerminated = record.terminated;
+    this.echoable += record.value.length + 1;
+    this.readSinceLoop = true;
     return record;
   }
 
@@ -200,7 +208,10 @@ class SedRunner {
       else if ("jump" in action) {
         // A forward pass is bounded by the script and the input; only a
         // branch back can repeat, so only that charges a step.
-        if (action.jump <= pc) this.budget.step();
+        if (action.jump <= pc) {
+          this.budget.step();
+          this.chargeLoop();
+        }
         pc = action.jump;
       } else return yield* this.finishCycle(action);
     }
@@ -248,11 +259,34 @@ class SedRunner {
     return this.quiet ? undefined : this.emit(`${this.space}\n`, true);
   }
 
-  /** Writes `text`, returning a promise only when it had to reach the sink. */
+  /**
+   * Writes `text`, returning a promise only when it had to reach the sink.
+   *
+   * Echoing what the cycle read is free, as `cat`'s and `grep`'s output is:
+   * printing each record once, edited or not, is bounded by the bytes read.
+   * Printing beyond that — `p;p`, `i` and `a` text, `=` — is expansion work,
+   * since a sink such as `/dev/null` charges nothing for it.
+   */
   private emit(text: string, patternSpace = false): Promise<void> | undefined {
     if (text === "") return undefined;
-    this.budget.expansionWork(text.length);
+    if (text.length <= this.echoable) this.echoable -= text.length;
+    else {
+      this.budget.expansionWork(text.length - this.echoable);
+      this.echoable = 0;
+    }
     return this.output.emit(text, patternSpace);
+  }
+
+  /**
+   * A branch back, or a `D` restart, runs the script over the pattern space
+   * again; when no record was read since the last one, that pass is charged as
+   * expansion work. A loop that reads as it goes (`:a;N;$!ba`) is bounded by
+   * its input instead, and one that does not (`:a;s/x/x/;ta`, `:a;p;ba`)
+   * would otherwise rescan the space on a step each.
+   */
+  private chargeLoop(): void {
+    if (!this.readSinceLoop) this.budget.expansionWork(this.space.length);
+    this.readSinceLoop = false;
   }
 
   private *flushAppended(): Steps<void> {
@@ -508,7 +542,7 @@ async function editInPlace(
     normalized,
   );
   // `-i` numbers each file on its own, as GNU's implied `-s` does. The
-  // records were charged as they were emitted, so the copy is not charged again.
+  // edited text is held to the buffer limit, as a pipe holds output to its own.
   const edited = new SedText(context.budget, context.budget.limits.maxBufferedBytes, false);
   let quit: boolean;
   try {

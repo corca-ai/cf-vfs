@@ -16,6 +16,12 @@ included.
 
 ## [Unreleased]
 
+- `sed` no longer charges expansion work for text it only copies — echoing
+  what a cycle read, and the unchanged parts of a record a substitution
+  rebuilds — only for growth, printing beyond what was read, and loops that
+  read nothing new (which before could run until the step limit). A large
+  edit stopped part way before: `sed -i 's/owner/OWNER/'` over 8,055 wiki
+  pages rewrote 1,654 and failed; it now rewrites all 6,822 that match.
 - `grep`, `awk` and `sed` reading a pipe or stdin take a chunk's lines
   synchronously, awaiting once per chunk instead of once per line: `cat dir |
   sed s/x/y/` takes 0.84 of the time on local workerd, `cat dir | grep -c`

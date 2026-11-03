@@ -18,9 +18,19 @@ it.each([{ maxExpansionChars: 32 }, { maxExpansionWork: 32 }, { maxBufferedBytes
   "bounds a literal replacement with %j",
   (limits) => {
     const budget = new ExecutionBudget(resolveShellLimits(limits), () => 0);
-    expect(() => substitute(replacementCommand("a".repeat(33)), "x", budget)).toThrow(/limit/u);
+    // Replacing one character with 34 grows the record by 33.
+    expect(() => substitute(replacementCommand("a".repeat(34)), "x", budget)).toThrow(/limit/u);
   },
 );
+
+it("charges a replacement's growth, not text no longer than what it replaces", () => {
+  const budget = new ExecutionBudget(resolveShellLimits({ maxExpansionWork: 32 }), () => 0);
+  const record = "x".repeat(20);
+  const global = { ...replacementCommand("y"), global: true };
+  // Twenty one-character replacements and twenty-one match attempts: 21 units.
+  expect(substitute(global, record, budget).value).toBe("y".repeat(20));
+  expect(() => substitute(replacementCommand("a".repeat(33)), "x", budget)).toThrow(/limit/u);
+});
 
 it("counts literal replacement bytes alongside buffers already held by sed", () => {
   const budget = new ExecutionBudget(resolveShellLimits({ maxBufferedBytes: 32 }), () => 0);
