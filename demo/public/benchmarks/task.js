@@ -12,10 +12,10 @@ const median = (xs) => {
   return sorted.length ? (sorted[m] + sorted[Math.floor((sorted.length - 1) / 2)]) / 2 : null;
 };
 function render(state) {
-  button.disabled = state.status === "running";
+  button.disabled = state.status === "running" || !state.eligible;
   status.textContent = state.status === "running"
     ? `Task benchmark running (${state.progress ?? 0}%). Previous results stay visible.`
-    : state.error ?? (state.result ? `Saved ${new Date(state.result.completedAt).toLocaleString()} · commit ${state.result.commitHash.slice(0, 8)}. Lower is better.` : "No task measurements yet. Request the first run.");
+    : state.error ?? (state.result ? `Saved ${new Date(state.result.completedAt).toLocaleString()} · commit ${state.result.commitHash.slice(0, 8)}. Lower is better.${state.eligible ? " This deployment has not been measured yet." : " Each deployment is measured once."}` : "No task measurements yet. Request the first run.");
   if (!state.result) return;
   const points = comparablePoints(state.history ?? [], state.result);
   const row = state.result.rows[0];
@@ -48,10 +48,23 @@ async function load() {
     if (!response.ok) throw new Error("Could not load task results");
     const state = await response.json();
     render(state);
-    if (state.status === "running") timer = setTimeout(load, 5000);
+    if (state.status === "running") timer = setTimeout(poll, 5000);
   } catch (error) {
     status.textContent = error.message;
     button.disabled = false;
+  }
+}
+/** While a run is going, only its progress is read; the full result once it ends. */
+async function poll() {
+  try {
+    const response = await fetch(`${endpoint}?progress=1`, { cache: "no-store" });
+    if (!response.ok) throw new Error("Could not load task progress");
+    const state = await response.json();
+    if (state.status !== "running") return await load();
+    render(state);
+    timer = setTimeout(poll, 5000);
+  } catch (error) {
+    status.textContent = error.message;
   }
 }
 button.addEventListener("click", async () => {

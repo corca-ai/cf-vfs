@@ -67,13 +67,19 @@ import type {
 export abstract class VfsDurableObject<Environment> extends DurableObject<Environment> {
   protected readonly fileSystem: DurableObjectFileSystem;
 
+  /**
+   * `storage` is what the filesystem keeps its tables in, `ctx.storage` unless
+   * a subclass passes a wrapper over it — one that meters rows read and
+   * written, say.
+   */
   protected constructor(
     ctx: DurableObjectState,
     env: Environment,
     options: DurableObjectFileSystemOptions = {},
+    storage: DurableObjectStorage = ctx.storage,
   ) {
     super(ctx, env);
-    this.fileSystem = new DurableObjectFileSystem(ctx.storage, options);
+    this.fileSystem = new DurableObjectFileSystem(storage, options);
     ctx.blockConcurrencyWhile(() => this.fileSystem.initialize());
   }
 

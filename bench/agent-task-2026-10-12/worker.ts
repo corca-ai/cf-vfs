@@ -10,6 +10,7 @@ import publicWorker from "../remote-worker.js";
 export {
   BenchmarkRunner,
   BenchmarkWorkspace,
+  DemoBudget,
   DemoWorkspace,
   PublicBenchmarks,
   VfsBenchmark,

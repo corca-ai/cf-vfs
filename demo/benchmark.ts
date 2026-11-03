@@ -49,14 +49,21 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
     });
   }
   async snapshot(progressOnly = false) {
-    const state = await this.store.get(!progressOnly);
+    const state = await this.store.get(!progressOnly, BENCHMARK_BUILD_ID);
     const job = state.status === "running" ? await this.store.job() : null;
     const progress =
       job === null
         ? null
         : Math.floor((job.nextIndex / (job.task ? TASK_GROUPS : pairedPlan().length)) * 100);
     if (progressOnly)
-      return { status: state.status, error: state.error, buildId: BENCHMARK_BUILD_ID, progress };
+      return {
+        status: state.status,
+        error: state.error,
+        buildId: BENCHMARK_BUILD_ID,
+        progress,
+        modifiedAt: state.modifiedAt,
+        eligible: state.eligible,
+      };
     return { ...state, buildId: BENCHMARK_BUILD_ID, progress };
   }
   private exclusive<T>(operation: () => Promise<T>): Promise<T> {
@@ -74,7 +81,7 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
     return this.exclusive(async () => {
       if (expectedBuild !== undefined && expectedBuild !== BENCHMARK_BUILD_ID)
         throw new Error("Benchmark deployment is still propagating; retry the request");
-      const claim = await this.store.claim(force);
+      const claim = await this.store.claim(BENCHMARK_BUILD_ID, force);
       if (claim.runId !== null) {
         await this.store.checkpoint({
           runId: claim.runId,
@@ -179,7 +186,7 @@ export class PublicBenchmarks extends DurableObject<VfsBenchmarkEnv> {
       await this.exclusive(() =>
         this.store.fail(
           job.runId,
-          "Benchmark did not complete. The previous saved result is retained; you can request a retry.",
+          "Benchmark did not complete. The previous saved result is retained; this deployment is not run again from the page.",
         ),
       );
     }
@@ -264,6 +271,48 @@ export class BenchmarkRunner extends WorkerEntrypoint<VfsBenchmarkEnv> {
   }
 }
 
+/**
+ * The full snapshot — about a megabyte of retained history — served from the
+ * edge cache while the saved result, the run's state and the deployed build
+ * are what the cheap status read just reported, so a page view or a crawler
+ * does not make the coordinator rebuild it.
+ */
+async function cachedSnapshot(
+  url: URL,
+  brief: { status: string; modifiedAt: number | null; eligible: boolean; progress: number | null },
+  build: () => Promise<unknown>,
+): Promise<unknown> {
+  const cache =
+    typeof caches === "undefined" ? undefined : (caches as unknown as { default: Cache }).default;
+  // A run in progress changes by the second, and a failure's message is not
+  // in the key, so neither is cached.
+  if (cache === undefined || brief.status === "running" || brief.status === "failed")
+    return await build();
+  const key = new Request(
+    `${url.origin}${url.pathname}?snapshot=${BENCHMARK_BUILD_ID}:${brief.status}:${brief.modifiedAt}:${brief.eligible}`,
+  );
+  const hit = await cache.match(key);
+  if (hit !== undefined) return await hit.json();
+  const snapshot = (await build()) as typeof brief;
+  // A run claimed between the two reads would be stored under a key that
+  // says otherwise; only a snapshot matching its key is kept.
+  const matches =
+    snapshot.status === brief.status &&
+    snapshot.modifiedAt === brief.modifiedAt &&
+    snapshot.eligible === brief.eligible;
+  if (matches) {
+    try {
+      await cache.put(
+        key,
+        Response.json(snapshot, { headers: { "Cache-Control": "public, max-age=3600" } }),
+      );
+    } catch {
+      // A cache that refuses the entry costs a rebuild next time, nothing more.
+    }
+  }
+  return snapshot;
+}
+
 export async function handlePublicBenchmarks(
   request: Request,
   env: VfsBenchmarkEnv,
@@ -276,11 +325,12 @@ export async function handlePublicBenchmarks(
     "X-Vfs-Deployment": env.VERSION_METADATA.id,
   };
   const stub = env.PUBLIC_BENCHMARKS.getByName(task ? "agent-task-results-v1" : WORKSPACE);
-  if (request.method === "GET")
-    return Response.json(
-      await stub.snapshot(new URL(request.url).searchParams.get("progress") === "1"),
-      { headers },
-    );
+  if (request.method === "GET") {
+    const url = new URL(request.url);
+    const brief = await stub.snapshot(true);
+    if (url.searchParams.get("progress") === "1") return Response.json(brief, { headers });
+    return Response.json(await cachedSnapshot(url, brief, () => stub.snapshot(false)), { headers });
+  }
   if (request.method !== "POST")
     return Response.json(
       { error: "Method not allowed" },
@@ -296,8 +346,14 @@ export async function handlePublicBenchmarks(
     env.VERSION_METADATA.id,
     task,
   );
+  if (claim.runId === null && claim.snapshot.status !== "running") {
+    // Refused: the saved result, as a GET serves it, from the cache.
+    const brief = { ...claim.snapshot, progress: null };
+    const saved = await cachedSnapshot(new URL(request.url), brief, () => stub.snapshot(false));
+    return Response.json({ ...(saved as object), reused: true }, { headers });
+  }
   return Response.json(
-    { ...claim.snapshot, reused: claim.runId === null },
+    { ...claim.snapshot, buildId: BENCHMARK_BUILD_ID, reused: claim.runId === null },
     { headers, status: claim.snapshot.status === "running" ? 202 : 200 },
   );
 }

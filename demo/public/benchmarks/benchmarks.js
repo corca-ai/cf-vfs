@@ -226,16 +226,15 @@ function render() {
         }),
       }
     : savedResult;
-  button.disabled = pending || snapshot.status === "running";
+  button.disabled = pending || snapshot.status === "running" || !snapshot.eligible;
   if (pending || snapshot.status === "running")
     status.textContent = `Benchmark running${snapshot.progress == null ? "" : ` (${snapshot.progress}% complete)`}. Everyone shares this run; the previous saved result stays visible.`;
   else if (snapshot.status === "failed") status.textContent = snapshot.error;
   else if (!result) status.textContent = "No saved result yet. Request the first benchmark.";
-  else if (snapshot.nextRunAt > Date.now())
-    status.textContent = `Saved result available. A new run becomes eligible at ${new Date(snapshot.nextRunAt).toLocaleTimeString()}. Requests before then reuse this result.`;
-  else
+  else if (!snapshot.eligible)
     status.textContent =
-      "The saved result is more than 10 minutes old. Request a benchmark to refresh it.";
+      "Saved result available for this deployment. Each deployment is measured once; requests reuse this result.";
+  else status.textContent = "This deployment has not been measured yet. Request a benchmark.";
   resultPanel.hidden = !result;
   if (!result) return;
   metadata.textContent = `Saved ${new Date(snapshot.modifiedAt).toLocaleString()} · Commit ${result.commitHash?.slice(0, 8) ?? "not recorded"} · Deployment ${result.deploymentId?.slice(0, 8) ?? "legacy"} · Request location ${result.colo ?? "local"} · ${result.protocol ? `${result.protocol.pairsPerRun} paired samples + warmup / run` : "3 samples + warmup (legacy)"} · ${result.verified.toLocaleString()} checks passed`;

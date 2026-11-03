@@ -6,6 +6,18 @@ import { redrawSequence, submitSequence } from "./line-block.js";
   const RECONNECT_MIN_MS = 750;
   const RECONNECT_MAX_MS = 8_000;
   const KEEPALIVE_MS = 25_000;
+  /**
+   * Codes the server closes a session with that the page must not retry by
+   * itself; the visitor's next key reconnects. Each says why.
+   */
+  const HELD_CLOSES = new Map([
+    [4000, "session closed after 10 minutes idle; press any key to reconnect."],
+    [4001, "this room is full; press any key to try again."],
+    [4002, "too many sessions from your connection; close one and press any key."],
+    [4003, "the public demo has used today's budget; it resets at 00:00 UTC."],
+    [4004, "session closed after an hour; press any key to reconnect."],
+    [1008, "session closed for sending too many messages; press any key to reconnect."],
+  ]);
   const encoder = new TextEncoder();
 
   const terminalElement = document.querySelector("#terminal");
@@ -94,6 +106,7 @@ import { redrawSequence, submitSequence } from "./line-block.js";
 
   let socket;
   let reconnectTimer;
+  let idleClosed = false;
   let keepaliveTimer;
   let reconnectDelay = RECONNECT_MIN_MS;
   let manualReconnect = false;
@@ -278,6 +291,9 @@ import { redrawSequence, submitSequence } from "./line-block.js";
   }
 
   function send(message) {
+    // Any action reconnects an idle session; this one is dropped, as any
+    // action is while disconnected.
+    if (reconnectAfterIdle()) return false;
     if (socket?.readyState !== WebSocket.OPEN) return false;
     socket.send(JSON.stringify(message));
     return true;
@@ -310,6 +326,7 @@ import { redrawSequence, submitSequence } from "./line-block.js";
   }
 
   function queuePaste(value) {
+    if (reconnectAfterIdle()) return;
     const normalized = value.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     const parts = normalized.split("\n");
     const first = parts.shift() ?? "";
@@ -335,8 +352,20 @@ import { redrawSequence, submitSequence } from "./line-block.js";
     redrawLine();
   }
 
+  /** Reconnects a session the server closed for inactivity; whether it did. */
+  function reconnectAfterIdle() {
+    if (!idleClosed) return false;
+    idleClosed = false;
+    manualReconnect = true;
+    connect();
+    return true;
+  }
+
   function handleTerminalData(data) {
-    if (!connected) return;
+    if (!connected) {
+      reconnectAfterIdle();
+      return;
+    }
     if (data.includes("\n") || (data.includes("\r") && data !== "\r")) {
       if (!running) queuePaste(data);
       return;
@@ -579,6 +608,20 @@ import { redrawSequence, submitSequence } from "./line-block.js";
       connected = false;
       running = true;
       window.clearInterval(keepaliveTimer);
+      const held = HELD_CLOSES.get(event.code);
+      if (held !== undefined) {
+        // Reconnecting at once would keep the room's object running for a
+        // forgotten tab, or retry a refusal forever; the next key reconnects.
+        idleClosed = true;
+        writeNotice(held, "244");
+        // Text typed into a closed session would be dropped and then replaced
+        // by the document's text on reconnect, so the editor waits too.
+        if (openPath !== null) {
+          editorText.disabled = true;
+          setEditorStatus("Idle. Press a key in the terminal to reconnect.");
+        }
+        return;
+      }
       if (userClosed) {
         // A deliberate exit is not a dropped connection: reconnecting here
         // would hand the user a new session moments after they ended one.

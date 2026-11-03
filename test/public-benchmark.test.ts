@@ -1,7 +1,6 @@
 import { expect, it } from "vitest";
 import { benchmarkGroups } from "../demo/benchmark-protocol.js";
 import {
-  BENCHMARK_TTL_MS,
   BenchmarkStore,
   type PublicBenchmarkResult,
   RESULT_PATH,
@@ -34,27 +33,37 @@ function fixture() {
   };
 }
 
-it("reads without executing and expires exactly ten minutes after the result file mtime", async () => {
+it("runs a public request once per build, finished or failed, and a developer request always", async () => {
   const { fs, store, result, advance } = fixture();
-  expect((await store.get()).status).toBe("empty");
-  const first = await store.claim();
+  expect((await store.get(true, "build-a")).status).toBe("empty");
+  expect((await store.get(true, "build-a")).eligible).toBe(true);
+  const first = await store.claim("build-a");
   expect(first.runId).not.toBeNull();
   if (first.runId === null) throw new Error("No run");
   advance(1000);
-  await store.complete(result(first.runId));
+  await store.complete({ ...result(first.runId), buildId: "build-a" });
   expect((await store.get()).modifiedAt).toBe(fs.stat(RESULT_PATH).modifiedAtMs);
-  advance(BENCHMARK_TTL_MS - 1);
-  expect((await store.claim()).runId).toBeNull();
-  advance(1);
-  expect((await store.claim()).runId).not.toBeNull();
+  advance(7 * 24 * 60 * 60 * 1000);
+  expect((await store.get(true, "build-a")).eligible).toBe(false);
+  expect((await store.claim("build-a")).runId).toBeNull();
+  const next = await store.claim("build-b");
+  if (next.runId === null) throw new Error("No run");
+  await store.fail(next.runId, "failed");
+  // A failed run is not retried by public requests either.
+  expect((await store.claim("build-b")).runId).toBeNull();
+  expect((await store.claim("build-b", true)).runId).not.toBeNull();
 });
 
 it("coalesces concurrent requests and reconstructs the lease and result after eviction", async () => {
   const { fs, store, result } = fixture();
-  const claims = await Promise.all([store.claim(), store.claim(), store.claim()]);
+  const claims = await Promise.all([
+    store.claim("build-a", true),
+    store.claim("build-a", true),
+    store.claim("build-a", true),
+  ]);
   expect(claims.filter((claim) => claim.runId !== null)).toHaveLength(1);
   const reconstructed = new BenchmarkStore(fs, () => 1700000000000);
-  expect((await reconstructed.claim()).runId).toBeNull();
+  expect((await reconstructed.claim("build-a", true)).runId).toBeNull();
   const runId = claims[0]?.runId;
   if (runId === undefined || runId === null) throw new Error("No run");
   await reconstructed.complete(result(runId));
@@ -63,26 +72,26 @@ it("coalesces concurrent requests and reconstructs the lease and result after ev
 
 it("keeps the saved result after failure and rejects stale completions", async () => {
   const { store, result, advance } = fixture();
-  const first = await store.claim();
+  const first = await store.claim("build-a", true);
   if (first.runId === null) throw new Error("No run");
   await store.complete(result(first.runId));
-  advance(BENCHMARK_TTL_MS);
-  const next = await store.claim();
+  advance(5 * 60 * 1000);
+  const next = await store.claim("build-a", true);
   if (next.runId === null) throw new Error("No run");
   await store.fail(next.runId, "failed");
   expect((await store.get()).result?.runId).toBe(first.runId);
-  const third = await store.claim();
+  const third = await store.claim("build-a", true);
   expect(third.runId).not.toBeNull();
   await expect(store.complete(result(next.runId))).rejects.toThrow("no longer active");
 });
 
 it("recovers an expired run without letting its old owner publish", async () => {
   const { store, result, advance } = fixture();
-  const first = await store.claim();
+  const first = await store.claim("build-a", true);
   if (first.runId === null) throw new Error("No run");
-  advance(BENCHMARK_TTL_MS);
+  advance(5 * 60 * 1000);
   expect((await store.get()).status).toBe("failed");
-  const next = await store.claim();
+  const next = await store.claim("build-a", true);
   expect(next.runId).not.toBeNull();
   await expect(store.complete(result(first.runId))).rejects.toThrow("no longer active");
 });
@@ -90,7 +99,7 @@ it("recovers an expired run without letting its old owner publish", async () => 
 it("retains ten distinct commits across resets and replaces reruns without losing older commits", async () => {
   const { fs, store, result, advance, now } = fixture();
   for (let commit = 0; commit < 12; commit++) {
-    const claim = await store.claim(true);
+    const claim = await store.claim("build-a", true);
     if (claim.runId === null) throw new Error("No run");
     await store.complete({
       ...result(claim.runId),
@@ -103,7 +112,7 @@ it("retains ten distinct commits across resets and replaces reruns without losin
   const before = (await reopened.get()).history.map((point) => point.commitHash);
   expect(before).toEqual(Array.from({ length: 10 }, (_, index) => `commit-${index + 2}`));
   for (let repeat = 0; repeat < 22; repeat++) {
-    const claim = await reopened.claim(true);
+    const claim = await reopened.claim("build-a", true);
     if (claim.runId === null) throw new Error("No run");
     await reopened.complete({
       ...result(claim.runId),
@@ -149,7 +158,7 @@ it("recovers identifiable legacy runs without inventing commit hashes or duplica
   const snapshot = await store.get();
   expect(snapshot.history.map((point) => point.buildId)).toEqual(["old", "new"]);
   expect(snapshot.history.every((point) => point.commitHash === undefined)).toBe(true);
-  const claim = await store.claim(true);
+  const claim = await store.claim("build-a", true);
   if (claim.runId === null) throw new Error("No run");
   await store.complete({ ...result(claim.runId), commitHash: "known", buildId: "new" });
   expect((await store.get()).history.map((point) => point.commitHash ?? point.buildId)).toEqual([
@@ -203,7 +212,7 @@ it("runs and validates the 1,000-file shell Git workflow", async () => {
 
 it("persists checkpoints and renews a running job lease without touching the saved result", async () => {
   const { fs, store, advance, now } = fixture();
-  const claim = await store.claim();
+  const claim = await store.claim("build-a", true);
   if (claim.runId === null) throw new Error("No run");
   advance(4 * 60 * 1000);
   const job = { runId: claim.runId, nextIndex: 9, rows: [], verified: 100, colo: "ICN" };
@@ -211,21 +220,21 @@ it("persists checkpoints and renews a running job lease without touching the sav
   const reconstructed = new BenchmarkStore(fs, now);
   expect(await reconstructed.job()).toEqual(job);
   advance(4 * 60 * 1000);
-  expect((await reconstructed.claim()).runId).toBeNull();
+  expect((await reconstructed.claim("build-a", true)).runId).toBeNull();
   advance(2 * 60 * 1000);
   expect((await reconstructed.get()).status).toBe("failed");
   await expect(reconstructed.checkpoint(job)).rejects.toThrow("no longer active");
 });
 
-it("allows authenticated callers to bypass freshness while sharing active runs and retaining history", async () => {
+it("allows authenticated callers to rerun a measured build while sharing active runs and retaining history", async () => {
   const { fs, store, result } = fixture();
-  const first = await store.claim();
+  const first = await store.claim("build-a", true);
   if (first.runId === null) throw new Error("No run");
   await store.complete({ ...result(first.runId), deploymentId: "before" });
-  expect((await store.claim()).runId).toBeNull();
-  const second = await store.claim(true);
+  expect((await store.claim("build-a")).runId).toBeNull();
+  const second = await store.claim("build-a", true);
   if (second.runId === null) throw new Error("No run");
-  expect((await store.claim(true)).runId).toBeNull();
+  expect((await store.claim("build-a", true)).runId).toBeNull();
   await store.complete({ ...result(second.runId), deploymentId: "after" });
   expect((await store.get()).result?.deploymentId).toBe("after");
   expect(fs.list("/benchmarks/history")).toHaveLength(2);
@@ -272,7 +281,7 @@ function pairedResult(runId: string, value: number): PublicBenchmarkResult {
 it("accumulates same-commit raw pairs durably without recounting reads or replacing them with the last run", async () => {
   const { store, fs, now } = fixture();
   for (const value of [8, 12]) {
-    const claim = await store.claim(true);
+    const claim = await store.claim("build-a", true);
     if (!claim.runId) throw new Error("No run");
     await store.complete(pairedResult(claim.runId, value));
     await store.get();
@@ -293,7 +302,7 @@ it("accumulates same-commit raw pairs durably without recounting reads or replac
 it("bounds retained raw observations per commit and records how many runs were collected", async () => {
   const { store } = fixture();
   for (let value = 1; value <= 15; value++) {
-    const claim = await store.claim(true);
+    const claim = await store.claim("build-a", true);
     if (!claim.runId) throw new Error("No run");
     await store.complete(pairedResult(claim.runId, value));
   }
@@ -304,10 +313,10 @@ it("bounds retained raw observations per commit and records how many runs were c
 });
 it("rejects malformed pairs and cohort/build mismatches before publishing", async () => {
   const { store } = fixture();
-  const first = await store.claim(true);
+  const first = await store.claim("build-a", true);
   if (!first.runId) throw new Error("No run");
   await store.complete(pairedResult(first.runId, 10));
-  const next = await store.claim(true);
+  const next = await store.claim("build-a", true);
   if (!next.runId) throw new Error("No run");
   const bad = pairedResult(next.runId, 8);
   const badRow = bad.rows[0];

@@ -453,8 +453,8 @@ partial boundary writes still read the bytes they must preserve.
 
 The [public Cloudflare evaluation](../bench/public-benchmark-evaluation-2026-10-08.md)
 records the deployed file/Git workload at `https://vfs.borca.ai/benchmarks/`.
-Its saved result is refreshed only on an explicit request once the VFS result
-file is at least ten minutes old. Durable alarms and VFS checkpoints let a run
+Its saved result is refreshed only on an explicit request, and a request
+without the developer token runs each deployed build at most once. Durable alarms and VFS checkpoints let a run
 continue without an open browser. The report distinguishes local metadata
 reuse gains, rejected checkout candidates, production RPC timings and the
 Git compression concurrency needed to fit a real isolate.
