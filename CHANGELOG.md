@@ -16,6 +16,16 @@ included.
 
 ## [Unreleased]
 
+- `sed` no longer charges `n` and `N` for the pattern space they build;
+  instead a regular expression — an address or an `s` pattern — that scans
+  more of the space than the records read allow (two scans of each record
+  each) is charged. Joining a file with `:a;N;$!ba` was quadratic and stopped
+  at about 14 KB of 10-byte lines; it now costs what the file's size does, and
+  `:a;N;/end/!ba`, which rescans as it grows, is charged as before.
+- A `sed` branch back or `D` restart that read a record since the last one no
+  longer takes a step, so `$!N;P;D` windows and per-file joins are not stopped
+  at 100,000 lines: `sed -i ':a;N;$!ba;s/\n\n\n*/\n\n/g'` over the
+  8,055-page wiki now finishes, where it stopped part way.
 - `awk` no longer charges expansion work for text an action builds within the
   length of the record it read — a `sub`/`gsub` result, a rebuilt `$0`, a
   concatenation, an array key, `sprintf` — only for text beyond it, as `sed`

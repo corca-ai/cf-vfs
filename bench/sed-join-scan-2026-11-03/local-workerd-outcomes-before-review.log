@@ -1,0 +1,10 @@
+baseline sed -i ':a;N;$!ba;s/\n\n\n*/\n\n/g' /wiki/*/*.md; echo $? => 225 ms exit 1 out  err sed: /wiki/data/guide-0046.md: permission denied
+sed: /wiki/data/guide-0091.md: 
+candidate sed -i ':a;N;$!ba;s/\n\n\n*/\n\n/g' /wiki/*/*.md; echo $? => 496 ms exit 0 out 2 err sed: /wiki/data/guide-0046.md: permission denied
+sed: /wiki/data/guide-0091.md: 
+baseline sed -n '$!N;/owner\n/P;D' /wiki/*/*.md | wc -l => 84 ms exit 1 out 0 err shell expansion work limit exceeded
+candidate sed -n '$!N;/owner\n/P;D' /wiki/*/*.md | wc -l => 317 ms exit 0 out 0 err 
+baseline sed -n ':a;N;$!ba;s/\n/ /g;p' /wiki/legal/topic-00*.md | wc -c => 4 ms exit 0 out 8928 err 
+candidate sed -n ':a;N;$!ba;s/\n/ /g;p' /wiki/legal/topic-00*.md | wc -c => 4 ms exit 0 out 8928 err 
+baseline sed -i join over the wiki => 210 ms exit 1 out  stderr lines 41, permission-denied 40, last: sed: /wiki/data/guide-2563.md: permissio
+candidate sed -i join over the wiki => 484 ms exit 0 out 2 stderr lines 41, permission-denied 40, last: sed: /wiki/data/guide-2563.md: permissio

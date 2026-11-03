@@ -736,10 +736,15 @@ including text later discarded by `-n` or `d`. Intermediate text respects
 `maxExpansionChars` and `maxBufferedBytes`. Expansion work counts what input
 size does not bound: each attempt of a global or numbered substitution, a
 replacement's growth over the text it replaces, printing beyond what the cycle
-read (`p;p`, `i`, `a`, `=`), the spaces `N`, `G`, `H` and the others build, and
-a branch back or `D` restart that read no record since the last one. Echoing
-what a cycle read, edited or not, is bounded by the bytes read, as `cat`'s
-output is, so a large edit runs to the end. `-i` also bounds accumulated output
+read (`p;p`, `i`, `a`, `=`), the spaces `G`, `H`, `x` and the others copy,
+and a scan of more of the pattern space than the records read allow: each
+record read lets each address, each `s` pattern and each `P` or `D` search
+for the first line cover it twice, credited when that scan next runs. Echoing what a cycle read,
+edited or not, and reading with `n` or `N` are bounded by the bytes read, as
+`cat`'s output is, so a large edit runs to the end and `:a;N;$!ba` joins a
+whole file, while `:a;N;/end/!ba`, which scans the growing space again on each
+pass, and `:a;s/x/x/;ta`, which scans it again with nothing read, are charged
+for those scans. `-i` also bounds accumulated output
 before publishing, so a failed edit preserves the original file.
 
 ### Opaque R2 content
@@ -1135,8 +1140,9 @@ replacement expands `&` and `\1`…`\9` and writes everything else literally.
 `l`, `r`, `R`, `w`, `W`, `e`, and `F` are usage errors: they read or write
 other files, run commands, or print an escaped dump. The pattern space and the
 hold space are each bounded by `maxExpansionChars`, so `N`, `H`, and `G` cannot
-grow either without limit, and every branch back and `D` restart charges a
-step, so a branch loop such as `:a;ba` ends at the step limit. Ordinary operation still
+grow either without limit, and a branch back or `D` restart that read no record
+since the last one charges a step, so a branch loop such as `:a;ba` ends at the
+step limit while one that reads as it goes is bounded by its input. Ordinary operation still
 streams one record at a time. A selected `q` stops immediately, cancels the current input,
 and never opens later operands. A script containing a `$` address necessarily
 keeps one record of lookahead; scripts without one emit their first record as
