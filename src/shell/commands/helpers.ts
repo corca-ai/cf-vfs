@@ -5,8 +5,16 @@ import { encodeUtf8, utf8ByteLength } from "../../core/unicode.js";
 import type { InlineReadResult } from "../../vfs/types.js";
 import { chargeConsumed, fileBody } from "../content.js";
 import type { ShellCommandContext, ShellSink } from "../types.js";
-import { cancellation, watchReader } from "./watch-reader.js";
+import { decodeUtf8 } from "./line-reader.js";
+import { watchReader } from "./watch-reader.js";
 
+export {
+  eachLine,
+  readTextLines,
+  skipTextLines,
+  type TextLines,
+  textLines,
+} from "./line-reader.js";
 export { cancellation, watchReader } from "./watch-reader.js";
 
 export interface BufferLease<T> {
@@ -126,196 +134,6 @@ export function displayPath(operand: string, resolved: string, entry: string): s
   const suffix = resolved === "/" ? entry : entry.slice(resolved.length);
   if (operand === "") return suffix.replace(/^\//u, "");
   return `${operand.replace(/\/$/u, "")}${suffix}`;
-}
-
-function decodeUtf8(decoder: TextDecoder, chunk: Uint8Array | undefined, path?: string): string {
-  try {
-    return chunk === undefined ? decoder.decode() : decoder.decode(chunk, { stream: true });
-  } catch {
-    throw new VfsError("EIO", "input is not valid UTF-8", path);
-  }
-}
-
-interface TextLineState {
-  pending: string;
-  records: number;
-}
-
-/**
- * Counts one decoded record. It charges no step: reading is bounded by the
- * I/O byte limit, and steps are kept for work input size does not bound.
- */
-function accountRecord(state: TextLineState, context: ShellCommandContext, path?: string): void {
-  state.records += 1;
-  if (state.records > context.budget.limits.maxBufferedRecords) {
-    throw new VfsError("E2BIG", "input record limit exceeded", path);
-  }
-}
-
-function takeTextLine(
-  state: TextLineState,
-  context: ShellCommandContext,
-  path?: string,
-): string | undefined {
-  const newline = state.pending.indexOf("\n");
-  if (newline < 0) return undefined;
-  const line = state.pending.slice(0, newline + 1);
-  state.pending = state.pending.slice(newline + 1);
-  if (utf8ByteLength(line) > context.budget.limits.maxLineBytes) {
-    throw new VfsError("E2BIG", "line byte limit exceeded", path);
-  }
-  accountRecord(state, context, path);
-  return line;
-}
-
-/**
- * Splits bulk-read chunks into lines exactly as {@link readTextLines} splits
- * the stream that would have yielded them, charging each chunk as a file read.
- *
- * `decoded`, for a one-chunk body, is its text already decoded with a fatal
- * UTF-8 decoder that strips a leading BOM, as decoding the chunk here would
- * give it, so it is not decoded twice; it is ignored for longer bodies.
- */
-function* chunkTextLines(
-  context: ShellCommandContext,
-  chunks: readonly Uint8Array[],
-  path?: string,
-  decoded?: string,
-): Generator<string> {
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  const state: TextLineState = { pending: "", records: 0 };
-  const whole = chunks.length === 1 ? decoded : undefined;
-  for (const chunk of chunks) {
-    if (context.signal.aborted) throw cancellation(context.signal);
-    context.budget.read(chunk.byteLength);
-    state.pending += whole ?? decodeUtf8(decoder, chunk, path);
-    for (;;) {
-      const line = takeTextLine(state, context, path);
-      if (line === undefined) break;
-      yield line;
-    }
-    if (utf8ByteLength(state.pending) > context.budget.limits.maxLineBytes) {
-      throw new VfsError("E2BIG", "line byte limit exceeded", path);
-    }
-  }
-  state.pending += decodeUtf8(decoder, undefined, path);
-  if (state.pending.length > 0) {
-    accountRecord(state, context, path);
-    yield state.pending;
-  }
-}
-
-/**
- * Consumes bulk-read chunks whose lines a caller will not use, with the charges
- * and failures splitting them would have had. A valid UTF-8 body no larger than
- * the line and record limits can exceed neither, so only its reads are charged.
- */
-export function skipTextLines(
-  context: ShellCommandContext,
-  chunks: readonly Uint8Array[],
-  validText: boolean,
-  path?: string,
-): void {
-  const { limits } = context.budget;
-  const bytes = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
-  if (!validText || bytes > Math.min(limits.maxLineBytes, limits.maxBufferedRecords)) {
-    const lines = chunkTextLines(context, chunks, path);
-    while (lines.next().done !== true);
-    return;
-  }
-  for (const chunk of chunks) {
-    if (context.signal.aborted) throw cancellation(context.signal);
-    context.budget.read(chunk.byteLength);
-  }
-}
-
-/**
- * The lines of a command's input: synchronously for a bulk-read body, so a
- * caller iterating them with {@link eachLine} awaits only what needs it.
- */
-export function textLines(
-  context: ShellCommandContext,
-  source: ReadableStream<Uint8Array> | readonly Uint8Array[],
-  path?: string,
-  decoded?: string,
-): Iterable<string> | AsyncIterable<string> {
-  return Array.isArray(source)
-    ? chunkTextLines(context, source as readonly Uint8Array[], path, decoded)
-    : readTextLines(context, source as ReadableStream<Uint8Array>, path);
-}
-
-/**
- * Visits each line until `visit` returns true. A line of a synchronous source
- * is awaited only when `visit` returns a promise: `for await` would await
- * every value even of a synchronous iterable, and on Workers an await costs
- * more than handling a short line.
- */
-export async function eachLine(
-  lines: Iterable<string> | AsyncIterable<string>,
-  visit: (line: string) => boolean | Promise<boolean>,
-): Promise<void> {
-  if (Symbol.asyncIterator in lines) {
-    for await (const line of lines) {
-      const stop = visit(line);
-      if (stop === true || (stop !== false && (await stop))) return;
-    }
-    return;
-  }
-  for (const line of lines) {
-    const stop = visit(line);
-    if (stop === true || (stop !== false && (await stop))) return;
-  }
-}
-
-export async function* readTextLines(
-  context: ShellCommandContext,
-  source: ReadableStream<Uint8Array> | readonly Uint8Array[],
-  path?: string,
-): AsyncGenerator<string> {
-  if (Array.isArray(source)) {
-    yield* chunkTextLines(context, source, path);
-    return;
-  }
-  const stream = source as ReadableStream<Uint8Array>;
-  const reader = stream.getReader();
-  const watched = watchReader(reader, context.signal);
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  const state: TextLineState = { pending: "", records: 0 };
-  let finished = false;
-  try {
-    for (;;) {
-      const read = await watched.read();
-      if (read.done) {
-        state.pending += decodeUtf8(decoder, undefined, path);
-        finished = true;
-        break;
-      }
-      chargeConsumed(context.budget, stream, read.value.byteLength);
-      state.pending += decodeUtf8(decoder, read.value, path);
-      for (;;) {
-        const line = takeTextLine(state, context, path);
-        if (line === undefined) break;
-        yield line;
-      }
-      if (utf8ByteLength(state.pending) > context.budget.limits.maxLineBytes) {
-        throw new VfsError("E2BIG", "line byte limit exceeded", path);
-      }
-    }
-    if (state.pending.length > 0) {
-      accountRecord(state, context, path);
-      yield state.pending;
-    }
-  } catch (error) {
-    await reader.cancel(error).catch(() => undefined);
-    throw error;
-  } finally {
-    if (!finished)
-      await reader
-        .cancel(new VfsError("EPIPE", "line consumer stopped early"))
-        .catch(() => undefined);
-    watched.unwatch();
-    reader.releaseLock();
-  }
 }
 
 export async function collectStream(
