@@ -16,6 +16,8 @@ included.
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-11-04
+
 - `grep -o` without context lines awaits only when its output reaches the sink,
   and one pattern's matches stream: over the 10,000-page wiki extracting words
   or links takes 0.93–0.95 of the time, and a 1 MiB line of matches no longer
@@ -826,7 +828,8 @@ to the release, so the package can be installed by a consumer that pins
 [`a335bd1`]: https://github.com/corca-ai/cf-vfs/commit/a335bd1
 [`1a4447d`]: https://github.com/corca-ai/cf-vfs/commit/1a4447d
 [`32a2c15`]: https://github.com/corca-ai/cf-vfs/commit/32a2c15
-[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/corca-ai/cf-vfs/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/corca-ai/cf-vfs/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/corca-ai/cf-vfs/compare/v0.5.4...v0.6.0
 [0.5.4]: https://github.com/corca-ai/cf-vfs/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/corca-ai/cf-vfs/compare/v0.5.2...v0.5.3
