@@ -54,7 +54,7 @@ function takeTextLine(
 }
 
 /**
- * Splits bulk-read chunks into lines exactly as {@link readTextLines} splits
+ * Splits bulk-read chunks into lines exactly as {@link textLines} splits
  * the stream that would have yielded them, charging each chunk as a file read.
  *
  * `decoded`, for a one-chunk body, is its text already decoded with a fatal
@@ -163,58 +163,6 @@ async function visitRun(
     if (stop === true || (stop !== false && (await stop))) return true;
   }
   return false;
-}
-
-export async function* readTextLines(
-  context: ShellCommandContext,
-  source: ReadableStream<Uint8Array> | readonly Uint8Array[],
-  path?: string,
-): AsyncGenerator<string> {
-  if (Array.isArray(source)) {
-    yield* chunkTextLines(context, source, path);
-    return;
-  }
-  // Line by line, as callers here iterate it: built on runs, each line would
-  // also step a run's generator.
-  const stream = source as ReadableStream<Uint8Array>;
-  const reader = stream.getReader();
-  const watched = watchReader(reader, context.signal);
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  const state: TextLineState = { pending: "" };
-  let finished = false;
-  try {
-    for (;;) {
-      const read = await watched.read();
-      if (read.done) {
-        state.pending += decodeUtf8(decoder, undefined, path);
-        finished = true;
-        break;
-      }
-      chargeConsumed(context.budget, stream, read.value.byteLength);
-      state.pending += decodeUtf8(decoder, read.value, path);
-      for (;;) {
-        const line = takeTextLine(state, context, path);
-        if (line === undefined) break;
-        yield line;
-      }
-      if (exceedsLine(state.pending, context.budget.limits.maxLineBytes)) {
-        throw new VfsError("E2BIG", "line byte limit exceeded", path);
-      }
-    }
-    if (state.pending.length > 0) {
-      yield state.pending;
-    }
-  } catch (error) {
-    await reader.cancel(error).catch(() => undefined);
-    throw error;
-  } finally {
-    if (!finished)
-      await reader
-        .cancel(new VfsError("EPIPE", "line consumer stopped early"))
-        .catch(() => undefined);
-    watched.unwatch();
-    reader.releaseLock();
-  }
 }
 
 /**

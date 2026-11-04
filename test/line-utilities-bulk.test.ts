@@ -3,7 +3,7 @@ import { defaultShellCommands } from "../src/shell/commands/default.js";
 import { Shell } from "../src/shell/shell.js";
 import { createTestFileSystem, withoutBulkReads } from "./helpers/node-sql.js";
 
-// cut, uniq, nl and fold take a bulk body's lines synchronously and a stream's a
+// cut, uniq, nl, fold and xargs take a bulk body's lines synchronously and a stream's a
 // chunk at a time, writing through a buffer that awaits only its sink; every
 // form of input must print what reading each line in turn printed.
 const SCRIPTS = [
@@ -36,6 +36,12 @@ const SCRIPTS = [
   "fold -w 7 /x/long.md /x/long.md | tail -2",
   "fold -w 3 /x/bad.md",
   "fold -w 5 /x/huge-line.md | wc -l",
+  "cat /w/*.md | xargs echo",
+  "cat /w/*.md | xargs -n 3 echo | tail -2",
+  "cat /x/unterminated.md | xargs -n 1 echo",
+  "cat /x/long.md /x/long.md | xargs echo | wc -c",
+  "cat /x/bad.md | xargs echo",
+  "printf 'a b\\0c\\n\\0' | xargs -0 -n 1 echo",
 ];
 
 async function run(bulk: boolean, chunkBytes: number) {
@@ -77,4 +83,14 @@ it("prints from bulk bodies and streams what reading each line in turn printed",
       "  9999\trow 1666\n 10000\trow 1666\nstatus 0\n",
     );
   }
+});
+
+it("xargs keeps a value that spans lines or ends the input", async () => {
+  const fs = createTestFileSystem({});
+  const shell = new Shell({ fileSystem: fs, commands: defaultShellCommands });
+  const output = async (script: string) => (await shell.executeText({ cwd: "/", script })).stdout;
+
+  expect(await output("printf 'a b\\n  c\\nd' | xargs -n 1 echo")).toBe("a\nb\nc\nd\n");
+  expect(await output("printf 'a\\nb\\0c\\0d' | xargs -0 -n 1 echo")).toBe("a\nb\nc\nd\n");
+  expect(await output("printf '\\0a\\0' | xargs -0 -n 1 echo x")).toBe("x \nx a\n");
 });

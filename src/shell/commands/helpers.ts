@@ -10,7 +10,6 @@ import { watchReader } from "./watch-reader.js";
 
 export {
   eachLine,
-  readTextLines,
   skipTextLines,
   type TextLines,
   textLines,
