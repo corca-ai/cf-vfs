@@ -16,6 +16,13 @@ included.
 
 ## [Unreleased]
 
+- `grep -o` without context lines awaits only when its output reaches the sink,
+  and one pattern's matches stream: over the 10,000-page wiki extracting words
+  or links takes 0.93–0.95 of the time, and a 1 MiB line of matches no longer
+  exhausts a 256 MB heap. `grep -oiF` no longer lowercases the line per match.
+- `xargs` takes its input a chunk at a time, and `xargs -0` handles a value
+  spanning many lines in linear time, refusing one past `maxBufferedBytes`.
+
 ## [0.6.0] — 2026-11-03
 
 - `awk` grants each record read an allowance of four times its length for

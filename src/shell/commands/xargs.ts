@@ -2,7 +2,7 @@ import { VfsError } from "../../core/errors.js";
 import { utf8ByteLength } from "../../core/unicode.js";
 import type { ShellCommandContext, ShellFileDescriptors } from "../types.js";
 import { type AppletSpecWithOptions, defineApplet, parseAppletOptions } from "./applet.js";
-import { parseInteger, readTextLines, writeText } from "./helpers.js";
+import { eachLine, parseInteger, textLines, writeText } from "./helpers.js";
 
 const XARGS = {
   name: "xargs",
@@ -74,17 +74,26 @@ async function collectArguments(
     release();
     release = context.budget.buffered(heldBytes);
   };
-  const consume = (chunk: string, final: boolean): string => {
-    const parts = nullSeparated ? chunk.split("\0") : chunk.split(/[ \t\n]+/u);
+  // Only `line` is split: `carry` holds no separator, so a value spanning many
+  // lines is not scanned again for each of them.
+  const consume = (carry: string, line: string, final: boolean): string => {
+    const parts = nullSeparated ? line.split("\0") : line.split(/[ \t\n]+/u);
+    parts[0] = carry + parts[0];
     const remainder = parts.pop() ?? "";
     for (const value of parts) take(value);
+    if (remainder.length > context.budget.limits.maxBufferedBytes) {
+      throw new VfsError("E2BIG", "xargs: buffered byte limit exceeded");
+    }
     if (final && remainder !== "") take(remainder);
     return final ? "" : remainder;
   };
   try {
     let carry = "";
-    for await (const line of readTextLines(context, input)) carry = consume(carry + line, false);
-    consume(carry, true);
+    await eachLine(textLines(context, input), (line) => {
+      carry = consume(carry, line, false);
+      return false;
+    });
+    consume(carry, "", true);
     return { values, release };
   } catch (error) {
     release();

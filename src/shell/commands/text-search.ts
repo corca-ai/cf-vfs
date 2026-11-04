@@ -486,8 +486,10 @@ class GrepRunner {
       const printing = this.lines.unselected(name, lineNumber, line);
       return printing === undefined ? false : printing.then(() => false);
     }
-    if (!this.lines.active && !this.invocation.onlyMatching) {
-      const writing = this.lines.selectedAlone(lineNumber, this.formatted(name, lineNumber, line));
+    if (!this.lines.active) {
+      const writing = this.invocation.onlyMatching
+        ? this.putParts(this.prefix(name, lineNumber), this.matchedParts(candidate))
+        : this.lines.selectedAlone(lineNumber, this.formatted(name, lineNumber, line));
       return writing === undefined ? true : writing.then(() => true);
     }
     return this.lines
@@ -495,11 +497,29 @@ class GrepRunner {
       .then(() => true);
   }
 
-  private formatted(name: string, lineNumber: number, line: string): string {
-    const prefix = `${this.invocation.showName ? `${name}:` : ""}${
+  private prefix(name: string, lineNumber: number): string {
+    return `${this.invocation.showName ? `${name}:` : ""}${
       this.invocation.lineNumbers ? `${lineNumber}:` : ""
     }`;
-    return `${prefix}${line}${line.endsWith("\n") ? "" : "\n"}`;
+  }
+
+  private formatted(name: string, lineNumber: number, line: string): string {
+    return `${this.prefix(name, lineNumber)}${line}${line.endsWith("\n") ? "" : "\n"}`;
+  }
+
+  private matchedParts(candidate: string): Iterator<string> {
+    return this.invocation.invert
+      ? [][Symbol.iterator]()
+      : this.invocation.matcher.parts(candidate);
+  }
+
+  /** Prints each part as it is found, awaiting only when the writer reaches its sink. */
+  private putParts(prefix: string, parts: Iterator<string>): Promise<void> | undefined {
+    for (let part = parts.next(); !part.done; part = parts.next()) {
+      const writing = this.output.put(`${prefix}${part.value}\n`);
+      if (writing !== undefined) return writing.then(() => this.putParts(prefix, parts));
+    }
+    return undefined;
   }
 
   private selected(candidate: string): boolean {
@@ -516,13 +536,7 @@ class GrepRunner {
       await this.output.write(this.formatted(name, lineNumber, line));
       return;
     }
-    if (this.invocation.invert) return;
-    const prefix = `${this.invocation.showName ? `${name}:` : ""}${
-      this.invocation.lineNumbers ? `${lineNumber}:` : ""
-    }`;
-    for (const part of this.invocation.matcher.parts(candidate)) {
-      await this.output.write(`${prefix}${part}\n`);
-    }
+    await this.putParts(this.prefix(name, lineNumber), this.matchedParts(candidate));
   }
 
   private async finishInput(name: string, matches: number): Promise<void> {

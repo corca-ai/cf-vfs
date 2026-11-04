@@ -15,6 +15,14 @@ const SCRIPTS = [
   "grep -q hit /w/*.md",
   "grep -v hit /w/*.md",
   "grep -o 'hit [0-9]*' /w/*.md",
+  "grep -on 'hit [0-9]*' /w/*.md",
+  "grep -ov hit /w/*.md; echo $?",
+  "grep -oc hit /w/*.md",
+  "grep -o -A 1 hit /w/a.md",
+  "grep -om 1 hit /w/*.md",
+  "grep -o . /x/long.md | wc -c",
+  "grep -oH . /x/long.md | tail -2",
+  "grep -o x /x/huge-line.md | wc -l",
   "grep -m 1 hit /w/*.md",
   "grep -m 2 -A 1 hit /w/*.md",
   "grep -B 2 -n hit /w/*.md",
@@ -65,4 +73,20 @@ it("prints from bulk-read bodies what reading each file as a stream prints", asy
     expect(bulk[0]?.stdout).toContain("see hit 0");
     expect(bulk.some((result) => result.stderr.includes("not valid UTF-8"))).toBe(true);
   }
+});
+
+it("prints each match of -o in order, past the writer's 64 KiB buffer", async () => {
+  const fs = createTestFileSystem({});
+  await fs.writeFile("/many", `${"ab ".repeat(40_000)}\nnone\nAB\n`);
+  await fs.writeFile("/second", "ab\n");
+  const shell = new Shell({ fileSystem: fs, commands: defaultShellCommands });
+  const output = async (script: string) => (await shell.executeText({ cwd: "/", script })).stdout;
+
+  expect(await output("grep -on ab many")).toBe("1:ab\n".repeat(40_000));
+  expect(await output("grep -oH ab many second | tail -2")).toBe("many:ab\nsecond:ab\n");
+  expect(await output("grep -oiF ab many | tail -1")).toBe("AB\n");
+  expect(await output("grep -o -e ab -e a second")).toBe("ab\n");
+  expect(await output("grep -ov ab second; echo $?")).toBe("1\n");
+  expect(await output("grep -ovx ab second many | wc -c")).toBe("0\n");
+  expect(await output("grep -om 1 ab second many | wc -l")).toBe("40001\n");
 });

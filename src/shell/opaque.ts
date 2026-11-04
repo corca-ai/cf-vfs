@@ -144,7 +144,7 @@ export class R2ContentReader implements ShellContentReader {
       throw new VfsError("EIO", "opaque object is missing from storage", path);
     }
     // Bytes are already charged by whatever consumes them — `pipeToSink`,
-    // `readTextLines`, `wc` — so nothing is metered here; doing it again would
+    // `textLines`, `wc` — so nothing is metered here; doing it again would
     // charge an opaque read twice for the same bytes.
     return { stat: lease.stat, stream: reportingErrors(body, path) };
   }

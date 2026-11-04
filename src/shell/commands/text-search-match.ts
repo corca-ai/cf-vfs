@@ -102,20 +102,29 @@ export class GrepMatcher {
     return this.patterns.some((pattern) => this.spans(pattern, line).next().done === false);
   }
 
-  /** The matched parts of a line, left to right without overlap. */
-  parts(line: string): string[] {
+  /**
+   * The matched parts of a line, left to right without overlap. One pattern's
+   * spans already come that way, so they stream: a line of a million matches
+   * would otherwise hold a span and a string for each outside the budget.
+   */
+  *parts(line: string): Generator<string> {
+    const [only] = this.patterns;
+    if (only !== undefined && this.patterns.length === 1) {
+      for (const span of this.spans(only, line)) {
+        if (span.end > span.index) yield line.slice(span.index, span.end);
+      }
+      return;
+    }
     const spans = this.patterns
       .flatMap((pattern) => [...this.spans(pattern, line)])
       .filter((span) => span.end > span.index)
       .sort((left, right) => left.index - right.index || right.end - left.end);
-    const parts: string[] = [];
     let covered = -1;
     for (const span of spans) {
       if (span.index < covered) continue;
-      parts.push(line.slice(span.index, span.end));
+      yield line.slice(span.index, span.end);
       covered = span.end;
     }
-    return parts;
   }
 
   private compile(pattern: string): CompiledPattern {
@@ -150,8 +159,9 @@ export class GrepMatcher {
 
   /** Candidate matches from every starting point, keeping those `-w` accepts. */
   private *spans(pattern: CompiledPattern, line: string): Generator<Span> {
+    const text = pattern.regex === undefined && this.options.ignoreCase ? asciiLower(line) : line;
     for (let from = 0; from <= line.length; ) {
-      const span = this.find(pattern, line, from);
+      const span = this.find(pattern, text, from);
       if (span === undefined) return;
       if (this.wordBounded(line, span)) {
         yield span;
@@ -160,12 +170,11 @@ export class GrepMatcher {
     }
   }
 
-  private find(pattern: CompiledPattern, line: string, from: number): Span | undefined {
-    if (pattern.regex !== undefined) return pattern.regex.exec(line, from);
-    const text = this.options.ignoreCase ? asciiLower(line) : line;
+  private find(pattern: CompiledPattern, text: string, from: number): Span | undefined {
+    if (pattern.regex !== undefined) return pattern.regex.exec(text, from);
     if (this.options.line)
-      return from === 0 && text === pattern.needle ? { index: 0, end: line.length } : undefined;
-    if (pattern.needle === "") return from <= line.length ? { index: from, end: from } : undefined;
+      return from === 0 && text === pattern.needle ? { index: 0, end: text.length } : undefined;
+    if (pattern.needle === "") return from <= text.length ? { index: from, end: from } : undefined;
     const index = text.indexOf(pattern.needle, from);
     return index < 0 ? undefined : { index, end: index + pattern.needle.length };
   }
